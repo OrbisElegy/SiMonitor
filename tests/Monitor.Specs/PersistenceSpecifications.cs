@@ -17,6 +17,8 @@ internal static class PersistenceSpecifications
         new(nameof(RevisionConflictLeavesNoFragments), RevisionConflictLeavesNoFragments),
         new(nameof(WrongDatabaseKeyFailsClosed), WrongDatabaseKeyFailsClosed),
         new(nameof(DatabaseContainsNoSensitivePlaintext), DatabaseContainsNoSensitivePlaintext),
+        new(nameof(AuthenticationAuditSurvivesRestart), AuthenticationAuditSurvivesRestart),
+        new(nameof(DuplicateAuditRollsBackFailureCount), DuplicateAuditRollsBackFailureCount),
         new(nameof(AuthenticationLockSurvivesRestart), AuthenticationLockSurvivesRestart),
         new(nameof(SqliteUsesWalJournal), SqliteUsesWalJournal),
     ];
@@ -124,7 +126,7 @@ internal static class PersistenceSpecifications
         repository.TryCompleteBootstrap(new BootstrapCompletion(1, account, Audit(account), true));
 
         SqliteAuthenticationFailureTracker tracker = new(fixture.Path, protector);
-        tracker.RecordFailure(canonicalUsername, sourceSentinel, TestTime);
+        tracker.RecordFailure(FailureAudit(canonicalUsername, sourceSentinel));
         byte[] databaseBytes = fixture.ReadAllDatabaseBytes();
         foreach (string sentinel in new[]
                  {
@@ -140,6 +142,59 @@ internal static class PersistenceSpecifications
         }
     }
 
+    private static void AuthenticationAuditSurvivesRestart()
+    {
+        using DatabaseFixture fixture = new();
+        AuthenticationFailureAuditRecord audit = FailureAudit(
+            "AUDITEDADMIN",
+            "203.0.113.71");
+        AuthenticationFailureAuditRecord lockedAudit = FailureAudit(
+            "AUDITEDADMIN",
+            "203.0.113.71",
+            "identity.account.locked");
+        using (AesGcmIdentityPayloadProtector protector = new(fixture.MasterKey))
+        {
+            SqliteAuthenticationFailureTracker tracker = new(fixture.Path, protector);
+            tracker.RecordFailure(audit);
+            tracker.RecordRejection(lockedAudit);
+        }
+
+        using AesGcmIdentityPayloadProtector restartedProtector = new(fixture.MasterKey);
+        SqliteAuthenticationFailureTracker restarted = new(fixture.Path, restartedProtector);
+        Check.That(restarted.FindAudit(audit.AuditId) == audit,
+            "protected authentication audit must survive process restart");
+        Check.That(restarted.FindAudit(lockedAudit.AuditId) == lockedAudit,
+            "a lock rejection audit must survive process restart");
+    }
+
+    private static void DuplicateAuditRollsBackFailureCount()
+    {
+        using DatabaseFixture fixture = new();
+        using AesGcmIdentityPayloadProtector protector = new(fixture.MasterKey);
+        SqliteAuthenticationFailureTracker tracker = new(fixture.Path, protector);
+        AuthenticationFailureAuditRecord first = FailureAudit("ATOMICADMIN", "203.0.113.72");
+        tracker.RecordFailure(first);
+        bool duplicateRejected = false;
+        try
+        {
+            tracker.RecordFailure(first);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            duplicateRejected = true;
+        }
+
+        Check.That(duplicateRejected, "duplicate audit identity must reject");
+        for (int attempt = 0; attempt < IdentityPolicy.FailureLimit - 2; attempt++)
+        {
+            Check.That(!tracker.RecordFailure(FailureAudit("ATOMICADMIN", "203.0.113.72")).IsLocked,
+                "a rolled-back audit insert must not increment the failure window");
+        }
+
+        Check.That(tracker.RecordFailure(FailureAudit("ATOMICADMIN", "203.0.113.72")).IsLocked,
+            "the fifth committed audit/failure must establish the lock");
+    }
+
     private static void AuthenticationLockSurvivesRestart()
     {
         using DatabaseFixture fixture = new();
@@ -150,7 +205,7 @@ internal static class PersistenceSpecifications
             SqliteAuthenticationFailureTracker tracker = new(fixture.Path, protector);
             for (int attempt = 0; attempt < IdentityPolicy.FailureLimit - 1; attempt++)
             {
-                Check.That(!tracker.RecordFailure(account, source, TestTime).IsLocked,
+                Check.That(!tracker.RecordFailure(FailureAudit(account, source)).IsLocked,
                     "pre-threshold failures must remain unlocked");
             }
         }
@@ -158,7 +213,7 @@ internal static class PersistenceSpecifications
         using (AesGcmIdentityPayloadProtector protector = new(fixture.MasterKey))
         {
             SqliteAuthenticationFailureTracker tracker = new(fixture.Path, protector);
-            AuthenticationLockState fifth = tracker.RecordFailure(account, source, TestTime);
+            AuthenticationLockState fifth = tracker.RecordFailure(FailureAudit(account, source));
             Check.That(fifth.IsLocked && fifth.LockedUntilUtc == TestTime + IdentityPolicy.LockDuration,
                 "failure count must survive restart and lock on the fifth attempt");
         }
@@ -207,6 +262,20 @@ internal static class PersistenceSpecifications
             "BootstrapAdminActivated",
             account.PrincipalId,
             account.CanonicalUsername,
+            TestTime);
+
+    private static AuthenticationFailureAuditRecord FailureAudit(
+        string canonicalUsername,
+        string sourceAddress,
+        string reasonCode = "identity.password.invalid") =>
+        new(
+            Guid.NewGuid(),
+            Guid.Parse("54444444-4444-4444-8444-444444444444"),
+            canonicalUsername,
+            sourceAddress,
+            InstitutionAuthenticationContext.Teaching,
+            null,
+            reasonCode,
             TestTime);
 
     private static bool ThrowsCryptographic(Action action)

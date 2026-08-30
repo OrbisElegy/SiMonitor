@@ -102,5 +102,25 @@ internal sealed class SqliteIdentityDatabase
             locked_until_ticks INTEGER NOT NULL,
             PRIMARY KEY (dimension, subject_lookup)
         ) STRICT;
+
+        CREATE TABLE IF NOT EXISTS authentication_audit (
+            audit_id TEXT PRIMARY KEY,
+            account_lookup TEXT NOT NULL,
+            source_lookup TEXT NOT NULL,
+            protected_payload BLOB NOT NULL,
+            recorded_at_ticks INTEGER NOT NULL
+        ) STRICT;
+        CREATE INDEX IF NOT EXISTS ix_authentication_audit_account
+        ON authentication_audit(account_lookup, recorded_at_ticks);
+        CREATE INDEX IF NOT EXISTS ix_authentication_audit_source
+        ON authentication_audit(source_lookup, recorded_at_ticks);
+        CREATE TRIGGER IF NOT EXISTS authentication_audit_no_update
+        BEFORE UPDATE ON authentication_audit BEGIN
+            SELECT RAISE(ABORT, 'authentication audit is append-only');
+        END;
+        CREATE TRIGGER IF NOT EXISTS authentication_audit_no_delete
+        BEFORE DELETE ON authentication_audit BEGIN
+            SELECT RAISE(ABORT, 'authentication audit is append-only');
+        END;
         """;
 }

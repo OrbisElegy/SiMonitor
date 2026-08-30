@@ -67,6 +67,12 @@ public sealed class InstitutionAuthenticationService
             nowUtc);
         if (lockState.IsLocked)
         {
+            _failures.RecordRejection(CreateFailureAudit(
+                request,
+                canonicalUsername,
+                nowUtc,
+                null,
+                "identity.account.locked"));
             return new InstitutionAuthenticationResult(
                 AuthenticationOutcomeKind.Rejected,
                 "identity.account.locked",
@@ -84,10 +90,12 @@ public sealed class InstitutionAuthenticationService
         bool passwordValid = _passwordHasher.Verify(password, verifier);
         if (account is null || !passwordValid)
         {
-            AuthenticationLockState failure = _failures.RecordFailure(
+            AuthenticationLockState failure = _failures.RecordFailure(CreateFailureAudit(
+                request,
                 canonicalUsername,
-                request.SourceAddress,
-                nowUtc);
+                nowUtc,
+                account?.PrincipalId,
+                "identity.password.invalid"));
             return new InstitutionAuthenticationResult(
                 AuthenticationOutcomeKind.Rejected,
                 "identity.password.invalid",
@@ -101,6 +109,12 @@ public sealed class InstitutionAuthenticationService
             false);
         if (decision.Kind != AuthenticationOutcomeKind.Accepted)
         {
+            _failures.RecordRejection(CreateFailureAudit(
+                request,
+                canonicalUsername,
+                nowUtc,
+                account.PrincipalId,
+                decision.ReasonCode));
             return Reject(decision.ReasonCode);
         }
 
@@ -129,4 +143,28 @@ public sealed class InstitutionAuthenticationService
 
     private static InstitutionAuthenticationResult Reject(string reasonCode) =>
         new(AuthenticationOutcomeKind.Rejected, reasonCode);
+
+    private AuthenticationFailureAuditRecord CreateFailureAudit(
+        InstitutionAuthenticationRequest request,
+        string canonicalUsername,
+        DateTimeOffset recordedAtUtc,
+        Guid? principalId,
+        string reasonCode)
+    {
+        Guid auditId = _ids.NewAuditId();
+        if (auditId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Identity ID source returned an empty audit identifier.");
+        }
+
+        return new AuthenticationFailureAuditRecord(
+            auditId,
+            request.CorrelationId,
+            canonicalUsername,
+            request.SourceAddress,
+            request.Context,
+            principalId,
+            reasonCode,
+            recordedAtUtc);
+    }
 }

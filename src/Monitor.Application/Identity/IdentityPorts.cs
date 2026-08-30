@@ -54,10 +54,9 @@ public interface IAuthenticationFailureTracker
         string sourceAddress,
         DateTimeOffset nowUtc);
 
-    public AuthenticationLockState RecordFailure(
-        string canonicalUsername,
-        string sourceAddress,
-        DateTimeOffset nowUtc);
+    public AuthenticationLockState RecordFailure(AuthenticationFailureAuditRecord audit);
+
+    public void RecordRejection(AuthenticationFailureAuditRecord audit);
 
     public void ClearAccountFailures(string canonicalUsername);
 }

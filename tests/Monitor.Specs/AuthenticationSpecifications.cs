@@ -16,6 +16,7 @@ internal static class AuthenticationSpecifications
         new(nameof(LockExpiresAfterFrozenDuration), LockExpiresAfterFrozenDuration),
         new(nameof(SourceFailuresThrottleDifferentAccounts), SourceFailuresThrottleDifferentAccounts),
         new(nameof(UnknownAccountUsesDummyVerifier), UnknownAccountUsesDummyVerifier),
+        new(nameof(RejectedAttemptIsAuditedWithoutEnumeration), RejectedAttemptIsAuditedWithoutEnumeration),
         new(nameof(IncompatibleDummyVerifierIsRejected), IncompatibleDummyVerifierIsRejected),
         new(nameof(DisabledAccountIsRejected), DisabledAccountIsRejected),
         new(nameof(SessionTimeBoundariesFailClosed), SessionTimeBoundariesFailClosed),
@@ -52,6 +53,8 @@ internal static class AuthenticationSpecifications
 
         InstitutionAuthenticationResult locked = fixture.Authenticate(fixture.Password);
         Check.That(locked.ReasonCode == "identity.account.locked", "correct password cannot bypass lock");
+        Check.That(fixture.Tracker.AuditRecords[^1].ReasonCode == "identity.account.locked",
+            "an attempt rejected by an active lock must be audited");
     }
 
     private static void LockExpiresAfterFrozenDuration()
@@ -98,11 +101,32 @@ internal static class AuthenticationSpecifications
             "unknown account must use the configured dummy verifier");
     }
 
+    private static void RejectedAttemptIsAuditedWithoutEnumeration()
+    {
+        AuthenticationFixture fixture = new();
+        InstitutionAuthenticationResult result = fixture.Authenticate(
+            fixture.WrongPassword,
+            username: "missing-user",
+            sourceAddress: "192.0.2.77");
+        AuthenticationFailureAuditRecord audit = fixture.Tracker.AuditRecords.Single();
+        Check.That(result.ReasonCode == audit.ReasonCode &&
+            audit.ReasonCode == "identity.password.invalid",
+            "the audit must preserve the public non-enumerating rejection code");
+        Check.That(audit.CanonicalUsername == "MISSING-USER" &&
+            audit.SourceAddress == "192.0.2.77" &&
+            audit.Context == InstitutionAuthenticationContext.Teaching,
+            "the audit must bind the normalized account, source and context");
+        Check.That(audit.PrincipalId is null,
+            "an unknown account audit must not invent a principal identity");
+    }
+
     private static void DisabledAccountIsRejected()
     {
         AuthenticationFixture fixture = new(accountState: InstitutionAccountState.Disabled);
         InstitutionAuthenticationResult result = fixture.Authenticate(fixture.Password);
         Check.That(result.ReasonCode == "identity.account.disabled", "disabled account must reject");
+        Check.That(fixture.Tracker.AuditRecords.Single().PrincipalId == fixture.Account.PrincipalId,
+            "disabled-account audit must bind the rejected principal");
     }
 
     private static void IncompatibleDummyVerifierIsRejected()
@@ -188,9 +212,10 @@ internal static class AuthenticationSpecifications
                 verifier,
                 1);
             Clock = new MutableClock(new DateTimeOffset(2026, 8, 30, 9, 0, 0, TimeSpan.Zero));
+            Tracker = new InMemoryAuthenticationFailureTracker();
             Service = new InstitutionAuthenticationService(
                 new TestAccountRepository(Account),
-                new InMemoryAuthenticationFailureTracker(),
+                Tracker,
                 Hasher,
                 DummyVerifier,
                 Clock,
@@ -208,6 +233,8 @@ internal static class AuthenticationSpecifications
         public InstitutionAccount Account { get; }
 
         public MutableClock Clock { get; }
+
+        public InMemoryAuthenticationFailureTracker Tracker { get; }
 
         public InstitutionAuthenticationService Service { get; }
 
@@ -263,7 +290,7 @@ internal static class AuthenticationSpecifications
     {
         public Guid NewPrincipalId() => Guid.Parse("42111111-1111-4111-8111-111111111111");
 
-        public Guid NewAuditId() => Guid.Parse("42222222-2222-4222-8222-222222222222");
+        public Guid NewAuditId() => Guid.NewGuid();
 
         public Guid NewSessionId() => Guid.Parse("43333333-3333-4333-8333-333333333333");
     }

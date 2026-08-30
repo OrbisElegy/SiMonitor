@@ -11,6 +11,18 @@ public sealed class InMemoryAuthenticationFailureTracker : IAuthenticationFailur
     private readonly Dictionary<string, List<DateTimeOffset>> _sourceFailures = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _accountLocks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _sourceLocks = new(StringComparer.Ordinal);
+    private readonly List<AuthenticationFailureAuditRecord> _audit = [];
+
+    public IReadOnlyList<AuthenticationFailureAuditRecord> AuditRecords
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _audit];
+            }
+        }
+    }
 
     public AuthenticationLockState GetLockState(
         string canonicalUsername,
@@ -26,31 +38,53 @@ public sealed class InMemoryAuthenticationFailureTracker : IAuthenticationFailur
         }
     }
 
-    public AuthenticationLockState RecordFailure(
-        string canonicalUsername,
-        string sourceAddress,
-        DateTimeOffset nowUtc)
+    public AuthenticationLockState RecordFailure(AuthenticationFailureAuditRecord audit)
     {
+        ArgumentNullException.ThrowIfNull(audit);
         lock (_sync)
         {
-            int accountCount = AddFailure(_accountFailures, canonicalUsername, nowUtc);
-            int sourceCount = AddFailure(_sourceFailures, sourceAddress, nowUtc);
+            _audit.Add(audit);
+            int accountCount = AddFailure(
+                _accountFailures,
+                audit.CanonicalUsername,
+                audit.RecordedAtUtc);
+            int sourceCount = AddFailure(
+                _sourceFailures,
+                audit.SourceAddress,
+                audit.RecordedAtUtc);
             DateTimeOffset? accountUntil = null;
             DateTimeOffset? sourceUntil = null;
             if (accountCount >= IdentityPolicy.FailureLimit)
             {
-                accountUntil = nowUtc + IdentityPolicy.LockDuration;
-                _accountLocks[canonicalUsername] = accountUntil.Value;
+                accountUntil = audit.RecordedAtUtc + IdentityPolicy.LockDuration;
+                _accountLocks[audit.CanonicalUsername] = accountUntil.Value;
             }
 
             if (sourceCount >= IdentityPolicy.FailureLimit)
             {
-                sourceUntil = nowUtc + IdentityPolicy.LockDuration;
-                _sourceLocks[sourceAddress] = sourceUntil.Value;
+                sourceUntil = audit.RecordedAtUtc + IdentityPolicy.LockDuration;
+                _sourceLocks[audit.SourceAddress] = sourceUntil.Value;
             }
 
             DateTimeOffset? lockedUntil = Latest(accountUntil, sourceUntil);
             return new AuthenticationLockState(lockedUntil is not null, lockedUntil);
+        }
+    }
+
+    public void RecordRejection(AuthenticationFailureAuditRecord audit)
+    {
+        ArgumentNullException.ThrowIfNull(audit);
+        lock (_sync)
+        {
+            _audit.Add(audit);
+        }
+    }
+
+    public AuthenticationFailureAuditRecord? FindAudit(Guid auditId)
+    {
+        lock (_sync)
+        {
+            return _audit.Find(record => record.AuditId == auditId);
         }
     }
 

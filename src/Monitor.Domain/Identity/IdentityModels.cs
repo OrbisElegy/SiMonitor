@@ -43,6 +43,16 @@ public sealed record AuthenticationOutcome(AuthenticationOutcomeKind Kind, strin
 
 public sealed record MobileFactorOutcome(MobileFactorOutcomeKind Kind, string ReasonCode);
 
+public sealed record AuthenticationFailureAuditRecord(
+    Guid AuditId,
+    Guid CorrelationId,
+    string CanonicalUsername,
+    string SourceAddress,
+    InstitutionAuthenticationContext Context,
+    Guid? PrincipalId,
+    string ReasonCode,
+    DateTimeOffset RecordedAtUtc);
+
 public sealed record LocalPrincipal(
     Guid SessionId,
     Guid PrincipalId,

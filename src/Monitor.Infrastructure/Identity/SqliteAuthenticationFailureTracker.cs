@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Monitor.Application.Identity;
 using Monitor.Domain.Identity;
@@ -41,15 +43,23 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
         return new AuthenticationLockState(lockedUntil is not null, lockedUntil);
     }
 
-    public AuthenticationLockState RecordFailure(
-        string canonicalUsername,
-        string sourceAddress,
-        DateTimeOffset nowUtc)
+    public AuthenticationLockState RecordFailure(AuthenticationFailureAuditRecord audit)
     {
-        (string accountLookup, string sourceLookup) = Lookups(canonicalUsername, sourceAddress);
-        long nowTicks = nowUtc.UtcTicks;
-        long windowStartTicks = (nowUtc - IdentityPolicy.FailureWindow).UtcTicks;
-        long lockedUntilTicks = (nowUtc + IdentityPolicy.LockDuration).UtcTicks;
+        ValidateAudit(audit);
+        if (!StringComparer.Ordinal.Equals(audit.ReasonCode, "identity.password.invalid"))
+        {
+            throw new ArgumentException(
+                "Only an invalid-password audit can increment authentication failures.",
+                nameof(audit));
+        }
+
+        (string accountLookup, string sourceLookup) = Lookups(
+            audit.CanonicalUsername,
+            audit.SourceAddress);
+        byte[] protectedAudit = ProtectAudit(audit);
+        long nowTicks = audit.RecordedAtUtc.UtcTicks;
+        long windowStartTicks = (audit.RecordedAtUtc - IdentityPolicy.FailureWindow).UtcTicks;
+        long lockedUntilTicks = (audit.RecordedAtUtc + IdentityPolicy.LockDuration).UtcTicks;
 
         using SqliteConnection connection = _database.Open();
         using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
@@ -79,6 +89,7 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
             UpsertLock(connection, transaction, SourceDimension, sourceLookup, lockedUntilTicks);
         }
 
+        InsertAudit(connection, transaction, audit, accountLookup, sourceLookup, protectedAudit);
         DateTimeOffset? lockedUntil = ReadLatestLock(
             connection,
             transaction,
@@ -86,6 +97,77 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
             sourceLookup);
         transaction.Commit();
         return new AuthenticationLockState(lockedUntil is not null, lockedUntil);
+    }
+
+    public void RecordRejection(AuthenticationFailureAuditRecord audit)
+    {
+        ValidateAudit(audit);
+        if (StringComparer.Ordinal.Equals(audit.ReasonCode, "identity.password.invalid"))
+        {
+            throw new ArgumentException(
+                "Invalid-password audits must update the failure window atomically.",
+                nameof(audit));
+        }
+
+        (string accountLookup, string sourceLookup) = Lookups(
+            audit.CanonicalUsername,
+            audit.SourceAddress);
+        byte[] protectedAudit = ProtectAudit(audit);
+        using SqliteConnection connection = _database.Open();
+        using SqliteTransaction transaction = connection.BeginTransaction(deferred: false);
+        InsertAudit(connection, transaction, audit, accountLookup, sourceLookup, protectedAudit);
+        transaction.Commit();
+    }
+
+    public AuthenticationFailureAuditRecord? FindAudit(Guid auditId)
+    {
+        if (auditId == Guid.Empty)
+        {
+            return null;
+        }
+
+        using SqliteConnection connection = _database.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT account_lookup, source_lookup, protected_payload, recorded_at_ticks
+            FROM authentication_audit
+            WHERE audit_id = $audit_id;
+            """;
+        command.Parameters.AddWithValue("$audit_id", auditId.ToString("D"));
+        using SqliteDataReader reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        string accountLookup = reader.GetString(0);
+        string sourceLookup = reader.GetString(1);
+        byte[] protectedPayload = reader.GetFieldValue<byte[]>(2);
+        byte[] plaintext = _protector.Unprotect(protectedPayload, AuditPurpose(auditId));
+        try
+        {
+            AuthenticationFailureAuditRecord audit =
+                JsonSerializer.Deserialize<AuthenticationFailureAuditRecord>(plaintext) ??
+                throw new InvalidOperationException("The protected authentication audit is empty.");
+            ValidateAudit(audit);
+            if (audit.AuditId != auditId ||
+                audit.RecordedAtUtc.UtcTicks != reader.GetInt64(3) ||
+                !StringComparer.Ordinal.Equals(
+                    accountLookup,
+                    _protector.LookupToken(audit.CanonicalUsername, AccountLookupPurpose)) ||
+                !StringComparer.Ordinal.Equals(
+                    sourceLookup,
+                    _protector.LookupToken(audit.SourceAddress, SourceLookupPurpose)))
+            {
+                throw new InvalidOperationException("The protected authentication audit index is inconsistent.");
+            }
+
+            return audit;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
     }
 
     public void ClearAccountFailures(string canonicalUsername)
@@ -192,6 +274,33 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
         command.ExecuteNonQuery();
     }
 
+    private static void InsertAudit(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        AuthenticationFailureAuditRecord audit,
+        string accountLookup,
+        string sourceLookup,
+        byte[] protectedPayload)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO authentication_audit(
+                audit_id,
+                account_lookup,
+                source_lookup,
+                protected_payload,
+                recorded_at_ticks)
+            VALUES ($audit_id, $account_lookup, $source_lookup, $payload, $recorded);
+            """;
+        command.Parameters.AddWithValue("$audit_id", audit.AuditId.ToString("D"));
+        command.Parameters.AddWithValue("$account_lookup", accountLookup);
+        command.Parameters.AddWithValue("$source_lookup", sourceLookup);
+        command.Parameters.Add("$payload", SqliteType.Blob).Value = protectedPayload;
+        command.Parameters.AddWithValue("$recorded", audit.RecordedAtUtc.UtcTicks);
+        command.ExecuteNonQuery();
+    }
+
     private static void DeleteExpiredLocks(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -240,5 +349,40 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
         return (
             _protector.LookupToken(canonicalUsername, AccountLookupPurpose),
             _protector.LookupToken(sourceAddress, SourceLookupPurpose));
+    }
+
+    private byte[] ProtectAudit(AuthenticationFailureAuditRecord audit)
+    {
+        byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(audit);
+        try
+        {
+            return _protector.Protect(plaintext, AuditPurpose(audit.AuditId));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
+    }
+
+    private static string AuditPurpose(Guid auditId) =>
+        $"authentication-audit-payload-v1:{auditId:D}";
+
+    private static void ValidateAudit(AuthenticationFailureAuditRecord audit)
+    {
+        ArgumentNullException.ThrowIfNull(audit);
+        bool supportedReason = audit.ReasonCode is
+            "identity.password.invalid" or
+            "identity.account.locked" or
+            "identity.account.disabled";
+        if (audit.AuditId == Guid.Empty ||
+            audit.CorrelationId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(audit.CanonicalUsername) ||
+            string.IsNullOrWhiteSpace(audit.SourceAddress) ||
+            !Enum.IsDefined(audit.Context) ||
+            audit.PrincipalId == Guid.Empty ||
+            !supportedReason)
+        {
+            throw new ArgumentException("The authentication failure audit is invalid.", nameof(audit));
+        }
     }
 }

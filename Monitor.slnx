@@ -1,0 +1,11 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Monitor.Domain/Monitor.Domain.csproj" />
+    <Project Path="src/Monitor.Application/Monitor.Application.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Monitor.Specs/Monitor.Specs.csproj" />
+  </Folder>
+</Solution>
+

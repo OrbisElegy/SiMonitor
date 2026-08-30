@@ -8,6 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Monitor.Domain/Monitor.Domain.csproj" />
     <ProjectReference Include="../../src/Monitor.Application/Monitor.Application.csproj" />
+    <ProjectReference Include="../../src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
-

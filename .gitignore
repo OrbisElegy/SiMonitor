@@ -7,4 +7,5 @@ obj/
 TestResults/
 artifacts/
 *.trx
-
+*.pyc
+__pycache__/

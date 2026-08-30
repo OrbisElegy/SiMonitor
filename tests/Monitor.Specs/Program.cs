@@ -12,6 +12,7 @@ internal static class Program
             .. IdentitySpecifications.All,
             .. AuthenticationSpecifications.All,
             .. PersistenceSpecifications.All,
+            .. KeyProtectionSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

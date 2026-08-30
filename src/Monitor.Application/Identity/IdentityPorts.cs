@@ -8,6 +8,8 @@ public interface IPasswordHasher
     public PasswordVerifier Hash(ReadOnlySpan<char> password);
 
     public bool Verify(ReadOnlySpan<char> password, PasswordVerifier verifier);
+
+    public bool IsSupported(PasswordVerifier verifier);
 }
 
 public interface ICompromisedPasswordChecker
@@ -34,4 +36,28 @@ public interface IIdentityIdSource
     public Guid NewPrincipalId();
 
     public Guid NewAuditId();
+
+    public Guid NewSessionId();
+}
+
+public interface IInstitutionAccountRepository
+{
+    public InstitutionAccount? FindByCanonicalUsername(string canonicalUsername);
+}
+
+public sealed record AuthenticationLockState(bool IsLocked, DateTimeOffset? LockedUntilUtc);
+
+public interface IAuthenticationFailureTracker
+{
+    public AuthenticationLockState GetLockState(
+        string canonicalUsername,
+        string sourceAddress,
+        DateTimeOffset nowUtc);
+
+    public AuthenticationLockState RecordFailure(
+        string canonicalUsername,
+        string sourceAddress,
+        DateTimeOffset nowUtc);
+
+    public void ClearAccountFailures(string canonicalUsername);
 }

@@ -43,6 +43,28 @@ public sealed record AuthenticationOutcome(AuthenticationOutcomeKind Kind, strin
 
 public sealed record MobileFactorOutcome(MobileFactorOutcomeKind Kind, string ReasonCode);
 
+public sealed record LocalPrincipal(
+    Guid SessionId,
+    Guid PrincipalId,
+    string AuthenticationMethod,
+    InstitutionRole Role,
+    IReadOnlyList<string> Scopes,
+    DateTimeOffset AuthenticatedAtUtc,
+    DateTimeOffset LastActivityAtUtc,
+    DateTimeOffset SensitiveAuthenticatedAtUtc,
+    DateTimeOffset ExpiresAtUtc);
+
+public enum SessionAccessOutcomeKind
+{
+    Allowed,
+    SessionExpired,
+    InactivityExpired,
+    SensitiveReauthenticationRequired,
+    InvalidClockState,
+}
+
+public sealed record SessionAccessOutcome(SessionAccessOutcomeKind Kind, string ReasonCode);
+
 public sealed record PasswordVerifier(
     string Algorithm,
     int Iterations,

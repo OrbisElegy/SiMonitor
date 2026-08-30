@@ -248,6 +248,8 @@ internal static class IdentitySpecifications
 
         public bool Verify(ReadOnlySpan<char> password, PasswordVerifier verifier) =>
             verifier == Hash(password);
+
+        public bool IsSupported(PasswordVerifier verifier) => verifier.Algorithm == "TEST-ONLY";
     }
 
     private sealed class TestCompromisedChecker(string? compromised) : ICompromisedPasswordChecker
@@ -266,6 +268,8 @@ internal static class IdentitySpecifications
         public Guid NewPrincipalId() => Guid.Parse("31111111-1111-4111-8111-111111111111");
 
         public Guid NewAuditId() => Guid.Parse("32222222-2222-4222-8222-222222222222");
+
+        public Guid NewSessionId() => Guid.Parse("33333333-3333-4333-8333-333333333333");
     }
 
     internal sealed class TestBootstrapRepository : IBootstrapIdentityRepository

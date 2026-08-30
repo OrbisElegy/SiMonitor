@@ -13,6 +13,12 @@ public static class IdentityPolicy
     public const int MaximumPasswordLength = 128;
     public const int MinimumUsernameLength = 3;
     public const int MaximumUsernameLength = 64;
+    public const int FailureLimit = 5;
+    public static readonly TimeSpan FailureWindow = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
+    public static readonly TimeSpan InactivityLimit = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan SensitiveReauthenticationLimit = TimeSpan.FromMinutes(15);
 
     private static readonly Dictionary<InstitutionRole, HashSet<string>> RoleScopes = new()
     {
@@ -49,6 +55,21 @@ public static class IdentityPolicy
 
     public static string CanonicalizeUsername(string username) =>
         NormalizeUsername(username).ToUpperInvariant();
+
+    public static bool TryCanonicalizeUsername(string username, out string canonicalUsername)
+    {
+        try
+        {
+            canonicalUsername = CanonicalizeUsername(username);
+            int length = canonicalUsername.EnumerateRunes().Count();
+            return length is >= MinimumUsernameLength and <= MaximumUsernameLength;
+        }
+        catch (ArgumentException)
+        {
+            canonicalUsername = string.Empty;
+            return false;
+        }
+    }
 
     public static bool IsUsernameAllowed(string username, out string reasonCode)
     {
@@ -109,6 +130,11 @@ public static class IdentityPolicy
         return RoleScopes.TryGetValue(role, out HashSet<string>? scopes) && scopes.Contains(scope);
     }
 
+    public static IReadOnlyList<string> GetScopes(InstitutionRole role) =>
+        RoleScopes.TryGetValue(role, out HashSet<string>? scopes)
+            ? scopes.Order(StringComparer.Ordinal).ToArray()
+            : [];
+
     public static AuthenticationOutcome EvaluateAuthentication(
         InstitutionAuthenticationContext context,
         bool passwordValid,
@@ -154,5 +180,67 @@ public static class IdentityPolicy
             : new MobileFactorOutcome(
                 MobileFactorOutcomeKind.NoAuthorityChange,
                 "identity.mobile_factor.deferred");
+    }
+
+    public static SessionAccessOutcome EvaluateSession(
+        LocalPrincipal principal,
+        DateTimeOffset nowUtc,
+        bool sensitiveOperation)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        if (principal.AuthenticatedAtUtc > nowUtc ||
+            principal.LastActivityAtUtc < principal.AuthenticatedAtUtc ||
+            principal.LastActivityAtUtc > nowUtc ||
+            principal.SensitiveAuthenticatedAtUtc < principal.AuthenticatedAtUtc ||
+            principal.SensitiveAuthenticatedAtUtc > nowUtc ||
+            principal.ExpiresAtUtc != principal.AuthenticatedAtUtc + SessionLifetime)
+        {
+            return new SessionAccessOutcome(
+                SessionAccessOutcomeKind.InvalidClockState,
+                "identity.session.clock_state_invalid");
+        }
+
+        if (nowUtc >= principal.ExpiresAtUtc)
+        {
+            return new SessionAccessOutcome(
+                SessionAccessOutcomeKind.SessionExpired,
+                "identity.session.overall_expired");
+        }
+
+        if (nowUtc - principal.LastActivityAtUtc >= InactivityLimit)
+        {
+            return new SessionAccessOutcome(
+                SessionAccessOutcomeKind.InactivityExpired,
+                "identity.session.inactivity_expired");
+        }
+
+        if (sensitiveOperation &&
+            nowUtc - principal.SensitiveAuthenticatedAtUtc >= SensitiveReauthenticationLimit)
+        {
+            return new SessionAccessOutcome(
+                SessionAccessOutcomeKind.SensitiveReauthenticationRequired,
+                "identity.session.sensitive_reauthentication_required");
+        }
+
+        return new SessionAccessOutcome(SessionAccessOutcomeKind.Allowed, "identity.session.allowed");
+    }
+
+    public static LocalPrincipal RecordActivity(LocalPrincipal principal, DateTimeOffset nowUtc)
+    {
+        SessionAccessOutcome access = EvaluateSession(principal, nowUtc, false);
+        if (access.Kind != SessionAccessOutcomeKind.Allowed)
+        {
+            throw new InvalidOperationException(access.ReasonCode);
+        }
+
+        return principal with { LastActivityAtUtc = nowUtc };
+    }
+
+    public static LocalPrincipal RecordSensitiveReauthentication(
+        LocalPrincipal principal,
+        DateTimeOffset nowUtc)
+    {
+        LocalPrincipal active = RecordActivity(principal, nowUtc);
+        return active with { SensitiveAuthenticatedAtUtc = nowUtc };
     }
 }

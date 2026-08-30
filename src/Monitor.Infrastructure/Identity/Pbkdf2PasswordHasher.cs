@@ -31,8 +31,7 @@ public sealed class Pbkdf2PasswordHasher : IPasswordHasher
     public bool Verify(ReadOnlySpan<char> password, PasswordVerifier verifier)
     {
         ArgumentNullException.ThrowIfNull(verifier);
-        if (!StringComparer.Ordinal.Equals(verifier.Algorithm, Algorithm) ||
-            verifier.Iterations != IdentityPolicy.PasswordIterations)
+        if (!IsSupported(verifier))
         {
             return false;
         }
@@ -72,6 +71,35 @@ public sealed class Pbkdf2PasswordHasher : IPasswordHasher
             CryptographicOperations.ZeroMemory(actual);
             CryptographicOperations.ZeroMemory(expected);
             CryptographicOperations.ZeroMemory(salt);
+        }
+    }
+
+    public bool IsSupported(PasswordVerifier verifier)
+    {
+        ArgumentNullException.ThrowIfNull(verifier);
+        if (!StringComparer.Ordinal.Equals(verifier.Algorithm, Algorithm) ||
+            verifier.Iterations != IdentityPolicy.PasswordIterations)
+        {
+            return false;
+        }
+
+        byte[] salt = [];
+        byte[] subkey = [];
+        try
+        {
+            salt = Convert.FromBase64String(verifier.SaltBase64);
+            subkey = Convert.FromBase64String(verifier.SubkeyBase64);
+            return salt.Length == IdentityPolicy.PasswordSaltBytes &&
+                subkey.Length == IdentityPolicy.PasswordSubkeyBytes;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(salt);
+            CryptographicOperations.ZeroMemory(subkey);
         }
     }
 }

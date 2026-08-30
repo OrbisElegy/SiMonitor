@@ -10,6 +10,7 @@ internal static class Program
             .. TherapySpecifications.All,
             .. AssessmentSpecifications.All,
             .. IdentitySpecifications.All,
+            .. AuthenticationSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

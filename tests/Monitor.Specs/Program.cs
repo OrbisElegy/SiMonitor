@@ -5,7 +5,11 @@ internal static class Program
 {
     public static int Main()
     {
-        Specification[] specifications = TherapySpecifications.All;
+        Specification[] specifications =
+        [
+            .. TherapySpecifications.All,
+            .. AssessmentSpecifications.All,
+        ];
 
         for (int index = 0; index < specifications.Length; index++)
         {

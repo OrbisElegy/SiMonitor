@@ -1,0 +1,15 @@
+{
+  "schema": "MonitorDependencyLedger@1",
+  "toolchain": {
+    "dotnet_sdk": {
+      "version": "10.0.400",
+      "bundled_runtime": "10.0.11",
+      "linux_x64_archive_sha512": "1033977dd837150e0814cf0c5d5b17ceb63925fda7ba2158b47258a4bd7c048cf82eac3bc1166f3146f53124a3f5fba09db1de1260d2ce96399860303b404b48",
+      "source": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-linux-x64.tar.gz"
+    }
+  },
+  "direct_packages": [],
+  "native_dependencies": [],
+  "notes": "The bootstrap slice uses only the pinned .NET reference packs. UI, SQLite and native audio dependencies are not admitted yet."
+}
+

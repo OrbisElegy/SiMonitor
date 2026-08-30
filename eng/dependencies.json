@@ -12,7 +12,53 @@
       "release_rule": "ReleaseBaseline records the resolved SDK and binary hashes"
     }
   },
-  "direct_packages": [],
-  "native_dependencies": [],
-  "notes": "Development follows the apt-managed .NET 10 SDK. Release candidates still require an immutable toolchain evidence record. UI, SQLite and native audio dependencies are not admitted yet."
+  "direct_packages": [
+    {
+      "id": "Microsoft.Data.Sqlite",
+      "version": "10.0.11",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "7je7UELzm131GiLYc4PpZvfKXIgIyzPM+v+tjcd/nbnuWRfgcONYKzDTqJlURxwVCFsVnlpmq6y6yn4qvR8QXQ=="
+    }
+  ],
+  "transitive_packages": [
+    {
+      "id": "Microsoft.Data.Sqlite.Core",
+      "version": "10.0.11",
+      "license": "MIT",
+      "content_hash_sha512_base64": "hubA20AGenQ4Sx0ElWaPpB8DISjXpdx463+1zOGRslsT0e/t/06ITv+pHsop8CcJ0d8PZLfgnT7juCDVD79Dkw=="
+    },
+    {
+      "id": "SQLitePCLRaw.bundle_e_sqlite3",
+      "version": "2.1.12",
+      "license": "Apache-2.0",
+      "content_hash_sha512_base64": "mAgscpQMLw5/nfA1Q5oJVAT29yROUo1ifZGbbTpx/lwZpSxMUGoYbKfmvdm8oXER+RzxqBmmQzeBEVKfeHv2nw=="
+    },
+    {
+      "id": "SQLitePCLRaw.core",
+      "version": "2.1.12",
+      "license": "Apache-2.0",
+      "content_hash_sha512_base64": "ETpNw9DY3ckWLgRRAeCHj+GKOuPi61aeczkXhgHexUvqoZBAYg8RYESE2J7O1M7+o6QbdSEZwrw9bfqztUVWXg=="
+    },
+    {
+      "id": "SQLitePCLRaw.lib.e_sqlite3",
+      "version": "2.1.12",
+      "license": "Apache-2.0",
+      "content_hash_sha512_base64": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w=="
+    },
+    {
+      "id": "SQLitePCLRaw.provider.e_sqlite3",
+      "version": "2.1.12",
+      "license": "Apache-2.0",
+      "content_hash_sha512_base64": "W3oH4XIfCzFrgUSDKHhN6N+dgzA5YHOR2VxX8GB6Qy7CyrJJgxPEG8NirgYWlPQC5P2jz2knSsexWu4tDUL33g=="
+    }
+  ],
+  "native_dependencies": [
+    {
+      "id": "e_sqlite3",
+      "provided_by": "SQLitePCLRaw.lib.e_sqlite3 2.1.12",
+      "purpose": "SQLite native engine"
+    }
+  ],
+  "notes": "Development follows the apt-managed .NET 10 SDK. Release candidates still require an immutable toolchain evidence record. Package resolution is committed in packages.lock.json files; UI and native audio dependencies are not admitted yet."
 }

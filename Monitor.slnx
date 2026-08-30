@@ -4,6 +4,7 @@
     <Project Path="src/Monitor.Domain/Monitor.Domain.csproj" />
     <Project Path="src/Monitor.Application/Monitor.Application.csproj" />
     <Project Path="src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
+    <Project Path="src/Monitor.Simulation/Monitor.Simulation.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Monitor.Specs/Monitor.Specs.csproj" />

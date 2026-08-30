@@ -63,6 +63,9 @@
           "Monitor.Application": "[1.0.0, )",
           "Monitor.Domain": "[1.0.0, )"
         }
+      },
+      "monitor.simulation": {
+        "type": "Project"
       }
     }
   }

@@ -37,7 +37,7 @@ internal static class DeterminismSpecifications
                 ["1d72f19f13e0122f", "d4610fa8a8fa2657", "2d3d863cadca92a4", "359d1adc39d3389d", "b924ce94f674a4ba", "f2e5368df9ebe825", "410213ccfd7a3a46", "6fa927cc63842293"]),
         ];
 
-        using DeterministicStreamFactory factory =
+        using var factory =
             DeterministicStreamFactory.FromLowercaseHex(RootSeedHex);
         foreach (GoldenStream vector in vectors)
         {
@@ -55,7 +55,7 @@ internal static class DeterminismSpecifications
 
     private static void SamplingConsumesOnlyItsNamedStream()
     {
-        using DeterministicStreamFactory factory =
+        using var factory =
             DeterministicStreamFactory.FromLowercaseHex(RootSeedHex);
         DeterministicRandomSource noise = factory.CreateStream("sensor.ecg.noise");
         DeterministicRandomSource drift = factory.CreateStream("physiology.hr.drift");
@@ -77,13 +77,14 @@ internal static class DeterminismSpecifications
             "UniformBelowU64 must reject the same values as the frozen algorithm");
         Check.That(drift.DrawCount == driftProbe.DrawCount && drift.DrawCount > 1,
             "every bounded rejection draw must remain visible in draw_count");
-        Check.That(ThrowsArgumentOutOfRange(() => drift.UniformBelow(0)),
+        Check.That(ConfigurationReason(() => drift.UniformBelow(0)) ==
+            "UniformBelowU64.InvalidBound",
             "a zero bound must reject as a configuration error");
     }
 
     private static void CheckpointRestoresEveryFutureDraw()
     {
-        using DeterministicStreamFactory factory =
+        using var factory =
             DeterministicStreamFactory.FromLowercaseHex(RootSeedHex);
         DeterministicRandomSource noise = factory.CreateStream("sensor.ecg.noise");
         DeterministicRandomSource drift = factory.CreateStream("physiology.hr.drift");
@@ -109,7 +110,7 @@ internal static class DeterminismSpecifications
             ["physiology.hr.drift", "sensor.ecg.noise"]),
             "checkpoint streams must use canonical ASCII ordering");
 
-        Dictionary<string, DeterministicRandomSource> resumed = restored.Streams.ToDictionary(
+        var resumed = restored.Streams.ToDictionary(
             stream => stream.StreamId,
             DeterministicRandomSource.Restore,
             StringComparer.Ordinal);
@@ -146,7 +147,7 @@ internal static class DeterminismSpecifications
         Check.That(ThrowsArgument(() =>
             DeterministicStreamFactory.FromLowercaseHex(RootSeedHex.ToUpperInvariant())),
             "uppercase seed text must reject");
-        using DeterministicStreamFactory factory =
+        using var factory =
             DeterministicStreamFactory.FromLowercaseHex(RootSeedHex);
         foreach (string streamId in new[] { "Sensor.ecg", "sensor..ecg", "sensor.ecg.", "传感器.ecg" })
         {
@@ -181,16 +182,16 @@ internal static class DeterminismSpecifications
         }
     }
 
-    private static bool ThrowsArgumentOutOfRange(Action action)
+    private static string? ConfigurationReason(Action action)
     {
         try
         {
             action();
-            return false;
+            return null;
         }
-        catch (ArgumentOutOfRangeException)
+        catch (DeterminismConfigurationException exception)
         {
-            return true;
+            return exception.ReasonCode;
         }
     }
 

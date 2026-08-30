@@ -15,6 +15,7 @@ internal static class Program
             .. KeyProtectionSpecifications.All,
             .. BackupSpecifications.All,
             .. DeterminismSpecifications.All,
+            .. NumericDeterminismSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

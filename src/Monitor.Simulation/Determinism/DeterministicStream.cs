@@ -66,7 +66,7 @@ public sealed class DeterministicRandomSource
     {
         if (bound == 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(bound), "UniformBelowU64 requires a positive bound.");
+            throw new DeterminismConfigurationException("UniformBelowU64.InvalidBound", nameof(bound));
         }
 
         ulong threshold = unchecked(0UL - bound) % bound;

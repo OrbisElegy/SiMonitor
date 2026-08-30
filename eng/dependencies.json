@@ -2,14 +2,17 @@
   "schema": "MonitorDependencyLedger@1",
   "toolchain": {
     "dotnet_sdk": {
-      "version": "10.0.111",
-      "bundled_runtime": "10.0.11",
-      "distribution_package": "dotnet-sdk-10.0=10.0.111-0ubuntu1~24.04.1",
-      "host_binary_sha256": "1c13be7f10008294dfd25f0fc0cd7c88e26d3dbaf8e16019af6c5bb53dd0259d",
-      "source": "Ubuntu 24.04 Microsoft .NET distribution package"
+      "development_policy": "apt-managed stable .NET 10 SDK",
+      "global_json_floor": "10.0.100",
+      "roll_forward": "latestFeature",
+      "allow_prerelease": false,
+      "last_verified_sdk": "10.0.111",
+      "last_verified_runtime": "10.0.11",
+      "source": "Ubuntu 24.04 dotnet-sdk-10.0 package",
+      "release_rule": "ReleaseBaseline records the resolved SDK and binary hashes"
     }
   },
   "direct_packages": [],
   "native_dependencies": [],
-  "notes": "The bootstrap slice uses only the pinned .NET reference packs. UI, SQLite and native audio dependencies are not admitted yet."
+  "notes": "Development follows the apt-managed .NET 10 SDK. Release candidates still require an immutable toolchain evidence record. UI, SQLite and native audio dependencies are not admitted yet."
 }

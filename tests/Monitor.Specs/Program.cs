@@ -25,6 +25,7 @@ internal static class Program
             .. WaveformBlockAssemblerSpecifications.All,
             .. WaveformBlockRingSpecifications.All,
             .. WaveformRecoveryPlannerSpecifications.All,
+            .. ConnectionHealthSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

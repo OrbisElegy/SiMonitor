@@ -22,6 +22,7 @@ internal static class Program
             .. SignalAcquisitionDelaySpecifications.All,
             .. SensorFaultSpecifications.All,
             .. WaveformEnvelopeCodecSpecifications.All,
+            .. WaveformBlockAssemblerSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

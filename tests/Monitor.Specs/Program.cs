@@ -16,6 +16,7 @@ internal static class Program
             .. BackupSpecifications.All,
             .. DeterminismSpecifications.All,
             .. NumericDeterminismSpecifications.All,
+            .. AuthorityOrderingSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

@@ -20,6 +20,7 @@ internal static class Program
             .. DeterminismKernelSpecifications.All,
             .. SignalSampleClockSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,
+            .. SensorFaultSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

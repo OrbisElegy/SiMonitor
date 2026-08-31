@@ -19,6 +19,7 @@ internal static class Program
             .. AuthorityOrderingSpecifications.All,
             .. DeterminismKernelSpecifications.All,
             .. SignalSampleClockSpecifications.All,
+            .. SignalAcquisitionDelaySpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

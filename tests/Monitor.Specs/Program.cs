@@ -21,6 +21,7 @@ internal static class Program
             .. SignalSampleClockSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,
             .. SensorFaultSpecifications.All,
+            .. WaveformEnvelopeCodecSpecifications.All,
         ];
 
         for (int index = 0; index < specifications.Length; index++)

@@ -26,6 +26,7 @@ internal static class Program
             .. WaveformBlockRingSpecifications.All,
             .. WaveformRecoveryPlannerSpecifications.All,
             .. ConnectionHealthSpecifications.All,
+            .. DataContinuitySpecifications.All,
             .. WaveformSubscriberQueueSpecifications.All,
         ];
 

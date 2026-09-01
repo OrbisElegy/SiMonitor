@@ -30,6 +30,7 @@ internal static class Program
             .. RecoveryHandshakeSpecifications.All,
             .. RecoveryResyncPlanFactorySpecifications.All,
             .. RecoveryRelockSpecifications.All,
+            .. RecoveryWireCodecSpecifications.All,
             .. WaveformSubscriberQueueSpecifications.All,
         ];
 

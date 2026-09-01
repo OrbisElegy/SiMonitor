@@ -27,6 +27,7 @@ internal static class Program
             .. WaveformRecoveryPlannerSpecifications.All,
             .. ConnectionHealthSpecifications.All,
             .. DataContinuitySpecifications.All,
+            .. RecoveryRelockSpecifications.All,
             .. WaveformSubscriberQueueSpecifications.All,
         ];
 

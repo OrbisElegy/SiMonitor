@@ -51,10 +51,14 @@
       "monitor.application": {
         "type": "Project",
         "dependencies": {
-          "Monitor.Domain": "[1.0.0, )"
+          "Monitor.Domain": "[1.0.0, )",
+          "Monitor.Simulation": "[1.0.0, )"
         }
       },
       "monitor.domain": {
+        "type": "Project"
+      },
+      "monitor.simulation": {
         "type": "Project"
       }
     }

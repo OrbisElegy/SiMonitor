@@ -6,6 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Monitor.Domain/Monitor.Domain.csproj" />
+    <ProjectReference Include="../Monitor.Simulation/Monitor.Simulation.csproj" />
   </ItemGroup>
 </Project>
-

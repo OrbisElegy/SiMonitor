@@ -36,6 +36,16 @@ internal static class ContinuityCapsuleChainSpecifications
             TwoPhaseAdmissionsCannotCommitOutOfOrder),
         new(nameof(DecodedCapsulesAreDefensivelyCopied),
             DecodedCapsulesAreDefensivelyCopied),
+        new(nameof(BaseBuildsCompleteCompatibleRecoveryState),
+            BaseBuildsCompleteCompatibleRecoveryState),
+        new(nameof(IncompatibleBasePreservesThePreviousState),
+            IncompatibleBasePreservesThePreviousState),
+        new(nameof(DeltaReplacesOnlyDeclaredStateAtomically),
+            DeltaReplacesOnlyDeclaredStateAtomically),
+        new(nameof(RecoveryStateCheckpointIsValidatedAndCopied),
+            RecoveryStateCheckpointIsValidatedAndCopied),
+        new(nameof(RuntimeCapabilitiesAreCanonicalAndCopied),
+            RuntimeCapabilitiesAreCanonicalAndCopied),
     ];
 
     private static void BaseAndDeltasAdvanceOneAuthenticatedChain()
@@ -227,10 +237,11 @@ internal static class ContinuityCapsuleChainSpecifications
     {
         ContinuityCapsuleChain chain = WithBaseAndFirstDelta();
         ContinuityCapsuleChainState checkpoint = chain.CaptureState();
-        ContinuityCapsuleChain restored = ContinuityCapsuleChain.Restore(
+        var restored = ContinuityCapsuleChain.Restore(
             checkpoint,
             [Key()],
             new FakeVerifier(),
+            Capabilities(),
             new FakeDecoder());
         ContinuityCapsuleDelta second = Delta(
             DeltaTwoId,
@@ -257,13 +268,14 @@ internal static class ContinuityCapsuleChainSpecifications
                 forged,
                 [Key()],
                 new FakeVerifier(),
+                Capabilities(),
                 new FakeDecoder())) == "ContinuityChain.InvalidCheckpoint",
             "a frontier cannot name a delta absent from replay evidence");
     }
 
     private static void TwoPhaseAdmissionsCannotCommitOutOfOrder()
     {
-        ContinuitySignatureGate gate = ContinuitySignatureGate.Start(
+        var gate = ContinuitySignatureGate.Start(
             SessionId,
             InstanceId,
             authorityEpoch: 4,
@@ -304,8 +316,164 @@ internal static class ContinuityCapsuleChainSpecifications
             authorityMonotonicNs: 11);
         decoder.LastDecodedBase!.StateComponents[0].StateBytes[0] = 0xff;
 
-        Check.That(accepted.Capsule.StateComponents[0].StateBytes[0] == 0x00,
+        Check.That(accepted.Capsule.StateComponents[0].StateBytes[0] == (byte)'f',
             "an adapter cannot mutate the accepted state after decoding returns");
+    }
+
+    private static void BaseBuildsCompleteCompatibleRecoveryState()
+    {
+        ContinuityCapsuleChain chain = WithBase();
+        ContinuityRecoveryStateImage image = chain.RecoveryStateImage!;
+
+        Check.That(image.BaseCapsuleId == BaseId &&
+            image.LastDeltaId is null &&
+            image.SessionId == SessionId &&
+            image.InstanceId == InstanceId &&
+            image.BranchId == "main" &&
+            image.AuthorityEpoch == 4 &&
+            image.TimebaseEpoch == 2 &&
+            image.StreamEpoch == 9 &&
+            image.CheckpointSequence == 30 &&
+            image.NextEventSequence == 401 &&
+            image.ChannelCursors.Select(static cursor => cursor.ChannelId)
+                .SequenceEqual(["ECG.II", "Pleth"]) &&
+            image.StateComponents.Select(static component =>
+                    component.ComponentId)
+                .SequenceEqual(["filter.ecg", "prng.rhythm"]),
+            "a compatible complete base must materialize one recovery image");
+
+        image.StateComponents[0].StateBytes[0] = 0xff;
+        Check.That(chain.RecoveryStateImage!.StateComponents[0].StateBytes[0] ==
+                (byte)'f',
+            "callers must not mutate the chain's recoverable state image");
+    }
+
+    private static void IncompatibleBasePreservesThePreviousState()
+    {
+        ContinuityCapsuleChain chain = Start();
+        foreach ((string payloadText, string reason) in new[]
+        {
+            ("base-engine-mismatch", "ContinuityChain.EngineMismatch"),
+            ("base-resource-mismatch", "ContinuityChain.ResourcePackMismatch"),
+            ("base-channel-mismatch", "ContinuityChain.ChannelSetMismatch"),
+            ("base-component-missing",
+                "ContinuityChain.StateComponentSetMismatch"),
+            ("base-state-hash-mismatch", "ContinuityChain.StateHashMismatch"),
+        })
+        {
+            byte[] payload = Payload(payloadText);
+            ContinuityCapsuleBase capsule = DecodeBaseForTest(payloadText);
+            Check.That(Reason(() => chain.AcceptBase(
+                    SignedBody(capsule, payload),
+                    payload,
+                    100,
+                    11)) == reason &&
+                chain.Frontier is null &&
+                chain.RecoveryStateImage is null &&
+                chain.CaptureState().SignatureGate.AcceptedCapsuleIds.Count == 0,
+                "incompatible base state must reject without a partial commit");
+        }
+    }
+
+    private static void DeltaReplacesOnlyDeclaredStateAtomically()
+    {
+        ContinuityCapsuleChain chain = WithBase();
+        ContinuityCapsuleChainState before = chain.CaptureState();
+        foreach ((string payloadText, string reason) in new[]
+        {
+            ("delta-unknown", "ContinuityChain.UnknownStateComponent"),
+            ("delta-schema", "ContinuityChain.StateSchemaMismatch"),
+            ("delta-state-hash-mismatch", "ContinuityChain.StateHashMismatch"),
+        })
+        {
+            byte[] payload = Payload(payloadText);
+            ContinuityCapsuleDelta delta = DecodeDeltaForTest(payloadText);
+            Check.That(Reason(() => chain.AcceptDelta(
+                    SignedBody(delta, payload),
+                    payload,
+                    101,
+                    12)) == reason &&
+                SameState(before, chain.CaptureState()),
+                "an invalid delta component must preserve chain and state image");
+        }
+
+        byte[] acceptedPayload = Payload("delta-replace");
+        ContinuityCapsuleDelta accepted = DecodeDeltaForTest("delta-replace");
+        _ = chain.AcceptDelta(
+            SignedBody(accepted, acceptedPayload),
+            acceptedPayload,
+            101,
+            12);
+        ContinuityRecoveryStateImage image = chain.RecoveryStateImage!;
+        Check.That(image.LastDeltaId == DeltaOneId &&
+            image.CheckpointSequence == 31 &&
+            image.StateComponents[0].StateBytes.SequenceEqual([(byte)'f']) &&
+            image.StateComponents[1].StateBytes.SequenceEqual([(byte)0x42]),
+            "a valid delta must replace only its declared component");
+    }
+
+    private static void RecoveryStateCheckpointIsValidatedAndCopied()
+    {
+        ContinuityCapsuleChain chain = WithBaseAndFirstDelta();
+        ContinuityCapsuleChainState checkpoint = chain.CaptureState();
+        var restored = ContinuityCapsuleChain.Restore(
+            checkpoint,
+            [Key()],
+            new FakeVerifier(),
+            Capabilities(),
+            new FakeDecoder());
+        checkpoint.RecoveryStateImage!.StateComponents[0].StateBytes[0] = 0xff;
+        Check.That(restored.RecoveryStateImage!.StateComponents[0].StateBytes[0] ==
+                (byte)'f',
+            "restored recovery state must not alias its checkpoint input");
+
+        ContinuityCapsuleChainState forged = chain.CaptureState() with
+        {
+            RecoveryStateImage = chain.RecoveryStateImage! with
+            {
+                EngineReference = Reference("SimulationCore", '9'),
+            },
+        };
+        Check.That(Reason(() => ContinuityCapsuleChain.Restore(
+                forged,
+                [Key()],
+                new FakeVerifier(),
+                Capabilities(),
+                new FakeDecoder())) == "ContinuityChain.InvalidCheckpoint",
+            "a checkpoint image must still match local runtime capabilities");
+    }
+
+    private static void RuntimeCapabilitiesAreCanonicalAndCopied()
+    {
+        ContinuityRuntimeCapabilities invalid = Capabilities() with
+        {
+            ChannelIds = ["Pleth", "ECG.II"],
+        };
+        Check.That(Reason(() => Start(invalid)) ==
+                "ContinuityChain.InvalidConfiguration",
+            "runtime capabilities must use canonical unique ordering");
+
+        string[] channels = ["ECG.II", "Pleth"];
+        ContinuityStateComponentCapability[] components =
+        [
+            new("filter.ecg", Reference("State.PRNG.Xoshiro256", 'f')),
+            new("prng.rhythm", Reference("State.PRNG.Xoshiro256", 'e')),
+        ];
+        ContinuityRuntimeCapabilities mutable = Capabilities() with
+        {
+            ChannelIds = channels,
+            StateComponents = components,
+        };
+        ContinuityCapsuleChain chain = Start(mutable);
+        channels[0] = "mutated";
+        components[0] = new(
+            "mutated",
+            Reference("State.PRNG.Xoshiro256", '9'));
+        ContinuityCapsuleBase capsule = Base();
+        byte[] payload = Payload("base");
+        _ = chain.AcceptBase(SignedBody(capsule, payload), payload, 100, 11);
+        Check.That(chain.RecoveryStateImage is not null,
+            "caller mutation must not alter the admitted capability catalog");
     }
 
     private static ContinuityCapsuleChain WithBase()
@@ -340,6 +508,11 @@ internal static class ContinuityCapsuleChainSpecifications
     }
 
     private static ContinuityCapsuleChain Start(FakeDecoder? decoder = null) =>
+        Start(Capabilities(), decoder);
+
+    private static ContinuityCapsuleChain Start(
+        ContinuityRuntimeCapabilities capabilities,
+        FakeDecoder? decoder = null) =>
         ContinuityCapsuleChain.Start(
             SessionId,
             InstanceId,
@@ -347,7 +520,19 @@ internal static class ContinuityCapsuleChainSpecifications
             authorityMonotonicNs: 10,
             [Key()],
             new FakeVerifier(),
+            capabilities,
             decoder ?? new FakeDecoder());
+
+    private static ContinuityRuntimeCapabilities Capabilities() => new(
+        Reference("SimulationCore", '1'),
+        Reference("DeterminismProfile.FixedV1", '2'),
+        ResourcePackReferences: [],
+        ChannelIds: ["ECG.II", "Pleth"],
+        StateComponents:
+        [
+            new("filter.ecg", Reference("State.PRNG.Xoshiro256", 'f')),
+            new("prng.rhythm", Reference("State.PRNG.Xoshiro256", 'e')),
+        ]);
 
     private static ContinuityCapsuleBase Base() => new(
         BaseId,
@@ -402,11 +587,16 @@ internal static class ContinuityCapsuleChainSpecifications
 
     private static ContinuityStateComponent Component(
         string componentId,
-        char hashCharacter) => new(
-        componentId,
-        Reference("State.PRNG.Xoshiro256", hashCharacter),
-        Hash(hashCharacter),
-        [0x00]);
+        char hashCharacter,
+        byte? stateByte = null)
+    {
+        byte[] state = [stateByte ?? (byte)hashCharacter];
+        return new ContinuityStateComponent(
+            componentId,
+            Reference("State.PRNG.Xoshiro256", hashCharacter),
+            PayloadHash(state),
+            state);
+    }
 
     private static ContinuityVersionedReference Reference(
         string id,
@@ -473,7 +663,29 @@ internal static class ContinuityCapsuleChainSpecifications
         expected.SignatureGate.LastAuthorityMonotonicNs ==
             actual.SignatureGate.LastAuthorityMonotonicNs &&
         expected.SignatureGate.AcceptedCapsuleIds.SequenceEqual(
-            actual.SignatureGate.AcceptedCapsuleIds);
+            actual.SignatureGate.AcceptedCapsuleIds) &&
+        SameImage(expected.RecoveryStateImage, actual.RecoveryStateImage);
+
+    private static bool SameImage(
+        ContinuityRecoveryStateImage? expected,
+        ContinuityRecoveryStateImage? actual) =>
+        expected is null
+            ? actual is null
+            : actual is not null &&
+                expected.BaseCapsuleId == actual.BaseCapsuleId &&
+                expected.LastDeltaId == actual.LastDeltaId &&
+                expected.CheckpointSequence == actual.CheckpointSequence &&
+                expected.CommitSequence == actual.CommitSequence &&
+                expected.SimTimeNs == actual.SimTimeNs &&
+                expected.StateComponents.Select(static component =>
+                        (component.ComponentId,
+                            component.StateSha256,
+                            Convert.ToHexString(component.StateBytes)))
+                    .SequenceEqual(actual.StateComponents.Select(
+                        static component =>
+                            (component.ComponentId,
+                                component.StateSha256,
+                                Convert.ToHexString(component.StateBytes))));
 
     private static byte[] Payload(string value) => Encoding.UTF8.GetBytes(value);
 
@@ -481,6 +693,12 @@ internal static class ContinuityCapsuleChainSpecifications
         SHA256.HashData(payload)).ToLowerInvariant();
 
     private static string Hash(char character) => new(character, 64);
+
+    private static ContinuityCapsuleBase DecodeBaseForTest(string payloadText) =>
+        new FakeDecoder().DecodeBase(Payload(payloadText));
+
+    private static ContinuityCapsuleDelta DecodeDeltaForTest(
+        string payloadText) => new FakeDecoder().DecodeDelta(Payload(payloadText));
 
     private static string? Reason(Action action)
     {
@@ -514,6 +732,34 @@ internal static class ContinuityCapsuleChainSpecifications
                     {
                         ContinuationPermission =
                             ContinuityPermissionState.DisallowedByCourse,
+                    },
+                    "base-engine-mismatch" => Base() with
+                    {
+                        EngineReference = Reference("SimulationCore", '9'),
+                    },
+                    "base-resource-mismatch" => Base() with
+                    {
+                        ResourcePackReferences =
+                            [Reference("Resource.Ecg", '9')],
+                    },
+                    "base-channel-mismatch" => Base() with
+                    {
+                        ChannelCursors = [new("ECG.II", 2_000, 50, 41)],
+                    },
+                    "base-component-missing" => Base() with
+                    {
+                        StateComponents = [Component("filter.ecg", 'f')],
+                    },
+                    "base-state-hash-mismatch" => Base() with
+                    {
+                        StateComponents =
+                        [
+                            Component("filter.ecg", 'f') with
+                            {
+                                StateSha256 = Hash('9'),
+                            },
+                            Component("prng.rhythm", 'e'),
+                        ],
                     },
                     _ => throw new ArgumentException("Unknown base payload."),
                 };
@@ -565,6 +811,49 @@ internal static class ContinuityCapsuleChainSpecifications
                     deltaSha256: Hash('b'),
                     checkpointSequence: 30,
                     simTimeNs: 101),
+                "delta-replace" => Delta(
+                    DeltaOneId,
+                    previousDeltaSha256: null,
+                    deltaSha256: Hash('b'),
+                    checkpointSequence: 31,
+                    simTimeNs: 101) with
+                {
+                    ChangedComponents =
+                        [Component("prng.rhythm", 'e', 0x42)],
+                },
+                "delta-unknown" => Delta(
+                    DeltaOneId,
+                    previousDeltaSha256: null,
+                    deltaSha256: Hash('b'),
+                    checkpointSequence: 31,
+                    simTimeNs: 101) with
+                {
+                    ChangedComponents = [Component("prng.unknown", 'e')],
+                },
+                "delta-schema" => Delta(
+                    DeltaOneId,
+                    previousDeltaSha256: null,
+                    deltaSha256: Hash('b'),
+                    checkpointSequence: 31,
+                    simTimeNs: 101) with
+                {
+                    ChangedComponents = [Component("prng.rhythm", '9')],
+                },
+                "delta-state-hash-mismatch" => Delta(
+                    DeltaOneId,
+                    previousDeltaSha256: null,
+                    deltaSha256: Hash('b'),
+                    checkpointSequence: 31,
+                    simTimeNs: 101) with
+                {
+                    ChangedComponents =
+                    [
+                        Component("prng.rhythm", 'e') with
+                        {
+                            StateSha256 = Hash('9'),
+                        },
+                    ],
+                },
                 _ => throw new ArgumentException("Unknown delta payload."),
             };
     }

@@ -83,15 +83,38 @@ public sealed record ContinuityCapsuleFrontier(
 
 public sealed record ContinuityCapsuleChainState(
     ContinuitySignatureGateState SignatureGate,
-    ContinuityCapsuleFrontier? Frontier);
+    ContinuityCapsuleFrontier? Frontier,
+    ContinuityRecoveryStateImage? RecoveryStateImage);
 
-public sealed record AcceptedContinuityCapsuleBase(
-    ContinuityCapsuleBase Capsule,
-    ContinuityCapsuleChainState State);
+public sealed class AcceptedContinuityCapsuleBase
+{
+    internal AcceptedContinuityCapsuleBase(
+        ContinuityCapsuleBase capsule,
+        ContinuityCapsuleChainState state)
+    {
+        Capsule = capsule;
+        State = state;
+    }
 
-public sealed record AcceptedContinuityCapsuleDelta(
-    ContinuityCapsuleDelta Delta,
-    ContinuityCapsuleChainState State);
+    public ContinuityCapsuleBase Capsule { get; }
+
+    public ContinuityCapsuleChainState State { get; }
+}
+
+public sealed class AcceptedContinuityCapsuleDelta
+{
+    internal AcceptedContinuityCapsuleDelta(
+        ContinuityCapsuleDelta delta,
+        ContinuityCapsuleChainState state)
+    {
+        Delta = delta;
+        State = state;
+    }
+
+    public ContinuityCapsuleDelta Delta { get; }
+
+    public ContinuityCapsuleChainState State { get; }
+}
 
 public interface IContinuityCapsulePayloadDecoder
 {
@@ -114,7 +137,7 @@ public sealed class ContinuityCapsuleChainException : ArgumentException
     public string ReasonCode { get; }
 }
 
-public sealed class ContinuityCapsuleChain
+public sealed partial class ContinuityCapsuleChain
 {
     public const int MaximumChannelCursorCount = 128;
     public const int MaximumStateComponentCount = 256;
@@ -122,22 +145,37 @@ public sealed class ContinuityCapsuleChain
 
     private readonly ContinuitySignatureGate _signatureGate;
     private readonly IContinuityCapsulePayloadDecoder _payloadDecoder;
+    private readonly ContinuityRuntimeCapabilities _runtimeCapabilities;
     private ContinuityCapsuleFrontier? _frontier;
+    private ContinuityRecoveryStateImage? _recoveryStateImage;
 
     private ContinuityCapsuleChain(
         ContinuitySignatureGate signatureGate,
         ContinuityCapsuleFrontier? frontier,
+        ContinuityRecoveryStateImage? recoveryStateImage,
+        ContinuityRuntimeCapabilities runtimeCapabilities,
         IContinuityCapsulePayloadDecoder payloadDecoder)
     {
         ArgumentNullException.ThrowIfNull(signatureGate);
         ArgumentNullException.ThrowIfNull(payloadDecoder);
         ValidateFrontier(frontier, signatureGate.CaptureState());
+        _runtimeCapabilities = ValidateAndCopyCapabilities(runtimeCapabilities);
         _signatureGate = signatureGate;
         _payloadDecoder = payloadDecoder;
         _frontier = frontier;
+        _recoveryStateImage = ValidateAndCopyRecoveryStateImage(
+            recoveryStateImage,
+            frontier,
+            signatureGate.CaptureState(),
+            _runtimeCapabilities);
     }
 
     public ContinuityCapsuleFrontier? Frontier => _frontier;
+
+    public ContinuityRecoveryStateImage? RecoveryStateImage =>
+        _recoveryStateImage is null
+            ? null
+            : CopyRecoveryStateImage(_recoveryStateImage);
 
     public static ContinuityCapsuleChain Start(
         Guid sessionId,
@@ -146,6 +184,7 @@ public sealed class ContinuityCapsuleChain
         long authorityMonotonicNs,
         IEnumerable<TrustedContinuitySigningKey> trustedKeys,
         IContinuitySignatureVerifier verifier,
+        ContinuityRuntimeCapabilities runtimeCapabilities,
         IContinuityCapsulePayloadDecoder payloadDecoder) =>
         new(
             ContinuitySignatureGate.Start(
@@ -156,12 +195,15 @@ public sealed class ContinuityCapsuleChain
                 trustedKeys,
                 verifier),
             frontier: null,
+            recoveryStateImage: null,
+            runtimeCapabilities,
             payloadDecoder);
 
     public static ContinuityCapsuleChain Restore(
         ContinuityCapsuleChainState state,
         IEnumerable<TrustedContinuitySigningKey> trustedKeys,
         IContinuitySignatureVerifier verifier,
+        ContinuityRuntimeCapabilities runtimeCapabilities,
         IContinuityCapsulePayloadDecoder payloadDecoder)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -173,6 +215,8 @@ public sealed class ContinuityCapsuleChain
                     trustedKeys,
                     verifier),
                 state.Frontier,
+                state.RecoveryStateImage,
+                runtimeCapabilities,
                 payloadDecoder);
         }
         catch (ContinuityCapsuleChainException)
@@ -230,8 +274,13 @@ public sealed class ContinuityCapsuleChain
             capsule.SimTimeNs,
             capsule.SecretBoundarySimTimeNs,
             capsule.ContinuationValidUntilSimTimeNs);
+        ContinuityRecoveryStateImage nextImage = BuildRecoveryStateImage(
+            capsule,
+            next,
+            _runtimeCapabilities);
         _ = _signatureGate.Commit(admission);
         _frontier = next;
+        _recoveryStateImage = nextImage;
         return new AcceptedContinuityCapsuleBase(capsule, CaptureState());
     }
 
@@ -284,14 +333,25 @@ public sealed class ContinuityCapsuleChain
             ContinuationValidUntilSimTimeNs =
                 delta.ContinuationValidUntilSimTimeNs,
         };
+        ContinuityRecoveryStateImage currentImage = _recoveryStateImage ??
+            throw Error("ContinuityChain.InvalidCheckpoint", nameof(delta));
+        ContinuityRecoveryStateImage nextImage = ApplyDeltaToRecoveryState(
+            currentImage,
+            delta,
+            next,
+            _runtimeCapabilities);
         _ = _signatureGate.Commit(admission);
         _frontier = next;
+        _recoveryStateImage = nextImage;
         return new AcceptedContinuityCapsuleDelta(delta, CaptureState());
     }
 
     public ContinuityCapsuleChainState CaptureState() => new(
         _signatureGate.CaptureState(),
-        _frontier);
+        _frontier,
+        _recoveryStateImage is null
+            ? null
+            : CopyRecoveryStateImage(_recoveryStateImage));
 
     private ContinuityCapsuleBase DecodeBase(ReadOnlyMemory<byte> signedPayload)
     {

@@ -29,6 +29,7 @@ internal static class Program
             .. DataContinuitySpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,
+            .. ContinuityShadowSpecifications.All,
             .. ClientRecoverySessionSpecifications.All,
             .. RecoveryHandshakeSpecifications.All,
             .. RecoveryResyncPlanFactorySpecifications.All,

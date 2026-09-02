@@ -68,6 +68,33 @@ public sealed class ContinuitySignatureGateException : ArgumentException
     public string ReasonCode { get; }
 }
 
+public sealed class ContinuitySignatureAdmission
+{
+    internal ContinuitySignatureAdmission(
+        ContinuitySignatureGate owner,
+        Guid capsuleId,
+        long authorityMonotonicNs,
+        int expectedAcceptedCount,
+        long expectedAuthorityMonotonicNs)
+    {
+        Owner = owner;
+        CapsuleId = capsuleId;
+        AuthorityMonotonicNs = authorityMonotonicNs;
+        ExpectedAcceptedCount = expectedAcceptedCount;
+        ExpectedAuthorityMonotonicNs = expectedAuthorityMonotonicNs;
+    }
+
+    internal ContinuitySignatureGate Owner { get; }
+
+    internal Guid CapsuleId { get; }
+
+    internal long AuthorityMonotonicNs { get; }
+
+    internal int ExpectedAcceptedCount { get; }
+
+    internal long ExpectedAuthorityMonotonicNs { get; }
+}
+
 public sealed class ContinuitySignatureGate
 {
     public const string SignatureAlgorithmId = "SM2-SM3-RS64@1";
@@ -179,6 +206,19 @@ public sealed class ContinuitySignatureGate
         ContinuitySignatureProof proof,
         ReadOnlyMemory<byte> payload,
         long currentSimTimeNs,
+        long authorityMonotonicNs) =>
+        Commit(Verify(
+            body,
+            proof,
+            payload,
+            currentSimTimeNs,
+            authorityMonotonicNs));
+
+    public ContinuitySignatureAdmission Verify(
+        ContinuitySignedBody body,
+        ContinuitySignatureProof proof,
+        ReadOnlyMemory<byte> payload,
+        long currentSimTimeNs,
         long authorityMonotonicNs)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -264,8 +304,33 @@ public sealed class ContinuitySignatureGate
                 nameof(payload));
         }
 
-        _ = _acceptedCapsuleIds.Add(body.CapsuleId);
-        _lastAuthorityMonotonicNs = authorityMonotonicNs;
+        return new ContinuitySignatureAdmission(
+            this,
+            body.CapsuleId,
+            authorityMonotonicNs,
+            _acceptedCapsuleIds.Count,
+            _lastAuthorityMonotonicNs);
+    }
+
+    public ContinuitySignatureGateState Commit(
+        ContinuitySignatureAdmission admission)
+    {
+        ArgumentNullException.ThrowIfNull(admission);
+        if (!ReferenceEquals(admission.Owner, this) ||
+            admission.ExpectedAcceptedCount != _acceptedCapsuleIds.Count ||
+            admission.ExpectedAuthorityMonotonicNs !=
+                _lastAuthorityMonotonicNs ||
+            admission.AuthorityMonotonicNs < _lastAuthorityMonotonicNs ||
+            _acceptedCapsuleIds.Contains(admission.CapsuleId) ||
+            _acceptedCapsuleIds.Count == MaximumAcceptedCapsuleCount)
+        {
+            throw Error(
+                "ContinuityCrypto.StaleAdmission",
+                nameof(admission));
+        }
+
+        _ = _acceptedCapsuleIds.Add(admission.CapsuleId);
+        _lastAuthorityMonotonicNs = admission.AuthorityMonotonicNs;
         return CaptureState();
     }
 

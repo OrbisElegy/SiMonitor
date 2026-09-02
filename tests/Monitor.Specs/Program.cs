@@ -28,6 +28,7 @@ internal static class Program
             .. ConnectionHealthSpecifications.All,
             .. DataContinuitySpecifications.All,
             .. NoDataPresentationSpecifications.All,
+            .. NoDataSweepSpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,
             .. ContinuityShadowSpecifications.All,

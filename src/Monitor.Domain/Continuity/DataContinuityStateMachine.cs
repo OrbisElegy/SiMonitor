@@ -227,11 +227,11 @@ public sealed class DataContinuityStateMachine
         _bufferedDataRemaining = hasBufferedData;
         _disconnectedAtAuthorityMonotonicNs = authorityMonotonicNs;
         _localContinuationStartedAtAuthorityMonotonicNs = null;
+        _noDataSinceAuthorityMonotonicNs = null;
         if (hasBufferedData)
         {
             _dataAvailability = DataAvailability.Buffered;
             _authorityState = AuthorityState.Authoritative;
-            _noDataSinceAuthorityMonotonicNs = null;
             _continuationStopReason = null;
         }
         else
@@ -373,6 +373,29 @@ public sealed class DataContinuityStateMachine
             _noDataSinceAuthorityMonotonicNs ??= authorityMonotonicNs;
         }
 
+        return CaptureState();
+    }
+
+    public DataContinuityState RecordRelockPrerollVerified(
+        long authorityMonotonicNs)
+    {
+        if (_connectionState != ConnectionState.Relocking ||
+            _dataAvailability != DataAvailability.NoData ||
+            _bufferedDataRemaining ||
+            _continuationStopReason !=
+                ContinuationStopReason.AwaitingRelockCommit)
+        {
+            throw Error(
+                "DataContinuity.InvalidTransition",
+                nameof(authorityMonotonicNs));
+        }
+
+        MoveTo(authorityMonotonicNs);
+        _dataAvailability = DataAvailability.Buffered;
+        _authorityState = AuthorityState.Provisional;
+        _bufferedDataRemaining = true;
+        _noDataSinceAuthorityMonotonicNs = null;
+        _continuationStopReason = null;
         return CaptureState();
     }
 

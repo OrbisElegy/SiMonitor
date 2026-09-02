@@ -27,6 +27,7 @@ internal static class Program
             .. WaveformRecoveryPlannerSpecifications.All,
             .. ConnectionHealthSpecifications.All,
             .. DataContinuitySpecifications.All,
+            .. NoDataPresentationSpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,
             .. ContinuityShadowSpecifications.All,

@@ -30,6 +30,7 @@ internal static class Program
             .. NoDataPresentationSpecifications.All,
             .. NoDataSweepSpecifications.All,
             .. SweepStateProjectionSpecifications.All,
+            .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,
             .. ContinuityShadowSpecifications.All,

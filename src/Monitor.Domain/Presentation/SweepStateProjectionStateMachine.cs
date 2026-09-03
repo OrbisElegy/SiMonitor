@@ -29,6 +29,7 @@ public enum TemporalViewMode
 public enum TraceHistoryPresentation
 {
     LiveHistory,
+    RecordFill,
     PinnedOriginalRange,
 }
 

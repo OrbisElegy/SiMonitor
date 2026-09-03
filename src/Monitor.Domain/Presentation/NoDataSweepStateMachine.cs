@@ -39,6 +39,7 @@ public sealed record NoDataSweepState(
     NoDataSweepPlan Plan,
     long NoDataSinceAuthorityMonotonicNs,
     long StartedAtPresentationNs,
+    long SweepClockAtStartNs,
     long CurrentPresentationNs);
 
 public sealed class NoDataSweepStateMachine
@@ -48,6 +49,7 @@ public sealed class NoDataSweepStateMachine
     private readonly NoDataSweepPlan _plan;
     private readonly long _noDataSinceAuthorityMonotonicNs;
     private readonly long _startedAtPresentationNs;
+    private readonly long _sweepClockAtStartNs;
     private long _currentPresentationNs;
 
     private NoDataSweepStateMachine(NoDataSweepState state)
@@ -57,6 +59,7 @@ public sealed class NoDataSweepStateMachine
         _noDataSinceAuthorityMonotonicNs =
             state.NoDataSinceAuthorityMonotonicNs;
         _startedAtPresentationNs = state.StartedAtPresentationNs;
+        _sweepClockAtStartNs = state.SweepClockAtStartNs;
         _currentPresentationNs = state.CurrentPresentationNs;
     }
 
@@ -65,7 +68,17 @@ public sealed class NoDataSweepStateMachine
     public static NoDataSweepStateMachine Start(
         NoDataSweepPlan plan,
         DataContinuityState continuityState,
-        long startedAtPresentationNs)
+        long startedAtPresentationNs) => StartAtSweepClock(
+            plan,
+            continuityState,
+            startedAtPresentationNs,
+            startedAtPresentationNs);
+
+    public static NoDataSweepStateMachine StartAtSweepClock(
+        NoDataSweepPlan plan,
+        DataContinuityState continuityState,
+        long startedAtPresentationNs,
+        long sweepClockAtStartNs)
     {
         ValidateNoDataContinuity(continuityState, nameof(continuityState));
         ArgumentNullException.ThrowIfNull(plan);
@@ -73,6 +86,7 @@ public sealed class NoDataSweepStateMachine
             plan,
             continuityState.NoDataSinceAuthorityMonotonicNs!.Value,
             startedAtPresentationNs,
+            sweepClockAtStartNs,
             startedAtPresentationNs));
     }
 
@@ -99,6 +113,7 @@ public sealed class NoDataSweepStateMachine
             throw Error("NoDataSweep.TimeReversed", nameof(presentationNs));
         }
 
+        _ = SweepClockAt(presentationNs);
         _currentPresentationNs = presentationNs;
         return CaptureCoverage();
     }
@@ -115,12 +130,12 @@ public sealed class NoDataSweepStateMachine
 
         (ulong cycleIndex, ulong writeHeadOffset) = Locate(
             _plan,
-            _currentPresentationNs);
+            SweepClockAt(_currentPresentationNs));
         uint phasePpm = checked((uint)(
             (UInt128)writeHeadOffset * PhasePartsPerMillion /
             _plan.VisibleDurationNs));
         SweepCoverageInterval[] intervals = BuildCoveredIntervals(
-            PhaseOffset(_plan, _startedAtPresentationNs),
+            PhaseOffset(_plan, _sweepClockAtStartNs),
             coveredDuration,
             _plan.VisibleDurationNs);
 
@@ -141,7 +156,31 @@ public sealed class NoDataSweepStateMachine
         _plan,
         _noDataSinceAuthorityMonotonicNs,
         _startedAtPresentationNs,
+        _sweepClockAtStartNs,
         _currentPresentationNs);
+
+    internal long CurrentSweepClockNs =>
+        SweepClockAt(_currentPresentationNs);
+
+    internal static void ValidatePlanForUse(NoDataSweepPlan plan) =>
+        ValidatePlan(plan, nameof(plan));
+
+    private long SweepClockAt(long presentationNs)
+    {
+        ulong elapsed = Elapsed(_startedAtPresentationNs, presentationNs);
+        return AddElapsed(_sweepClockAtStartNs, elapsed);
+    }
+
+    private static long AddElapsed(long sweepClockNs, ulong elapsedNs)
+    {
+        Int128 result = (Int128)sweepClockNs + elapsedNs;
+        if (result > long.MaxValue)
+        {
+            throw Error("NoDataSweep.ClockOutOfRange", nameof(elapsedNs));
+        }
+
+        return (long)result;
+    }
 
     private static SweepCoverageInterval[] BuildCoveredIntervals(
         ulong startOffset,
@@ -212,10 +251,18 @@ public sealed class NoDataSweepStateMachine
         if (state.NoDataSinceAuthorityMonotonicNs < 0 ||
             state.StartedAtPresentationNs <
                 state.Plan.CycleOriginPresentationNs ||
+            state.SweepClockAtStartNs <
+                state.Plan.CycleOriginPresentationNs ||
+            state.SweepClockAtStartNs > state.StartedAtPresentationNs ||
             state.CurrentPresentationNs < state.StartedAtPresentationNs)
         {
             throw Error("NoDataSweep.InvalidCheckpoint", nameof(state));
         }
+
+        ulong elapsed = Elapsed(
+            state.StartedAtPresentationNs,
+            state.CurrentPresentationNs);
+        _ = AddElapsed(state.SweepClockAtStartNs, elapsed);
     }
 
     private static void ValidatePlan(NoDataSweepPlan plan, string parameterName)

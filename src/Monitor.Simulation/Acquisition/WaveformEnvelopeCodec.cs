@@ -55,6 +55,7 @@ public static class WaveformEnvelopeCodec
     public const int MaximumHeaderSize = 16_384;
     public const int MaximumPayloadSize = 262_144;
     public const int MaximumPlaneCount = 128;
+    public const int ContentSha256Offset = PreludeSize + 80;
 
     private static ReadOnlySpan<byte> Magic => "MWS1"u8;
 
@@ -245,7 +246,7 @@ public static class WaveformEnvelopeCodec
             throw Error("BINARY_LENGTH_INVALID", nameof(wire));
         }
 
-        DecodedDescriptor[] descriptors = new DecodedDescriptor[planeCount];
+        var descriptors = new DecodedDescriptor[planeCount];
         byte[]? previousChannel = null;
         uint expectedPayloadOffset = 0;
         for (int index = 0; index < planeCount; index++)
@@ -317,7 +318,7 @@ public static class WaveformEnvelopeCodec
             throw Error("BINARY_CONTENT_HASH_MISMATCH", nameof(wire));
         }
 
-        WaveformPlane[] planes = new WaveformPlane[planeCount];
+        var planes = new WaveformPlane[planeCount];
         for (int index = 0; index < descriptors.Length; index++)
         {
             DecodedDescriptor descriptor = descriptors[index];
@@ -330,7 +331,7 @@ public static class WaveformEnvelopeCodec
                     planePayload[(sampleIndex * sizeof(short))..]);
             }
 
-            WaveformQualityRange[] qualityRanges =
+            var qualityRanges =
                 new WaveformQualityRange[descriptor.QualityRangeCount];
             int qualityOffset = sampleCount * sizeof(short);
             ulong previousRangeEnd = 0;
@@ -390,7 +391,7 @@ public static class WaveformEnvelopeCodec
             throw Error("BINARY_DESCRIPTOR_INVALID", nameof(sourcePlanes));
         }
 
-        ValidatedPlane[] planes = new ValidatedPlane[sourcePlanes.Count];
+        var planes = new ValidatedPlane[sourcePlanes.Count];
         long totalRawBytes = 0;
         for (int index = 0; index < sourcePlanes.Count; index++)
         {
@@ -420,7 +421,7 @@ public static class WaveformEnvelopeCodec
                 samples[sampleIndex] = plane.Samples[sampleIndex];
             }
 
-            WaveformQualityRange[] qualityRanges =
+            var qualityRanges =
                 new WaveformQualityRange[plane.QualityRanges.Count];
             for (int rangeIndex = 0; rangeIndex < qualityRanges.Length; rangeIndex++)
             {
@@ -480,7 +481,7 @@ public static class WaveformEnvelopeCodec
 
     private static byte[] ComputeSha256(ReadOnlySpan<byte> header, ReadOnlySpan<byte> payload)
     {
-        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(header);
         hash.AppendData(payload);
         return hash.GetHashAndReset();

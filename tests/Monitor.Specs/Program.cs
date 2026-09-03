@@ -24,6 +24,7 @@ internal static class Program
             .. WaveformEnvelopeCodecSpecifications.All,
             .. WaveformBlockAssemblerSpecifications.All,
             .. WaveformBlockRingSpecifications.All,
+            .. WaveformRecordArchiveSpecifications.All,
             .. WaveformRecoveryPlannerSpecifications.All,
             .. ConnectionHealthSpecifications.All,
             .. DataContinuitySpecifications.All,

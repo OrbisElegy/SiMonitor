@@ -55,9 +55,6 @@ public sealed class WaveformBlockRing
     public const int HostRetentionBlockCount = 300;
     public const int MaximumCapacity = HostRetentionBlockCount;
 
-    private const int ContentHashOffset =
-        WaveformEnvelopeCodec.PreludeSize + 80;
-
     private readonly StoredBlock?[] _slots;
     private int _head;
     private int _count;
@@ -147,7 +144,7 @@ public sealed class WaveformBlockRing
             ulong firstSequence = state.NextBlockSequence -
                 (ulong)state.RetainedRawBlocks.Count;
             long firstStart = (long)firstStartWide;
-            StoredBlock[] retained = new StoredBlock[state.RetainedRawBlocks.Count];
+            var retained = new StoredBlock[state.RetainedRawBlocks.Count];
             for (int index = 0; index < retained.Length; index++)
             {
                 byte[] source = state.RetainedRawBlocks[index] ??
@@ -223,7 +220,9 @@ public sealed class WaveformBlockRing
 
             StoredBlock existing = GetSlot(checked((int)(
                 envelope.BlockSequence - OldestBlockSequence)));
-            ReadOnlySpan<byte> incomingHash = rawEnvelope.Slice(ContentHashOffset, 32);
+            ReadOnlySpan<byte> incomingHash = rawEnvelope.Slice(
+                WaveformEnvelopeCodec.ContentSha256Offset,
+                32);
             if (!CryptographicOperations.FixedTimeEquals(existing.ContentSha256, incomingHash))
             {
                 throw Error("WaveformBlockRing.ConflictingDuplicate", nameof(rawEnvelope));
@@ -304,7 +303,7 @@ public sealed class WaveformBlockRing
 
         int offset = checked((int)(firstBlockSequence - OldestBlockSequence));
         int resultCount = Math.Min(maximumBlocks, _count - offset);
-        WaveformRetainedBlock[] result = new WaveformRetainedBlock[resultCount];
+        var result = new WaveformRetainedBlock[resultCount];
         for (int index = 0; index < result.Length; index++)
         {
             StoredBlock block = GetSlot(offset + index);
@@ -348,7 +347,7 @@ public sealed class WaveformBlockRing
         envelope.BlockSequence,
         envelope.ConfigurationRevision,
         envelope.StartSimTimeNs,
-        wire.Slice(ContentHashOffset, 32).ToArray(),
+        wire.Slice(WaveformEnvelopeCodec.ContentSha256Offset, 32).ToArray(),
         wire.ToArray());
 
     private static void ValidateConfiguration(

@@ -10,6 +10,11 @@ internal static class SweepStateProjectionSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(AuthorityReplacesPlanAtExactCycleBoundary), AuthorityReplacesPlanAtExactCycleBoundary),
+        new(nameof(ReplacementRejectsRoundedPhaseAndInvalidIdentityAtomically), ReplacementRejectsRoundedPhaseAndInvalidIdentityAtomically),
+        new(nameof(ReplacementUsesHeldSweepClockAfterPause), ReplacementUsesHeldSweepClockAfterPause),
+        new(nameof(ReplacementPreservesUnsupportedViewsAndContinuity), ReplacementPreservesUnsupportedViewsAndContinuity),
+        new(nameof(ReplacementCheckpointAndRevisionLimitsRemainValid), ReplacementCheckpointAndRevisionLimitsRemainValid),
         new(nameof(RunningLiveProjectionTracksSharedClockAndPlayhead),
             RunningLiveProjectionTracksSharedClockAndPlayhead),
         new(nameof(PauseHoldsLiveHeadAndResumeContinuesWithoutJump),
@@ -27,6 +32,124 @@ internal static class SweepStateProjectionSpecifications
         new(nameof(ProjectionCheckpointAndFailedTransitionsAreAtomic),
             ProjectionCheckpointAndFailedTransitionsAreAtomic),
     ];
+
+    private static NoDataSweepPlan Replacement(long origin = 8_000_000_000) => Plan() with
+    {
+        SweepEpoch = 8,
+        CycleOriginPresentationNs = origin,
+        VisibleDurationNs = 4 * Second,
+        RequiredRenderHistoryNs = 5 * Second,
+    };
+
+    private static void AuthorityReplacesPlanAtExactCycleBoundary()
+    {
+        SweepStateProjectionStateMachine direct = Start();
+        SweepStateProjectionStateMachine chunked = Start();
+        chunked.Advance(3_000_000_000, 123);
+        chunked.Advance(7_000_000_000, 456);
+        foreach (SweepStateProjectionStateMachine machine in new[] { direct, chunked })
+        {
+            SweepStateProjectionSnapshot result = machine.ReplacePlanAtCycleBoundary(
+                Replacement(), 14, 18, 8_000_000_000, 789);
+            Check.That(result.CycleIndex == 0 && result.WriteHeadPhasePpm == 0 &&
+                result.PlanRevision == 14 && result.SweepRevision == 18 &&
+                result.PresentationClockRevision == 11 && result.PlayheadDataSimTimeNs == 789,
+                "authority commits new plan and revisions together without substituting patient time");
+        }
+
+        Check.That(direct.CaptureState() == chunked.CaptureState() &&
+            direct.Advance(9_000_000_000, 800).WriteHeadPhasePpm == 250_000,
+            "frame chunking cannot change replacement or the new fixed duration");
+    }
+
+    private static void ReplacementRejectsRoundedPhaseAndInvalidIdentityAtomically()
+    {
+        SweepStateProjectionStateMachine machine = Start();
+        SweepStateProjectionState before = machine.CaptureState();
+        foreach (long time in new long[] { 0, 7_999_999_999, 8_000_000_001 })
+        {
+            Check.That(Reason(() => machine.ReplacePlanAtCycleBoundary(
+                Replacement(time), 14, 18, time, 1)) == "SweepState.NotCycleBoundary" &&
+                machine.CaptureState() == before,
+                "initial origin and either nanosecond beside wrap reject without advancing clocks");
+        }
+
+        foreach (NoDataSweepPlan plan in new[]
+        {
+            Replacement() with { GroupId = "other" },
+            Replacement() with { PresentationClockRevision = 12 },
+            Replacement() with { SweepEpoch = 7 },
+            Replacement() with { RequiredRenderHistoryNs = 4 * Second },
+            Replacement() with { CycleOriginPresentationNs = 0 },
+        })
+        {
+            Check.That(Reason(() => machine.ReplacePlanAtCycleBoundary(plan, 14, 18, 8_000_000_000, 1)) is not null &&
+                machine.CaptureState() == before, "invalid plans and identities leave all fields unchanged");
+        }
+
+        foreach ((ulong planRevision, ulong sweepRevision) in new[] { (13UL, 18UL), (14UL, 17UL) })
+        {
+            Check.That(Reason(() => machine.ReplacePlanAtCycleBoundary(
+                Replacement(), planRevision, sweepRevision, 8_000_000_000, 1)) == "SweepState.StalePlanReplacement" &&
+                machine.CaptureState() == before, "both authority revisions must advance");
+        }
+    }
+
+    private static void ReplacementUsesHeldSweepClockAfterPause()
+    {
+        SweepStateProjectionStateMachine machine = Start();
+        machine.ChangeRunState(SessionRunState.Paused, 2_000_000_000, 25);
+        machine.ChangeRunState(SessionRunState.Running, 5_000_000_000, 25);
+        SweepStateProjectionState before = machine.CaptureState();
+        Check.That(Reason(() => machine.ReplacePlanAtCycleBoundary(
+            Replacement(), 14, 20, 8_000_000_000, 50)) == "SweepState.NotCycleBoundary" &&
+            machine.CaptureState() == before, "raw presentation wrap is not the held Live sweep boundary");
+        SweepStateProjectionSnapshot result = machine.ReplacePlanAtCycleBoundary(
+            Replacement(), 14, 20, 11_000_000_000, 50);
+        Check.That(result.WriteHeadPhasePpm == 0 && result.PlayheadDataSimTimeNs == 50 &&
+            SweepStateProjectionStateMachine.Restore(machine.CaptureState()).CaptureState() == machine.CaptureState(),
+            "effective sweep origin survives restoration after pause offset");
+    }
+
+    private static void ReplacementPreservesUnsupportedViewsAndContinuity()
+    {
+        SweepStateProjectionStateMachine frozen = Start();
+        frozen.EnterFrozen(1, 1);
+        SweepStateProjectionStateMachine review = Start();
+        review.EnterReview("record.old", 0, 1, 1);
+        foreach (SweepStateProjectionStateMachine machine in new[]
+        {
+            frozen, review, Start(SessionRunState.Paused), Start(SessionRunState.Stopped),
+            Start(continuityState: Continuity().Disconnect(false, 10)),
+        })
+        {
+            SweepStateProjectionState before = machine.CaptureState();
+            Check.That(Reason(() => machine.ReplacePlanAtCycleBoundary(
+                Replacement(), 14, 20, 8_000_000_000, 1)) == "SweepState.PlanReplacementUnavailable" &&
+                machine.CaptureState() == before,
+                "unsupported axes retain pinned history and NoData coverage exactly");
+        }
+    }
+
+    private static void ReplacementCheckpointAndRevisionLimitsRemainValid()
+    {
+        SweepStateProjectionStateMachine machine = Start();
+        machine.ReplacePlanAtCycleBoundary(Replacement() with { SweepEpoch = ulong.MaxValue },
+            ulong.MaxValue, ulong.MaxValue, 8_000_000_000, 9);
+        SweepStateProjectionState checkpoint = machine.CaptureState();
+        var restored = SweepStateProjectionStateMachine.Restore(checkpoint);
+        Check.That(restored.CaptureState() == checkpoint &&
+            machine.Advance(9_000_000_000, 10) == restored.Advance(9_000_000_000, 10),
+            "maximum revisions restore and ordinary advancement does not consume revisions");
+        SweepStateProjectionState before = restored.CaptureState();
+        Check.That(Reason(() => restored.ReplacePlanAtCycleBoundary(Replacement(12_000_000_000),
+            0, 0, 12_000_000_000, 11)) == "SweepState.StalePlanReplacement" &&
+            restored.CaptureState() == before, "exhausted revisions cannot wrap");
+        Check.That(Reason(() => SweepStateProjectionStateMachine.Restore(checkpoint with
+        {
+            Plan = checkpoint.Plan with { CycleOriginPresentationNs = 8_000_000_001 },
+        })) == "SweepState.InvalidCheckpoint", "replacement origin cannot be ahead of accepted clock");
+    }
 
     private static void RunningLiveProjectionTracksSharedClockAndPlayhead()
     {
@@ -250,7 +373,7 @@ internal static class SweepStateProjectionSpecifications
         _ = original.Advance(2 * (long)Second, 2 * (long)Second);
         _ = original.EnterFrozen(2 * (long)Second, 2 * (long)Second);
         SweepStateProjectionState checkpoint = original.CaptureState();
-        SweepStateProjectionStateMachine restored =
+        var restored =
             SweepStateProjectionStateMachine.Restore(checkpoint);
 
         Check.That(

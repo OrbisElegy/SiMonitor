@@ -178,6 +178,54 @@ public sealed class SweepStateProjectionStateMachine
         trial.AdvanceCore(presentationNs, livePlayheadDataSimTimeNs);
     });
 
+    // Called by authority orchestration at the old plan's exact cycle boundary,
+    // independently of renderer frames. Clock remapping is a separate operation.
+    public SweepStateProjectionSnapshot ReplacePlanAtCycleBoundary(
+        NoDataSweepPlan plan,
+        ulong planRevision,
+        ulong sweepRevision,
+        long presentationNs,
+        long livePlayheadDataSimTimeNs) => Mutate(trial =>
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ValidatePlan(plan, nameof(plan));
+        if (trial._sessionRunState != SessionRunState.Running ||
+            trial._temporalViewMode != TemporalViewMode.LiveSweep ||
+            trial._continuityState.DataAvailability != DataAvailability.Authoritative ||
+            trial._continuityState.AuthorityState != AuthorityState.Authoritative)
+        {
+            throw Error("SweepState.PlanReplacementUnavailable", nameof(plan));
+        }
+
+        if (plan.GroupId != trial._plan.GroupId ||
+            plan.PresentationClockRevision != trial._plan.PresentationClockRevision)
+        {
+            throw Error("SweepState.PlanIdentityMismatch", nameof(plan));
+        }
+
+        if (planRevision <= trial._planRevision ||
+            sweepRevision <= trial._sweepRevision ||
+            plan.SweepEpoch <= trial._plan.SweepEpoch)
+        {
+            throw Error("SweepState.StalePlanReplacement", nameof(plan));
+        }
+
+        trial.AdvanceCore(presentationNs, livePlayheadDataSimTimeNs);
+        UInt128 elapsed = ElapsedWide(
+            trial._plan.CycleOriginPresentationNs,
+            trial._liveSweepClockNs);
+        // Rounded ppm phase zero is insufficient: test the nanosecond remainder.
+        if (elapsed == 0 || elapsed % trial._plan.VisibleDurationNs != 0 ||
+            plan.CycleOriginPresentationNs != trial._liveSweepClockNs)
+        {
+            throw Error("SweepState.NotCycleBoundary", nameof(presentationNs));
+        }
+
+        trial._plan = plan;
+        trial._planRevision = planRevision;
+        trial._sweepRevision = sweepRevision;
+    });
+
     public SweepStateProjectionSnapshot SynchronizeContinuity(
         DataContinuityState continuityState,
         long presentationNs,

@@ -33,6 +33,7 @@ internal static class Program
             .. SweepStateProjectionSpecifications.All,
             .. SweepPlanSchedulerSpecifications.All,
             .. SweepTraceCompositionSpecifications.All,
+            .. SweepPlotGeometrySpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,

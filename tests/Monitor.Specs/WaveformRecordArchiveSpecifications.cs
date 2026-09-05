@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Presentation;
+using Monitor.Domain.Continuity;
+using Monitor.Domain.Presentation;
 using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Specs;
@@ -27,6 +30,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(CompletedRecordBindsExplicitSlots), CompletedRecordBindsExplicitSlots),
+        new(nameof(RecordBindingRejectsIncompleteAndMismatchedInputs), RecordBindingRejectsIncompleteAndMismatchedInputs),
+        new(nameof(RecordBindingCheckpointIsDefensive), RecordBindingCheckpointIsDefensive),
         new(nameof(StandardRecordArchivesFiftySharedBlocks),
             StandardRecordArchivesFiftySharedBlocks),
         new(nameof(ArchivedRecordSurvivesLiveRingEviction),
@@ -42,6 +48,101 @@ internal static class WaveformRecordArchiveSpecifications
         new(nameof(ArchiveCheckpointAndReadsAreDefensive),
             ArchiveCheckpointAndReadsAreDefensive),
     ];
+
+    private static FillOnceThenHoldStateMachine BindingPresentation(long playhead = 200_000_000)
+    {
+        FillOnceThenHoldStateMachine machine = FillOnceThenHoldStateMachine.Start(
+            new FillOnceThenHoldPlan("ecg12.standard", "record.ecg12-7", 7, 11,
+                0, 200_000_000, 200_000_000,
+                Enumerable.Range(0, 12).Select(index => $"ecg.slot{index}").ToArray()),
+            13, 17, SessionRunState.Running,
+            DataContinuityStateMachine.Start(LocalContinuationPolicy.DefaultDuration, 0).CaptureState(),
+            0, 0);
+        machine.Advance(1, playhead);
+        return machine;
+    }
+
+    private static RecordSlotBinding[] BindingSlots() => Enumerable.Range(0, 12)
+        .Select(index => new RecordSlotBinding($"ecg.slot{index}", ChannelIds[11 - index])).ToArray();
+
+    private static WaveformRecordArchive BindingArchive() => WaveformRecordArchive.Create(
+        Plan(endExclusiveSimTimeNs: 200_000_000), [Wire(100, 0)]);
+
+    private static void CompletedRecordBindsExplicitSlots()
+    {
+        foreach (long playhead in new long[] { 200_000_000, 900_000_000 })
+        {
+            FillOnceThenHoldStateMachine machine = BindingPresentation(playhead);
+            CapturedRecordBinding binding = CapturedRecordBinding.Create(
+                machine.CaptureState(), BindingArchive(), BindingSlots());
+            machine.Advance(2, 1_000_000_000);
+            Check.That(binding.Slots[0].ChannelId == ChannelIds[11] &&
+                binding.CapturePinnedRecordRange().EndExclusiveDataSimTimeNs == 200_000_000 &&
+                binding.CaptureProjection().TransientReplayPolicy == TransientReplayPolicy.Suppress &&
+                binding.ReadBlocks().Count == 1,
+                "exact and skipped completion bind explicit channels, never positional channel order");
+        }
+    }
+
+    private static void RecordBindingRejectsIncompleteAndMismatchedInputs()
+    {
+        FillOnceThenHoldStateMachine machine = BindingPresentation();
+        FillOnceThenHoldState state = machine.CaptureState();
+        WaveformRecordArchive archive = BindingArchive();
+        RecordSlotBinding[] slots = BindingSlots();
+        Check.That(BindingReason(() => CapturedRecordBinding.Create(
+            BindingPresentation(199_999_999).CaptureState(), archive, slots)) ==
+            "CapturedRecordBinding.RecordNotCaptured", "one nanosecond before completion cannot bind");
+        foreach (FillOnceThenHoldPlan plan in new[]
+        {
+            state.Plan with { GroupId = "other" }, state.Plan with { RecordRef = "other" },
+            state.Plan with { SweepEpoch = 8 }, state.Plan with { RecordStartDataSimTimeNs = 1, RecordDurationNs = 199_999_999 },
+            state.Plan with { RecordDurationNs = 199_999_999 },
+        })
+        {
+            Check.That(BindingReason(() => CapturedRecordBinding.Create(state with { Plan = plan }, archive, slots)) ==
+                "CapturedRecordBinding.IdentityMismatch", "every pinned identity must match");
+        }
+
+        foreach (RecordSlotBinding[] invalid in new[]
+        {
+            slots.Take(11).ToArray(), slots.Reverse().ToArray(),
+            slots.Select((slot, index) => index == 11 ? slot with { ChannelId = slots[0].ChannelId } : slot).ToArray(),
+            slots.Select((slot, index) => index == 0 ? slot with { ChannelId = Guid.Empty } : slot).ToArray(),
+            slots.Select((slot, index) => index == 0 ? null! : slot).ToArray(),
+        })
+        {
+            Check.That(BindingReason(() => CapturedRecordBinding.Create(state, archive, invalid)) ==
+                "CapturedRecordBinding.InvalidSlots", "partial, reordered, duplicated and unknown mappings reject");
+        }
+
+        Check.That(machine.CaptureProjection().SweepRevision == state.SweepRevision &&
+            CapturedRecordBinding.Create(state, archive, slots).Slots.Count == 12,
+            "failed publication leaves source state usable for an exact retry");
+    }
+
+    private static void RecordBindingCheckpointIsDefensive()
+    {
+        RecordSlotBinding[] slots = BindingSlots();
+        CapturedRecordBinding binding = CapturedRecordBinding.Create(
+            BindingPresentation().CaptureState(), BindingArchive(), slots);
+        slots[0] = slots[0] with { ChannelId = Guid.Empty };
+        CapturedRecordBindingState state = binding.CaptureState();
+        CapturedRecordBinding restored = CapturedRecordBinding.Restore(state);
+        state.Archive.RawEnvelopes[0][0] ^= 1;
+        Check.That(binding.Slots[0].ChannelId == ChannelIds[11] &&
+            Equivalent(binding.ReadBlocks(), restored.ReadBlocks()) &&
+            BindingReason(() => CapturedRecordBinding.Restore(state)) == "CapturedRecordBinding.InvalidCheckpoint" &&
+            BindingReason(() => CapturedRecordBinding.Restore(binding.CaptureState() with { Slots = slots })) ==
+                "CapturedRecordBinding.InvalidCheckpoint",
+            "restore revalidates mapping and bytes without exposing accepted state to caller mutation");
+    }
+
+    private static string? BindingReason(Action action)
+    {
+        try { action(); return null; }
+        catch (CapturedRecordBindingException exception) { return exception.ReasonCode; }
+    }
 
     private static void StandardRecordArchivesFiftySharedBlocks()
     {

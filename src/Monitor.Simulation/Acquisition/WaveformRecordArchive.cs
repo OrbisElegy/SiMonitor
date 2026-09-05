@@ -56,6 +56,8 @@ public sealed class WaveformRecordArchive
 
     public int BlockCount => _blocks.Length;
 
+    public WaveformRecordArchivePlan CapturePlan() => CopyPlan(_plan);
+
     public long RecordStartSimTimeNs => _plan.RecordStartSimTimeNs;
 
     public long RecordEndExclusiveSimTimeNs =>

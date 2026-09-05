@@ -38,6 +38,7 @@ internal static class Program
             .. EcgVerticalGeometrySpecifications.All,
             .. SweepSegmentClipperSpecifications.All,
             .. SweepPathBuilderSpecifications.All,
+            .. SweepFramePathSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,
             .. ContinuityCapsuleChainSpecifications.All,

@@ -10,6 +10,11 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(DisplaySelectionMatchesRestoredFramesAndRejectsResize), DisplaySelectionMatchesRestoredFramesAndRejectsResize),
+        new(nameof(DisplaySelectionRejectsSubPpmPhaseAndPatientChanges), DisplaySelectionRejectsSubPpmPhaseAndPatientChanges),
+        new(nameof(DisplaySelectionKeepsPausedAndPinnedFrames), DisplaySelectionKeepsPausedAndPinnedFrames),
+        new(nameof(DisplaySelectionRejectsNoDataProgressAndReviewSeek), DisplaySelectionRejectsNoDataProgressAndReviewSeek),
+        new(nameof(InvalidDisplaySelectionPreservesPublication), InvalidDisplaySelectionPreservesPublication),
         new(nameof(CancelledPathAppendPreservesPredecessor), CancelledPathAppendPreservesPredecessor),
         new(nameof(CancellationDuringInputCopyPreservesCompletedFrame), CancellationDuringInputCopyPreservesCompletedFrame),
         new(nameof(CancelledPublicationAndPumpCanRetry), CancelledPublicationAndPumpCanRetry),
@@ -36,9 +41,101 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
 
+    private static PublishedSweepFrame PublishForDisplay(SweepFrameReconstructionInput input) =>
+        SweepFramePublication.Restore(2, 4, input).CapturePublished()!;
+
+    private static SweepFrameDisplaySelection SelectForDisplay(SweepStateProjectionState state, PublishedSweepFrame? frame) =>
+        SweepFrameDisplayGate.Select(state, 0, 10, 0, 10, frame);
+
+    private static void DisplaySelectionMatchesRestoredFramesAndRejectsResize()
+    {
+        SweepFrameReconstructionInput input = Input();
+        PublishedSweepFrame frame = PublishForDisplay(input);
+        Check.That(SelectForDisplay(input.Frame.Presentation, null).ReasonCode == "FrameDisplay.Missing" &&
+            ReferenceEquals(SelectForDisplay(input.Frame.Presentation, frame).Frame, frame.Frame),
+            "missing is explicit and a matched publication is returned intact");
+        PublishedSweepFrame restored = PublishForDisplay(frame.Checkpoint);
+        Check.That(SelectForDisplay(input.Frame.Presentation, restored).ReasonCode == "FrameDisplay.Matched" &&
+            restored.Frame.Segments.SequenceEqual(frame.Frame.Segments), "restore preserves selection and exact paths");
+        Check.That(SweepFrameDisplayGate.Select(input.Frame.Presentation, 0, 20, 0, 10, frame) is
+        { ReasonCode: "FrameDisplay.ViewportMismatch", Frame: null }, "resize cannot reuse old pixels");
+    }
+
+    private static void DisplaySelectionRejectsSubPpmPhaseAndPatientChanges()
+    {
+        SweepFrameReconstructionInput input = Input();
+        SweepStateProjectionState state = input.Frame.Presentation;
+        state = state with { Plan = state.Plan with { VisibleDurationNs = 10_000_000, EraseGapNs = 0, RequiredRenderHistoryNs = 10_000_000 } };
+        PublishedSweepFrame frame = PublishForDisplay(input with { Frame = input.Frame with { Presentation = state } });
+        var machine = SweepStateProjectionStateMachine.Restore(state);
+        uint phase = machine.CaptureProjection().WriteHeadPhasePpm;
+        machine.Advance(5, 0);
+        Check.That(machine.CaptureProjection().WriteHeadPhasePpm == phase &&
+            SelectForDisplay(machine.CaptureState(), frame) is { ReasonCode: "FrameDisplay.PresentationMismatch", Frame: null },
+            "one nanosecond invalidates even when rounded phase and zero-gap geometry agree");
+        machine = SweepStateProjectionStateMachine.Restore(state);
+        machine.Advance(4, 1);
+        Check.That(SelectForDisplay(machine.CaptureState(), frame).Frame is null,
+            "patient frontier mismatch rejects even at the same presentation clock");
+    }
+
+    private static void DisplaySelectionKeepsPausedAndPinnedFrames()
+    {
+        foreach (TemporalViewMode view in new[] { TemporalViewMode.LiveSweep, TemporalViewMode.FrozenSnapshot, TemporalViewMode.HistoricalReview })
+        {
+            SweepFrameReconstructionInput input = Input();
+            var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+            if (view == TemporalViewMode.LiveSweep) { machine.ChangeRunState(SessionRunState.Paused, 4, 0); }
+            else if (view == TemporalViewMode.FrozenSnapshot) { machine.EnterFrozen(4, 0); }
+            else { machine.EnterReview("record.one", 0, 4, 0); }
+            PublishedSweepFrame frame = PublishForDisplay(input with { Frame = input.Frame with { Presentation = machine.CaptureState() } });
+            machine.Advance(30, view == TemporalViewMode.LiveSweep ? 0 : 20);
+            Check.That(ReferenceEquals(SelectForDisplay(machine.CaptureState(), frame).Frame, frame.Frame),
+                "background time and live frontier do not invalidate an unchanged displayed range");
+        }
+    }
+
+    private static void DisplaySelectionRejectsNoDataProgressAndReviewSeek()
+    {
+        SweepFrameReconstructionInput input = Input();
+        var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        PublishedSweepFrame live = PublishForDisplay(input);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(input.Frame.Presentation.ContinuityState).Disconnect(false, 1), 4, 0);
+        Check.That(SelectForDisplay(machine.CaptureState(), live).Frame is null, "NoData entry fences retained authoritative geometry");
+        machine.ChangeRunState(SessionRunState.Paused, 4, 0);
+        PublishedSweepFrame noData = PublishForDisplay(input with { Frame = input.Frame with { Presentation = machine.CaptureState() } });
+        Check.That(SelectForDisplay(machine.CaptureState(), noData).Frame is not null, "matching NoData coverage compares by value");
+        machine.Advance(5, 0);
+        Check.That(SelectForDisplay(machine.CaptureState(), noData).Frame is null, "NoData advances while patient is paused");
+        machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        machine.EnterReview("record.one", 0, 4, 0);
+        PublishedSweepFrame review = PublishForDisplay(input with { Frame = input.Frame with { Presentation = machine.CaptureState() } });
+        machine.SeekReview(1);
+        Check.That(SelectForDisplay(machine.CaptureState(), review).Frame is null, "review seek cannot reuse the prior range");
+    }
+
+    private static void InvalidDisplaySelectionPreservesPublication()
+    {
+        SweepFrameReconstructionInput input = Input();
+        var publication = SweepFramePublication.Restore(2, 4, input);
+        PublishedSweepFrame before = publication.CapturePublished()!;
+        try
+        {
+            _ = SelectForDisplay(input.Frame.Presentation with { LiveSweepClockNs = -1 }, before);
+            throw new InvalidOperationException("invalid current state accepted");
+        }
+        catch (SweepFramePathException exception)
+        {
+            Check.That(exception.ReasonCode == "SweepFrame.InvalidCheckpoint", "invalid selection has stable validation failure");
+        }
+        Check.That(ReferenceEquals(publication.CapturePublished(), before) &&
+            SelectForDisplay(input.Frame.Presentation, before).Frame is not null,
+            "failed selection never changes the retained complete publication");
+    }
+
     private static void CancelledPathAppendPreservesPredecessor()
     {
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(Input().Frame);
+        var builder = SweepFramePathBuilder.Restore(Input().Frame);
         builder.Append(Sample(10, 0));
         SweepFramePathState before = builder.CaptureState();
         using CancellationTokenSource cancellation = new();
@@ -221,7 +318,7 @@ internal static class SweepFrameReconstructionSpecifications
         original.Enqueue(Input());
         original.ProcessNext();
         PublishedSweepFrame saved = original.Stop()!;
-        SweepFrameWorkPump restored = SweepFrameWorkPump.Restore(2, 2, saved.Checkpoint);
+        var restored = SweepFrameWorkPump.Restore(2, 2, saved.Checkpoint);
         restored.Enqueue(Input(20));
         Check.That(restored.ProcessNext() == SweepFramePublicationStatus.Published &&
             restored.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20 &&
@@ -261,7 +358,7 @@ internal static class SweepFrameReconstructionSpecifications
     {
         SweepFrameWorkPump queue = new(2, 2);
         queue.Enqueue(Input());
-        SweepFramePublicationStatus?[] results = new SweepFramePublicationStatus?[16];
+        var results = new SweepFramePublicationStatus?[16];
         Parallel.For(0, results.Length, index => results[index] = queue.ProcessNext());
         Check.That(results.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
             results.Count(status => status is null) == 15 && queue.CapturePublished()!.Frame.Segments.Count == 2,
@@ -277,7 +374,7 @@ internal static class SweepFrameReconstructionSpecifications
         queue.ProcessNext();
         PublishedSweepFrame published = queue.CapturePublished()!;
         queue.Enqueue(Input(20));
-        SweepFrameWorkPump restored = SweepFrameWorkPump.Restore(2, 2, published.Checkpoint);
+        var restored = SweepFrameWorkPump.Restore(2, 2, published.Checkpoint);
         Check.That(restored.ProcessNext() is null && restored.CapturePublished()!.Frame.Segments.SequenceEqual(published.Frame.Segments),
             "restore reconstructs owned completed inputs without resurrecting transient pending jobs");
     }
@@ -300,7 +397,7 @@ internal static class SweepFrameReconstructionSpecifications
     {
         SweepFramePublication publication = new(2, 2);
         SweepFrameWork work = publication.Request(Input());
-        SweepFramePublicationStatus[] results = new SweepFramePublicationStatus[16];
+        var results = new SweepFramePublicationStatus[16];
         Parallel.For(0, results.Length, index => results[index] = publication.Complete(work));
         Check.That(results.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
             results.Count(status => status == SweepFramePublicationStatus.AlreadyPublished) == 15 &&
@@ -336,7 +433,7 @@ internal static class SweepFrameReconstructionSpecifications
         samples[1] = Sample(0, 0);
         publication.Complete(work);
         PublishedSweepFrame current = publication.CapturePublished()!;
-        SweepFramePublication restored = SweepFramePublication.Restore(2, 2, current.Checkpoint);
+        var restored = SweepFramePublication.Restore(2, 2, current.Checkpoint);
         Check.That(current.Frame.Segments.SequenceEqual(restored.CapturePublished()!.Frame.Segments) &&
             PublicationReason(() => restored.Complete(work)) == "FramePublication.ForeignWork",
             "request inputs are owned and restored publication rejects tickets from the previous instance");
@@ -352,7 +449,7 @@ internal static class SweepFrameReconstructionSpecifications
 
     private static SweepFrameReconstructionInput Input(int width = 10)
     {
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
+        var machine = SweepStateProjectionStateMachine.Start(
             new("ecg", 4, 5, 0, 10, 2, 12), 1, 1, SessionRunState.Running,
             DataContinuityStateMachine.Start(LocalContinuationPolicy.DefaultDuration, 0).CaptureState(), 0, 0);
         machine.Advance(4, 0);
@@ -398,7 +495,7 @@ internal static class SweepFrameReconstructionSpecifications
         ReconstructedSweepFrame frame = reconstructor.Replace(Input() with { Samples = samples });
         samples[1] = Sample(0, 0);
         SweepFrameReconstructionInput checkpoint = reconstructor.CaptureCheckpoint()!;
-        SweepFrameReconstructor restored = SweepFrameReconstructor.Restore(2, 2, checkpoint);
+        var restored = SweepFrameReconstructor.Restore(2, 2, checkpoint);
         Check.That(frame.Segments.SequenceEqual(restored.Current!.Segments) && checkpoint.Samples[1].SampleIndex == 11,
             "caller array mutation cannot alter checkpoint inputs or restored geometry");
         Check.That(Reason(() => SweepFrameReconstructor.Restore(2, 1, checkpoint)) == "FrameReconstruction.InvalidCheckpoint" &&

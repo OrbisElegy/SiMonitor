@@ -41,6 +41,7 @@ internal static class Program
             .. SweepPathBuilderSpecifications.All,
             .. SweepFramePathSpecifications.All,
             .. SweepFrameReconstructionSpecifications.All,
+            .. SweepFrameScaleSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,

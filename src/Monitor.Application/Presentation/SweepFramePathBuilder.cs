@@ -12,7 +12,7 @@ public sealed class SweepFramePathException(string reasonCode, string parameterN
 public sealed record SweepFramePathState(
     SweepStateProjectionState Presentation,
     int PlotLeftPixels, int PlotWidthPixels, int PlotTopPixels, int PlotHeightPixels,
-    SweepPathSample? Previous);
+    SweepPathSample? Previous, EcgVerticalScale? VerticalScale = null);
 
 public sealed record SweepRegionPathResult(int RegionIndex, SweepPathAppendResult Path);
 
@@ -30,8 +30,9 @@ public sealed class SweepFramePathBuilder
     }
 
     public static SweepFramePathBuilder Start(SweepStateProjectionState presentation,
-        int leftPixels, int widthPixels, int topPixels, int heightPixels) =>
-        Restore(new(presentation, leftPixels, widthPixels, topPixels, heightPixels, null));
+        int leftPixels, int widthPixels, int topPixels, int heightPixels,
+        EcgVerticalScale? verticalScale = null) =>
+        Restore(new(presentation, leftPixels, widthPixels, topPixels, heightPixels, null, verticalScale));
 
     public static SweepFramePathBuilder Restore(SweepFramePathState state)
     {
@@ -40,6 +41,14 @@ public sealed class SweepFramePathBuilder
         {
             SweepStateProjectionState presentation = SweepStateProjectionStateMachine.Restore(state.Presentation).CaptureState();
             SweepPlotGeometrySnapshot geometry = SweepPlotGeometry.Compose(presentation, state.PlotLeftPixels, state.PlotWidthPixels);
+            if (state.VerticalScale is { } scale)
+            {
+                _ = EcgVerticalGeometry.MapMicrovolts(scale, 0, 1);
+                if (scale.PlotTopPixels != state.PlotTopPixels || scale.PlotHeightPixels != state.PlotHeightPixels)
+                {
+                    throw new ArgumentException("SweepFrame.ScaleBoundsMismatch", nameof(state));
+                }
+            }
             foreach (SweepPlotRegion region in geometry.Regions)
             {
                 _ = SweepPathBuilder.Restore(new(region, state.PlotTopPixels, state.PlotHeightPixels, state.Previous));

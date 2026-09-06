@@ -6,15 +6,16 @@ namespace Monitor.Application.Presentation;
 public sealed record SweepFrameDisplaySelection(string ReasonCode, ReconstructedSweepFrame? Frame);
 
 // Consumes trusted in-process publication snapshots. This checks presentation
-// compatibility, not source freshness, gain, authentication or history coverage.
+// compatibility and declared scale, not source freshness, authentication or
+// proof that caller-mapped samples actually used the declared scale.
 public static class SweepFrameDisplayGate
 {
     public static SweepFrameDisplaySelection Select(SweepStateProjectionState current,
         int leftPixels, int widthPixels, int topPixels, int heightPixels,
-        PublishedSweepFrame? published)
+        PublishedSweepFrame? published, EcgVerticalScale? verticalScale = null)
     {
         SweepFramePathBuilder expected = SweepFramePathBuilder.Start(
-            current, leftPixels, widthPixels, topPixels, heightPixels);
+            current, leftPixels, widthPixels, topPixels, heightPixels, verticalScale);
         if (published is null) { return new("FrameDisplay.Missing", null); }
 
         SweepFramePathState seed = published.Checkpoint.Frame;
@@ -22,6 +23,11 @@ public static class SweepFrameDisplayGate
             seed.PlotTopPixels != topPixels || seed.PlotHeightPixels != heightPixels)
         {
             return new("FrameDisplay.ViewportMismatch", null);
+        }
+
+        if (!SameScale(seed.VerticalScale, verticalScale))
+        {
+            return new("FrameDisplay.ScaleMismatch", null);
         }
 
         SweepStateProjectionState previous = seed.Presentation;
@@ -42,4 +48,13 @@ public static class SweepFrameDisplayGate
     private static long DisplayClock(SweepStateProjectionState state) =>
         state.TemporalViewMode == TemporalViewMode.LiveSweep
             ? state.LiveSweepClockNs : state.PinnedSweepClockNs!.Value;
+
+    private static bool SameScale(EcgVerticalScale? before, EcgVerticalScale? now)
+    {
+        if (before is null || now is null) { return before is null && now is null; }
+        return before.PlotTopPixels == now.PlotTopPixels && before.PlotHeightPixels == now.PlotHeightPixels &&
+            before.ZeroBaselinePixels == now.ZeroBaselinePixels &&
+            (ulong)before.PixelsPerMillivoltNumerator * now.PixelsPerMillivoltDenominator ==
+            (ulong)now.PixelsPerMillivoltNumerator * before.PixelsPerMillivoltDenominator;
+    }
 }

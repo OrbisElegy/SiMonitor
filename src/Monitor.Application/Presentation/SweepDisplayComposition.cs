@@ -19,15 +19,15 @@ public static class SweepDisplayComposition
     public static SweepDisplaySnapshot Compose(SweepStateProjectionState state,
         long authorityMonotonicNs, IReadOnlyList<NumericNoDataPolicy> numericPolicies,
         int leftPixels, int widthPixels, int topPixels, int heightPixels,
-        PublishedSweepFrame? published)
+        PublishedSweepFrame? published, EcgVerticalScale? verticalScale = null)
     {
-        SweepStateProjectionStateMachine presentation = SweepStateProjectionStateMachine.Restore(state);
+        var presentation = SweepStateProjectionStateMachine.Restore(state);
         SweepStateProjectionState current = presentation.CaptureState();
-        NoDataPresentationStateMachine safety = NoDataPresentationStateMachine.Start(
+        var safety = NoDataPresentationStateMachine.Start(
             numericPolicies, current.ContinuityState);
         NoDataSafetyProjection liveSafety = safety.Advance(authorityMonotonicNs);
         SweepFrameDisplaySelection frame = SweepFrameDisplayGate.Select(
-            current, leftPixels, widthPixels, topPixels, heightPixels, published);
+            current, leftPixels, widthPixels, topPixels, heightPixels, published, verticalScale);
 
         return new(presentation.CaptureProjection(),
             SweepPlotGeometry.Compose(current, leftPixels, widthPixels),

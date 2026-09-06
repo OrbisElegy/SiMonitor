@@ -12,13 +12,19 @@ public static class SweepFrameDisplayGate
 {
     public static SweepFrameDisplaySelection Select(SweepStateProjectionState current,
         int leftPixels, int widthPixels, int topPixels, int heightPixels,
-        PublishedSweepFrame? published, EcgVerticalScale? verticalScale = null)
-    {
-        SweepFramePathBuilder expected = SweepFramePathBuilder.Start(
-            current, leftPixels, widthPixels, topPixels, heightPixels, verticalScale);
-        if (published is null) { return new("FrameDisplay.Missing", null); }
+        PublishedSweepFrame? published, EcgVerticalScale? verticalScale = null) =>
+        SelectFrame(current, leftPixels, widthPixels, topPixels, heightPixels,
+            published?.Frame, published?.Checkpoint, verticalScale);
 
-        SweepFramePathState seed = published.Checkpoint.Frame;
+    internal static SweepFrameDisplaySelection SelectFrame(SweepStateProjectionState current,
+        int leftPixels, int widthPixels, int topPixels, int heightPixels,
+        ReconstructedSweepFrame? frame, SweepFrameReconstructionInput? checkpoint, EcgVerticalScale? verticalScale)
+    {
+        var expected = SweepFramePathBuilder.Start(
+            current, leftPixels, widthPixels, topPixels, heightPixels, verticalScale);
+        if (frame is null || checkpoint is null) { return new("FrameDisplay.Missing", null); }
+
+        SweepFramePathState seed = checkpoint.Frame;
         if (seed.PlotLeftPixels != leftPixels || seed.PlotWidthPixels != widthPixels ||
             seed.PlotTopPixels != topPixels || seed.PlotHeightPixels != heightPixels)
         {
@@ -37,12 +43,12 @@ public static class SweepFrameDisplayGate
         // rather than collection reference identity or rounded ppm phase alone.
         if (previous.Plan != current.Plan || DisplayClock(previous) != DisplayClock(current) ||
             (before with { NoDataCoverage = null }) != (now with { NoDataCoverage = null }) ||
-            !expected.Geometry.Regions.SequenceEqual(published.Frame.Geometry.Regions))
+            !expected.Geometry.Regions.SequenceEqual(frame.Geometry.Regions))
         {
             return new("FrameDisplay.PresentationMismatch", null);
         }
 
-        return new("FrameDisplay.Matched", published.Frame);
+        return new("FrameDisplay.Matched", frame);
     }
 
     private static long DisplayClock(SweepStateProjectionState state) =>

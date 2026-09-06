@@ -9,11 +9,86 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripDisplaySelectsOnlyWholeMatchingResults), StripDisplaySelectsOnlyWholeMatchingResults),
+        new(nameof(StripDisplayRejectsPhaseScaleAndGutterChanges), StripDisplayRejectsPhaseScaleAndGutterChanges),
+        new(nameof(StripDisplayPreservesPinnedReuseAcrossBackgroundProgress), StripDisplayPreservesPinnedReuseAcrossBackgroundProgress),
+        new(nameof(StripDisplayRestoreAndInvalidLayoutPreserveResults), StripDisplayRestoreAndInvalidLayoutPreserveResults),
         new(nameof(StripResizeCommitsPatientAndCalibrationTogether), StripResizeCommitsPatientAndCalibrationTogether),
         new(nameof(StripRejectsCalibrationFailureWithoutPartialReplacement), StripRejectsCalibrationFailureWithoutPartialReplacement),
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static EcgStripDisplaySelection Select(ReconstructedEcgStrip strip, SweepStateProjectionState? state = null,
+        int pulseLeft = 5, EcgVerticalScale? scale = null) => EcgStripDisplayGate.Select(
+            state ?? strip.Checkpoint.Source.Frame.Presentation, 30, 500,
+            scale ?? strip.Checkpoint.Source.Frame.VerticalScale!, 0, pulseLeft, strip);
+
+    private static void StripDisplaySelectsOnlyWholeMatchingResults()
+    {
+        EcgStripReconstructor reconstructor = new(2, 2);
+        ReconstructedEcgStrip strip = reconstructor.Replace(Input());
+        Check.That(Select(strip) is { ReasonCode: "EcgStripDisplay.Matched" } && ReferenceEquals(Select(strip).Strip, strip),
+            "matched selection returns the complete patient/calibration result intact");
+        Check.That(EcgStripDisplayGate.Select(strip.Checkpoint.Source.Frame.Presentation, 30, 500,
+            strip.Checkpoint.Source.Frame.VerticalScale!, 0, 5, null) is { ReasonCode: "FrameDisplay.Missing", Strip: null },
+            "missing geometry cannot masquerade as a complete strip");
+        Check.That(Select(strip, scale: strip.Checkpoint.Source.Frame.VerticalScale! with
+        {
+            PixelsPerMillivoltNumerator = 40,
+            PixelsPerMillivoltDenominator = 2,
+        }).Strip == strip, "equivalent gain fractions match both patient and calibration");
+    }
+
+    private static void StripDisplayRejectsPhaseScaleAndGutterChanges()
+    {
+        ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(Input());
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(strip.Checkpoint.Source.Frame.Presentation);
+        machine.Advance(1, 0);
+        Check.That(Select(strip, machine.CaptureState()) is { ReasonCode: "FrameDisplay.PresentationMismatch", Strip: null } &&
+            Select(strip, scale: strip.Checkpoint.Source.Frame.VerticalScale! with { PixelsPerMillivoltNumerator = 40 }) is
+            { ReasonCode: "FrameDisplay.ScaleMismatch", Strip: null },
+            "old phase or voltage scale rejects the entire strip, not just one layer");
+        Check.That(Select(strip, pulseLeft: 6) is { ReasonCode: "EcgStripDisplay.CalibrationMismatch", Strip: null } &&
+            EcgStripDisplayGate.Select(strip.Checkpoint.Source.Frame.Presentation, 30, 500,
+                strip.Checkpoint.Source.Frame.VerticalScale!, 1, 5, strip).Strip is null,
+            "pulse and gutter layout changes reject otherwise compatible patient pixels");
+    }
+
+    private static void StripDisplayPreservesPinnedReuseAcrossBackgroundProgress()
+    {
+        foreach (bool review in new[] { false, true })
+        {
+            EcgStripCheckpoint input = Input();
+            SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+            if (review) { machine.EnterReview("record.one", 0, 0, 0); }
+            else { machine.EnterFrozen(0, 0); }
+            ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(input with
+            {
+                Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } },
+            });
+            machine.Advance(10_000_000_000, 20);
+            Check.That(ReferenceEquals(Select(strip, machine.CaptureState()).Strip, strip),
+                "background progress does not invalidate a fixed original range or its calibration");
+            if (review)
+            {
+                machine.SeekReview(1);
+                Check.That(Select(strip, machine.CaptureState()).Strip is null, "review seek rejects the old whole strip");
+            }
+        }
+    }
+
+    private static void StripDisplayRestoreAndInvalidLayoutPreserveResults()
+    {
+        EcgStripReconstructor reconstructor = new(2, 2);
+        ReconstructedEcgStrip before = reconstructor.Replace(Input());
+        ReconstructedEcgStrip restored = EcgStripReconstructor.Restore(2, 2, before.Checkpoint).Current!;
+        Check.That(Select(restored).ReasonCode == "EcgStripDisplay.Matched" &&
+            restored.Calibration.Points.SequenceEqual(before.Calibration.Points), "restored evidence yields matching complete geometry");
+        Check.That(Reason(() => Select(before, pulseLeft: 29)) == "EcgCalibration.InsufficientSpace" &&
+            ReferenceEquals(reconstructor.Current, before) && ReferenceEquals(reconstructor.CaptureCheckpoint(), before.Checkpoint),
+            "invalid target layout rejects without retiring or changing the retained reconstruction");
+    }
 
     private static EcgStripCheckpoint Input()
     {

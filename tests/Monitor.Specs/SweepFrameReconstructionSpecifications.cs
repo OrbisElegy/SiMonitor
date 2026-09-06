@@ -2,6 +2,7 @@
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
+using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Specs;
 
@@ -9,6 +10,10 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(BackgroundWorkerWakesAndPublishesLatestInput), BackgroundWorkerWakesAndPublishesLatestInput),
+        new(nameof(BackgroundWorkerRecoversFromInvalidSamples), BackgroundWorkerRecoversFromInvalidSamples),
+        new(nameof(BackgroundWorkerShutdownJoinsAndRejectsWork), BackgroundWorkerShutdownJoinsAndRejectsWork),
+        new(nameof(BackgroundWorkerRebuildsPublishedCheckpointInputs), BackgroundWorkerRebuildsPublishedCheckpointInputs),
         new(nameof(StoppingPublicationFencesEveryOwnedTicket), StoppingPublicationFencesEveryOwnedTicket),
         new(nameof(StoppingPumpDiscardsPendingAndRejectsAdmission), StoppingPumpDiscardsPendingAndRejectsAdmission),
         new(nameof(ConcurrentStopLeavesOneFinalImmutableSnapshot), ConcurrentStopLeavesOneFinalImmutableSnapshot),
@@ -26,6 +31,74 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(ReconstructionCheckpointOwnsAndRevalidatesInputs), ReconstructionCheckpointOwnsAndRevalidatesInputs),
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
+
+    private static void WithWorker(Action<SweepFrameWorker> action)
+    {
+        SweepFrameWorker worker = new(2, 2);
+        try { action(worker); }
+        finally { worker.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult(); }
+    }
+    private static void Idle(SweepFrameWorker worker) =>
+        worker.WaitForIdleAsync().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+
+    private static void BackgroundWorkerWakesAndPublishesLatestInput() => WithWorker(worker =>
+    {
+        Idle(worker);
+        ulong latest = 0;
+        for (int width = 10; width <= 30; width++) { latest = worker.Enqueue(Input(width)); }
+        Idle(worker);
+        Check.That(worker.CapturePublished()!.LocalGeneration == latest &&
+            worker.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 30 && worker.LastFailureCode is null,
+            "background wakeups drain coalesced work and publish the latest admitted frame");
+        worker.Enqueue(Input(40));
+        Idle(worker);
+        Check.That(worker.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 40,
+            "a request after idle wakes the same worker without polling");
+    });
+
+    private static void BackgroundWorkerRecoversFromInvalidSamples() => WithWorker(worker =>
+    {
+        worker.Enqueue(Input());
+        Idle(worker);
+        PublishedSweepFrame before = worker.CapturePublished()!;
+        worker.Enqueue(Input() with { Samples = new[] { Sample(10, 0), Sample(9, 10) } });
+        Idle(worker);
+        Check.That(worker.LastFailureCode == "SweepPath.FrontierReversed" && ReferenceEquals(before, worker.CapturePublished()),
+            "expected input failures are observable and preserve the completed frame");
+        worker.Enqueue(Input(20));
+        Idle(worker);
+        Check.That(worker.LastFailureCode is null && worker.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20,
+            "one invalid build cannot terminate future worker processing");
+    });
+
+    private static void BackgroundWorkerShutdownJoinsAndRejectsWork() => WithWorker(worker =>
+    {
+        worker.Enqueue(Input());
+        worker.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+        PublishedSweepFrame? final = worker.CapturePublished();
+        worker.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+        Idle(worker);
+        try { worker.Enqueue(Input()); throw new InvalidOperationException("stopped worker must reject"); }
+        catch (ObjectDisposedException) { }
+        Check.That(ReferenceEquals(final, worker.CapturePublished()),
+            "asynchronous shutdown joins the task and leaves a stable final snapshot");
+    });
+
+    private static void BackgroundWorkerRebuildsPublishedCheckpointInputs() => WithWorker(first =>
+    {
+        SweepPathSample[] samples = [Sample(10, 0), Sample(11, 10)];
+        first.Enqueue(Input() with { Samples = samples });
+        samples[1] = Sample(0, 0);
+        Idle(first);
+        PublishedSweepFrame saved = first.CapturePublished()!;
+        WithWorker(second =>
+        {
+            second.Enqueue(saved.Checkpoint);
+            Idle(second);
+            Check.That(saved.Frame.Segments.SequenceEqual(second.CapturePublished()!.Frame.Segments),
+                "owned published checkpoint inputs rebuild identically in a fresh background lifecycle");
+        });
+    });
 
     private static void StoppingPublicationFencesEveryOwnedTicket()
     {

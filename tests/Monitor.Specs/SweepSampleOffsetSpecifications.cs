@@ -9,11 +9,94 @@ internal static class SweepSampleOffsetSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(HorizontalResizeRebuildsFromEvidence), HorizontalResizeRebuildsFromEvidence),
+        new(nameof(HorizontalResizePreservesNoDataAndPinnedState), HorizontalResizePreservesNoDataAndPinnedState),
+        new(nameof(HorizontalResizeRejectsMissingOrCorruptEvidence), HorizontalResizeRejectsMissingOrCorruptEvidence),
+        new(nameof(HorizontalResizeCancellationAndLimitsPreserveSource), HorizontalResizeCancellationAndLimitsPreserveSource),
         new(nameof(SampleOffsetsUseExactHalfOpenGeometry), SampleOffsetsUseExactHalfOpenGeometry),
         new(nameof(OffsetAppendMapsBothAxesAndBreaksAtWrap), OffsetAppendMapsBothAxesAndBreaksAtWrap),
         new(nameof(OffsetEvidenceRejectsForgedPixelsAtomically), OffsetEvidenceRejectsForgedPixelsAtomically),
         new(nameof(OffsetCheckpointsRevalidateAfterResize), OffsetCheckpointsRevalidateAfterResize),
     ];
+
+    private static SweepFrameReconstructionInput ResizeInput() => new(Frame(), new[] { Sample(0, 3), Sample(1, 4) });
+
+    private static void HorizontalResizeRebuildsFromEvidence()
+    {
+        SweepFrameReconstructionInput input = ResizeInput();
+        SweepFrameResizeResult result = SweepFrameHorizontalResize.Rebuild(input, 20, 30, 2, 2);
+        Check.That(result.Frame.Segments[0].Segment.Start.X == new ExactPlotCoordinate(29, 1) &&
+            result.Frame.Segments[0].Segment.End.X == new ExactPlotCoordinate(32, 1) &&
+            result.Checkpoint.Frame.Presentation == input.Frame.Presentation &&
+            result.Checkpoint.Frame.VerticalScale == input.Frame.VerticalScale && result.Checkpoint.Frame.Previous is null,
+            "resize maps offsets into translated wider bounds without changing time or voltage scale");
+        Check.That(result.Checkpoint.Samples[0] == input.Samples[0] with
+        {
+            Point = input.Samples[0].Point with { X = new(29, 0, 10) },
+        }, "only X changes; source, quality, index, cycle and voltage evidence remain intact");
+        SweepFrameResizeResult roundTrip = SweepFrameHorizontalResize.Rebuild(result.Checkpoint, 5, 10, 2, 2);
+        Check.That(roundTrip.Checkpoint.Samples.SequenceEqual(input.Samples) &&
+            result.Frame.Segments.SequenceEqual(SweepFrameReconstructor.Restore(2, 2, result.Checkpoint).Current!.Segments),
+            "resize round trip and checkpoint restore introduce no pixel rounding drift");
+    }
+
+    private static void HorizontalResizePreservesNoDataAndPinnedState()
+    {
+        foreach (bool pinned in new[] { false, true })
+        {
+            SweepFrameReconstructionInput input = ResizeInput();
+            SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+            if (pinned) { machine.EnterReview("record.one", 0, 0, 0); }
+            machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+            machine.Advance(10, 0);
+            input = input with { Frame = input.Frame with { Presentation = machine.CaptureState() } };
+            SweepFrameResizeResult result = SweepFrameHorizontalResize.Rebuild(input, 5, 20, 2, 2);
+            Check.That(result.Checkpoint.Frame.Presentation == machine.CaptureState() &&
+                (pinned ? result.Frame.Geometry.Regions.Single().Kind == SweepTraceRegionKind.PinnedHistory && result.Frame.Segments.Count == 1
+                    : result.Frame.Segments.Count == 0),
+                "resize keeps the original Review range or current NoData suppression without advancing any clock");
+        }
+    }
+
+    private static void HorizontalResizeRejectsMissingOrCorruptEvidence()
+    {
+        SweepFrameReconstructionInput input = ResizeInput();
+        Check.That(Reason(() => SweepFrameHorizontalResize.Rebuild(input with
+        {
+            Samples = new[] { input.Samples[0], input.Samples[1] with { CycleOffsetNs = null } },
+        }, 5, 20, 2, 2)) == "FrameResize.OffsetEvidenceRequired", "legacy pixels cannot be stretched without time evidence");
+        Check.That(Reason(() => SweepFrameHorizontalResize.Rebuild(input with
+        {
+            Samples = new[] { input.Samples[0], input.Samples[1] with { CycleOffsetNs = 5 } },
+        }, 5, 20, 2, 2)) == "SweepFrame.TimeMappingMismatch",
+            "resize validates original evidence before remapping, rather than repairing forged input silently");
+        SweepPathSample[] callerSamples = [input.Samples[0], input.Samples[1]];
+        SweepFrameResizeResult result = SweepFrameHorizontalResize.Rebuild(input with { Samples = callerSamples }, 5, 20, 2, 2);
+        callerSamples[1] = Sample(9, 9);
+        Check.That(result.Checkpoint.Samples[1].SampleIndex == 1 && input.Samples[1].Point.X.WholePixels == 9,
+            "output owns its samples and never edits caller coordinates");
+    }
+
+    private static void HorizontalResizeCancellationAndLimitsPreserveSource()
+    {
+        SweepFrameReconstructionInput input = ResizeInput();
+        Check.That(Reason(() => SweepFrameHorizontalResize.Rebuild(input, 5, 20, 1, 2)) == "FrameReconstruction.SampleLimitExceeded" &&
+            Reason(() => SweepFrameHorizontalResize.Rebuild(input, 5, 0, 2, 2)) == "SweepFrame.InvalidCheckpoint",
+            "sample capacity and invalid target bounds fail explicitly");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            _ = SweepFrameHorizontalResize.Rebuild(input, 5, 20, 2, 2, cancellation.Token);
+            throw new InvalidOperationException("cancelled resize accepted");
+        }
+        catch (OperationCanceledException exception)
+        {
+            Check.That(exception.CancellationToken == cancellation.Token, "resize preserves cancellation identity");
+        }
+        Check.That(input.Frame == Frame() && input.Samples.SequenceEqual(ResizeInput().Samples),
+            "failure and cancellation leave the original checkpoint intact");
+    }
 
     private static SweepFramePathState Frame(int width = 10) => new(
         SweepStateProjectionStateMachine.Start(new("ecg", 4, 5, 0, 10, 2, 12), 1, 1, SessionRunState.Running,
@@ -93,5 +176,7 @@ internal static class SweepSampleOffsetSpecifications
         try { action(); return null; }
         catch (SweepPlotGeometryException exception) { return exception.ReasonCode; }
         catch (SweepFramePathException exception) { return exception.ReasonCode; }
+        catch (SweepFrameResizeException exception) { return exception.ReasonCode; }
+        catch (SweepFrameReconstructionException exception) { return exception.ReasonCode; }
     }
 }

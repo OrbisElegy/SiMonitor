@@ -44,6 +44,7 @@ internal static class Program
             .. SweepFrameScaleSpecifications.All,
             .. SweepVoltageMappingSpecifications.All,
             .. SweepSampleOffsetSpecifications.All,
+            .. EcgStripSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,

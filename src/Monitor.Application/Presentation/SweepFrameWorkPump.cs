@@ -29,17 +29,18 @@ public sealed class SweepFrameWorkPump
         }
     }
 
-    public SweepFramePublicationStatus? ProcessNext()
+    public SweepFramePublicationStatus? ProcessNext(CancellationToken cancellationToken = default)
     {
         SweepFrameWork work;
         lock (_gate)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_stopped || _processing || _pending is null) { return null; }
             work = _pending;
             _pending = null;
             _processing = true;
         }
-        try { return _publication.Complete(work); }
+        try { return _publication.Complete(work, cancellationToken); }
         finally
         {
             lock (_gate) { _processing = false; }

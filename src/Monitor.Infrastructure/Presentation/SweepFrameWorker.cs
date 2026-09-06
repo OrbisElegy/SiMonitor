@@ -9,6 +9,7 @@ public sealed class SweepFrameWorker : IAsyncDisposable
     private readonly object _gate = new();
     private readonly SweepFrameWorkPump _pump;
     private readonly SemaphoreSlim _wake;
+    private readonly CancellationTokenSource _shutdown;
     private readonly Task _worker;
     private TaskCompletionSource _idle = NewSignal();
     private ulong _latest;
@@ -19,6 +20,7 @@ public sealed class SweepFrameWorker : IAsyncDisposable
     {
         _pump = new(maximumSamples, maximumSegments);
         _wake = new(0, 1);
+        _shutdown = new();
         _idle.SetResult();
         _worker = Task.Run(RunAsync);
     }
@@ -53,6 +55,7 @@ public sealed class SweepFrameWorker : IAsyncDisposable
             {
                 _stopping = true;
                 _pump.Stop();
+                _shutdown.Cancel();
                 Signal();
             }
         }
@@ -75,7 +78,7 @@ public sealed class SweepFrameWorker : IAsyncDisposable
                         observed = _latest;
                     }
                     SweepFramePublicationStatus? result;
-                    try { result = _pump.ProcessNext(); }
+                    try { result = _pump.ProcessNext(_shutdown.Token); }
                     catch (ArgumentException exception) when (FailureCode(exception) is not null)
                     {
                         lock (_gate) { _lastFailure = FailureCode(exception); }
@@ -93,6 +96,10 @@ public sealed class SweepFrameWorker : IAsyncDisposable
                 }
             }
         }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            lock (_gate) { _idle.TrySetResult(); }
+        }
         catch (Exception exception)
         {
             lock (_gate)
@@ -103,7 +110,7 @@ public sealed class SweepFrameWorker : IAsyncDisposable
             }
             throw;
         }
-        finally { _wake.Dispose(); }
+        finally { _wake.Dispose(); _shutdown.Dispose(); }
     }
 
     // Called only under admission lock, preventing duplicate releases or disposal races.

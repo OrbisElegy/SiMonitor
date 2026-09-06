@@ -39,8 +39,9 @@ public sealed class SweepFrameReconstructor
 
     public ReconstructedSweepFrame? Current { get; private set; }
 
-    public ReconstructedSweepFrame Replace(SweepFrameReconstructionInput input)
+    public ReconstructedSweepFrame Replace(SweepFrameReconstructionInput input, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(input);
         if (input.Frame is null || input.Frame.Previous is not null || input.Samples is null)
         {
@@ -50,14 +51,21 @@ public sealed class SweepFrameReconstructor
         {
             throw Error("FrameReconstruction.SampleLimitExceeded", nameof(input));
         }
-        SweepPathSample[] samples = input.Samples.ToArray();
-        SweepFramePathBuilder trial = SweepFramePathBuilder.Restore(input.Frame);
+        var samples = new SweepPathSample[input.Samples.Count];
+        for (int index = 0; index < samples.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            samples[index] = input.Samples[index];
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var trial = SweepFramePathBuilder.Restore(input.Frame);
         SweepFramePathState initial = trial.CaptureState();
         List<SweepFrameSegment> segments = [];
         foreach (SweepPathSample sample in samples)
         {
-            foreach (SweepRegionPathResult result in trial.Append(sample))
+            foreach (SweepRegionPathResult result in trial.Append(sample, cancellationToken))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (result.Path.Segment is not null)
                 {
                     if (segments.Count == _maximumSegments)
@@ -71,6 +79,7 @@ public sealed class SweepFrameReconstructor
         }
         ReconstructedSweepFrame completed = new(trial.Geometry, initial.PlotTopPixels, initial.PlotHeightPixels,
             Array.AsReadOnly(segments.ToArray()));
+        cancellationToken.ThrowIfCancellationRequested();
         _checkpoint = new(initial, Array.AsReadOnly(samples));
         Current = completed;
         return completed;

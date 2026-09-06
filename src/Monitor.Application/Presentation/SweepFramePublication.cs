@@ -65,8 +65,9 @@ public sealed class SweepFramePublication
 
     // May run on a worker thread. No callback, UI dispatcher or Task is held under
     // the lock; the caller chooses execution and marshals the resulting snapshot.
-    public SweepFramePublicationStatus Complete(SweepFrameWork work)
+    public SweepFramePublicationStatus Complete(SweepFrameWork work, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(work);
         if (!ReferenceEquals(work.Owner, _gate))
         { throw Error("FramePublication.ForeignWork", nameof(work)); }
@@ -76,12 +77,13 @@ public sealed class SweepFramePublication
             if (status is not null) { return status.Value; }
         }
         SweepFrameReconstructor reconstruction = new(_maximumSamples, _maximumSegments);
-        ReconstructedSweepFrame frame = reconstruction.Replace(work.Input);
+        ReconstructedSweepFrame frame = reconstruction.Replace(work.Input, cancellationToken);
         PublishedSweepFrame completed = new(work.Generation, frame, reconstruction.CaptureCheckpoint()!);
         lock (_gate)
         {
             SweepFramePublicationStatus? status = ExistingStatus(work);
             if (status is not null) { return status.Value; }
+            cancellationToken.ThrowIfCancellationRequested();
             _current = completed;
             return SweepFramePublicationStatus.Published;
         }
@@ -106,7 +108,7 @@ public sealed class SweepFramePublication
     public static SweepFramePublication Restore(int maximumSamples, int maximumSegments,
         SweepFrameReconstructionInput checkpoint)
     {
-        SweepFrameReconstructor validated = SweepFrameReconstructor.Restore(maximumSamples, maximumSegments, checkpoint);
+        var validated = SweepFrameReconstructor.Restore(maximumSamples, maximumSegments, checkpoint);
         SweepFramePublication result = new(maximumSamples, maximumSegments);
         result._latestGeneration = 1;
         result._current = new(1, validated.Current!, validated.CaptureCheckpoint()!);

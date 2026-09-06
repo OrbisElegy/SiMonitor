@@ -10,6 +10,10 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(CancelledPathAppendPreservesPredecessor), CancelledPathAppendPreservesPredecessor),
+        new(nameof(CancellationDuringInputCopyPreservesCompletedFrame), CancellationDuringInputCopyPreservesCompletedFrame),
+        new(nameof(CancelledPublicationAndPumpCanRetry), CancelledPublicationAndPumpCanRetry),
+        new(nameof(WorkerShutdownCancellationIsNotAnInputFailure), WorkerShutdownCancellationIsNotAnInputFailure),
         new(nameof(BackgroundWorkerWakesAndPublishesLatestInput), BackgroundWorkerWakesAndPublishesLatestInput),
         new(nameof(BackgroundWorkerRecoversFromInvalidSamples), BackgroundWorkerRecoversFromInvalidSamples),
         new(nameof(BackgroundWorkerShutdownJoinsAndRejectsWork), BackgroundWorkerShutdownJoinsAndRejectsWork),
@@ -31,6 +35,73 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(ReconstructionCheckpointOwnsAndRevalidatesInputs), ReconstructionCheckpointOwnsAndRevalidatesInputs),
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
+
+    private static void CancelledPathAppendPreservesPredecessor()
+    {
+        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(Input().Frame);
+        builder.Append(Sample(10, 0));
+        SweepFramePathState before = builder.CaptureState();
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        Cancelled(() => builder.Append(Sample(11, 10), cancellation.Token), cancellation.Token);
+        Check.That(builder.CaptureState() == before && builder.Append(Sample(11, 10)).Any(result => result.Path.Segment is not null),
+            "cancelled append leaves the predecessor available for a valid retry");
+    }
+
+    private static void CancellationDuringInputCopyPreservesCompletedFrame()
+    {
+        SweepFrameReconstructor reconstructor = new(2, 2);
+        ReconstructedSweepFrame before = reconstructor.Replace(Input());
+        SweepFrameReconstructionInput checkpoint = reconstructor.CaptureCheckpoint()!;
+        using CancellationTokenSource cancellation = new();
+        SweepFrameReconstructionInput input = Input(20);
+        IReadOnlyList<SweepPathSample> cancelling = new CancelOnReadSamples(input.Samples, cancellation.Cancel);
+        Cancelled(() => reconstructor.Replace(input with { Samples = cancelling }, cancellation.Token), cancellation.Token);
+        Check.That(ReferenceEquals(before, reconstructor.Current) && ReferenceEquals(checkpoint, reconstructor.CaptureCheckpoint()),
+            "cancellation observed while copying inputs cannot publish a partial frame or checkpoint");
+        Check.That(SweepFrameReconstructor.Restore(2, 2, checkpoint).Current!.Segments.SequenceEqual(before.Segments),
+            "cancelled work leaves a fully restorable completed checkpoint");
+    }
+
+    private static void CancelledPublicationAndPumpCanRetry()
+    {
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        SweepFramePublication publication = new(2, 2);
+        SweepFrameWork work = publication.Request(Input());
+        Cancelled(() => publication.Complete(work, cancellation.Token), cancellation.Token);
+        Check.That(publication.CapturePublished() is null && publication.Complete(work) == SweepFramePublicationStatus.Published,
+            "cancellation before completion preserves the work ticket for retry");
+        SweepFrameWorkPump pump = new(2, 2);
+        ulong generation = pump.Enqueue(Input());
+        Cancelled(() => pump.ProcessNext(cancellation.Token), cancellation.Token);
+        Check.That(pump.ProcessNext() == SweepFramePublicationStatus.Published && pump.CapturePublished()!.LocalGeneration == generation,
+            "pre-cancelled worker call must not consume the pending slot");
+    }
+
+    private static void WorkerShutdownCancellationIsNotAnInputFailure() => WithWorker(worker =>
+    {
+        worker.Enqueue(Input());
+        worker.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+        Idle(worker);
+        Check.That(worker.LastFailureCode is null,
+            "cooperative shutdown completes cleanly without reporting cancellation as invalid patient input");
+    });
+
+    private static void Cancelled(Action action, CancellationToken token)
+    {
+        try { action(); throw new InvalidOperationException("operation must observe cancellation"); }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == token, "cancellation preserves caller token identity"); }
+    }
+
+    private sealed class CancelOnReadSamples(IReadOnlyList<SweepPathSample> samples, Action cancel) : IReadOnlyList<SweepPathSample>
+    {
+        public int Count => samples.Count;
+        public SweepPathSample this[int index] { get { cancel(); return samples[index]; } }
+        public IEnumerator<SweepPathSample> GetEnumerator() => samples.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 
     private static void WithWorker(Action<SweepFrameWorker> action)
     {

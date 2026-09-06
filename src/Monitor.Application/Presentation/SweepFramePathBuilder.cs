@@ -54,17 +54,20 @@ public sealed class SweepFramePathBuilder
         }
     }
 
-    public IReadOnlyList<SweepRegionPathResult> Append(SweepPathSample sample)
+    public IReadOnlyList<SweepRegionPathResult> Append(SweepPathSample sample, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateIdentity(sample);
         SweepRegionPathResult[] results = new SweepRegionPathResult[_geometry.Regions.Count];
         for (int index = 0; index < results.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SweepPathBuilder trial = SweepPathBuilder.Restore(new(
                 _geometry.Regions[index], _state.PlotTopPixels, _state.PlotHeightPixels, _state.Previous));
             results[index] = new(index, trial.Append(sample));
         }
         // One shared frontier commits only after every region succeeds.
+        cancellationToken.ThrowIfCancellationRequested();
         _state = _state with { Previous = sample };
         return Array.AsReadOnly(results);
     }

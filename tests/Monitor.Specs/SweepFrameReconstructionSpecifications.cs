@@ -9,6 +9,10 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(QueuedFramesCoalesceToTheLatestRequest), QueuedFramesCoalesceToTheLatestRequest),
+        new(nameof(QueueFailureReleasesWorkerAndPreservesPublishedFrame), QueueFailureReleasesWorkerAndPreservesPublishedFrame),
+        new(nameof(ConcurrentQueuePumpsConsumeOnePendingRequest), ConcurrentQueuePumpsConsumeOnePendingRequest),
+        new(nameof(QueueRestoreDoesNotRevivePendingWork), QueueRestoreDoesNotRevivePendingWork),
         new(nameof(OlderWorkCannotOverwriteANewerPublication), OlderWorkCannotOverwriteANewerPublication),
         new(nameof(ConcurrentDuplicateCompletionPublishesOnce), ConcurrentDuplicateCompletionPublishesOnce),
         new(nameof(FailedNewestWorkPreservesPublishedSnapshot), FailedNewestWorkPreservesPublishedSnapshot),
@@ -18,6 +22,59 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(ReconstructionCheckpointOwnsAndRevalidatesInputs), ReconstructionCheckpointOwnsAndRevalidatesInputs),
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
+
+    private static void QueuedFramesCoalesceToTheLatestRequest()
+    {
+        SweepFrameWorkPump queue = new(2, 2);
+        Check.That(queue.ProcessNext() is null, "empty queue has no worker result");
+        queue.Enqueue(Input());
+        queue.Enqueue(Input(20));
+        ulong latest = queue.Enqueue(Input(30));
+        Check.That(queue.ProcessNext() == SweepFramePublicationStatus.Published && queue.ProcessNext() is null &&
+            queue.CapturePublished()!.LocalGeneration == latest && queue.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 30,
+            "only the latest waiting frame is reconstructed without accumulating stale work");
+    }
+
+    private static void QueueFailureReleasesWorkerAndPreservesPublishedFrame()
+    {
+        SweepFrameWorkPump queue = new(2, 2);
+        queue.Enqueue(Input());
+        queue.ProcessNext();
+        PublishedSweepFrame before = queue.CapturePublished()!;
+        queue.Enqueue(Input() with { Samples = new[] { Sample(10, 0), Sample(9, 10) } });
+        Check.That(Reason(() => queue.ProcessNext()) == "SweepPath.FrontierReversed" &&
+            ReferenceEquals(before, queue.CapturePublished()), "failed reconstruction retains the complete previous frame");
+        ulong pending = queue.Enqueue(Input(20));
+        Check.That(PublicationReason(() => queue.Enqueue(Input() with { Samples = new[] { Sample(0, 0), Sample(1, 1), Sample(2, 2) } })) ==
+            "FramePublication.SampleLimitExceeded" && queue.ProcessNext() == SweepFramePublicationStatus.Published &&
+            queue.CapturePublished()!.LocalGeneration == pending,
+            "failure releases the worker and invalid admission does not discard valid pending work");
+    }
+
+    private static void ConcurrentQueuePumpsConsumeOnePendingRequest()
+    {
+        SweepFrameWorkPump queue = new(2, 2);
+        queue.Enqueue(Input());
+        SweepFramePublicationStatus?[] results = new SweepFramePublicationStatus?[16];
+        Parallel.For(0, results.Length, index => results[index] = queue.ProcessNext());
+        Check.That(results.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
+            results.Count(status => status is null) == 15 && queue.CapturePublished()!.Frame.Segments.Count == 2,
+            "concurrent worker pumps cannot consume the same pending slot twice");
+    }
+
+    private static void QueueRestoreDoesNotRevivePendingWork()
+    {
+        SweepFrameWorkPump queue = new(2, 2);
+        SweepPathSample[] source = [Sample(10, 0), Sample(11, 10)];
+        queue.Enqueue(Input() with { Samples = source });
+        source[1] = Sample(0, 0);
+        queue.ProcessNext();
+        PublishedSweepFrame published = queue.CapturePublished()!;
+        queue.Enqueue(Input(20));
+        SweepFrameWorkPump restored = SweepFrameWorkPump.Restore(2, 2, published.Checkpoint);
+        Check.That(restored.ProcessNext() is null && restored.CapturePublished()!.Frame.Segments.SequenceEqual(published.Frame.Segments),
+            "restore reconstructs owned completed inputs without resurrecting transient pending jobs");
+    }
 
     private static void OlderWorkCannotOverwriteANewerPublication()
     {

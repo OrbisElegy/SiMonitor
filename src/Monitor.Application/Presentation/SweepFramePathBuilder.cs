@@ -81,6 +81,18 @@ public sealed class SweepFramePathBuilder
         return Array.AsReadOnly(results);
     }
 
+    public IReadOnlyList<SweepRegionPathResult> AppendVoltage(SweepSampleSource source,
+        ulong sampleIndex, ulong cycleIndex, bool drawable, SweepPixelPosition x,
+        EcgSampleVoltage voltage, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(voltage);
+        EcgVerticalScale scale = _state.VerticalScale ??
+            throw new SweepFramePathException("SweepFrame.VoltageScaleRequired", nameof(voltage));
+        EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(scale, voltage.NumeratorMicrovolts, voltage.Denominator);
+        return Append(new(source, sampleIndex, cycleIndex, drawable, new(x, y), voltage), cancellationToken);
+    }
+
     public SweepFramePathState CaptureState() => _state;
 
     public SweepPlotGeometrySnapshot Geometry => _geometry;
@@ -92,6 +104,26 @@ public sealed class SweepFramePathBuilder
             sample.Source.PresentationClockRevision != _geometry.PresentationClockRevision)
         {
             throw new SweepFramePathException("SweepFrame.PresentationIdentityMismatch", nameof(sample));
+        }
+        if ((_state.VerticalScale is null) != (sample.Voltage is null))
+        {
+            throw new SweepFramePathException("SweepFrame.VoltageEvidenceRequired", nameof(sample));
+        }
+        if (_state.VerticalScale is { } scale && sample.Voltage is { } voltage)
+        {
+            EcgVerticalPosition expected;
+            try
+            {
+                expected = EcgVerticalGeometry.MapMicrovolts(scale, voltage.NumeratorMicrovolts, voltage.Denominator);
+            }
+            catch (EcgVerticalGeometryException)
+            {
+                throw new SweepFramePathException("SweepFrame.InvalidVoltageAmplitude", nameof(sample));
+            }
+            if (sample.Point is null || sample.Point.Y != expected)
+            {
+                throw new SweepFramePathException("SweepFrame.VoltageMappingMismatch", nameof(sample));
+            }
         }
     }
 }

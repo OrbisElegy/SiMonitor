@@ -9,6 +9,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripPumpCoalescesAndRejectsInvalidAdmission), StripPumpCoalescesAndRejectsInvalidAdmission),
+        new(nameof(StripPumpFailureReleasesSlotWithoutPartialPublication), StripPumpFailureReleasesSlotWithoutPartialPublication),
+        new(nameof(StripPumpConcurrentConsumersAndCancellationKeepOneRequest), StripPumpConcurrentConsumersAndCancellationKeepOneRequest),
+        new(nameof(StripPumpStopAndRestoreExcludePendingWork), StripPumpStopAndRestoreExcludePendingWork),
         new(nameof(StripPublicationKeepsLatestWholeResult), StripPublicationKeepsLatestWholeResult),
         new(nameof(StripPublicationOwnsInputAndRetainsSuccessOnFailure), StripPublicationOwnsInputAndRetainsSuccessOnFailure),
         new(nameof(StripPublicationRestoreAndStopFenceOldWork), StripPublicationRestoreAndStopFenceOldWork),
@@ -22,6 +26,79 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void StripPumpCoalescesAndRejectsInvalidAdmission()
+    {
+        EcgStripWorkPump pump = new(2, 2);
+        pump.Enqueue(Input());
+        ulong latest = pump.Enqueue(Input() with { PulseLeftPixels = 6 });
+        Check.That(Reason(() => pump.Enqueue(Input() with { PulseLeftPixels = 29 })) == "EcgCalibration.InsufficientSpace",
+            "invalid calibration cannot replace a valid pending strip");
+        Check.That(pump.ProcessNext() == SweepFramePublicationStatus.Published && pump.ProcessNext() is null &&
+            pump.CapturePublished()!.LocalGeneration == latest && pump.CapturePublished()!.Strip.Checkpoint.PulseLeftPixels == 6,
+            "only the latest valid pending strip is reconstructed and published");
+    }
+
+    private static void StripPumpFailureReleasesSlotWithoutPartialPublication()
+    {
+        EcgStripWorkPump pump = EcgStripWorkPump.Restore(2, 2, Input());
+        PublishedEcgStrip before = pump.CapturePublished()!;
+        EcgStripCheckpoint bad = Input();
+        bad = bad with
+        {
+            Source = bad.Source with
+            {
+                Samples = new[] { bad.Source.Samples[0], bad.Source.Samples[1] with { Voltage = new(2000, 1) } },
+            }
+        };
+        pump.Enqueue(bad);
+        Check.That(Reason(() => pump.ProcessNext()) == "SweepFrame.VoltageMappingMismatch" &&
+            ReferenceEquals(before, pump.CapturePublished()) && pump.ProcessNext() is null,
+            "failed reconstruction releases and consumes its slot without exposing a partial strip");
+        ulong next = pump.Enqueue(Input() with { PulseLeftPixels = 7 });
+        Check.That(pump.ProcessNext() == SweepFramePublicationStatus.Published && pump.CapturePublished()!.LocalGeneration == next &&
+            pump.CapturePublished()!.Strip.Calibration.Points[0].X.WholePixels == 7,
+            "later valid work can publish both layers after failure");
+    }
+
+    private static void StripPumpConcurrentConsumersAndCancellationKeepOneRequest()
+    {
+        EcgStripWorkPump pump = new(2, 2);
+        ulong generation = pump.Enqueue(Input());
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            pump.ProcessNext(cancellation.Token);
+            throw new InvalidOperationException("cancelled pump accepted");
+        }
+        catch (OperationCanceledException exception)
+        {
+            Check.That(exception.CancellationToken == cancellation.Token && pump.CapturePublished() is null,
+                "pre-cancelled processing cannot consume or publish a pending request");
+        }
+        SweepFramePublicationStatus?[] outcomes = new SweepFramePublicationStatus?[16];
+        Parallel.For(0, outcomes.Length, index => outcomes[index] = pump.ProcessNext());
+        Check.That(outcomes.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
+            outcomes.Count(status => status is null) == 15 && pump.CapturePublished()!.LocalGeneration == generation,
+            "concurrent consumers claim one pending request exactly once");
+    }
+
+    private static void StripPumpStopAndRestoreExcludePendingWork()
+    {
+        EcgStripWorkPump pump = EcgStripWorkPump.Restore(2, 2, Input());
+        PublishedEcgStrip before = pump.CapturePublished()!;
+        pump.Enqueue(Input() with { PulseLeftPixels = 6 });
+        Check.That(ReferenceEquals(before, pump.Stop()) && ReferenceEquals(before, pump.Stop()) && pump.ProcessNext() is null &&
+            Reason(() => pump.Enqueue(Input())) == "StripPublication.Stopped",
+            "stop drops pending work and freezes the complete published snapshot");
+        EcgStripWorkPump restored = EcgStripWorkPump.Restore(2, 2, before.Strip.Checkpoint);
+        Check.That(restored.ProcessNext() is null && restored.CapturePublished()!.Strip.Checkpoint.PulseLeftPixels == 5,
+            "restore regenerates only the completed checkpoint, not pending or stopped lifecycle state");
+        restored.Enqueue(Input() with { PulseLeftPixels = 8 });
+        Check.That(restored.ProcessNext() == SweepFramePublicationStatus.Published &&
+            ReferenceEquals(before, pump.CapturePublished()), "restored pump has an independent active lifecycle");
+    }
 
     private static void StripPublicationKeepsLatestWholeResult()
     {

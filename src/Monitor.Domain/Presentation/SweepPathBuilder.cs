@@ -17,7 +17,8 @@ public sealed record EcgSampleVoltage(long NumeratorMicrovolts, uint Denominator
 
 public sealed record SweepPathSample(
     SweepSampleSource Source, ulong SampleIndex, ulong CycleIndex,
-    bool Drawable, SweepSamplePoint Point, EcgSampleVoltage? Voltage = null);
+    bool Drawable, SweepSamplePoint Point, EcgSampleVoltage? Voltage = null,
+    ulong? CycleOffsetNs = null);
 
 public sealed record SweepPathState(
     SweepPlotRegion Region, int PlotTopPixels, int PlotHeightPixels,

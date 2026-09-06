@@ -43,6 +43,7 @@ internal static class Program
             .. SweepFrameReconstructionSpecifications.All,
             .. SweepFrameScaleSpecifications.All,
             .. SweepVoltageMappingSpecifications.All,
+            .. SweepSampleOffsetSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,

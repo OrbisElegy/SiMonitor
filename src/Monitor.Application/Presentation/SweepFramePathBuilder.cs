@@ -67,11 +67,11 @@ public sealed class SweepFramePathBuilder
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateIdentity(sample);
-        SweepRegionPathResult[] results = new SweepRegionPathResult[_geometry.Regions.Count];
+        var results = new SweepRegionPathResult[_geometry.Regions.Count];
         for (int index = 0; index < results.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            SweepPathBuilder trial = SweepPathBuilder.Restore(new(
+            var trial = SweepPathBuilder.Restore(new(
                 _geometry.Regions[index], _state.PlotTopPixels, _state.PlotHeightPixels, _state.Previous));
             results[index] = new(index, trial.Append(sample));
         }
@@ -95,6 +95,20 @@ public sealed class SweepFramePathBuilder
 
     public SweepFramePathState CaptureState() => _state;
 
+    public IReadOnlyList<SweepRegionPathResult> AppendVoltageAtOffset(SweepSampleSource source,
+        ulong sampleIndex, ulong cycleIndex, bool drawable, ulong cycleOffsetNs,
+        EcgSampleVoltage voltage, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(voltage);
+        EcgVerticalScale scale = _state.VerticalScale ??
+            throw new SweepFramePathException("SweepFrame.VoltageScaleRequired", nameof(voltage));
+        SweepPixelPosition x = SweepPlotGeometry.MapSampleOffset(cycleOffsetNs,
+            _geometry.VisibleDurationNs, _geometry.PlotLeftPixels, _geometry.PlotWidthPixels);
+        EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(scale, voltage.NumeratorMicrovolts, voltage.Denominator);
+        return Append(new(source, sampleIndex, cycleIndex, drawable, new(x, y), voltage, cycleOffsetNs), cancellationToken);
+    }
+
     public SweepPlotGeometrySnapshot Geometry => _geometry;
 
     private void ValidateIdentity(SweepPathSample sample)
@@ -104,6 +118,23 @@ public sealed class SweepFramePathBuilder
             sample.Source.PresentationClockRevision != _geometry.PresentationClockRevision)
         {
             throw new SweepFramePathException("SweepFrame.PresentationIdentityMismatch", nameof(sample));
+        }
+        if (sample.CycleOffsetNs is { } offset)
+        {
+            SweepPixelPosition expected;
+            try
+            {
+                expected = SweepPlotGeometry.MapSampleOffset(offset,
+                    _geometry.VisibleDurationNs, _geometry.PlotLeftPixels, _geometry.PlotWidthPixels);
+            }
+            catch (SweepPlotGeometryException)
+            {
+                throw new SweepFramePathException("SweepFrame.InvalidSampleOffset", nameof(sample));
+            }
+            if (sample.Point is null || sample.Point.X != expected)
+            {
+                throw new SweepFramePathException("SweepFrame.TimeMappingMismatch", nameof(sample));
+            }
         }
         if ((_state.VerticalScale is null) != (sample.Voltage is null))
         {

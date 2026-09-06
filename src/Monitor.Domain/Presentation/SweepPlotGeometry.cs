@@ -30,6 +30,19 @@ public sealed record SweepPlotGeometrySnapshot(
 
 public static class SweepPlotGeometry
 {
+    public static SweepPixelPosition MapSampleOffset(ulong offsetNs, ulong durationNs, int leftPixels, int widthPixels)
+    {
+        if (durationNs == 0 || offsetNs >= durationNs)
+        {
+            throw new SweepPlotGeometryException("SweepGeometry.InvalidSampleOffset", nameof(offsetNs));
+        }
+        if (leftPixels < 0 || widthPixels <= 0 || (long)leftPixels + widthPixels > int.MaxValue)
+        {
+            throw new SweepPlotGeometryException("SweepGeometry.InvalidPlotBounds", nameof(widthPixels));
+        }
+        return Map(offsetNs, durationNs, leftPixels, widthPixels);
+    }
+
     // The caller supplies the resolved SweepPlotArea, excluding calibration
     // gutters and chrome. Resizing maps the same time partition to new geometry.
     public static SweepPlotGeometrySnapshot Compose(

@@ -9,6 +9,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripPublicationKeepsLatestWholeResult), StripPublicationKeepsLatestWholeResult),
+        new(nameof(StripPublicationOwnsInputAndRetainsSuccessOnFailure), StripPublicationOwnsInputAndRetainsSuccessOnFailure),
+        new(nameof(StripPublicationRestoreAndStopFenceOldWork), StripPublicationRestoreAndStopFenceOldWork),
+        new(nameof(StripPublicationCancellationAndConcurrentStopAreAtomic), StripPublicationCancellationAndConcurrentStopAreAtomic),
         new(nameof(StripDisplaySelectsOnlyWholeMatchingResults), StripDisplaySelectsOnlyWholeMatchingResults),
         new(nameof(StripDisplayRejectsPhaseScaleAndGutterChanges), StripDisplayRejectsPhaseScaleAndGutterChanges),
         new(nameof(StripDisplayPreservesPinnedReuseAcrossBackgroundProgress), StripDisplayPreservesPinnedReuseAcrossBackgroundProgress),
@@ -18,6 +22,82 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void StripPublicationKeepsLatestWholeResult()
+    {
+        EcgStripPublication publication = new(2, 2);
+        EcgStripWork old = publication.Request(Input());
+        EcgStripWork latest = publication.Request(Input() with { PulseLeftPixels = 6 });
+        SweepFramePublicationStatus[] statuses = new SweepFramePublicationStatus[16];
+        Parallel.For(0, statuses.Length, index => statuses[index] = publication.Complete(latest));
+        PublishedEcgStrip result = publication.CapturePublished()!;
+        Check.That(statuses.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
+            statuses.Count(status => status == SweepFramePublicationStatus.AlreadyPublished) == 15 &&
+            publication.Complete(old) == SweepFramePublicationStatus.Superseded &&
+            result.LocalGeneration == latest.Generation && result.Strip.Calibration.Points[0].X.WholePixels == 6 &&
+            result.Strip.Checkpoint.PulseLeftPixels == 6 && result.Strip.PatientFrame.Segments.Count == 1,
+            "duplicate concurrent completion publishes once and old work cannot replace either layer");
+    }
+
+    private static void StripPublicationOwnsInputAndRetainsSuccessOnFailure()
+    {
+        EcgStripPublication publication = new(2, 2);
+        EcgStripCheckpoint input = Input();
+        SweepPathSample[] samples = input.Source.Samples.ToArray();
+        EcgStripWork work = publication.Request(input with { Source = input.Source with { Samples = samples } });
+        samples[1] = samples[1] with { Voltage = new(2000, 1) };
+        publication.Complete(work);
+        PublishedEcgStrip before = publication.CapturePublished()!;
+        Check.That(before.Strip.Checkpoint.Source.Samples[1].Voltage == new EcgSampleVoltage(1000, 1),
+            "admission owns caller sample evidence before asynchronous work begins");
+        Check.That(Reason(() => publication.Request(input with { PulseLeftPixels = 29 })) == "EcgCalibration.InsufficientSpace",
+            "invalid gutter is rejected before allocating a generation");
+        EcgStripWork invalid = publication.Request(input with { Source = input.Source with { Samples = samples } });
+        Check.That(invalid.Generation == before.LocalGeneration + 1 &&
+            Reason(() => publication.Complete(invalid)) == "SweepFrame.VoltageMappingMismatch" &&
+            ReferenceEquals(before, publication.CapturePublished()),
+            "late sample failure preserves the whole prior publication and rejected layout consumes no generation");
+    }
+
+    private static void StripPublicationRestoreAndStopFenceOldWork()
+    {
+        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        EcgStripWork work = publication.Request(Input());
+        PublishedEcgStrip final = publication.Stop()!;
+        Check.That(ReferenceEquals(final, publication.Stop()) && publication.Complete(work) == SweepFramePublicationStatus.Stopped &&
+            Reason(() => publication.Request(Input())) == "StripPublication.Stopped", "stop is an irreversible idempotent publication fence");
+        EcgStripPublication restored = EcgStripPublication.Restore(2, 2, final.Strip.Checkpoint);
+        Check.That(Reason(() => restored.Complete(work)) == "StripPublication.ForeignWork" &&
+            restored.CapturePublished()!.Strip.PatientFrame.Segments.SequenceEqual(final.Strip.PatientFrame.Segments) &&
+            restored.CapturePublished()!.Strip.Calibration.Points.SequenceEqual(final.Strip.Calibration.Points) &&
+            restored.Complete(restored.Request(Input())) == SweepFramePublicationStatus.Published,
+            "restoration revalidates both layers in a new active owner and rejects old lifecycle tickets");
+    }
+
+    private static void StripPublicationCancellationAndConcurrentStopAreAtomic()
+    {
+        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        PublishedEcgStrip before = publication.CapturePublished()!;
+        EcgStripWork work = publication.Request(Input() with { PulseLeftPixels = 6 });
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            publication.Complete(work, cancellation.Token);
+            throw new InvalidOperationException("cancelled publication accepted");
+        }
+        catch (OperationCanceledException exception)
+        {
+            Check.That(exception.CancellationToken == cancellation.Token && ReferenceEquals(before, publication.CapturePublished()),
+                "cancelled work preserves the entire prior publication");
+        }
+        PublishedEcgStrip? stopped = null;
+        Parallel.Invoke(() => publication.Complete(work), () => stopped = publication.Stop());
+        Check.That(ReferenceEquals(stopped, publication.CapturePublished()) &&
+            publication.Complete(work) == SweepFramePublicationStatus.Stopped &&
+            stopped!.Strip.Checkpoint.PulseLeftPixels == stopped.Strip.Calibration.Points[0].X.WholePixels,
+            "completion-versus-stop race yields one final internally consistent strip");
+    }
 
     private static EcgStripDisplaySelection Select(ReconstructedEcgStrip strip, SweepStateProjectionState? state = null,
         int pulseLeft = 5, EcgVerticalScale? scale = null) => EcgStripDisplayGate.Select(
@@ -194,5 +274,7 @@ internal static class EcgStripSpecifications
         try { action(); return null; }
         catch (EcgStripException exception) { return exception.ReasonCode; }
         catch (EcgCalibrationGeometryException exception) { return exception.ReasonCode; }
+        catch (EcgStripPublicationException exception) { return exception.ReasonCode; }
+        catch (SweepFramePathException exception) { return exception.ReasonCode; }
     }
 }

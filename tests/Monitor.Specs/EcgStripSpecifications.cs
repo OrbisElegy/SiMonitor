@@ -2,6 +2,7 @@
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
+using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Specs;
 
@@ -9,6 +10,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripWorkerPublishesLatestAndWakesAgain), StripWorkerPublishesLatestAndWakesAgain),
+        new(nameof(StripWorkerRecoversFromInvalidSampleEvidence), StripWorkerRecoversFromInvalidSampleEvidence),
+        new(nameof(StripWorkerShutdownJoinsAndRejectsAdmission), StripWorkerShutdownJoinsAndRejectsAdmission),
+        new(nameof(StripWorkerRebuildsOwnedCheckpointInNewLifecycle), StripWorkerRebuildsOwnedCheckpointInNewLifecycle),
         new(nameof(StripPumpCoalescesAndRejectsInvalidAdmission), StripPumpCoalescesAndRejectsInvalidAdmission),
         new(nameof(StripPumpFailureReleasesSlotWithoutPartialPublication), StripPumpFailureReleasesSlotWithoutPartialPublication),
         new(nameof(StripPumpConcurrentConsumersAndCancellationKeepOneRequest), StripPumpConcurrentConsumersAndCancellationKeepOneRequest),
@@ -26,6 +31,103 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void Wait(Task task) => task.WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+
+    private static void StripWorkerPublishesLatestAndWakesAgain()
+    {
+        EcgStripWorker worker = new(2, 2);
+        try
+        {
+            ulong latest = 0;
+            for (int index = 0; index < 16; index++) { latest = worker.Enqueue(Input() with { PulseLeftPixels = 5 + index % 3 }); }
+            Wait(worker.WaitForIdleAsync());
+            PublishedEcgStrip first = worker.CapturePublished()!;
+            Check.That(first.LocalGeneration == latest && first.Strip.PatientFrame.Segments.Count == 1 &&
+                first.Strip.Calibration.Points[0].X.WholePixels == 5 && worker.LastFailureCode is null,
+                "idle includes all previously admitted work and exposes the latest whole strip");
+            latest = worker.Enqueue(Input() with { PulseLeftPixels = 8 });
+            Wait(worker.WaitForIdleAsync());
+            Check.That(worker.CapturePublished()!.LocalGeneration == latest &&
+                worker.CapturePublished()!.Strip.Calibration.Points[0].X.WholePixels == 8,
+                "a sleeping worker wakes for later requests without per-request tasks");
+        }
+        finally { Wait(worker.DisposeAsync().AsTask()); }
+    }
+
+    private static void StripWorkerRecoversFromInvalidSampleEvidence()
+    {
+        EcgStripWorker worker = new(2, 2);
+        try
+        {
+            worker.Enqueue(Input());
+            Wait(worker.WaitForIdleAsync());
+            PublishedEcgStrip before = worker.CapturePublished()!;
+            EcgStripCheckpoint bad = Input();
+            bad = bad with
+            {
+                Source = bad.Source with
+                {
+                    Samples = new[] { bad.Source.Samples[0], bad.Source.Samples[1] with { Voltage = new(1, 0) } },
+                }
+            };
+            worker.Enqueue(bad);
+            Wait(worker.WaitForIdleAsync());
+            Check.That(worker.LastFailureCode == "SweepFrame.InvalidVoltageAmplitude" &&
+                ReferenceEquals(before, worker.CapturePublished()), "invalid sample reports an expected failure and preserves both layers");
+            worker.Enqueue(Input() with { PulseLeftPixels = 6 });
+            Wait(worker.WaitForIdleAsync());
+            Check.That(worker.LastFailureCode is null && worker.CapturePublished()!.Strip.Checkpoint.PulseLeftPixels == 6,
+                "later valid work clears the diagnostic and publishes a complete replacement");
+        }
+        finally { Wait(worker.DisposeAsync().AsTask()); }
+    }
+
+    private static void StripWorkerShutdownJoinsAndRejectsAdmission()
+    {
+        EcgStripWorker worker = new(2, 2);
+        worker.Enqueue(Input());
+        Task idle = worker.WaitForIdleAsync();
+        Wait(worker.DisposeAsync().AsTask());
+        PublishedEcgStrip? final = worker.CapturePublished();
+        Wait(idle);
+        Wait(worker.DisposeAsync().AsTask());
+        Check.That(ReferenceEquals(final, worker.CapturePublished()) && worker.LastFailureCode is null,
+            "shutdown joins the worker, is repeatable and does not report normal cancellation as input failure");
+        try
+        {
+            worker.Enqueue(Input());
+            throw new InvalidOperationException("disposed worker admitted work");
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    private static void StripWorkerRebuildsOwnedCheckpointInNewLifecycle()
+    {
+        EcgStripWorker first = new(2, 2);
+        PublishedEcgStrip original;
+        try
+        {
+            EcgStripCheckpoint input = Input();
+            SweepPathSample[] samples = input.Source.Samples.ToArray();
+            first.Enqueue(input with { Source = input.Source with { Samples = samples } });
+            samples[1] = samples[1] with { Voltage = new(1, 0) };
+            Wait(first.WaitForIdleAsync());
+            original = first.CapturePublished()!;
+        }
+        finally { Wait(first.DisposeAsync().AsTask()); }
+        EcgStripWorker restored = new(2, 2);
+        try
+        {
+            restored.Enqueue(original.Strip.Checkpoint);
+            Wait(restored.WaitForIdleAsync());
+            ReconstructedEcgStrip result = restored.CapturePublished()!.Strip;
+            Check.That(result.PatientFrame.Segments.SequenceEqual(original.Strip.PatientFrame.Segments) &&
+                result.Calibration.Points.SequenceEqual(original.Strip.Calibration.Points),
+                "a new worker revalidates owned completed evidence rather than reviving old pending work");
+        }
+        finally { Wait(restored.DisposeAsync().AsTask()); }
+    }
 
     private static void StripPumpCoalescesAndRejectsInvalidAdmission()
     {

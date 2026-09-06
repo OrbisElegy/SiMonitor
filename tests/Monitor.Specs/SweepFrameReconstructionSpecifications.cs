@@ -9,11 +9,83 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(OlderWorkCannotOverwriteANewerPublication), OlderWorkCannotOverwriteANewerPublication),
+        new(nameof(ConcurrentDuplicateCompletionPublishesOnce), ConcurrentDuplicateCompletionPublishesOnce),
+        new(nameof(FailedNewestWorkPreservesPublishedSnapshot), FailedNewestWorkPreservesPublishedSnapshot),
+        new(nameof(PublicationOwnsInputsAndFencesRestoredWork), PublicationOwnsInputsAndFencesRestoredWork),
         new(nameof(CompleteRebuildPublishesBoundedRegionSegments), CompleteRebuildPublishesBoundedRegionSegments),
         new(nameof(LateFailureRetainsThePreviouslyPublishedFrame), LateFailureRetainsThePreviouslyPublishedFrame),
         new(nameof(ReconstructionCheckpointOwnsAndRevalidatesInputs), ReconstructionCheckpointOwnsAndRevalidatesInputs),
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
+
+    private static void OlderWorkCannotOverwriteANewerPublication()
+    {
+        SweepFramePublication publication = new(2, 2);
+        SweepFrameWork old = publication.Request(Input());
+        SweepFrameWork latest = publication.Request(Input(20));
+        Check.That(latest.Generation > old.Generation && publication.Complete(latest) == SweepFramePublicationStatus.Published &&
+            publication.Complete(old) == SweepFramePublicationStatus.Superseded &&
+            publication.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20,
+            "completion order cannot replace newer requested geometry with an older viewport");
+        PublishedSweepFrame current = publication.CapturePublished()!;
+        Check.That(publication.Complete(latest) == SweepFramePublicationStatus.AlreadyPublished &&
+            ReferenceEquals(current, publication.CapturePublished()), "duplicate completion retains the exact immutable snapshot");
+    }
+
+    private static void ConcurrentDuplicateCompletionPublishesOnce()
+    {
+        SweepFramePublication publication = new(2, 2);
+        SweepFrameWork work = publication.Request(Input());
+        SweepFramePublicationStatus[] results = new SweepFramePublicationStatus[16];
+        Parallel.For(0, results.Length, index => results[index] = publication.Complete(work));
+        Check.That(results.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
+            results.Count(status => status == SweepFramePublicationStatus.AlreadyPublished) == 15 &&
+            publication.CapturePublished()!.Frame.Segments.Count == 2,
+            "concurrent workers publish one complete snapshot and duplicate commits are idempotent");
+    }
+
+    private static void FailedNewestWorkPreservesPublishedSnapshot()
+    {
+        SweepFramePublication publication = new(2, 2);
+        publication.Complete(publication.Request(Input()));
+        PublishedSweepFrame before = publication.CapturePublished()!;
+        SweepFrameWork older = publication.Request(Input(20));
+        SweepFrameWork invalid = publication.Request(Input() with { Samples = new[] { Sample(10, 0), Sample(9, 10) } });
+        Check.That(Reason(() => publication.Complete(invalid)) == "SweepPath.FrontierReversed" &&
+            ReferenceEquals(before, publication.CapturePublished()) &&
+            publication.Complete(older) == SweepFramePublicationStatus.Superseded,
+            "newest reconstruction failure preserves the last complete frame without reviving old work");
+        SweepFrameWork retry = publication.Request(Input(30));
+        Check.That(publication.Complete(retry) == SweepFramePublicationStatus.Published,
+            "a valid subsequent request recovers normally");
+        SweepFrameWork valid = publication.Request(Input());
+        Check.That(PublicationReason(() => publication.Request(Input() with { Samples = new[] { Sample(0, 0), Sample(1, 1), Sample(2, 2) } })) ==
+            "FramePublication.SampleLimitExceeded" && publication.Complete(valid) == SweepFramePublicationStatus.Published,
+            "request admission failure must not consume a generation or supersede valid pending work");
+    }
+
+    private static void PublicationOwnsInputsAndFencesRestoredWork()
+    {
+        SweepFramePublication publication = new(2, 2);
+        SweepPathSample[] samples = [Sample(10, 0), Sample(11, 10)];
+        SweepFrameWork work = publication.Request(Input() with { Samples = samples });
+        samples[1] = Sample(0, 0);
+        publication.Complete(work);
+        PublishedSweepFrame current = publication.CapturePublished()!;
+        SweepFramePublication restored = SweepFramePublication.Restore(2, 2, current.Checkpoint);
+        Check.That(current.Frame.Segments.SequenceEqual(restored.CapturePublished()!.Frame.Segments) &&
+            PublicationReason(() => restored.Complete(work)) == "FramePublication.ForeignWork",
+            "request inputs are owned and restored publication rejects tickets from the previous instance");
+        Check.That(Reason(() => SweepFramePublication.Restore(2, 1, current.Checkpoint)) == "FrameReconstruction.InvalidCheckpoint",
+            "restore rebuilds the frame under current resource limits");
+    }
+
+    private static string? PublicationReason(Action action)
+    {
+        try { action(); return null; }
+        catch (SweepFramePublicationException exception) { return exception.ReasonCode; }
+    }
 
     private static SweepFrameReconstructionInput Input(int width = 10)
     {

@@ -9,6 +9,7 @@ public sealed class SweepFrameWorkPump
     private readonly SweepFramePublication _publication;
     private SweepFrameWork? _pending;
     private bool _processing;
+    private bool _stopped;
 
     public SweepFrameWorkPump(int maximumSamples, int maximumSegments)
         : this(new SweepFramePublication(maximumSamples, maximumSegments)) { }
@@ -19,6 +20,8 @@ public sealed class SweepFrameWorkPump
     {
         lock (_gate)
         {
+            if (_stopped)
+            { throw new SweepFramePublicationException("FramePublication.Stopped", nameof(input)); }
             // Request admission fails before replacing the existing pending slot.
             SweepFrameWork work = _publication.Request(input);
             _pending = work;
@@ -31,7 +34,7 @@ public sealed class SweepFrameWorkPump
         SweepFrameWork work;
         lock (_gate)
         {
-            if (_processing || _pending is null) { return null; }
+            if (_stopped || _processing || _pending is null) { return null; }
             work = _pending;
             _pending = null;
             _processing = true;
@@ -44,6 +47,18 @@ public sealed class SweepFrameWorkPump
     }
 
     public PublishedSweepFrame? CapturePublished() => _publication.CapturePublished();
+
+    // Does not wait for CPU work to finish. The publication fence guarantees it
+    // cannot replace the returned snapshot, while finally releases the worker.
+    public PublishedSweepFrame? Stop()
+    {
+        lock (_gate)
+        {
+            _stopped = true;
+            _pending = null;
+            return _publication.Stop();
+        }
+    }
 
     // In-flight and pending work are transient. Only a completed frame is restored.
     public static SweepFrameWorkPump Restore(int maximumSamples, int maximumSegments,

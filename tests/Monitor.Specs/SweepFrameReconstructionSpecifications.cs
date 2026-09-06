@@ -9,6 +9,10 @@ internal static class SweepFrameReconstructionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StoppingPublicationFencesEveryOwnedTicket), StoppingPublicationFencesEveryOwnedTicket),
+        new(nameof(StoppingPumpDiscardsPendingAndRejectsAdmission), StoppingPumpDiscardsPendingAndRejectsAdmission),
+        new(nameof(ConcurrentStopLeavesOneFinalImmutableSnapshot), ConcurrentStopLeavesOneFinalImmutableSnapshot),
+        new(nameof(RestoredPumpIsIndependentFromStoppedLifecycle), RestoredPumpIsIndependentFromStoppedLifecycle),
         new(nameof(QueuedFramesCoalesceToTheLatestRequest), QueuedFramesCoalesceToTheLatestRequest),
         new(nameof(QueueFailureReleasesWorkerAndPreservesPublishedFrame), QueueFailureReleasesWorkerAndPreservesPublishedFrame),
         new(nameof(ConcurrentQueuePumpsConsumeOnePendingRequest), ConcurrentQueuePumpsConsumeOnePendingRequest),
@@ -22,6 +26,64 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(ReconstructionCheckpointOwnsAndRevalidatesInputs), ReconstructionCheckpointOwnsAndRevalidatesInputs),
         new(nameof(ResizeRebuildStartsWithoutAnOldPixelPredecessor), ResizeRebuildStartsWithoutAnOldPixelPredecessor),
     ];
+
+    private static void StoppingPublicationFencesEveryOwnedTicket()
+    {
+        SweepFramePublication publication = new(2, 2);
+        SweepFrameWork first = publication.Request(Input());
+        publication.Complete(first);
+        SweepFrameWork pending = publication.Request(Input(20));
+        PublishedSweepFrame? final = publication.Stop();
+        Check.That(final is not null && publication.Complete(first) == SweepFramePublicationStatus.Stopped &&
+            publication.Complete(pending) == SweepFramePublicationStatus.Stopped &&
+            ReferenceEquals(final, publication.Stop()) && ReferenceEquals(final, publication.CapturePublished()),
+            "stop fences completed and pending tickets without consuming revisions or changing the final snapshot");
+        Check.That(PublicationReason(() => publication.Request(Input())) == "FramePublication.Stopped",
+            "a stopped publisher cannot admit fresh work");
+    }
+
+    private static void StoppingPumpDiscardsPendingAndRejectsAdmission()
+    {
+        SweepFrameWorkPump pump = new(2, 2);
+        pump.Enqueue(Input());
+        Check.That(pump.Stop() is null && pump.ProcessNext() is null && pump.Stop() is null &&
+            PublicationReason(() => pump.Enqueue(Input())) == "FramePublication.Stopped",
+            "stopping before first processing drops pending work and remains stopped on repeated calls");
+    }
+
+    private static void ConcurrentStopLeavesOneFinalImmutableSnapshot()
+    {
+        SweepFramePublication publication = new(2, 2);
+        publication.Complete(publication.Request(Input()));
+        SweepFrameWork work = publication.Request(Input(20));
+        PublishedSweepFrame? atStop = null;
+        Parallel.Invoke(() => publication.Complete(work), () => atStop = publication.Stop());
+        Check.That(atStop is not null && ReferenceEquals(atStop, publication.CapturePublished()) &&
+            publication.Complete(work) == SweepFramePublicationStatus.Stopped,
+            "whether reconstruction wins or loses the race, no publication occurs after Stop returns");
+        SweepFrameWorkPump pump = new(2, 2);
+        pump.Enqueue(Input());
+        pump.ProcessNext();
+        pump.Enqueue(Input(20));
+        PublishedSweepFrame? pumpStop = null;
+        Parallel.Invoke(() => pump.ProcessNext(), () => pumpStop = pump.Stop());
+        Check.That(pumpStop is not null && ReferenceEquals(pumpStop, pump.CapturePublished()) && pump.ProcessNext() is null,
+            "pump stop fences active work without deadlock or subsequent pending consumption");
+    }
+
+    private static void RestoredPumpIsIndependentFromStoppedLifecycle()
+    {
+        SweepFrameWorkPump original = new(2, 2);
+        original.Enqueue(Input());
+        original.ProcessNext();
+        PublishedSweepFrame saved = original.Stop()!;
+        SweepFrameWorkPump restored = SweepFrameWorkPump.Restore(2, 2, saved.Checkpoint);
+        restored.Enqueue(Input(20));
+        Check.That(restored.ProcessNext() == SweepFramePublicationStatus.Published &&
+            restored.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20 &&
+            ReferenceEquals(saved, original.CapturePublished()) && original.ProcessNext() is null,
+            "restoring completed input creates a new active lifecycle without reopening the stopped instance");
+    }
 
     private static void QueuedFramesCoalesceToTheLatestRequest()
     {

@@ -9,7 +9,7 @@ public sealed class SweepFramePublicationException(string reasonCode, string par
     public string ReasonCode { get; } = reasonCode;
 }
 
-public enum SweepFramePublicationStatus { Published, Superseded, AlreadyPublished }
+public enum SweepFramePublicationStatus { Published, Superseded, AlreadyPublished, Stopped }
 
 public sealed class SweepFrameWork
 {
@@ -31,6 +31,7 @@ public sealed class SweepFramePublication
     private readonly int _maximumSegments;
     private ulong _latestGeneration;
     private PublishedSweepFrame? _current;
+    private bool _stopped;
 
     public SweepFramePublication(int maximumSamples, int maximumSegments)
     {
@@ -41,6 +42,10 @@ public sealed class SweepFramePublication
 
     public SweepFrameWork Request(SweepFrameReconstructionInput input)
     {
+        lock (_gate)
+        {
+            if (_stopped) { throw Error("FramePublication.Stopped", nameof(input)); }
+        }
         ArgumentNullException.ThrowIfNull(input);
         if (input.Frame is null || input.Frame.Previous is not null || input.Samples is null)
         { throw Error("FramePublication.InvalidInput", nameof(input)); }
@@ -51,6 +56,7 @@ public sealed class SweepFramePublication
         SweepFrameReconstructionInput owned = new(frame, Array.AsReadOnly(samples));
         lock (_gate)
         {
+            if (_stopped) { throw Error("FramePublication.Stopped", nameof(input)); }
             if (_latestGeneration == ulong.MaxValue)
             { throw Error("FramePublication.GenerationExhausted", nameof(input)); }
             return new SweepFrameWork(_gate, ++_latestGeneration, owned);
@@ -86,6 +92,17 @@ public sealed class SweepFramePublication
         lock (_gate) { return _current; }
     }
 
+    // Idempotently fences all tickets, including work already reconstructing.
+    // Returns the final completed snapshot; it cannot change after this returns.
+    public PublishedSweepFrame? Stop()
+    {
+        lock (_gate)
+        {
+            _stopped = true;
+            return _current;
+        }
+    }
+
     public static SweepFramePublication Restore(int maximumSamples, int maximumSegments,
         SweepFrameReconstructionInput checkpoint)
     {
@@ -97,6 +114,7 @@ public sealed class SweepFramePublication
     }
 
     private SweepFramePublicationStatus? ExistingStatus(SweepFrameWork work) =>
+        _stopped ? SweepFramePublicationStatus.Stopped :
         work.Generation != _latestGeneration ? SweepFramePublicationStatus.Superseded :
         _current?.LocalGeneration == work.Generation ? SweepFramePublicationStatus.AlreadyPublished : null;
 

@@ -9,6 +9,10 @@ internal static class SweepSampleOffsetSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(ColumnFrameRebuildPreservesClippedProvenance), ColumnFrameRebuildPreservesClippedProvenance),
+        new(nameof(ColumnFrameCapacityFailureKeepsPriorResult), ColumnFrameCapacityFailureKeepsPriorResult),
+        new(nameof(ColumnFrameRestoreOwnsSampleEvidence), ColumnFrameRestoreOwnsSampleEvidence),
+        new(nameof(ColumnFrameNoDataAndCancellationPreserveState), ColumnFrameNoDataAndCancellationPreserveState),
         new(nameof(HorizontalResizeRebuildsFromEvidence), HorizontalResizeRebuildsFromEvidence),
         new(nameof(HorizontalResizePreservesNoDataAndPinnedState), HorizontalResizePreservesNoDataAndPinnedState),
         new(nameof(HorizontalResizeRejectsMissingOrCorruptEvidence), HorizontalResizeRejectsMissingOrCorruptEvidence),
@@ -18,6 +22,65 @@ internal static class SweepSampleOffsetSpecifications
         new(nameof(OffsetEvidenceRejectsForgedPixelsAtomically), OffsetEvidenceRejectsForgedPixelsAtomically),
         new(nameof(OffsetCheckpointsRevalidateAfterResize), OffsetCheckpointsRevalidateAfterResize),
     ];
+
+    private static void ColumnFrameRebuildPreservesClippedProvenance()
+    {
+        SweepFrameReconstructionInput input = new(Frame(), new[] { Sample(0, 1), Sample(1, 5) });
+        ReconstructedSweepColumnFrame result = new SweepColumnFrameReconstructor(2, 2, 3).Replace(input);
+        Check.That(result.Pieces.Count == 3 && result.Pieces.Select(piece => piece.Piece.ColumnPixels).SequenceEqual(Enumerable.Range(7, 3)) &&
+            result.Pieces.All(piece => piece.Source == Source && piece.EndSampleIndex == 1 && piece.CycleIndex == 0 &&
+                result.SourceFrame.Geometry.Regions[piece.RegionIndex].Kind == SweepTraceRegionKind.RetainSourceTrace),
+            "gap clipping precedes column subdivision and every piece retains source and region provenance");
+        Check.That(result.Pieces[0].Piece.Segment.Start == result.SourceFrame.Segments[0].Segment.Start &&
+            result.Pieces[^1].Piece.Segment.End == result.SourceFrame.Segments[0].Segment.End,
+            "full segment intersections survive the column reconstruction");
+    }
+
+    private static void ColumnFrameCapacityFailureKeepsPriorResult()
+    {
+        SweepColumnFrameReconstructor reconstructor = new(3, 3, 2);
+        ReconstructedSweepColumnFrame before = reconstructor.Replace(ResizeInput());
+        Check.That(Reason(() => reconstructor.Replace(new(Frame(), new[] { Sample(0, 3), Sample(1, 4), Sample(2, 7) }))) ==
+            "ColumnFrame.OutputLimitExceeded" && ReferenceEquals(before, reconstructor.Current) &&
+            ReferenceEquals(before.Checkpoint, reconstructor.CaptureCheckpoint()),
+            "late total-piece overflow rejects the whole frame instead of publishing its completed prefix");
+    }
+
+    private static void ColumnFrameRestoreOwnsSampleEvidence()
+    {
+        SweepPathSample[] samples = [Sample(0, 3), Sample(1, 5)];
+        SweepColumnFrameReconstructor reconstructor = new(2, 2, 2);
+        ReconstructedSweepColumnFrame before = reconstructor.Replace(new(Frame(), samples));
+        samples[1] = Sample(9, 9);
+        var restored = SweepColumnFrameReconstructor.Restore(2, 2, 2, before.Checkpoint);
+        Check.That(before.Pieces.SequenceEqual(restored.Current!.Pieces) && before.Checkpoint.Samples[1].SampleIndex == 1,
+            "owned source evidence rebuilds identical pieces after caller array mutation");
+        Check.That(Reason(() => SweepColumnFrameReconstructor.Restore(2, 2, 1, before.Checkpoint)) == "ColumnFrame.InvalidCheckpoint",
+            "restore rechecks total output capacity rather than trusting old subdivisions");
+    }
+
+    private static void ColumnFrameNoDataAndCancellationPreserveState()
+    {
+        SweepFrameReconstructionInput input = ResizeInput();
+        var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        machine.Advance(10, 0);
+        SweepColumnFrameReconstructor reconstructor = new(2, 2, 2);
+        ReconstructedSweepColumnFrame noData = reconstructor.Replace(input with
+        {
+            Frame = input.Frame with { Presentation = machine.CaptureState() },
+        });
+        Check.That(noData.Pieces.Count == 0 && noData.SourceFrame.Segments.Count == 0,
+            "fully masked NoData cannot regain source geometry during subdivision");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { reconstructor.Replace(input, cancellation.Token); throw new InvalidOperationException("cancelled frame accepted"); }
+        catch (OperationCanceledException exception)
+        {
+            Check.That(exception.CancellationToken == cancellation.Token && ReferenceEquals(noData, reconstructor.Current),
+                "cancelled reconstruction retains the whole previous frame");
+        }
+    }
 
     private static SweepFrameReconstructionInput ResizeInput() => new(Frame(), new[] { Sample(0, 3), Sample(1, 4) });
 
@@ -45,7 +108,7 @@ internal static class SweepSampleOffsetSpecifications
         foreach (bool pinned in new[] { false, true })
         {
             SweepFrameReconstructionInput input = ResizeInput();
-            SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+            var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
             if (pinned) { machine.EnterReview("record.one", 0, 0, 0); }
             machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
             machine.Advance(10, 0);
@@ -109,7 +172,7 @@ internal static class SweepSampleOffsetSpecifications
 
     private static SweepPathSample Sample(ulong index, ulong offset, int width = 10)
     {
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(Frame(width));
+        var builder = SweepFramePathBuilder.Restore(Frame(width));
         builder.AppendVoltageAtOffset(Source, index, 0, true, offset, new(1000, 1));
         return builder.CaptureState().Previous!;
     }
@@ -131,7 +194,7 @@ internal static class SweepSampleOffsetSpecifications
 
     private static void OffsetAppendMapsBothAxesAndBreaksAtWrap()
     {
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(Frame());
+        var builder = SweepFramePathBuilder.Restore(Frame());
         builder.AppendVoltageAtOffset(Source, 0, 0, true, 9, new(1000, 1));
         Check.That(builder.CaptureState().Previous == Sample(0, 9), "mapped sample retains both offset and voltage evidence");
         IReadOnlyList<SweepRegionPathResult> wrap = builder.AppendVoltageAtOffset(Source, 1, 1, true, 0, new(1000, 1));
@@ -141,7 +204,7 @@ internal static class SweepSampleOffsetSpecifications
 
     private static void OffsetEvidenceRejectsForgedPixelsAtomically()
     {
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(Frame());
+        var builder = SweepFramePathBuilder.Restore(Frame());
         builder.Append(Sample(0, 3));
         SweepFramePathState before = builder.CaptureState();
         SweepPathSample next = Sample(1, 4);

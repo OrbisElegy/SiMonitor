@@ -9,6 +9,10 @@ internal static class SweepColumnEnvelopeSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(ClippedReductionRetainsPeaksAndJoinsOnlyContinuousPieces), ClippedReductionRetainsPeaksAndJoinsOnlyContinuousPieces),
+        new(nameof(ClippedReductionRetainsCrossingIntersections), ClippedReductionRetainsCrossingIntersections),
+        new(nameof(ClippedReductionKeepsGapsSeparate), ClippedReductionKeepsGapsSeparate),
+        new(nameof(ClippedReductionRestoresAndRejectsWithoutTruncation), ClippedReductionRestoresAndRejectsWithoutTruncation),
         new(nameof(RegionReductionMasksBeforeSelectingExtrema), RegionReductionMasksBeforeSelectingExtrema),
         new(nameof(RegionReductionPreservesPinnedHistoryDuringNoData), RegionReductionPreservesPinnedHistoryDuringNoData),
         new(nameof(RegionReductionSeparatesGapsAndOwnsOutput), RegionReductionSeparatesGapsAndOwnsOutput),
@@ -18,6 +22,60 @@ internal static class SweepColumnEnvelopeSpecifications
         new(nameof(ColumnReductionKeepsExactExtremaAndColumnEdges), ColumnReductionKeepsExactExtremaAndColumnEdges),
         new(nameof(ColumnReductionValidatesAndOwnsResults), ColumnReductionValidatesAndOwnsResults),
     ];
+
+    private static ReducedSweepColumnFrame ReduceClipped(SweepFrameReconstructionInput input, int maximumEnvelopes = 8) =>
+        SweepClippedColumnReduction.Reduce(input, 8, 8, 32, maximumEnvelopes);
+
+    private static void ClippedReductionRetainsPeaksAndJoinsOnlyContinuousPieces()
+    {
+        ReducedSweepColumnFrame result = ReduceClipped(Input(Sample(0, 2, 50), Sample(1, 2, 1), Sample(2, 2, 99), Sample(3, 2, 50)));
+        SweepClippedColumnEnvelope envelope = result.Envelopes.Single();
+        Check.That(result.Frame.Pieces.Count == 3 && envelope.MinimumY.Y == new ExactPlotCoordinate(1, 1) &&
+            envelope.MaximumY.Y == new ExactPlotCoordinate(99, 1) && envelope.FirstEndSampleIndex == 1 && envelope.LastEndSampleIndex == 3 &&
+            envelope.First.Y == new ExactPlotCoordinate(50, 1) && envelope.Last.Y == new ExactPlotCoordinate(50, 1),
+            "connected vertical column pieces retain both narrow extrema and full sample extent");
+    }
+
+    private static void ClippedReductionRetainsCrossingIntersections()
+    {
+        SweepFrameReconstructionInput input = Input(Sample(0, 0, 0), Sample(1, 1, 100));
+        ReducedSweepColumnFrame result = ReduceClipped(input);
+        SweepClippedColumnEnvelope envelope = result.Envelopes.Single();
+        Check.That(envelope.First.X == new ExactPlotCoordinate(1, 5) && envelope.MinimumY.Y == new ExactPlotCoordinate(20, 1) &&
+            envelope.MaximumY.Y == new ExactPlotCoordinate(100, 1),
+            "erase-gap clipping contributes its interpolated intersection rather than the hidden source endpoint");
+        Check.That(envelope.RegionIndex == result.Frame.SourceFrame.Segments[0].RegionIndex,
+            "summaries retain exact source-region provenance for downstream masking");
+    }
+
+    private static void ClippedReductionKeepsGapsSeparate()
+    {
+        ReducedSweepColumnFrame result = ReduceClipped(Input(Sample(0, 2, 50), Sample(1, 2, 40),
+            Sample(3, 2, 40), Sample(4, 2, 60)));
+        Check.That(result.Envelopes.Count == 2 && result.Envelopes[0].Last == result.Envelopes[1].First,
+            "coincident geometric endpoints cannot bridge a missing source sample");
+        SweepPathSample first = Sample(0, 2, 50), second = Sample(1, 2, 40);
+        SweepSampleSource changed = first.Source with { StreamEpoch = 9 };
+        result = ReduceClipped(Input(first, second, Sample(0, 2, 40) with { Source = changed }, Sample(1, 2, 60) with { Source = changed }));
+        Check.That(result.Envelopes.Count == 2 && result.Envelopes[0].Source != result.Envelopes[1].Source,
+            "source changes remain separate even when columns and endpoints match");
+    }
+
+    private static void ClippedReductionRestoresAndRejectsWithoutTruncation()
+    {
+        SweepFrameReconstructionInput input = Input(Sample(0, 2, 50), Sample(1, 4, 40));
+        ReducedSweepColumnFrame accepted = ReduceClipped(input);
+        Check.That(accepted.Envelopes.SequenceEqual(ReduceClipped(accepted.Frame.Checkpoint).Envelopes),
+            "owned checkpoint recomputation preserves clipped extrema and intersection provenance");
+        try { _ = ReduceClipped(input, 1); throw new InvalidOperationException("truncated envelopes accepted"); }
+        catch (SweepFrameReconstructionException exception)
+        { Check.That(exception.ReasonCode == "ClippedEnvelope.OutputLimitExceeded", "summary capacity rejects rather than truncates"); }
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { _ = SweepClippedColumnReduction.Reduce(input, 8, 8, 32, 8, cancellation.Token); throw new InvalidOperationException("cancelled summary accepted"); }
+        catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "cancellation retains identity"); }
+        Check.That(accepted.Envelopes.Count == 2, "later failed operations leave accepted results untouched");
+    }
 
     private static void RegionReductionMasksBeforeSelectingExtrema()
     {

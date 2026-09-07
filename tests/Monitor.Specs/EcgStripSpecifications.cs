@@ -10,6 +10,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripCompositionKeepsCurrentCalibrationWithoutSource), StripCompositionKeepsCurrentCalibrationWithoutSource),
+        new(nameof(StripCompositionUsesCurrentNoDataSafetyWithOldPublication), StripCompositionUsesCurrentNoDataSafetyWithOldPublication),
+        new(nameof(StripCompositionKeepsPinnedHistoryAndIndependentNumericClock), StripCompositionKeepsPinnedHistoryAndIndependentNumericClock),
+        new(nameof(StripCompositionRestoresAndRejectsWithoutMutation), StripCompositionRestoresAndRejectsWithoutMutation),
         new(nameof(StripWorkerPublishesLatestAndWakesAgain), StripWorkerPublishesLatestAndWakesAgain),
         new(nameof(StripWorkerRecoversFromInvalidSampleEvidence), StripWorkerRecoversFromInvalidSampleEvidence),
         new(nameof(StripWorkerShutdownJoinsAndRejectsAdmission), StripWorkerShutdownJoinsAndRejectsAdmission),
@@ -31,6 +35,78 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static EcgStripDisplaySnapshot ComposeDisplay(SweepStateProjectionState state, PublishedEcgStrip? published,
+        long authorityNs = 1, int pulseLeft = 5) => EcgStripDisplayComposition.Compose(state, authorityNs,
+            new[] { new NumericNoDataPolicy("HR", Guid.Parse("22222222-2222-4222-8222-222222222222"), 10) },
+            30, 500, Input().Source.Frame.VerticalScale!, 0, pulseLeft, published);
+
+    private static void StripCompositionKeepsCurrentCalibrationWithoutSource()
+    {
+        EcgStripCheckpoint input = Input();
+        EcgStripDisplaySnapshot missing = ComposeDisplay(input.Source.Frame.Presentation, null);
+        Check.That(missing.SourceStrip is { ReasonCode: "FrameDisplay.Missing", Strip: null } &&
+            missing.CurrentCalibration.Points.Count == 4 && missing.LiveSafety.PreserveCalibrationGutter,
+            "current calibration is available before any worker publication");
+        PublishedEcgStrip old = EcgStripPublication.Restore(2, 2, input).CapturePublished()!;
+        EcgStripDisplaySnapshot moved = ComposeDisplay(input.Source.Frame.Presentation, old, pulseLeft: 6);
+        Check.That(moved.SourceStrip is { ReasonCode: "EcgStripDisplay.CalibrationMismatch", Strip: null } &&
+            moved.CurrentCalibration.Points[0].X.WholePixels == 6 && old.Strip.Calibration.Points[0].X.WholePixels == 5,
+            "new layout supplies current scale geometry even when the old strip is rejected");
+    }
+
+    private static void StripCompositionUsesCurrentNoDataSafetyWithOldPublication()
+    {
+        EcgStripCheckpoint input = Input();
+        PublishedEcgStrip old = EcgStripPublication.Restore(2, 2, input).CapturePublished()!;
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        machine.Advance(5_000_000_000, 0);
+        EcgStripDisplaySnapshot result = ComposeDisplay(machine.CaptureState(), old);
+        Check.That(result.SourceStrip.Strip is null && result.Connectivity.Visible &&
+            result.Connectivity.Message == ConnectivityBannerMessage.NoData &&
+            result.LiveSafety.PatientAlarms == PatientAlarmSuspension.SuspendedUnknown &&
+            result.CurrentRegions.Regions.Any(region => region.Kind == SweepTraceRegionKind.NoDataBaseline) &&
+            result.CurrentRegions.Regions.Any(region => region.Kind == SweepTraceRegionKind.RetainSourceTrace) &&
+            !result.LiveSafety.ClearLiveTraceImmediately,
+            "stale complete strip cannot hide current NoData coverage or authorize clearing the full trace");
+        Check.That(result.CurrentCalibration.Points.SequenceEqual(old.Strip.Calibration.Points),
+            "disconnect preserves scale independently of source validity");
+    }
+
+    private static void StripCompositionKeepsPinnedHistoryAndIndependentNumericClock()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.EnterReview("record.one", 0, 0, 0);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        PublishedEcgStrip pinned = EcgStripPublication.Restore(2, 2, input with
+        {
+            Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } },
+        }).CapturePublished()!;
+        machine.Advance(20_000_000_000, 0);
+        EcgStripDisplaySnapshot before = ComposeDisplay(machine.CaptureState(), pinned, 10);
+        EcgStripDisplaySnapshot expiry = ComposeDisplay(machine.CaptureState(), pinned, 11);
+        Check.That(before.SourceStrip.Strip == pinned.Strip && expiry.SourceStrip.Strip == pinned.Strip &&
+            expiry.CurrentRegions.Regions.Single().Kind == SweepTraceRegionKind.PinnedHistory &&
+            expiry.Presentation.TransientReplayPolicy == TransientReplayPolicy.Suppress &&
+            before.LiveSafety.Numerics[0].ValuePresentation == NumericValuePresentation.PreserveLastValue &&
+            expiry.LiveSafety.Numerics[0].ValuePresentation == NumericValuePresentation.UnavailableMarker,
+            "authority numeric expiry coexists with unchanged pinned geometry and suppressed historical replay");
+    }
+
+    private static void StripCompositionRestoresAndRejectsWithoutMutation()
+    {
+        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        PublishedEcgStrip before = publication.CapturePublished()!;
+        SweepStateProjectionState state = before.Strip.Checkpoint.Source.Frame.Presentation;
+        PublishedEcgStrip restored = EcgStripPublication.Restore(2, 2, before.Strip.Checkpoint).CapturePublished()!;
+        EcgStripDisplaySnapshot result = ComposeDisplay(state, restored);
+        Check.That(result.SourceStrip.Strip == restored.Strip && result.CurrentCalibration.Points.SequenceEqual(before.Strip.Calibration.Points),
+            "owned checkpoint replay matches independently regenerated current calibration");
+        Check.That(Reason(() => ComposeDisplay(state, before, pulseLeft: 29)) == "EcgCalibration.InsufficientSpace" &&
+            ReferenceEquals(before, publication.CapturePublished()), "invalid target layout never mutates background publication");
+    }
 
     private static void Wait(Task task) => task.WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
 

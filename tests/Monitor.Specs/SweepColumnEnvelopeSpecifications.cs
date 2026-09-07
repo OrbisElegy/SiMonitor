@@ -9,11 +9,73 @@ internal static class SweepColumnEnvelopeSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(RegionReductionMasksBeforeSelectingExtrema), RegionReductionMasksBeforeSelectingExtrema),
+        new(nameof(RegionReductionPreservesPinnedHistoryDuringNoData), RegionReductionPreservesPinnedHistoryDuringNoData),
+        new(nameof(RegionReductionSeparatesGapsAndOwnsOutput), RegionReductionSeparatesGapsAndOwnsOutput),
+        new(nameof(RegionReductionRejectsMaskedCorruptionAndOutputOverflow), RegionReductionRejectsMaskedCorruptionAndOutputOverflow),
         new(nameof(ColumnReductionRetainsNarrowPeaksAndValleys), ColumnReductionRetainsNarrowPeaksAndValleys),
         new(nameof(ColumnReductionSeparatesDiscontinuities), ColumnReductionSeparatesDiscontinuities),
         new(nameof(ColumnReductionKeepsExactExtremaAndColumnEdges), ColumnReductionKeepsExactExtremaAndColumnEdges),
         new(nameof(ColumnReductionValidatesAndOwnsResults), ColumnReductionValidatesAndOwnsResults),
     ];
+
+    private static void RegionReductionMasksBeforeSelectingExtrema()
+    {
+        SweepPathSample hidden = Sample(0, 0, 1) with { Point = new(new(0, 1, 10), new(1, 1, VerticalPlotRelation.WithinPlot)) };
+        SweepPathSample edge = Sample(1, 0, 50) with { Point = new(new(0, 2, 10), new(50, 1, VerticalPlotRelation.WithinPlot)) };
+        SweepPathSample visible = Sample(2, 0, 60) with { Point = new(new(0, 3, 10), new(60, 1, VerticalPlotRelation.WithinPlot)) };
+        IReadOnlyList<SweepRegionColumnEnvelope> result = SweepRegionColumnEnvelopeReduction.Reduce(Input(hidden, edge, visible, Sample(3, 10, 99)), 4, 4);
+        Check.That(result.Count == 1 && result[0].Envelope.First == edge && result[0].Envelope.MinimumY == edge &&
+            result[0].Envelope.MaximumY == visible,
+            "subpixel erase-gap spike cannot contaminate the same column's source extrema; exact left edge is included and plot right excluded");
+    }
+
+    private static void RegionReductionPreservesPinnedHistoryDuringNoData()
+    {
+        SweepFrameReconstructionInput input = Input(Sample(0, 2, 50), Sample(1, 2, 40));
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        machine.Advance(100, 0);
+        SweepFrameReconstructionInput live = input with { Frame = input.Frame with { Presentation = machine.CaptureState() } };
+        Check.That(SweepRegionColumnEnvelopeReduction.Reduce(live, 2, 2).Count == 0, "full NoData coverage yields no source extrema");
+        machine.EnterFrozen(100, 0);
+        SweepFrameReconstructionInput pinned = input with { Frame = input.Frame with { Presentation = machine.CaptureState() } };
+        Check.That(SweepRegionColumnEnvelopeReduction.Reduce(pinned, 2, 2).Single().Envelope.MinimumY == input.Samples[1],
+            "pinned original data remains independent of Live NoData masking");
+    }
+
+    private static void RegionReductionSeparatesGapsAndOwnsOutput()
+    {
+        SweepPathSample[] samples = [Sample(0, 2, 50), Sample(2, 2, 40)];
+        SweepFrameReconstructionInput input = Input(samples);
+        IReadOnlyList<SweepRegionColumnEnvelope> result = SweepRegionColumnEnvelopeReduction.Reduce(input, 2, 2);
+        Check.That(result.Count == 2 && result.SequenceEqual(SweepRegionColumnEnvelopeReduction.Reduce(input with
+        {
+            Frame = SweepFramePathBuilder.Restore(input.Frame).CaptureState(),
+        }, 2, 2)), "masked reduction preserves source gaps and deterministic checkpoint recomputation");
+        samples[1] = Sample(9, 2, 1);
+        Check.That(result[1].Envelope.First.SampleIndex == 2, "caller array changes cannot alter returned provenance");
+    }
+
+    private static void RegionReductionRejectsMaskedCorruptionAndOutputOverflow()
+    {
+        try
+        {
+            _ = SweepRegionColumnEnvelopeReduction.Reduce(Input(Sample(0, 0, 50), Sample(0, 0, 40)), 2, 2);
+            throw new InvalidOperationException("masked corruption accepted");
+        }
+        catch (SweepPathException exception) { Check.That(exception.ReasonCode == "SweepPath.FrontierReversed", "masking never bypasses evidence validation"); }
+        try
+        {
+            _ = SweepRegionColumnEnvelopeReduction.Reduce(Input(Sample(0, 2, 50), Sample(1, 3, 40)), 2, 1);
+            throw new InvalidOperationException("output overflow accepted");
+        }
+        catch (SweepFrameReconstructionException exception) { Check.That(exception.ReasonCode == "RegionEnvelope.OutputLimitExceeded", "output bound rejects rather than truncating extrema"); }
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { _ = SweepRegionColumnEnvelopeReduction.Reduce(Input(), 1, 1, cancellation.Token); throw new InvalidOperationException("cancelled masking accepted"); }
+        catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "masking propagates cancellation without partial output"); }
+    }
 
     private static SweepFrameReconstructionInput Input(params SweepPathSample[] samples) => new(new(
         SweepStateProjectionStateMachine.Start(new("ecg", 4, 5, 0, 100, 2, 102), 1, 1, SessionRunState.Running,

@@ -35,6 +35,7 @@ internal static class Program
             .. SweepTraceCompositionSpecifications.All,
             .. SweepPlotGeometrySpecifications.All,
             .. SweepColumnCoverageSpecifications.All,
+            .. SweepColumnEnvelopeSpecifications.All,
             .. EcgVerticalGeometrySpecifications.All,
             .. EcgCalibrationGeometrySpecifications.All,
             .. SweepSegmentClipperSpecifications.All,

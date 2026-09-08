@@ -11,7 +11,8 @@ public static class EcgStripDisplayGate
 {
     public static EcgStripDisplaySelection Select(SweepStateProjectionState current,
         int plotLeftPixels, int plotWidthPixels, EcgVerticalScale verticalScale,
-        int gutterLeftPixels, int pulseLeftPixels, ReconstructedEcgStrip? strip)
+        int gutterLeftPixels, int pulseLeftPixels, ReconstructedEcgStrip? strip,
+        bool requireColumnReduction = false)
     {
         ArgumentNullException.ThrowIfNull(verticalScale);
         EcgCalibrationGeometrySnapshot calibration = EcgCalibrationGeometry.Compose(current,
@@ -29,6 +30,10 @@ public static class EcgStripDisplayGate
             !previous.Points.SequenceEqual(calibration.Points))
         {
             return new("EcgStripDisplay.CalibrationMismatch", null);
+        }
+        if (requireColumnReduction && strip.ColumnReduction is null)
+        {
+            return new("EcgStripDisplay.ColumnReductionRequired", null);
         }
         return new("EcgStripDisplay.Matched", strip);
     }

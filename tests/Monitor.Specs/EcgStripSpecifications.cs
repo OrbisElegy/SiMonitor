@@ -10,6 +10,9 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripDisplayRequiresRequestedColumnResults), StripDisplayRequiresRequestedColumnResults),
+        new(nameof(StripDisplayReductionRequirementKeepsCurrentSafety), StripDisplayReductionRequirementKeepsCurrentSafety),
+        new(nameof(StripDisplayRestoredReductionDoesNotBypassStateChecks), StripDisplayRestoredReductionDoesNotBypassStateChecks),
         new(nameof(ValidatedStripReductionMatchesIndependentReconstruction), ValidatedStripReductionMatchesIndependentReconstruction),
         new(nameof(ValidatedResizeReductionPreservesCapacityAndCheckpointRules), ValidatedResizeReductionPreservesCapacityAndCheckpointRules),
         new(nameof(StripReductionPublishesMatchingGeometryTogether), StripReductionPublishesMatchingGeometryTogether),
@@ -41,6 +44,57 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static EcgStripDisplaySelection SelectColumns(ReconstructedEcgStrip strip, SweepStateProjectionState? state = null) =>
+        EcgStripDisplayGate.Select(state ?? strip.Checkpoint.Source.Frame.Presentation,
+            30, 500, strip.Checkpoint.Source.Frame.VerticalScale!, 0, 5, strip, requireColumnReduction: true);
+
+    private static void StripDisplayRequiresRequestedColumnResults()
+    {
+        ReconstructedEcgStrip plain = new EcgStripReconstructor(2, 2).Replace(Input());
+        ReconstructedEcgStrip reduced = new EcgStripReconstructor(2, 2, new(20, 20)).Replace(Input());
+        Check.That(SelectColumns(plain) is { ReasonCode: "EcgStripDisplay.ColumnReductionRequired", Strip: null } &&
+            Select(plain).Strip == plain && ReferenceEquals(SelectColumns(reduced).Strip, reduced),
+            "column consumers reject otherwise matching unprocessed output while ordinary path consumers remain supported");
+        EcgStripCheckpoint empty = Input();
+        empty = empty with { Source = empty.Source with { Samples = Array.Empty<SweepPathSample>() } };
+        ReconstructedEcgStrip reducedEmpty = new EcgStripReconstructor(2, 2, new(1, 1)).Replace(empty);
+        Check.That(reducedEmpty.ColumnReduction!.Envelopes.Count == 0 && SelectColumns(reducedEmpty).Strip == reducedEmpty,
+            "a completed empty reduction is valid evidence and is distinct from absent processing");
+    }
+
+    private static void StripDisplayReductionRequirementKeepsCurrentSafety()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        machine.Advance(10_000_000_000, 0);
+        input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
+        PublishedEcgStrip plain = EcgStripPublication.Restore(2, 2, input).CapturePublished()!;
+        EcgStripDisplaySnapshot display = EcgStripDisplayComposition.Compose(machine.CaptureState(), 1,
+            Array.Empty<NumericNoDataPolicy>(), 30, 500, input.Source.Frame.VerticalScale!, 0, 5, plain, requireColumnReduction: true);
+        Check.That(display.SourceStrip.ReasonCode == "EcgStripDisplay.ColumnReductionRequired" && display.SourceStrip.Strip is null &&
+            display.CurrentCalibration.Points.Count == 4 && display.Connectivity.Message == ConnectivityBannerMessage.NoData &&
+            display.LiveSafety.PatientAlarms == PatientAlarmSuspension.SuspendedUnknown && !display.LiveSafety.ClearLiveTraceImmediately,
+            "missing column results do not hide current calibration or disconnect safety and do not authorize full clearing");
+    }
+
+    private static void StripDisplayRestoredReductionDoesNotBypassStateChecks()
+    {
+        EcgStripPublication original = EcgStripPublication.Restore(2, 2, Input());
+        PublishedEcgStrip before = original.CapturePublished()!;
+        ReconstructedEcgStrip restored = EcgStripReconstructor.Restore(2, 2, before.Strip.Checkpoint, new(20, 20)).Current!;
+        Check.That(SelectColumns(restored).Strip == restored && SelectColumns(before.Strip).Strip is null &&
+            ReferenceEquals(before, original.CapturePublished()),
+            "rebuilding from owned evidence enables column display without modifying old publication");
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(restored.Checkpoint.Source.Frame.Presentation);
+        machine.Advance(1, 0);
+        Check.That(SelectColumns(restored, machine.CaptureState()) is { ReasonCode: "FrameDisplay.PresentationMismatch", Strip: null },
+            "presence of reduction cannot bypass exact current-phase compatibility");
+        Check.That(Reason(() => EcgStripDisplayGate.Select(restored.Checkpoint.Source.Frame.Presentation,
+            30, 500, restored.Checkpoint.Source.Frame.VerticalScale!, 0, 29, restored, true)) == "EcgCalibration.InsufficientSpace",
+            "target layout validation remains mandatory for a column consumer");
+    }
 
     private static void ValidatedStripReductionMatchesIndependentReconstruction()
     {

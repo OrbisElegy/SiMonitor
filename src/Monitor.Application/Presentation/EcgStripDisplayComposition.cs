@@ -19,7 +19,8 @@ public static class EcgStripDisplayComposition
     public static EcgStripDisplaySnapshot Compose(SweepStateProjectionState state,
         long authorityMonotonicNs, IReadOnlyList<NumericNoDataPolicy> numericPolicies,
         int plotLeftPixels, int plotWidthPixels, EcgVerticalScale verticalScale,
-        int gutterLeftPixels, int pulseLeftPixels, PublishedEcgStrip? published)
+        int gutterLeftPixels, int pulseLeftPixels, PublishedEcgStrip? published,
+        bool requireColumnReduction = false)
     {
         ArgumentNullException.ThrowIfNull(verticalScale);
         SweepStateProjectionState current = SweepStateProjectionStateMachine.Restore(state).CaptureState();
@@ -28,7 +29,7 @@ public static class EcgStripDisplayComposition
         EcgCalibrationGeometrySnapshot calibration = EcgCalibrationGeometry.Compose(current,
             plotLeftPixels, plotWidthPixels, verticalScale, gutterLeftPixels, pulseLeftPixels);
         EcgStripDisplaySelection strip = EcgStripDisplayGate.Select(current,
-            plotLeftPixels, plotWidthPixels, verticalScale, gutterLeftPixels, pulseLeftPixels, published?.Strip);
+            plotLeftPixels, plotWidthPixels, verticalScale, gutterLeftPixels, pulseLeftPixels, published?.Strip, requireColumnReduction);
         return new(safety.Presentation, safety.CurrentRegions, calibration,
             safety.LiveSafety, safety.Connectivity, strip);
     }

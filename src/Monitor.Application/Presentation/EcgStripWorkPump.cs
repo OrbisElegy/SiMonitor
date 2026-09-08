@@ -11,8 +11,8 @@ public sealed class EcgStripWorkPump
     private bool _processing;
     private bool _stopped;
 
-    public EcgStripWorkPump(int maximumSamples, int maximumSegments)
-        : this(new EcgStripPublication(maximumSamples, maximumSegments)) { }
+    public EcgStripWorkPump(int maximumSamples, int maximumSegments, EcgColumnReductionLimits? columnLimits = null)
+        : this(new EcgStripPublication(maximumSamples, maximumSegments, columnLimits)) { }
 
     private EcgStripWorkPump(EcgStripPublication publication) => _publication = publication;
 
@@ -63,6 +63,6 @@ public sealed class EcgStripWorkPump
 
     // In-flight and pending work are transient. Only a completed frame is restored.
     public static EcgStripWorkPump Restore(int maximumSamples, int maximumSegments,
-        EcgStripCheckpoint checkpoint) =>
-        new(EcgStripPublication.Restore(maximumSamples, maximumSegments, checkpoint));
+        EcgStripCheckpoint checkpoint, EcgColumnReductionLimits? columnLimits = null) =>
+        new(EcgStripPublication.Restore(maximumSamples, maximumSegments, checkpoint, columnLimits));
 }

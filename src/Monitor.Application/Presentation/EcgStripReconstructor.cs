@@ -14,7 +14,9 @@ public sealed record EcgStripCheckpoint(
 
 public sealed record ReconstructedEcgStrip(
     ReconstructedSweepFrame PatientFrame, EcgCalibrationGeometrySnapshot Calibration,
-    EcgStripCheckpoint Checkpoint);
+    EcgStripCheckpoint Checkpoint, ReducedSweepColumnFrame? ColumnReduction = null);
+
+public sealed record EcgColumnReductionLimits(int MaximumPieces, int MaximumEnvelopes);
 
 // Serialized local composition. The UI must swap the whole result; this is not
 // a concurrent publication service or authority scale-change scheduler.
@@ -22,10 +24,14 @@ public sealed class EcgStripReconstructor
 {
     private readonly int _maximumSamples;
     private readonly int _maximumSegments;
+    private readonly EcgColumnReductionLimits? _columnLimits;
 
-    public EcgStripReconstructor(int maximumSamples, int maximumSegments)
+    public EcgStripReconstructor(int maximumSamples, int maximumSegments, EcgColumnReductionLimits? columnLimits = null)
     {
         _ = new SweepFrameReconstructor(maximumSamples, maximumSegments);
+        if (columnLimits is not null && (columnLimits.MaximumPieces <= 0 || columnLimits.MaximumEnvelopes <= 0))
+        { throw new EcgStripException("EcgStrip.InvalidColumnLimits", nameof(columnLimits)); }
+        _columnLimits = columnLimits;
         _maximumSamples = maximumSamples;
         _maximumSegments = maximumSegments;
     }
@@ -53,9 +59,10 @@ public sealed class EcgStripReconstructor
 
     public EcgStripCheckpoint? CaptureCheckpoint() => Current?.Checkpoint;
 
-    public static EcgStripReconstructor Restore(int maximumSamples, int maximumSegments, EcgStripCheckpoint checkpoint)
+    public static EcgStripReconstructor Restore(int maximumSamples, int maximumSegments, EcgStripCheckpoint checkpoint,
+        EcgColumnReductionLimits? columnLimits = null)
     {
-        EcgStripReconstructor result = new(maximumSamples, maximumSegments);
+        EcgStripReconstructor result = new(maximumSamples, maximumSegments, columnLimits);
         try { result.Replace(checkpoint); }
         catch (ArgumentException) { throw new EcgStripException("EcgStrip.InvalidCheckpoint", nameof(checkpoint)); }
         return result;
@@ -65,12 +72,20 @@ public sealed class EcgStripReconstructor
         int gutterLeftPixels, int pulseLeftPixels, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ReducedSweepColumnFrame? reduction = null;
+        if (_columnLimits is { } limits)
+        {
+            reduction = SweepClippedColumnReduction.Reduce(source, _maximumSamples, _maximumSegments,
+                limits.MaximumPieces, limits.MaximumEnvelopes, cancellationToken);
+            frame = reduction.Frame.SourceFrame;
+            source = reduction.Frame.Checkpoint;
+        }
         SweepFramePathState seed = source.Frame;
         EcgVerticalScale scale = seed.VerticalScale ??
             throw new EcgStripException("EcgStrip.VoltageScaleRequired", nameof(source));
         EcgCalibrationGeometrySnapshot calibration = EcgCalibrationGeometry.Compose(seed.Presentation,
             seed.PlotLeftPixels, seed.PlotWidthPixels, scale, gutterLeftPixels, pulseLeftPixels);
-        ReconstructedEcgStrip completed = new(frame, calibration, new(source, gutterLeftPixels, pulseLeftPixels));
+        ReconstructedEcgStrip completed = new(frame, calibration, new(source, gutterLeftPixels, pulseLeftPixels), reduction);
         cancellationToken.ThrowIfCancellationRequested();
         Current = completed;
         return completed;

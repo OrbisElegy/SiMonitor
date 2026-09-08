@@ -16,9 +16,9 @@ public sealed class EcgStripWorker : IAsyncDisposable
     private bool _stopping;
     private string? _lastFailure;
 
-    public EcgStripWorker(int maximumSamples, int maximumSegments)
+    public EcgStripWorker(int maximumSamples, int maximumSegments, EcgColumnReductionLimits? columnLimits = null)
     {
-        _pump = new(maximumSamples, maximumSegments);
+        _pump = new(maximumSamples, maximumSegments, columnLimits);
         _wake = new(0, 1);
         _shutdown = new();
         _idle.SetResult();

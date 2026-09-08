@@ -26,13 +26,15 @@ public sealed class EcgStripPublication
     private readonly object _gate = new();
     private readonly int _maximumSamples;
     private readonly int _maximumSegments;
+    private readonly EcgColumnReductionLimits? _columnLimits;
     private ulong _latestGeneration;
     private PublishedEcgStrip? _current;
     private bool _stopped;
 
-    public EcgStripPublication(int maximumSamples, int maximumSegments)
+    public EcgStripPublication(int maximumSamples, int maximumSegments, EcgColumnReductionLimits? columnLimits = null)
     {
-        _ = new SweepFrameReconstructor(maximumSamples, maximumSegments);
+        _ = new EcgStripReconstructor(maximumSamples, maximumSegments, columnLimits);
+        _columnLimits = columnLimits;
         _maximumSamples = maximumSamples;
         _maximumSegments = maximumSegments;
     }
@@ -49,7 +51,7 @@ public sealed class EcgStripPublication
         int count = input.Source.Samples.Count;
         if (count < 0 || count > _maximumSamples)
         { throw Error("StripPublication.SampleLimitExceeded", nameof(input)); }
-        SweepPathSample[] samples = new SweepPathSample[count];
+        var samples = new SweepPathSample[count];
         for (int index = 0; index < count; index++) { samples[index] = input.Source.Samples[index]; }
         SweepFramePathState frame = SweepFramePathBuilder.Restore(input.Source.Frame).CaptureState();
         EcgVerticalScale scale = frame.VerticalScale ??
@@ -79,7 +81,7 @@ public sealed class EcgStripPublication
             SweepFramePublicationStatus? status = ExistingStatus(work);
             if (status is not null) { return status.Value; }
         }
-        EcgStripReconstructor reconstruction = new(_maximumSamples, _maximumSegments);
+        EcgStripReconstructor reconstruction = new(_maximumSamples, _maximumSegments, _columnLimits);
         ReconstructedEcgStrip strip = reconstruction.Replace(work.Input, cancellationToken);
         PublishedEcgStrip completed = new(work.Generation, strip);
         lock (_gate)
@@ -109,10 +111,10 @@ public sealed class EcgStripPublication
     }
 
     public static EcgStripPublication Restore(int maximumSamples, int maximumSegments,
-        EcgStripCheckpoint checkpoint)
+        EcgStripCheckpoint checkpoint, EcgColumnReductionLimits? columnLimits = null)
     {
-        EcgStripReconstructor validated = EcgStripReconstructor.Restore(maximumSamples, maximumSegments, checkpoint);
-        EcgStripPublication result = new(maximumSamples, maximumSegments);
+        var validated = EcgStripReconstructor.Restore(maximumSamples, maximumSegments, checkpoint, columnLimits);
+        EcgStripPublication result = new(maximumSamples, maximumSegments, columnLimits);
         result._latestGeneration = 1;
         result._current = new(1, validated.Current!);
         return result;

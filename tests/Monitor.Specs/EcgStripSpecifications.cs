@@ -10,6 +10,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(StripReductionPublishesMatchingGeometryTogether), StripReductionPublishesMatchingGeometryTogether),
+        new(nameof(StripReductionFailurePreservesCompletedResult), StripReductionFailurePreservesCompletedResult),
+        new(nameof(StripReductionRestoresUnderExplicitLimits), StripReductionRestoresUnderExplicitLimits),
+        new(nameof(StripReductionWorkerRecoversFromOutputOverflow), StripReductionWorkerRecoversFromOutputOverflow),
         new(nameof(StripCompositionKeepsCurrentCalibrationWithoutSource), StripCompositionKeepsCurrentCalibrationWithoutSource),
         new(nameof(StripCompositionUsesCurrentNoDataSafetyWithOldPublication), StripCompositionUsesCurrentNoDataSafetyWithOldPublication),
         new(nameof(StripCompositionKeepsPinnedHistoryAndIndependentNumericClock), StripCompositionKeepsPinnedHistoryAndIndependentNumericClock),
@@ -35,6 +39,79 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static EcgStripCheckpoint ShortInput()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepPathSample second = input.Source.Samples[1];
+        return input with
+        {
+            Source = input.Source with
+            {
+                Samples = new[] { input.Source.Samples[0], second with
+        {
+            CycleOffsetNs = 1_020_000_000,
+            Point = second.Point with { X = new(81, 0, 10_000_000_000) },
+        } }
+            }
+        };
+    }
+
+    private static void StripReductionPublishesMatchingGeometryTogether()
+    {
+        ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2, new(20, 20)).Replace(Input());
+        Check.That(strip.ColumnReduction is not null && strip.ColumnReduction.Envelopes.Count == 10 &&
+            ReferenceEquals(strip.PatientFrame, strip.ColumnReduction.Frame.SourceFrame) &&
+            ReferenceEquals(strip.Checkpoint.Source, strip.ColumnReduction.Frame.Checkpoint) &&
+            strip.ColumnReduction.Envelopes.All(envelope => envelope.MinimumY.Y == new ExactPlotCoordinate(40, 1)) &&
+            strip.Calibration.Points[1].Y.PixelNumerator == 40,
+            "patient, column summaries and calibration share one validated scale and source checkpoint");
+        Check.That(new EcgStripReconstructor(2, 2).Replace(Input()).ColumnReduction is null,
+            "column processing requires explicit local capacity configuration");
+    }
+
+    private static void StripReductionFailurePreservesCompletedResult()
+    {
+        EcgStripReconstructor reconstructor = new(2, 2, new(20, 5));
+        ReconstructedEcgStrip before = reconstructor.Replace(ShortInput());
+        Check.That(Reason(() => reconstructor.Replace(Input())) == "ClippedEnvelope.OutputLimitExceeded" &&
+            ReferenceEquals(before, reconstructor.Current) && ReferenceEquals(before.Checkpoint, reconstructor.CaptureCheckpoint()),
+            "late summary overflow cannot publish a new patient frame with missing reduction");
+        Check.That(Reason(() => { _ = new EcgStripReconstructor(2, 2, new(0, 1)); }) == "EcgStrip.InvalidColumnLimits",
+            "enabled reduction requires positive limits before any work is admitted");
+    }
+
+    private static void StripReductionRestoresUnderExplicitLimits()
+    {
+        EcgStripPublication original = EcgStripPublication.Restore(2, 2, Input(), new(20, 20));
+        ReconstructedEcgStrip first = original.CapturePublished()!.Strip;
+        EcgStripWorkPump restored = EcgStripWorkPump.Restore(2, 2, first.Checkpoint, new(20, 20));
+        Check.That(first.ColumnReduction!.Envelopes.SequenceEqual(restored.CapturePublished()!.Strip.ColumnReduction!.Envelopes),
+            "restoration rebuilds summaries from source evidence under caller limits");
+        Check.That(Reason(() => EcgStripReconstructor.Restore(2, 2, first.Checkpoint, new(2, 2))) == "EcgStrip.InvalidCheckpoint",
+            "a restored source exceeding new piece limits is not accepted by trusting old output");
+    }
+
+    private static void StripReductionWorkerRecoversFromOutputOverflow()
+    {
+        EcgStripWorker worker = new(2, 2, new(5, 5));
+        try
+        {
+            worker.Enqueue(ShortInput());
+            Wait(worker.WaitForIdleAsync());
+            PublishedEcgStrip before = worker.CapturePublished()!;
+            worker.Enqueue(Input());
+            Wait(worker.WaitForIdleAsync());
+            Check.That(worker.LastFailureCode == "ColumnFrame.OutputLimitExceeded" && ReferenceEquals(before, worker.CapturePublished()),
+                "worker reports reduction capacity failure without replacing the complete strip");
+            worker.Enqueue(ShortInput() with { PulseLeftPixels = 6 });
+            Wait(worker.WaitForIdleAsync());
+            Check.That(worker.LastFailureCode is null && worker.CapturePublished()!.Strip.ColumnReduction!.Envelopes.Count == 1 &&
+                worker.CapturePublished()!.Strip.Checkpoint.PulseLeftPixels == 6,
+                "later work publishes summaries and calibration together after capacity failure");
+        }
+        finally { Wait(worker.DisposeAsync().AsTask()); }
+    }
 
     private static EcgStripDisplaySnapshot ComposeDisplay(SweepStateProjectionState state, PublishedEcgStrip? published,
         long authorityNs = 1, int pulseLeft = 5) => EcgStripDisplayComposition.Compose(state, authorityNs,
@@ -531,5 +608,6 @@ internal static class EcgStripSpecifications
         catch (EcgCalibrationGeometryException exception) { return exception.ReasonCode; }
         catch (EcgStripPublicationException exception) { return exception.ReasonCode; }
         catch (SweepFramePathException exception) { return exception.ReasonCode; }
+        catch (SweepFrameReconstructionException exception) { return exception.ReasonCode; }
     }
 }

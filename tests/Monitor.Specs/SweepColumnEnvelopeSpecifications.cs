@@ -9,6 +9,9 @@ internal static class SweepColumnEnvelopeSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(ColumnFrameExcludesExclusiveRightEdgeGeometry), ColumnFrameExcludesExclusiveRightEdgeGeometry),
+        new(nameof(ColumnFrameRetainsLeftEdgeAndArrivingSegments), ColumnFrameRetainsLeftEdgeAndArrivingSegments),
+        new(nameof(ColumnFrameBoundaryOwnershipRestoresAtCoordinateCeiling), ColumnFrameBoundaryOwnershipRestoresAtCoordinateCeiling),
         new(nameof(ClippedReductionRetainsPeaksAndJoinsOnlyContinuousPieces), ClippedReductionRetainsPeaksAndJoinsOnlyContinuousPieces),
         new(nameof(ClippedReductionRetainsCrossingIntersections), ClippedReductionRetainsCrossingIntersections),
         new(nameof(ClippedReductionKeepsGapsSeparate), ClippedReductionKeepsGapsSeparate),
@@ -22,6 +25,55 @@ internal static class SweepColumnEnvelopeSpecifications
         new(nameof(ColumnReductionKeepsExactExtremaAndColumnEdges), ColumnReductionKeepsExactExtremaAndColumnEdges),
         new(nameof(ColumnReductionValidatesAndOwnsResults), ColumnReductionValidatesAndOwnsResults),
     ];
+
+    private static void ColumnFrameExcludesExclusiveRightEdgeGeometry()
+    {
+        foreach (int y in new[] { 40, 50 })
+        {
+            ReconstructedSweepColumnFrame result = new SweepColumnFrameReconstructor(2, 2, 1)
+                .Replace(Input(Sample(0, 10, 50), Sample(1, 10, y)));
+            Check.That(result.SourceFrame.Segments.Count == 1 && result.Pieces.Count == 0,
+                "closed plot-edge vertical or point geometry owns no column beyond the half-open plot");
+        }
+        SweepFrameReconstructionInput input = Input(Sample(0, 4, 50), Sample(1, 4, 40));
+        var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        machine.Advance(40, 0);
+        ReconstructedSweepColumnFrame masked = new SweepColumnFrameReconstructor(2, 2, 1).Replace(input with
+        {
+            Frame = input.Frame with { Presentation = machine.CaptureState() },
+        });
+        Check.That(masked.Pieces.Count == 0, "source right edge adjoining an erase gap cannot emit a gap-column line");
+    }
+
+    private static void ColumnFrameRetainsLeftEdgeAndArrivingSegments()
+    {
+        SweepPathSample a = Sample(0, 0, 50) with { Point = new(new(0, 1, 5), new(50, 1, VerticalPlotRelation.WithinPlot)) };
+        SweepPathSample b = a with { SampleIndex = 1, Point = a.Point with { Y = new(40, 1, VerticalPlotRelation.WithinPlot) } };
+        Check.That(new SweepColumnFrameReconstructor(2, 2, 1).Replace(Input(a, b)).Pieces.Single().Piece.ColumnPixels == 0,
+            "fractional inclusive left edge still owns its vertical peak");
+        SweepFrameReconstructionInput input = Input(Sample(0, 3, 50), Sample(1, 4, 40), Sample(2, 4, 60));
+        var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        machine.Advance(40, 0);
+        ReconstructedSweepColumnFrame result = new SweepColumnFrameReconstructor(3, 3, 1).Replace(input with
+        {
+            Frame = input.Frame with { Presentation = machine.CaptureState() },
+        });
+        Check.That(result.Pieces.Count == 1 && result.Pieces[0].Piece.ColumnPixels == 3 &&
+            result.Pieces[0].Piece.Segment.End.X == new ExactPlotCoordinate(4, 1),
+            "arriving segment retains its boundary intersection; excluded vertical edge consumes no extra capacity");
+    }
+
+    private static void ColumnFrameBoundaryOwnershipRestoresAtCoordinateCeiling()
+    {
+        SweepFrameReconstructionInput input = Input(Sample(0, int.MaxValue, 50), Sample(1, int.MaxValue, 40));
+        input = input with { Frame = input.Frame with { PlotLeftPixels = int.MaxValue - 10 } };
+        SweepColumnFrameReconstructor reconstructor = new(2, 2, 1);
+        ReconstructedSweepColumnFrame result = reconstructor.Replace(input);
+        Check.That(result.Pieces.Count == 0 && SweepColumnFrameReconstructor.Restore(2, 2, 1, result.Checkpoint).Current!.Pieces.Count == 0,
+            "exclusive coordinate ceiling is suppressed before subdivision and remains deterministic on restore");
+        Check.That(SweepClippedColumnReduction.Reduce(result.Checkpoint, 2, 2, 1, 1).Envelopes.Count == 0,
+            "excluded boundary-only geometry cannot return through extrema reduction");
+    }
 
     private static ReducedSweepColumnFrame ReduceClipped(SweepFrameReconstructionInput input, int maximumEnvelopes = 8) =>
         SweepClippedColumnReduction.Reduce(input, 8, 8, 32, maximumEnvelopes);
@@ -91,7 +143,7 @@ internal static class SweepColumnEnvelopeSpecifications
     private static void RegionReductionPreservesPinnedHistoryDuringNoData()
     {
         SweepFrameReconstructionInput input = Input(Sample(0, 2, 50), Sample(1, 2, 40));
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Frame.Presentation);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         machine.Advance(100, 0);
         SweepFrameReconstructionInput live = input with { Frame = input.Frame with { Presentation = machine.CaptureState() } };

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Numerics;
 using Monitor.Domain.Presentation;
 
 namespace Monitor.Application.Presentation;
@@ -51,6 +52,10 @@ public sealed class SweepColumnFrameReconstructor
         foreach (SweepFrameSegment segment in frame.Segments)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // Closed clipping can retain a vertical line/point exactly on the
+            // exclusive region edge. It owns no source column in this region.
+            SweepPixelPosition right = frame.Geometry.Regions[segment.RegionIndex].EndExclusiveX;
+            if (AtRightEdge(segment.Segment.Start.X, right) && AtRightEdge(segment.Segment.End.X, right)) { continue; }
             int remaining = maximumPieces - pieces.Count;
             if (remaining == 0)
             { throw new SweepFrameReconstructionException("ColumnFrame.OutputLimitExceeded", nameof(input)); }
@@ -68,6 +73,10 @@ public sealed class SweepColumnFrameReconstructor
         cancellationToken.ThrowIfCancellationRequested();
         return completed;
     }
+
+    private static bool AtRightEdge(ExactPlotCoordinate x, SweepPixelPosition right) =>
+        x.Numerator * right.FractionDenominator ==
+        ((BigInteger)right.WholePixels * right.FractionDenominator + right.FractionNumerator) * x.Denominator;
 
     public SweepFrameReconstructionInput? CaptureCheckpoint() => Current?.Checkpoint;
 

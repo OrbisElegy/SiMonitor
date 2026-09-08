@@ -33,11 +33,25 @@ public sealed class SweepColumnFrameReconstructor
         cancellationToken.ThrowIfCancellationRequested();
         SweepFrameReconstructor trial = new(_maximumSamples, _maximumSegments);
         ReconstructedSweepFrame frame = trial.Replace(input, cancellationToken);
+        ReconstructedSweepColumnFrame completed = SubdivideValidated(frame, trial.CaptureCheckpoint()!, _maximumPieces, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        Current = completed;
+        return completed;
+    }
+
+    // Internal only: callers must pass the matching frame/checkpoint produced by
+    // reconstruction, never caller-created geometry or deserialized output.
+    internal static ReconstructedSweepColumnFrame SubdivideValidated(ReconstructedSweepFrame frame,
+        SweepFrameReconstructionInput input, int maximumPieces, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (maximumPieces <= 0)
+        { throw new SweepFrameReconstructionException("ColumnFrame.InvalidLimits", nameof(maximumPieces)); }
         List<SweepFrameColumnPiece> pieces = [];
         foreach (SweepFrameSegment segment in frame.Segments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int remaining = _maximumPieces - pieces.Count;
+            int remaining = maximumPieces - pieces.Count;
             if (remaining == 0)
             { throw new SweepFrameReconstructionException("ColumnFrame.OutputLimitExceeded", nameof(input)); }
             IReadOnlyList<SweepColumnSegment> split;
@@ -50,9 +64,8 @@ public sealed class SweepColumnFrameReconstructor
                 pieces.Add(new(segment.Source, segment.EndSampleIndex, segment.CycleIndex, segment.RegionIndex, piece));
             }
         }
-        ReconstructedSweepColumnFrame completed = new(frame, Array.AsReadOnly(pieces.ToArray()), trial.CaptureCheckpoint()!);
+        ReconstructedSweepColumnFrame completed = new(frame, Array.AsReadOnly(pieces.ToArray()), input);
         cancellationToken.ThrowIfCancellationRequested();
-        Current = completed;
         return completed;
     }
 

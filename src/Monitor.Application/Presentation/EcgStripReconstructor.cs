@@ -75,7 +75,7 @@ public sealed class EcgStripReconstructor
         ReducedSweepColumnFrame? reduction = null;
         if (_columnLimits is { } limits)
         {
-            reduction = SweepClippedColumnReduction.Reduce(source, _maximumSamples, _maximumSegments,
+            reduction = SweepClippedColumnReduction.ReduceValidated(frame, source,
                 limits.MaximumPieces, limits.MaximumEnvelopes, cancellationToken);
             frame = reduction.Frame.SourceFrame;
             source = reduction.Frame.Checkpoint;

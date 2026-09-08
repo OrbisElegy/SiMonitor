@@ -10,6 +10,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(ValidatedStripReductionMatchesIndependentReconstruction), ValidatedStripReductionMatchesIndependentReconstruction),
+        new(nameof(ValidatedResizeReductionPreservesCapacityAndCheckpointRules), ValidatedResizeReductionPreservesCapacityAndCheckpointRules),
         new(nameof(StripReductionPublishesMatchingGeometryTogether), StripReductionPublishesMatchingGeometryTogether),
         new(nameof(StripReductionFailurePreservesCompletedResult), StripReductionFailurePreservesCompletedResult),
         new(nameof(StripReductionRestoresUnderExplicitLimits), StripReductionRestoresUnderExplicitLimits),
@@ -39,6 +41,46 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void ValidatedStripReductionMatchesIndependentReconstruction()
+    {
+        EcgStripCheckpoint input = Input();
+        ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2, new(20, 20)).Replace(input);
+        ReducedSweepColumnFrame independent = SweepClippedColumnReduction.Reduce(input.Source, 2, 2, 20, 20);
+        Check.That(strip.ColumnReduction!.Envelopes.SequenceEqual(independent.Envelopes) &&
+            strip.ColumnReduction.Frame.Pieces.SequenceEqual(independent.Frame.Pieces) &&
+            strip.PatientFrame.Segments.SequenceEqual(independent.Frame.SourceFrame.Segments) &&
+            ReferenceEquals(strip.PatientFrame, strip.ColumnReduction.Frame.SourceFrame) &&
+            ReferenceEquals(strip.Checkpoint.Source, strip.ColumnReduction.Frame.Checkpoint),
+            "internal reuse agrees with independent fully validated reconstruction and shares its accepted source pair");
+        EcgStripCheckpoint corrupt = input with
+        {
+            Source = input.Source with
+            {
+                Samples = new[] { input.Source.Samples[0], input.Source.Samples[1] with { Voltage = new(2000, 1) } },
+            }
+        };
+        Check.That(Reason(() => EcgStripReconstructor.Restore(2, 2, corrupt, new(20, 20))) == "EcgStrip.InvalidCheckpoint",
+            "external restore still revalidates voltage evidence rather than using the internal reuse path directly");
+    }
+
+    private static void ValidatedResizeReductionPreservesCapacityAndCheckpointRules()
+    {
+        EcgStripReconstructor reconstructor = new(2, 2, new(20, 20));
+        reconstructor.Replace(Input());
+        ReconstructedEcgStrip resized = reconstructor.ResizeHorizontal(30, 1000, 0, 5);
+        ReducedSweepColumnFrame independent = SweepClippedColumnReduction.Reduce(resized.Checkpoint.Source, 2, 2, 20, 20);
+        Check.That(resized.ColumnReduction!.Frame.Pieces.Count == 20 && resized.ColumnReduction.Envelopes.SequenceEqual(independent.Envelopes),
+            "resized validated paths retain exact-capacity intersections and extrema");
+        Check.That(Reason(() => reconstructor.ResizeHorizontal(30, 1100, 0, 5)) == "ColumnFrame.OutputLimitExceeded" &&
+            ReferenceEquals(resized, reconstructor.Current) && ReferenceEquals(resized.Checkpoint, reconstructor.CaptureCheckpoint()),
+            "late subdivision overflow still preserves both the completed strip and owned checkpoint");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { reconstructor.Replace(Input(), cancellation.Token); throw new InvalidOperationException("cancelled reuse accepted"); }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == cancellation.Token && ReferenceEquals(resized, reconstructor.Current), "cancellation leaves the complete result intact"); }
+    }
 
     private static EcgStripCheckpoint ShortInput()
     {

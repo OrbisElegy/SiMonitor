@@ -23,6 +23,23 @@ public static class SweepClippedColumnReduction
         { throw new SweepFrameReconstructionException("ClippedEnvelope.InvalidLimits", nameof(maximumEnvelopes)); }
         ReconstructedSweepColumnFrame frame = new SweepColumnFrameReconstructor(maximumSamples, maximumSegments, maximumPieces)
             .Replace(input, cancellationToken);
+        return Summarize(frame, maximumEnvelopes, cancellationToken);
+    }
+
+    // Reuse only a matching pair from this assembly's validated reconstruction.
+    internal static ReducedSweepColumnFrame ReduceValidated(ReconstructedSweepFrame frame,
+        SweepFrameReconstructionInput checkpoint, int maximumPieces, int maximumEnvelopes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (maximumEnvelopes <= 0)
+        { throw new SweepFrameReconstructionException("ClippedEnvelope.InvalidLimits", nameof(maximumEnvelopes)); }
+        return Summarize(SweepColumnFrameReconstructor.SubdivideValidated(frame, checkpoint, maximumPieces, cancellationToken),
+            maximumEnvelopes, cancellationToken);
+    }
+
+    private static ReducedSweepColumnFrame Summarize(ReconstructedSweepColumnFrame frame,
+        int maximumEnvelopes, CancellationToken cancellationToken)
+    {
         List<SweepClippedColumnEnvelope> output = [];
         foreach (SweepFrameColumnPiece piece in frame.Pieces)
         {

@@ -12,6 +12,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewScaleLabelTracksHorizontalResize), SvgPreviewScaleLabelTracksHorizontalResize),
+        new(nameof(SvgPreviewScaleLabelKeepsExactGainAcrossRestore), SvgPreviewScaleLabelKeepsExactGainAcrossRestore),
         new(nameof(SvgPreviewReservesNarrowCanvasLabels), SvgPreviewReservesNarrowCanvasLabels),
         new(nameof(SvgPreviewDeclaresLogicalDimensionsWithoutChangingEvidence), SvgPreviewDeclaresLogicalDimensionsWithoutChangingEvidence),
         new(nameof(SvgPreviewExcludesExactRightEdgeBeforeRounding), SvgPreviewExcludesExactRightEdgeBeforeRounding),
@@ -57,6 +59,40 @@ internal static class EcgStripSpecifications
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
 
+    private static void SvgPreviewScaleLabelTracksHorizontalResize()
+    {
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        EcgStripReconstructor reconstructor = new(2, 2);
+        EcgStripCheckpoint original = reconstructor.Replace(Input()).Checkpoint;
+        EcgStripCheckpoint resized = reconstructor.ResizeHorizontal(30, 1000, 0, 5).Checkpoint;
+        XElement before = XElement.Parse(EcgStripSvgPreview.Render(original, 2, 2));
+        XElement after = XElement.Parse(EcgStripSvgPreview.Render(resized, 2, 2));
+        Check.That(before.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 50 px/s / 20 px/mV (logical)" &&
+            after.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 100 px/s / 20 px/mV (logical)" &&
+            (string?)after.Elements(svg + "path").Single().Attribute("d") == "M 5 60 L 5 40 L 25 40 L 25 60",
+            "resize changes time scale label and pulse width together without changing gain");
+    }
+
+    private static void SvgPreviewScaleLabelKeepsExactGainAcrossRestore()
+    {
+        EcgStripCheckpoint input = Input();
+        EcgVerticalScale scale = input.Source.Frame.VerticalScale! with { PixelsPerMillivoltNumerator = 40, PixelsPerMillivoltDenominator = 6 };
+        SweepPathSample[] samples = input.Source.Samples.Select(sample => sample with
+        {
+            Point = sample.Point with { Y = EcgVerticalGeometry.MapMicrovolts(scale, sample.Voltage!.NumeratorMicrovolts, sample.Voltage.Denominator) }
+        }).ToArray();
+        input = input with { Source = new(input.Source.Frame with { VerticalScale = scale }, samples) };
+        string output = EcgStripSvgPreview.Render(input, 2, 2);
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement root = XElement.Parse(output);
+        Check.That(root.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 50 px/s / 20/3 px/mV (logical)" &&
+            EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == output,
+            "gain labels reduce exact fractions rather than rounding or claiming physical millimeters");
+        Check.That(Reason(() => EcgStripSvgPreview.Render(input with { PulseLeftPixels = 29 }, 2, 2)) == "EcgCalibration.InsufficientSpace" &&
+            EcgStripSvgPreview.Render(input, 2, 2) == output,
+            "scale annotation does not bypass calibration rejection or modify accepted evidence");
+    }
+
     private static void SvgPreviewReservesNarrowCanvasLabels()
     {
         EcgStripReconstructor reconstructor = new(2, 2);
@@ -79,8 +115,8 @@ internal static class EcgStripSpecifications
         EcgStripCheckpoint input = Input();
         string before = EcgStripSvgPreview.Render(input, 2, 2);
         XElement root = XElement.Parse(before);
-        Check.That((string?)root.Attribute("width") == "530" && (string?)root.Attribute("height") == "132" &&
-            (string?)root.Attribute("viewBox") == "0 0 530 132",
+        Check.That((string?)root.Attribute("width") == "530" && (string?)root.Attribute("height") == "144" &&
+            (string?)root.Attribute("viewBox") == "0 0 530 144",
             "standalone intrinsic dimensions match the logical viewBox instead of browser defaults");
         Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == before &&
             Reason(() => EcgStripSvgPreview.Render(input with { PulseLeftPixels = 29 }, 2, 2)) == "EcgCalibration.InsufficientSpace" &&
@@ -186,7 +222,7 @@ internal static class EcgStripSpecifications
         XElement root = XElement.Parse(EcgStripSvgPreview.Render(Input(), 2, 2));
         XElement trace = root.Elements(svg + "g").Single();
         XElement calibration = root.Elements(svg + "path").Single();
-        Check.That(root.Name == svg + "svg" && (string?)root.Attribute("viewBox") == "0 0 530 132" &&
+        Check.That(root.Name == svg + "svg" && (string?)root.Attribute("viewBox") == "0 0 530 144" &&
             trace.Elements(svg + "path").Single().Attribute("clip-path") is not null &&
             (string?)calibration.Attribute("clip-path") == "url(#gutter)" &&
             (string?)calibration.Attribute("d") == "M 5 60 L 5 40 L 15 40 L 15 60" &&

@@ -3,8 +3,9 @@ namespace Monitor.Specs;
 
 internal static class Program
 {
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args.Length != 0) { return SvgFixtureCommand.Run(args, Console.Out, Console.Error); }
         Specification[] specifications =
         [
             .. TherapySpecifications.All,
@@ -47,6 +48,7 @@ internal static class Program
             .. SweepVoltageMappingSpecifications.All,
             .. SweepSampleOffsetSpecifications.All,
             .. EcgStripSpecifications.All,
+            .. SvgFixtureSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,
             .. ContinuitySignatureSpecifications.All,

@@ -10,12 +10,7 @@ internal static class Program
             using CancellationTokenSource cancellation = new();
             ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; cancellation.Cancel(); };
             Console.CancelKeyPress += handler;
-            try { return SvgFixtureCommand.Run(args, Console.Out, Console.Error, cancellation.Token); }
-            catch (OperationCanceledException exception) when (exception.CancellationToken == cancellation.Token)
-            {
-                Console.Error.WriteLine("Fixture command cancelled.");
-                return 130;
-            }
+            try { return SvgFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
             finally { Console.CancelKeyPress -= handler; }
         }
         Specification[] specifications =

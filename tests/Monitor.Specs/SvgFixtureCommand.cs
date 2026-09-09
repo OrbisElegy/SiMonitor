@@ -29,6 +29,22 @@ internal static class SvgFixtureCommand
         new("review-return", TemporalViewMode.HistoricalReview, SessionRunState.Running, true, true),
     ];
 
+    public static int Execute(string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
+    {
+        try { return Run(args, output, error, cancellationToken); }
+        catch (OperationCanceledException exception) when (exception.CancellationToken == cancellationToken)
+        {
+            error.WriteLine("Fixture command cancelled.");
+            return 130;
+        }
+        catch (IOException)
+        {
+            // A failed write may already have emitted bytes; never retry it.
+            error.WriteLine("Fixture command I/O failed; output may be incomplete.");
+            return 1;
+        }
+    }
+
     public static int Run(string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

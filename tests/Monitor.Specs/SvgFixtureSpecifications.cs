@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FixtureExecutionReportsPartialWriteFailureWithoutRetry), FixtureExecutionReportsPartialWriteFailureWithoutRetry),
+        new(nameof(FixtureExecutionDistinguishesCancellationUsageAndSuccess), FixtureExecutionDistinguishesCancellationUsageAndSuccess),
         new(nameof(FixtureCancellationPreventsOutputAndAllowsRetry), FixtureCancellationPreventsOutputAndAllowsRetry),
         new(nameof(FixtureCancellationAfterWriteEntryDoesNotReportRollback), FixtureCancellationAfterWriteEntryDoesNotReportRollback),
         new(nameof(FixtureCatalogListsEveryRunnableScenario), FixtureCatalogListsEveryRunnableScenario),
@@ -26,6 +28,53 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private sealed class FailingWriter : StringWriter
+    {
+        public FailingWriter() : base(CultureInfo.InvariantCulture) { }
+        public int Writes { get; private set; }
+        public override void WriteLine(string? value)
+        {
+            Writes++;
+            Write(value![..10]);
+            throw new IOException("simulated partial write");
+        }
+    }
+
+    private static void FixtureExecutionReportsPartialWriteFailureWithoutRetry()
+    {
+        string[][] commands = [["--svg-fixture", "live"], ["--list-svg-fixtures"]];
+        foreach (string[] args in commands)
+        {
+            using FailingWriter output = new();
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Execute(args, output, error) == 1 && output.Writes == 1 && output.ToString().Length == 10 &&
+                error.ToString() == "Fixture command I/O failed; output may be incomplete." + Environment.NewLine,
+                "partial output failure returns 1, reports incomplete output and never retries the write");
+            using StringWriter fresh = new(CultureInfo.InvariantCulture);
+            using StringWriter freshError = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Execute(args, fresh, freshError) == 0 && freshError.ToString().Length == 0,
+                "an independent invocation can succeed after output failure");
+        }
+    }
+
+    private static void FixtureExecutionDistinguishesCancellationUsageAndSuccess()
+    {
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        using StringWriter output = new(CultureInfo.InvariantCulture);
+        using StringWriter error = new(CultureInfo.InvariantCulture);
+        Check.That(SvgFixtureCommand.Execute(["--svg-fixture", "live"], output, error, cancellation.Token) == 130 &&
+            output.ToString().Length == 0 && error.ToString() == "Fixture command cancelled." + Environment.NewLine,
+            "recognized cancellation returns 130 without stdout");
+        error.GetStringBuilder().Clear();
+        Check.That(SvgFixtureCommand.Execute(["--invalid"], output, error) == 2 && output.ToString().Length == 0 &&
+            error.ToString().StartsWith("Usage:", StringComparison.Ordinal), "usage errors retain exit code 2");
+        error.GetStringBuilder().Clear();
+        Check.That(SvgFixtureCommand.Execute(["--svg-fixture", "nodata"], output, error) == 0 &&
+            error.ToString().Length == 0 && XElement.Parse(output.ToString()).Name.LocalName == "svg",
+            "successful execution still returns standalone SVG and exit code zero");
+    }
 
     private static void FixtureCancellationPreventsOutputAndAllowsRetry()
     {

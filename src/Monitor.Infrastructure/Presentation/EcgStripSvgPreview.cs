@@ -20,18 +20,25 @@ public static class EcgStripSvgPreview
         SweepFramePathState seed = strip.Checkpoint.Source.Frame;
         const string teachingLabel = "TEACHING SIMULATION / GEOMETRY PREVIEW / NOT FOR CLINICAL USE";
         string stateLabel = $"{seed.Presentation.SessionRunState} / {seed.Presentation.TemporalViewMode} / {seed.Presentation.ContinuityState.DataAvailability}";
+        string? pinnedLabel = seed.Presentation.TemporalViewMode switch
+        {
+            TemporalViewMode.FrozenSnapshot => $"FROZEN DATA TIME {Integer(seed.Presentation.FreezeAnchorSimTimeNs!.Value)} ns",
+            TemporalViewMode.HistoricalReview => $"REVIEW DATA TIME {Integer(seed.Presentation.ViewPlayheadDataSimTimeNs)} ns",
+            _ => null,
+        };
         EcgVerticalScale scale = seed.VerticalScale!;
         string scaleLabel = $"CAL 1 mV x 200 ms / {Ratio((BigInteger)seed.PlotWidthPixels * 1_000_000_000, strip.PatientFrame.Geometry.VisibleDurationNs)} px/s / " +
             $"{Ratio(scale.PixelsPerMillivoltNumerator, scale.PixelsPerMillivoltDenominator)} px/mV (logical)";
         // Reserve annotation space without resizing the patient plot or glyph.
         long width = Math.Max((long)seed.PlotLeftPixels + seed.PlotWidthPixels,
-            Math.Max(Math.Max(teachingLabel.Length, stateLabel.Length), scaleLabel.Length) * 5L + 16);
+            Math.Max(Math.Max(teachingLabel.Length, stateLabel.Length), Math.Max(scaleLabel.Length, pinnedLabel?.Length ?? 0)) * 5L + 16);
         long bottom = (long)seed.PlotTopPixels + seed.PlotHeightPixels;
-        XElement root = new(Svg + "svg", new XAttribute("viewBox", $"0 0 {Integer(width)} {Integer(bottom + 44)}"),
-            new XAttribute("width", Integer(width)), new XAttribute("height", Integer(bottom + 44)),
+        long height = bottom + (pinnedLabel is null ? 44 : 56);
+        XElement root = new(Svg + "svg", new XAttribute("viewBox", $"0 0 {Integer(width)} {Integer(height)}"),
+            new XAttribute("width", Integer(width)), new XAttribute("height", Integer(height)),
             new XAttribute("role", "img"), new XElement(Svg + "title", "ECG teaching geometry preview"),
             new XElement(Svg + "desc", "Logical pixels only; not physically calibrated. Diagnostic preview, not a product skin."));
-        root.Add(new XElement(Svg + "rect", new XAttribute("width", Integer(width)), new XAttribute("height", Integer(bottom + 44)),
+        root.Add(new XElement(Svg + "rect", new XAttribute("width", Integer(width)), new XAttribute("height", Integer(height)),
             new XAttribute("fill", "#ffffff")));
         XElement definitions = new(Svg + "defs");
         definitions.Add(new XElement(Svg + "clipPath", new XAttribute("id", "gutter"), new XAttribute("clipPathUnits", "userSpaceOnUse"),
@@ -81,7 +88,9 @@ public static class EcgStripSvgPreview
         root.Add(new XElement(Svg + "path", new XAttribute("id", "calibration"), new XAttribute("d", pulse),
             new XAttribute("clip-path", "url(#gutter)"),
             new XAttribute("fill", "none"), new XAttribute("stroke", "#000000"), new XAttribute("stroke-width", "1")));
-        root.Add(Label(teachingLabel, bottom + 12), Label(stateLabel, bottom + 24), Label(scaleLabel, bottom + 36));
+        root.Add(Label(teachingLabel, bottom + 12), Label(stateLabel, bottom + 24));
+        if (pinnedLabel is not null) { root.Add(Label(pinnedLabel, bottom + 36)); }
+        root.Add(Label(scaleLabel, bottom + (pinnedLabel is null ? 36 : 48)));
         cancellationToken.ThrowIfCancellationRequested();
         return root.ToString(SaveOptions.DisableFormatting);
     }

@@ -12,6 +12,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewLabelsFrozenDataAnchorAcrossNoData), SvgPreviewLabelsFrozenDataAnchorAcrossNoData),
+        new(nameof(SvgPreviewLabelsIndependentReviewCursor), SvgPreviewLabelsIndependentReviewCursor),
         new(nameof(SvgPreviewScaleLabelTracksHorizontalResize), SvgPreviewScaleLabelTracksHorizontalResize),
         new(nameof(SvgPreviewScaleLabelKeepsExactGainAcrossRestore), SvgPreviewScaleLabelKeepsExactGainAcrossRestore),
         new(nameof(SvgPreviewReservesNarrowCanvasLabels), SvgPreviewReservesNarrowCanvasLabels),
@@ -59,14 +61,58 @@ internal static class EcgStripSpecifications
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
 
+    private static void SvgPreviewLabelsFrozenDataAnchorAcrossNoData()
+    {
+        EcgStripCheckpoint input = Input();
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.EnterFrozen(1_000_000_000, 2_000_000_000);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1),
+            1_000_000_000, 2_000_000_000);
+        machine.Advance(11_000_000_000, 2_000_000_000);
+        input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        string output = EcgStripSvgPreview.Render(input, 2, 2);
+        var root = XElement.Parse(output);
+        Check.That(root.Elements(svg + "text").Any(text => text.Value == "FROZEN DATA TIME 2000000000 ns") &&
+            (string?)root.Attribute("height") == "156" &&
+            root.Elements(svg + "text").All(text => (long)text.Attribute("y")! < 156),
+            "frozen time remains the data anchor instead of the independently advancing presentation clock");
+        Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == output,
+            "restored frozen preview retains the exact labeled anchor");
+    }
+
+    private static void SvgPreviewLabelsIndependentReviewCursor()
+    {
+        EcgStripCheckpoint input = Input();
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.EnterReview("synthetic-record", 123456789, 0, 0);
+        input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        var before = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
+        machine.SeekReview(0);
+        EcgStripCheckpoint sought = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
+        var after = XElement.Parse(EcgStripSvgPreview.Render(sought, 2, 2));
+        Check.That(before.Elements(svg + "text").Any(text => text.Value == "REVIEW DATA TIME 123456789 ns") &&
+            after.Elements(svg + "text").Any(text => text.Value == "REVIEW DATA TIME 0 ns") &&
+            XNode.DeepEquals(before.Element(svg + "g"), after.Element(svg + "g")),
+            "review labels follow the independent cursor including zero without remapping supplied sample evidence");
+        Check.That(!XElement.Parse(EcgStripSvgPreview.Render(Input(), 2, 2)).Elements(svg + "text")
+            .Any(text => text.Value.Contains("DATA TIME", StringComparison.Ordinal)),
+            "Live previews do not invent a pinned time annotation");
+        SweepStateProjectionState accepted = machine.CaptureState();
+        try { machine.SeekReview(-1); throw new InvalidOperationException("negative review cursor accepted"); }
+        catch (SweepStateProjectionException exception) { Check.That(exception.ReasonCode == "SweepState.InvalidViewTransition", "invalid cursor retains the domain rejection"); }
+        Check.That(machine.CaptureState() == accepted, "rejected seeking cannot change the labeled review cursor");
+    }
+
     private static void SvgPreviewScaleLabelTracksHorizontalResize()
     {
         XNamespace svg = "http://www.w3.org/2000/svg";
         EcgStripReconstructor reconstructor = new(2, 2);
         EcgStripCheckpoint original = reconstructor.Replace(Input()).Checkpoint;
         EcgStripCheckpoint resized = reconstructor.ResizeHorizontal(30, 1000, 0, 5).Checkpoint;
-        XElement before = XElement.Parse(EcgStripSvgPreview.Render(original, 2, 2));
-        XElement after = XElement.Parse(EcgStripSvgPreview.Render(resized, 2, 2));
+        var before = XElement.Parse(EcgStripSvgPreview.Render(original, 2, 2));
+        var after = XElement.Parse(EcgStripSvgPreview.Render(resized, 2, 2));
         Check.That(before.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 50 px/s / 20 px/mV (logical)" &&
             after.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 100 px/s / 20 px/mV (logical)" &&
             (string?)after.Elements(svg + "path").Single().Attribute("d") == "M 5 60 L 5 40 L 25 40 L 25 60",
@@ -84,7 +130,7 @@ internal static class EcgStripSpecifications
         input = input with { Source = new(input.Source.Frame with { VerticalScale = scale }, samples) };
         string output = EcgStripSvgPreview.Render(input, 2, 2);
         XNamespace svg = "http://www.w3.org/2000/svg";
-        XElement root = XElement.Parse(output);
+        var root = XElement.Parse(output);
         Check.That(root.Elements(svg + "text").Last().Value == "CAL 1 mV x 200 ms / 50 px/s / 20/3 px/mV (logical)" &&
             EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == output,
             "gain labels reduce exact fractions rather than rounding or claiming physical millimeters");
@@ -99,7 +145,7 @@ internal static class EcgStripSpecifications
         reconstructor.Replace(Input());
         EcgStripCheckpoint input = reconstructor.ResizeHorizontal(30, 50, 0, 5).Checkpoint;
         XNamespace svg = "http://www.w3.org/2000/svg";
-        XElement root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
+        var root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
         long width = long.Parse(root.Attribute("width")!.Value, CultureInfo.InvariantCulture);
         Check.That(width > 80 && root.Elements(svg + "text").All(label =>
             (long)label.Attribute("x")! + (long)label.Attribute("textLength")! <= width - 8 &&
@@ -114,7 +160,7 @@ internal static class EcgStripSpecifications
     {
         EcgStripCheckpoint input = Input();
         string before = EcgStripSvgPreview.Render(input, 2, 2);
-        XElement root = XElement.Parse(before);
+        var root = XElement.Parse(before);
         Check.That((string?)root.Attribute("width") == "530" && (string?)root.Attribute("height") == "144" &&
             (string?)root.Attribute("viewBox") == "0 0 530 144",
             "standalone intrinsic dimensions match the logical viewBox instead of browser defaults");
@@ -127,10 +173,10 @@ internal static class EcgStripSpecifications
     private static EcgStripCheckpoint SvgEdgeInput(ulong firstOffset, ulong lastOffset)
     {
         EcgStripCheckpoint input = Input();
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.Advance(1_100_000_001, 1_100_000_001);
         SweepFramePathState frame = input.Source.Frame with { Presentation = machine.CaptureState() };
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        var builder = SweepFramePathBuilder.Restore(frame);
         builder.AppendVoltageAtOffset(input.Source.Samples[0].Source, 0, 0, true, firstOffset, new(1000, 1));
         SweepPathSample first = builder.CaptureState().Previous!;
         builder.AppendVoltageAtOffset(first.Source, 1, 0, true, lastOffset, new(0, 1));
@@ -143,7 +189,7 @@ internal static class EcgStripSpecifications
         XNamespace svg = "http://www.w3.org/2000/svg";
         ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(input);
         string output = EcgStripSvgPreview.Render(input, 2, 2);
-        XElement root = XElement.Parse(output);
+        var root = XElement.Parse(output);
         Check.That(strip.PatientFrame.Segments.Count == 1 &&
             !root.Elements(svg + "g").Single().Elements().Any() &&
             root.Elements(svg + "path").Single().Attribute("id")!.Value == "calibration",
@@ -159,7 +205,7 @@ internal static class EcgStripSpecifications
     {
         XNamespace svg = "http://www.w3.org/2000/svg";
         EcgStripCheckpoint inclusive = SvgEdgeInput(1_300_000_001, 1_300_000_001);
-        XElement left = XElement.Parse(EcgStripSvgPreview.Render(inclusive, 2, 2));
+        var left = XElement.Parse(EcgStripSvgPreview.Render(inclusive, 2, 2));
         Check.That((string?)left.Elements(svg + "g").Single().Elements(svg + "path").Single().Attribute("d") == "M 95 40 L 95 60",
             "inclusive source left edge retains its vertical path");
         EcgStripCheckpoint arriving = SvgEdgeInput(1_000_000_000, 1_100_000_001);
@@ -173,7 +219,7 @@ internal static class EcgStripSpecifications
     private static void SvgPreviewBatchesDisconnectedSegmentsWithoutBridging()
     {
         EcgStripCheckpoint input = Input();
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(input.Source.Frame);
+        var builder = SweepFramePathBuilder.Restore(input.Source.Frame);
         List<SweepPathSample> samples = [];
         for (ulong index = 0; index < 4; index++)
         {
@@ -196,10 +242,10 @@ internal static class EcgStripSpecifications
     private static void SvgPreviewKeepsSeparateRegionClips()
     {
         EcgStripCheckpoint input = Input();
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.Advance(1_100_000_000, 1_100_000_000);
         SweepFramePathState frame = input.Source.Frame with { Presentation = machine.CaptureState() };
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        var builder = SweepFramePathBuilder.Restore(frame);
         builder.AppendVoltageAtOffset(input.Source.Samples[0].Source, 0, 0, true, 1_000_000_000, new(1000, 1));
         SweepPathSample first = builder.CaptureState().Previous!;
         builder.AppendVoltageAtOffset(first.Source, 1, 0, true, 1_600_000_000, new(1000, 1));
@@ -219,7 +265,7 @@ internal static class EcgStripSpecifications
     private static void SvgPreviewSeparatesPatientAndCalibrationLayers()
     {
         XNamespace svg = "http://www.w3.org/2000/svg";
-        XElement root = XElement.Parse(EcgStripSvgPreview.Render(Input(), 2, 2));
+        var root = XElement.Parse(EcgStripSvgPreview.Render(Input(), 2, 2));
         XElement trace = root.Elements(svg + "g").Single();
         XElement calibration = root.Elements(svg + "path").Single();
         Check.That(root.Name == svg + "svg" && (string?)root.Attribute("viewBox") == "0 0 530 144" &&
@@ -235,12 +281,12 @@ internal static class EcgStripSpecifications
     private static void SvgPreviewNoDataKeepsCalibrationAndStateLabel()
     {
         EcgStripCheckpoint input = Input();
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         machine.Advance(10_000_000_000, 0);
         input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
         XNamespace svg = "http://www.w3.org/2000/svg";
-        XElement root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
+        var root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
         Check.That(root.Elements(svg + "g").Single().Elements(svg + "path").All(path => path.Attribute("stroke-dasharray") is not null) &&
             root.Elements(svg + "path").Single().Attribute("id")!.Value == "calibration" &&
             root.Elements(svg + "text").Any(text => text.Value.Contains("NoData", StringComparison.Ordinal)),
@@ -307,7 +353,7 @@ internal static class EcgStripSpecifications
     private static void StripDisplayReductionRequirementKeepsCurrentSafety()
     {
         EcgStripCheckpoint input = Input();
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         machine.Advance(10_000_000_000, 0);
         input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
@@ -322,13 +368,13 @@ internal static class EcgStripSpecifications
 
     private static void StripDisplayRestoredReductionDoesNotBypassStateChecks()
     {
-        EcgStripPublication original = EcgStripPublication.Restore(2, 2, Input());
+        var original = EcgStripPublication.Restore(2, 2, Input());
         PublishedEcgStrip before = original.CapturePublished()!;
         ReconstructedEcgStrip restored = EcgStripReconstructor.Restore(2, 2, before.Strip.Checkpoint, new(20, 20)).Current!;
         Check.That(SelectColumns(restored).Strip == restored && SelectColumns(before.Strip).Strip is null &&
             ReferenceEquals(before, original.CapturePublished()),
             "rebuilding from owned evidence enables column display without modifying old publication");
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(restored.Checkpoint.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(restored.Checkpoint.Source.Frame.Presentation);
         machine.Advance(1, 0);
         Check.That(SelectColumns(restored, machine.CaptureState()) is { ReasonCode: "FrameDisplay.PresentationMismatch", Strip: null },
             "presence of reduction cannot bypass exact current-phase compatibility");
@@ -420,9 +466,9 @@ internal static class EcgStripSpecifications
 
     private static void StripReductionRestoresUnderExplicitLimits()
     {
-        EcgStripPublication original = EcgStripPublication.Restore(2, 2, Input(), new(20, 20));
+        var original = EcgStripPublication.Restore(2, 2, Input(), new(20, 20));
         ReconstructedEcgStrip first = original.CapturePublished()!.Strip;
-        EcgStripWorkPump restored = EcgStripWorkPump.Restore(2, 2, first.Checkpoint, new(20, 20));
+        var restored = EcgStripWorkPump.Restore(2, 2, first.Checkpoint, new(20, 20));
         Check.That(first.ColumnReduction!.Envelopes.SequenceEqual(restored.CapturePublished()!.Strip.ColumnReduction!.Envelopes),
             "restoration rebuilds summaries from source evidence under caller limits");
         Check.That(Reason(() => EcgStripReconstructor.Restore(2, 2, first.Checkpoint, new(2, 2))) == "EcgStrip.InvalidCheckpoint",
@@ -473,7 +519,7 @@ internal static class EcgStripSpecifications
     {
         EcgStripCheckpoint input = Input();
         PublishedEcgStrip old = EcgStripPublication.Restore(2, 2, input).CapturePublished()!;
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         machine.Advance(5_000_000_000, 0);
         EcgStripDisplaySnapshot result = ComposeDisplay(machine.CaptureState(), old);
@@ -491,7 +537,7 @@ internal static class EcgStripSpecifications
     private static void StripCompositionKeepsPinnedHistoryAndIndependentNumericClock()
     {
         EcgStripCheckpoint input = Input();
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.EnterReview("record.one", 0, 0, 0);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         PublishedEcgStrip pinned = EcgStripPublication.Restore(2, 2, input with
@@ -511,7 +557,7 @@ internal static class EcgStripSpecifications
 
     private static void StripCompositionRestoresAndRejectsWithoutMutation()
     {
-        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        var publication = EcgStripPublication.Restore(2, 2, Input());
         PublishedEcgStrip before = publication.CapturePublished()!;
         SweepStateProjectionState state = before.Strip.Checkpoint.Source.Frame.Presentation;
         PublishedEcgStrip restored = EcgStripPublication.Restore(2, 2, before.Strip.Checkpoint).CapturePublished()!;
@@ -633,7 +679,7 @@ internal static class EcgStripSpecifications
 
     private static void StripPumpFailureReleasesSlotWithoutPartialPublication()
     {
-        EcgStripWorkPump pump = EcgStripWorkPump.Restore(2, 2, Input());
+        var pump = EcgStripWorkPump.Restore(2, 2, Input());
         PublishedEcgStrip before = pump.CapturePublished()!;
         EcgStripCheckpoint bad = Input();
         bad = bad with
@@ -669,7 +715,7 @@ internal static class EcgStripSpecifications
             Check.That(exception.CancellationToken == cancellation.Token && pump.CapturePublished() is null,
                 "pre-cancelled processing cannot consume or publish a pending request");
         }
-        SweepFramePublicationStatus?[] outcomes = new SweepFramePublicationStatus?[16];
+        var outcomes = new SweepFramePublicationStatus?[16];
         Parallel.For(0, outcomes.Length, index => outcomes[index] = pump.ProcessNext());
         Check.That(outcomes.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
             outcomes.Count(status => status is null) == 15 && pump.CapturePublished()!.LocalGeneration == generation,
@@ -678,13 +724,13 @@ internal static class EcgStripSpecifications
 
     private static void StripPumpStopAndRestoreExcludePendingWork()
     {
-        EcgStripWorkPump pump = EcgStripWorkPump.Restore(2, 2, Input());
+        var pump = EcgStripWorkPump.Restore(2, 2, Input());
         PublishedEcgStrip before = pump.CapturePublished()!;
         pump.Enqueue(Input() with { PulseLeftPixels = 6 });
         Check.That(ReferenceEquals(before, pump.Stop()) && ReferenceEquals(before, pump.Stop()) && pump.ProcessNext() is null &&
             Reason(() => pump.Enqueue(Input())) == "StripPublication.Stopped",
             "stop drops pending work and freezes the complete published snapshot");
-        EcgStripWorkPump restored = EcgStripWorkPump.Restore(2, 2, before.Strip.Checkpoint);
+        var restored = EcgStripWorkPump.Restore(2, 2, before.Strip.Checkpoint);
         Check.That(restored.ProcessNext() is null && restored.CapturePublished()!.Strip.Checkpoint.PulseLeftPixels == 5,
             "restore regenerates only the completed checkpoint, not pending or stopped lifecycle state");
         restored.Enqueue(Input() with { PulseLeftPixels = 8 });
@@ -697,7 +743,7 @@ internal static class EcgStripSpecifications
         EcgStripPublication publication = new(2, 2);
         EcgStripWork old = publication.Request(Input());
         EcgStripWork latest = publication.Request(Input() with { PulseLeftPixels = 6 });
-        SweepFramePublicationStatus[] statuses = new SweepFramePublicationStatus[16];
+        var statuses = new SweepFramePublicationStatus[16];
         Parallel.For(0, statuses.Length, index => statuses[index] = publication.Complete(latest));
         PublishedEcgStrip result = publication.CapturePublished()!;
         Check.That(statuses.Count(status => status == SweepFramePublicationStatus.Published) == 1 &&
@@ -730,12 +776,12 @@ internal static class EcgStripSpecifications
 
     private static void StripPublicationRestoreAndStopFenceOldWork()
     {
-        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        var publication = EcgStripPublication.Restore(2, 2, Input());
         EcgStripWork work = publication.Request(Input());
         PublishedEcgStrip final = publication.Stop()!;
         Check.That(ReferenceEquals(final, publication.Stop()) && publication.Complete(work) == SweepFramePublicationStatus.Stopped &&
             Reason(() => publication.Request(Input())) == "StripPublication.Stopped", "stop is an irreversible idempotent publication fence");
-        EcgStripPublication restored = EcgStripPublication.Restore(2, 2, final.Strip.Checkpoint);
+        var restored = EcgStripPublication.Restore(2, 2, final.Strip.Checkpoint);
         Check.That(Reason(() => restored.Complete(work)) == "StripPublication.ForeignWork" &&
             restored.CapturePublished()!.Strip.PatientFrame.Segments.SequenceEqual(final.Strip.PatientFrame.Segments) &&
             restored.CapturePublished()!.Strip.Calibration.Points.SequenceEqual(final.Strip.Calibration.Points) &&
@@ -745,7 +791,7 @@ internal static class EcgStripSpecifications
 
     private static void StripPublicationCancellationAndConcurrentStopAreAtomic()
     {
-        EcgStripPublication publication = EcgStripPublication.Restore(2, 2, Input());
+        var publication = EcgStripPublication.Restore(2, 2, Input());
         PublishedEcgStrip before = publication.CapturePublished()!;
         EcgStripWork work = publication.Request(Input() with { PulseLeftPixels = 6 });
         using CancellationTokenSource cancellation = new();
@@ -792,7 +838,7 @@ internal static class EcgStripSpecifications
     private static void StripDisplayRejectsPhaseScaleAndGutterChanges()
     {
         ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(Input());
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(strip.Checkpoint.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(strip.Checkpoint.Source.Frame.Presentation);
         machine.Advance(1, 0);
         Check.That(Select(strip, machine.CaptureState()) is { ReasonCode: "FrameDisplay.PresentationMismatch", Strip: null } &&
             Select(strip, scale: strip.Checkpoint.Source.Frame.VerticalScale! with { PixelsPerMillivoltNumerator = 40 }) is
@@ -809,7 +855,7 @@ internal static class EcgStripSpecifications
         foreach (bool review in new[] { false, true })
         {
             EcgStripCheckpoint input = Input();
-            SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+            var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
             if (review) { machine.EnterReview("record.one", 0, 0, 0); }
             else { machine.EnterFrozen(0, 0); }
             ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(input with
@@ -848,7 +894,7 @@ internal static class EcgStripSpecifications
         SweepSampleSource source = new(Guid.Parse("11111111-1111-4111-8111-111111111111"),
             Guid.Parse("22222222-2222-4222-8222-222222222222"), Guid.Parse("33333333-3333-4333-8333-333333333333"),
             1, 2, 3, 4, 5, 500, 1);
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        var builder = SweepFramePathBuilder.Restore(frame);
         builder.AppendVoltageAtOffset(source, 0, 0, true, 1_000_000_000, new(1000, 1));
         SweepPathSample first = builder.CaptureState().Previous!;
         builder.AppendVoltageAtOffset(source, 1, 0, true, 1_200_000_000, new(1000, 1));
@@ -912,7 +958,7 @@ internal static class EcgStripSpecifications
         EcgStripReconstructor strip = new(2, 2);
         EcgStripCheckpoint input = Input();
         ReconstructedEcgStrip live = strip.Replace(input);
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
         machine.Advance(10_000_000_000, 0);
         ReconstructedEcgStrip noData = strip.Replace(input with

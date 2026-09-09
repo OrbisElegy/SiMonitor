@@ -31,7 +31,14 @@ internal static class SvgFixtureCommand
 
     public static int Execute(string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
     {
-        try { return Run(args, output, error, cancellationToken); }
+        try
+        {
+            int result = Run(args, output, error, cancellationToken);
+            // Buffered writers may fail only when flushed. Do not close the
+            // caller-owned stream or retry bytes already accepted by it.
+            if (result == 0) { output.Flush(); }
+            return result;
+        }
         catch (OperationCanceledException exception) when (exception.CancellationToken == cancellationToken)
         {
             error.WriteLine("Fixture command cancelled.");
@@ -69,7 +76,7 @@ internal static class SvgFixtureCommand
         if (scenario.Return) { input = ReturnToLive(input, 10_500_000_000); }
         string rendered = EcgStripSvgPreview.Render(input, 5000, 5000, cancellationToken);
         XNamespace svg = "http://www.w3.org/2000/svg";
-        XElement root = XElement.Parse(rendered);
+        var root = XElement.Parse(rendered);
         root.Element(svg + "title")!.Value = "Synthetic triangle geometry fixture - " + args[1];
         root.Element(svg + "desc")!.Value += " Synthetic triangles only; not a physiological ECG model.";
         string completed = root.ToString(SaveOptions.DisableFormatting);
@@ -81,7 +88,7 @@ internal static class SvgFixtureCommand
 
     internal static EcgStripCheckpoint ReturnToLive(EcgStripCheckpoint input, long presentationNs)
     {
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
         long frontier = input.Source.Frame.Presentation.LivePlayheadDataSimTimeNs;
         if (input.Source.Frame.Presentation.TemporalViewMode == TemporalViewMode.FrozenSnapshot)
         { machine.ExitFrozen(presentationNs, frontier); }
@@ -95,7 +102,7 @@ internal static class SvgFixtureCommand
         cancellationToken.ThrowIfCancellationRequested();
         if (view is not (TemporalViewMode.LiveSweep or TemporalViewMode.FrozenSnapshot or TemporalViewMode.HistoricalReview))
         { throw new ArgumentOutOfRangeException(nameof(view)); }
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
+        var machine = SweepStateProjectionStateMachine.Start(
             new("ecg", 4, 5, 0, 10_000_000_000, 200_000_000, 10_200_000_000), 1, 1, SessionRunState.Running,
             DataContinuityStateMachine.Start(LocalContinuationPolicy.Disabled, 0).CaptureState(), 0, 0);
         machine.ChangeRunState(run, 0, 0);
@@ -112,7 +119,7 @@ internal static class SvgFixtureCommand
         SweepSampleSource source = new(Guid.Parse("11111111-1111-4111-8111-111111111111"),
             Guid.Parse("22222222-2222-4222-8222-222222222222"), Guid.Parse("33333333-3333-4333-8333-333333333333"),
             1, 2, 3, 4, 5, 500, 1);
-        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        var builder = SweepFramePathBuilder.Restore(frame);
         List<SweepPathSample> samples = new(5000);
         for (ulong index = 0; index < 5000; index++)
         {

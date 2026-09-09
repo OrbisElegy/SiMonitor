@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FixtureExecutionReportsFlushFailureWithoutRetry), FixtureExecutionReportsFlushFailureWithoutRetry),
+        new(nameof(FixtureExecutionFlushesOnlySuccessfulOutput), FixtureExecutionFlushesOnlySuccessfulOutput),
         new(nameof(FixtureExecutionReportsPartialWriteFailureWithoutRetry), FixtureExecutionReportsPartialWriteFailureWithoutRetry),
         new(nameof(FixtureExecutionDistinguishesCancellationUsageAndSuccess), FixtureExecutionDistinguishesCancellationUsageAndSuccess),
         new(nameof(FixtureCancellationPreventsOutputAndAllowsRetry), FixtureCancellationPreventsOutputAndAllowsRetry),
@@ -28,6 +30,49 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private sealed class FlushTrackingWriter(bool fail) : StringWriter(CultureInfo.InvariantCulture)
+    {
+        public int Flushes { get; private set; }
+        public int Writes { get; private set; }
+        public override void WriteLine(string? value) { Writes++; base.WriteLine(value); }
+        public override void Flush()
+        {
+            Flushes++;
+            if (fail) { throw new IOException("simulated buffered flush failure"); }
+            base.Flush();
+        }
+    }
+
+    private static void FixtureExecutionReportsFlushFailureWithoutRetry()
+    {
+        string[][] commands = [["--svg-fixture", "nodata"], ["--list-svg-fixtures"]];
+        foreach (string[] args in commands)
+        {
+            using FlushTrackingWriter output = new(true);
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Execute(args, output, error) == 1 && output.Writes == 1 && output.Flushes == 1 &&
+                output.ToString().Length > 0 && error.ToString() == "Fixture command I/O failed; output may be incomplete." + Environment.NewLine,
+                "buffered failure prevents success without retrying either write or flush");
+        }
+    }
+
+    private static void FixtureExecutionFlushesOnlySuccessfulOutput()
+    {
+        using FlushTrackingWriter output = new(false);
+        using StringWriter error = new(CultureInfo.InvariantCulture);
+        Check.That(SvgFixtureCommand.Execute(["--svg-fixture", "nodata"], output, error) == 0 && output.Flushes == 1 &&
+            output.Writes == 1 && error.ToString().Length == 0, "success requires one completed flush");
+        output.Write("still caller owned");
+        Check.That(output.ToString().EndsWith("still caller owned", StringComparison.Ordinal), "execution does not close the caller's writer");
+        using FlushTrackingWriter rejected = new(true);
+        Check.That(SvgFixtureCommand.Execute(["--invalid"], rejected, error) == 2 && rejected.Flushes == 0 && rejected.Writes == 0,
+            "usage rejection does not flush unrelated buffered stdout");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        Check.That(SvgFixtureCommand.Execute(["--list-svg-fixtures"], rejected, error, cancellation.Token) == 130 &&
+            rejected.Flushes == 0 && rejected.Writes == 0, "pre-cancellation does not flush stdout");
+    }
 
     private sealed class FailingWriter : StringWriter
     {
@@ -165,7 +210,7 @@ internal static class SvgFixtureSpecifications
             Check.That(SvgFixtureCommand.Run(["--svg-fixture", mode], output, error) == 0 && error.ToString().Length == 0,
                 "return scenarios export complete SVG");
             XNamespace svg = "http://www.w3.org/2000/svg";
-            XElement root = XElement.Parse(output.ToString());
+            var root = XElement.Parse(output.ToString());
             Check.That(root.Element(svg + "g")!.Elements(svg + "path").Any() &&
                 root.Element(svg + "g")!.Elements(svg + "path").All(path => path.Attribute("stroke-dasharray") is not null) &&
                 root.Elements(svg + "text").Any(text => text.Value == "Running / LiveSweep / NoData") &&
@@ -178,7 +223,7 @@ internal static class SvgFixtureSpecifications
     private static void ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput()
     {
         EcgStripCheckpoint live = SvgFixtureCommand.Create(true, TemporalViewMode.LiveSweep);
-        SweepStateProjectionStateMachine current = SweepStateProjectionStateMachine.Restore(live.Source.Frame.Presentation);
+        var current = SweepStateProjectionStateMachine.Restore(live.Source.Frame.Presentation);
         current.Advance(10_500_000_000, 0);
         foreach (TemporalViewMode view in new[] { TemporalViewMode.FrozenSnapshot, TemporalViewMode.HistoricalReview })
         {
@@ -263,7 +308,7 @@ internal static class SvgFixtureSpecifications
     {
         EcgStripCheckpoint before = SvgFixtureCommand.Create(false, TemporalViewMode.HistoricalReview);
         EcgStripCheckpoint after = SvgFixtureCommand.Create(true, TemporalViewMode.HistoricalReview);
-        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(after.Source.Frame.Presentation);
+        var machine = SweepStateProjectionStateMachine.Restore(after.Source.Frame.Presentation);
         SweepStateProjectionSnapshot projection = machine.CaptureProjection();
         Check.That(projection.ReviewSegmentRef == "synthetic-triangle-record" && projection.PlayheadDataSimTimeNs == 0 &&
             projection.TransientReplayPolicy == TransientReplayPolicy.Suppress && projection.NoDataCoverage is null &&

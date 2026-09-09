@@ -12,12 +12,13 @@ internal static class SvgFixtureCommand
 {
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
-        if (args.Length != 2 || args[0] != "--svg-fixture" || args[1] is not ("live" or "nodata"))
+        if (args.Length != 2 || args[0] != "--svg-fixture" || args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata"))
         {
-            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata");
+            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata");
             return 2;
         }
-        string rendered = EcgStripSvgPreview.Render(Create(args[1] == "nodata"), 5000, 5000);
+        string rendered = EcgStripSvgPreview.Render(
+            Create(args[1] is "nodata" or "frozen-nodata", args[1] is "frozen" or "frozen-nodata"), 5000, 5000);
         XNamespace svg = "http://www.w3.org/2000/svg";
         XElement root = XElement.Parse(rendered);
         root.Element(svg + "title")!.Value = "Synthetic triangle geometry fixture - " + args[1];
@@ -26,11 +27,12 @@ internal static class SvgFixtureCommand
         return 0;
     }
 
-    private static EcgStripCheckpoint Create(bool noData)
+    internal static EcgStripCheckpoint Create(bool noData, bool frozen)
     {
         SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
             new("ecg", 4, 5, 0, 10_000_000_000, 200_000_000, 10_200_000_000), 1, 1, SessionRunState.Running,
             DataContinuityStateMachine.Start(LocalContinuationPolicy.Disabled, 0).CaptureState(), 0, 0);
+        if (frozen) { machine.EnterFrozen(0, 0); }
         if (noData)
         {
             machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState)

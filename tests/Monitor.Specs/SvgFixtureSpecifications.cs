@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Globalization;
 using System.Xml.Linq;
+using Monitor.Application.Presentation;
+using Monitor.Domain.Presentation;
+using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Specs;
 
@@ -8,9 +11,49 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FrozenFixtureKeepsPatientPathsDuringNoData), FrozenFixtureKeepsPatientPathsDuringNoData),
+        new(nameof(FrozenFixtureRestoreRetainsPinnedClockAndEvidence), FrozenFixtureRestoreRetainsPinnedClockAndEvidence),
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private static void FrozenFixtureKeepsPatientPathsDuringNoData()
+    {
+        using StringWriter frozen = new(CultureInfo.InvariantCulture);
+        using StringWriter disconnected = new(CultureInfo.InvariantCulture);
+        using StringWriter error = new(CultureInfo.InvariantCulture);
+        Check.That(SvgFixtureCommand.Run(["--svg-fixture", "frozen"], frozen, error) == 0 &&
+            SvgFixtureCommand.Run(["--svg-fixture", "frozen-nodata"], disconnected, error) == 0 && error.ToString().Length == 0,
+            "both frozen scenarios are available through the diagnostic command");
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement before = XElement.Parse(frozen.ToString()), after = XElement.Parse(disconnected.ToString());
+        Check.That(XNode.DeepEquals(before.Element(svg + "g"), after.Element(svg + "g")) &&
+            XNode.DeepEquals(before.Element(svg + "defs"), after.Element(svg + "defs")) &&
+            XNode.DeepEquals(before.Elements(svg + "path").Single(), after.Elements(svg + "path").Single()) &&
+            after.Element(svg + "g")!.Elements(svg + "path").Single().Attribute("stroke-dasharray") is null &&
+            after.Elements(svg + "text").Any(text => text.Value == "Running / FrozenSnapshot / NoData"),
+            "background NoData changes the state label but preserves frozen patient paths, clips and calibration");
+    }
+
+    private static void FrozenFixtureRestoreRetainsPinnedClockAndEvidence()
+    {
+        EcgStripCheckpoint before = SvgFixtureCommand.Create(false, true);
+        EcgStripCheckpoint after = SvgFixtureCommand.Create(true, true);
+        SweepStateProjectionState state = after.Source.Frame.Presentation;
+        Check.That(state.LastPresentationNs == 10_000_000_000 && state.FreezeAnchorSimTimeNs == 0 &&
+            before.Source.Samples.SequenceEqual(after.Source.Samples),
+            "NoData advances presentation time while frozen sample evidence and anchor stay pinned");
+        EcgStripCheckpoint restored = EcgStripReconstructor.Restore(5000, 5000, after).CaptureCheckpoint()!;
+        string rendered = EcgStripSvgPreview.Render(after, 5000, 5000);
+        Check.That(EcgStripSvgPreview.Render(restored, 5000, 5000) == rendered,
+            "restoring the disconnected frozen checkpoint preserves complete preview output");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { _ = EcgStripSvgPreview.Render(after, 5000, 5000, cancellation.Token); throw new InvalidOperationException("cancelled fixture rendered"); }
+        catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "fixture cancellation retains token identity"); }
+        Check.That(EcgStripSvgPreview.Render(after, 5000, 5000) == rendered,
+            "cancelled rendering does not alter frozen evidence");
+    }
 
     private static void FixtureCommandEmitsDeterministicSeparatedScenarios()
     {

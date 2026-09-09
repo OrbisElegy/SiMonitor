@@ -51,6 +51,10 @@ public static class EcgStripSvgPreview
         foreach (SweepFrameSegment segment in strip.PatientFrame.Segments)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // Closed clipping retains boundary-only geometry; the right edge
+            // is exclusive. Decide ownership before rounding SVG coordinates.
+            SweepPixelPosition right = strip.PatientFrame.Geometry.Regions[segment.RegionIndex].EndExclusiveX;
+            if (AtRightEdge(segment.Segment.Start.X, right) && AtRightEdge(segment.Segment.End.X, right)) { continue; }
             StringBuilder path = patientPaths[segment.RegionIndex] ??= new StringBuilder();
             if (path.Length != 0) { path.Append(' '); }
             // Keep every segment independent: batching must never bridge a source gap.
@@ -78,6 +82,9 @@ public static class EcgStripSvgPreview
     }
 
     private static string Integer(long value) => value.ToString(CultureInfo.InvariantCulture);
+    private static bool AtRightEdge(ExactPlotCoordinate x, SweepPixelPosition right) =>
+        x.Numerator * right.FractionDenominator ==
+        ((BigInteger)right.WholePixels * right.FractionDenominator + right.FractionNumerator) * x.Denominator;
     private static string Point(ClippedSweepPoint p) => $"{Number(p.X.Numerator, p.X.Denominator)} {Number(p.Y.Numerator, p.Y.Denominator)}";
     private static string X(SweepPixelPosition x) => Number((BigInteger)x.WholePixels * x.FractionDenominator + x.FractionNumerator, x.FractionDenominator);
 

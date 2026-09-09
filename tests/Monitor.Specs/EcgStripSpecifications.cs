@@ -12,6 +12,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewExcludesExactRightEdgeBeforeRounding), SvgPreviewExcludesExactRightEdgeBeforeRounding),
+        new(nameof(SvgPreviewPreservesInclusiveAndArrivingEdges), SvgPreviewPreservesInclusiveAndArrivingEdges),
         new(nameof(SvgPreviewBatchesDisconnectedSegmentsWithoutBridging), SvgPreviewBatchesDisconnectedSegmentsWithoutBridging),
         new(nameof(SvgPreviewKeepsSeparateRegionClips), SvgPreviewKeepsSeparateRegionClips),
         new(nameof(SvgPreviewSeparatesPatientAndCalibrationLayers), SvgPreviewSeparatesPatientAndCalibrationLayers),
@@ -52,6 +54,52 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static EcgStripCheckpoint SvgEdgeInput(ulong firstOffset, ulong lastOffset)
+    {
+        EcgStripCheckpoint input = Input();
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.Advance(1_100_000_001, 1_100_000_001);
+        SweepFramePathState frame = input.Source.Frame with { Presentation = machine.CaptureState() };
+        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        builder.AppendVoltageAtOffset(input.Source.Samples[0].Source, 0, 0, true, firstOffset, new(1000, 1));
+        SweepPathSample first = builder.CaptureState().Previous!;
+        builder.AppendVoltageAtOffset(first.Source, 1, 0, true, lastOffset, new(0, 1));
+        return input with { Source = new(frame, new[] { first, builder.CaptureState().Previous! }) };
+    }
+
+    private static void SvgPreviewExcludesExactRightEdgeBeforeRounding()
+    {
+        EcgStripCheckpoint input = SvgEdgeInput(1_100_000_001, 1_100_000_001);
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2).Replace(input);
+        string output = EcgStripSvgPreview.Render(input, 2, 2);
+        XElement root = XElement.Parse(output);
+        Check.That(strip.PatientFrame.Segments.Count == 1 &&
+            !root.Elements(svg + "g").Single().Elements().Any() &&
+            root.Elements(svg + "path").Single().Attribute("id")!.Value == "calibration",
+            "fractional exclusive-edge line remains in exact closed geometry but cannot draw patient pixels");
+        Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == output,
+            "restored boundary evidence preserves exclusion");
+        EcgStripCheckpoint inside = SvgEdgeInput(1_100_000_000, 1_100_000_000);
+        Check.That(XElement.Parse(EcgStripSvgPreview.Render(inside, 2, 2)).Elements(svg + "g").Single().Elements().Count() == 1,
+            "a line just inside the region survives even when serialization rounds both X coordinates identically");
+    }
+
+    private static void SvgPreviewPreservesInclusiveAndArrivingEdges()
+    {
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        EcgStripCheckpoint inclusive = SvgEdgeInput(1_300_000_001, 1_300_000_001);
+        XElement left = XElement.Parse(EcgStripSvgPreview.Render(inclusive, 2, 2));
+        Check.That((string?)left.Elements(svg + "g").Single().Elements(svg + "path").Single().Attribute("d") == "M 95 40 L 95 60",
+            "inclusive source left edge retains its vertical path");
+        EcgStripCheckpoint arriving = SvgEdgeInput(1_000_000_000, 1_100_000_001);
+        string before = EcgStripSvgPreview.Render(arriving, 2, 2);
+        Check.That((string?)XElement.Parse(before).Elements(svg + "g").Single().Elements(svg + "path").Single().Attribute("d") == "M 80 40 L 85 60" &&
+            Reason(() => EcgStripSvgPreview.Render(arriving, 1, 2)) == "FrameReconstruction.SampleLimitExceeded" &&
+            EcgStripSvgPreview.Render(arriving, 2, 2) == before,
+            "arriving intersections survive and failed preview validation leaves source evidence unchanged");
+    }
 
     private static void SvgPreviewBatchesDisconnectedSegmentsWithoutBridging()
     {

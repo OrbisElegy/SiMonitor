@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(HeldRunFixturesKeepPatientClockWhileNoDataSweeps), HeldRunFixturesKeepPatientClockWhileNoDataSweeps),
+        new(nameof(HeldRunFixturesRestoreAndRejectInvalidRunState), HeldRunFixturesRestoreAndRejectInvalidRunState),
         new(nameof(ReviewFixtureKeepsHistoryDuringNoData), ReviewFixtureKeepsHistoryDuringNoData),
         new(nameof(ReviewFixtureRestoresSuppressedReplayPolicy), ReviewFixtureRestoresSuppressedReplayPolicy),
         new(nameof(FrozenFixtureKeepsPatientPathsDuringNoData), FrozenFixtureKeepsPatientPathsDuringNoData),
@@ -18,6 +20,48 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private static void HeldRunFixturesKeepPatientClockWhileNoDataSweeps()
+    {
+        foreach (SessionRunState run in new[] { SessionRunState.Paused, SessionRunState.Stopped })
+        {
+            string mode = run == SessionRunState.Paused ? "paused" : "stopped";
+            using StringWriter held = new(CultureInfo.InvariantCulture);
+            using StringWriter disconnected = new(CultureInfo.InvariantCulture);
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Run(["--svg-fixture", mode], held, error) == 0 &&
+                SvgFixtureCommand.Run(["--svg-fixture", mode + "-nodata"], disconnected, error) == 0 && error.ToString().Length == 0,
+                "held run scenarios export through the command");
+            XNamespace svg = "http://www.w3.org/2000/svg";
+            XElement before = XElement.Parse(held.ToString()), after = XElement.Parse(disconnected.ToString());
+            Check.That(before.Element(svg + "g")!.Elements(svg + "path").Single().Attribute("stroke-dasharray") is null &&
+                after.Element(svg + "g")!.Elements(svg + "path").Single().Attribute("stroke-dasharray") is not null &&
+                XNode.DeepEquals(before.Elements(svg + "path").Single(), after.Elements(svg + "path").Single()) &&
+                after.Elements(svg + "text").Any(text => text.Value == $"{run} / LiveSweep / NoData") &&
+                !after.Elements(svg + "text").Any(text => text.Value.Contains("DATA TIME", StringComparison.Ordinal)),
+                "NoData sweeps held Live trace while retaining calibration and distinguishing held runs from frozen views");
+        }
+    }
+
+    private static void HeldRunFixturesRestoreAndRejectInvalidRunState()
+    {
+        foreach (SessionRunState run in new[] { SessionRunState.Paused, SessionRunState.Stopped })
+        {
+            EcgStripCheckpoint before = SvgFixtureCommand.Create(false, TemporalViewMode.LiveSweep, run);
+            EcgStripCheckpoint after = SvgFixtureCommand.Create(true, TemporalViewMode.LiveSweep, run);
+            SweepStateProjectionState state = after.Source.Frame.Presentation;
+            Check.That(state.LastPresentationNs == 10_000_000_000 && state.LiveSweepClockNs == 10_000_000_000 &&
+                before.Source.Frame.Presentation.LiveSweepClockNs == 0 && state.LivePlayheadDataSimTimeNs == 0 &&
+                state.ViewPlayheadDataSimTimeNs == 0 && before.Source.Samples.SequenceEqual(after.Source.Samples),
+                "presentation time progresses independently of held patient clock and sample evidence");
+            string output = EcgStripSvgPreview.Render(after, 5000, 5000);
+            Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(5000, 5000, after).CaptureCheckpoint()!, 5000, 5000) == output,
+                "held NoData checkpoints restore deterministically");
+            try { _ = SvgFixtureCommand.Create(false, TemporalViewMode.LiveSweep, (SessionRunState)999); throw new InvalidOperationException("invalid run accepted"); }
+            catch (SweepStateProjectionException exception) { Check.That(exception.ReasonCode == "SweepState.InvalidRunState", "invalid run state fails closed"); }
+            Check.That(EcgStripSvgPreview.Render(after, 5000, 5000) == output, "rejected construction leaves accepted evidence unchanged");
+        }
+    }
 
     private static void ReviewFixtureKeepsHistoryDuringNoData()
     {

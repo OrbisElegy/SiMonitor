@@ -13,9 +13,10 @@ internal static class SvgFixtureCommand
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
         if (args.Length != 2 || args[0] != "--svg-fixture" ||
-            args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata" or "review" or "review-nodata"))
+            args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata" or "review" or "review-nodata" or
+                "paused" or "paused-nodata" or "stopped" or "stopped-nodata"))
         {
-            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata|review|review-nodata");
+            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata|review|review-nodata|paused|paused-nodata|stopped|stopped-nodata");
             return 2;
         }
         TemporalViewMode view = args[1] switch
@@ -24,8 +25,14 @@ internal static class SvgFixtureCommand
             "review" or "review-nodata" => TemporalViewMode.HistoricalReview,
             _ => TemporalViewMode.LiveSweep,
         };
+        SessionRunState run = args[1] switch
+        {
+            "paused" or "paused-nodata" => SessionRunState.Paused,
+            "stopped" or "stopped-nodata" => SessionRunState.Stopped,
+            _ => SessionRunState.Running,
+        };
         string rendered = EcgStripSvgPreview.Render(
-            Create(args[1] is "nodata" or "frozen-nodata" or "review-nodata", view), 5000, 5000);
+            Create(args[1] is "nodata" or "frozen-nodata" or "review-nodata" or "paused-nodata" or "stopped-nodata", view, run), 5000, 5000);
         XNamespace svg = "http://www.w3.org/2000/svg";
         XElement root = XElement.Parse(rendered);
         root.Element(svg + "title")!.Value = "Synthetic triangle geometry fixture - " + args[1];
@@ -34,13 +41,14 @@ internal static class SvgFixtureCommand
         return 0;
     }
 
-    internal static EcgStripCheckpoint Create(bool noData, TemporalViewMode view)
+    internal static EcgStripCheckpoint Create(bool noData, TemporalViewMode view, SessionRunState run = SessionRunState.Running)
     {
         if (view is not (TemporalViewMode.LiveSweep or TemporalViewMode.FrozenSnapshot or TemporalViewMode.HistoricalReview))
         { throw new ArgumentOutOfRangeException(nameof(view)); }
         SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
             new("ecg", 4, 5, 0, 10_000_000_000, 200_000_000, 10_200_000_000), 1, 1, SessionRunState.Running,
             DataContinuityStateMachine.Start(LocalContinuationPolicy.Disabled, 0).CaptureState(), 0, 0);
+        machine.ChangeRunState(run, 0, 0);
         if (view == TemporalViewMode.FrozenSnapshot) { machine.EnterFrozen(0, 0); }
         if (view == TemporalViewMode.HistoricalReview) { machine.EnterReview("synthetic-triangle-record", 0, 0, 0); }
         if (noData)
@@ -49,6 +57,7 @@ internal static class SvgFixtureCommand
                 .Disconnect(false, 1), 0, 0);
             machine.Advance(10_000_000_000, 0);
         }
+        else if (run != SessionRunState.Running) { machine.Advance(10_000_000_000, 0); }
         SweepFramePathState frame = new(machine.CaptureState(), 30, 500, 0, 100, null, new(0, 100, 60, 20, 1));
         SweepSampleSource source = new(Guid.Parse("11111111-1111-4111-8111-111111111111"),
             Guid.Parse("22222222-2222-4222-8222-222222222222"), Guid.Parse("33333333-3333-4333-8333-333333333333"),

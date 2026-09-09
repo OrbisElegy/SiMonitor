@@ -12,13 +12,20 @@ internal static class SvgFixtureCommand
 {
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
-        if (args.Length != 2 || args[0] != "--svg-fixture" || args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata"))
+        if (args.Length != 2 || args[0] != "--svg-fixture" ||
+            args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata" or "review" or "review-nodata"))
         {
-            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata");
+            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata|review|review-nodata");
             return 2;
         }
+        TemporalViewMode view = args[1] switch
+        {
+            "frozen" or "frozen-nodata" => TemporalViewMode.FrozenSnapshot,
+            "review" or "review-nodata" => TemporalViewMode.HistoricalReview,
+            _ => TemporalViewMode.LiveSweep,
+        };
         string rendered = EcgStripSvgPreview.Render(
-            Create(args[1] is "nodata" or "frozen-nodata", args[1] is "frozen" or "frozen-nodata"), 5000, 5000);
+            Create(args[1] is "nodata" or "frozen-nodata" or "review-nodata", view), 5000, 5000);
         XNamespace svg = "http://www.w3.org/2000/svg";
         XElement root = XElement.Parse(rendered);
         root.Element(svg + "title")!.Value = "Synthetic triangle geometry fixture - " + args[1];
@@ -27,12 +34,15 @@ internal static class SvgFixtureCommand
         return 0;
     }
 
-    internal static EcgStripCheckpoint Create(bool noData, bool frozen)
+    internal static EcgStripCheckpoint Create(bool noData, TemporalViewMode view)
     {
+        if (view is not (TemporalViewMode.LiveSweep or TemporalViewMode.FrozenSnapshot or TemporalViewMode.HistoricalReview))
+        { throw new ArgumentOutOfRangeException(nameof(view)); }
         SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
             new("ecg", 4, 5, 0, 10_000_000_000, 200_000_000, 10_200_000_000), 1, 1, SessionRunState.Running,
             DataContinuityStateMachine.Start(LocalContinuationPolicy.Disabled, 0).CaptureState(), 0, 0);
-        if (frozen) { machine.EnterFrozen(0, 0); }
+        if (view == TemporalViewMode.FrozenSnapshot) { machine.EnterFrozen(0, 0); }
+        if (view == TemporalViewMode.HistoricalReview) { machine.EnterReview("synthetic-triangle-record", 0, 0, 0); }
         if (noData)
         {
             machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState)

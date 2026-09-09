@@ -12,6 +12,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewBatchesDisconnectedSegmentsWithoutBridging), SvgPreviewBatchesDisconnectedSegmentsWithoutBridging),
+        new(nameof(SvgPreviewKeepsSeparateRegionClips), SvgPreviewKeepsSeparateRegionClips),
         new(nameof(SvgPreviewSeparatesPatientAndCalibrationLayers), SvgPreviewSeparatesPatientAndCalibrationLayers),
         new(nameof(SvgPreviewNoDataKeepsCalibrationAndStateLabel), SvgPreviewNoDataKeepsCalibrationAndStateLabel),
         new(nameof(SvgPreviewFormatsFractionsIndependentlyOfCulture), SvgPreviewFormatsFractionsIndependentlyOfCulture),
@@ -50,6 +52,52 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void SvgPreviewBatchesDisconnectedSegmentsWithoutBridging()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(input.Source.Frame);
+        List<SweepPathSample> samples = [];
+        for (ulong index = 0; index < 4; index++)
+        {
+            builder.AppendVoltageAtOffset(input.Source.Samples[0].Source, index < 2 ? index : index + 1,
+                0, true, 1_000_000_000 + index * 200_000_000, new(1000, 1));
+            samples.Add(builder.CaptureState().Previous!);
+        }
+        input = input with { Source = input.Source with { Samples = samples } };
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        string output = EcgStripSvgPreview.Render(input, 4, 2);
+        XElement path = XElement.Parse(output).Elements(svg + "g").Single().Elements(svg + "path").Single();
+        Check.That((string?)path.Attribute("d") == "M 80 40 L 90 40 M 100 40 L 110 40",
+            "one region uses one node while missing sample indices remain separate move-to subpaths");
+        Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(4, 2, input).CaptureCheckpoint()!, 4, 2) == output &&
+            Reason(() => EcgStripSvgPreview.Render(input, 4, 1)) == "FrameReconstruction.SegmentLimitExceeded" &&
+            EcgStripSvgPreview.Render(input, 4, 2) == output,
+            "batching preserves restored output and segment capacity rejection without modifying evidence");
+    }
+
+    private static void SvgPreviewKeepsSeparateRegionClips()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.Advance(1_100_000_000, 1_100_000_000);
+        SweepFramePathState frame = input.Source.Frame with { Presentation = machine.CaptureState() };
+        SweepFramePathBuilder builder = SweepFramePathBuilder.Restore(frame);
+        builder.AppendVoltageAtOffset(input.Source.Samples[0].Source, 0, 0, true, 1_000_000_000, new(1000, 1));
+        SweepPathSample first = builder.CaptureState().Previous!;
+        builder.AppendVoltageAtOffset(first.Source, 1, 0, true, 1_600_000_000, new(1000, 1));
+        input = input with { Source = new(frame, new[] { first, builder.CaptureState().Previous! }) };
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement[] paths = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2))
+            .Elements(svg + "g").Single().Elements(svg + "path").ToArray();
+        Check.That(paths.Length == 2 && (string?)paths[0].Attribute("d") == "M 80 40 L 85 40" &&
+            (string?)paths[1].Attribute("d") == "M 95 40 L 110 40" &&
+            (string?)paths[0].Attribute("clip-path") != (string?)paths[1].Attribute("clip-path"),
+            "a crossing segment retains separate clipped paths on either side of the erase gap");
+        EcgStripCheckpoint empty = input with { Source = input.Source with { Samples = Array.Empty<SweepPathSample>() } };
+        Check.That(!XElement.Parse(EcgStripSvgPreview.Render(empty, 2, 2)).Elements(svg + "g").Single().Elements().Any(),
+            "regions without patient segments emit no empty patient path nodes");
+    }
 
     private static void SvgPreviewSeparatesPatientAndCalibrationLayers()
     {

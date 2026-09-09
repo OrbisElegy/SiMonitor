@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Globalization;
 using System.Numerics;
+using System.Text;
 using System.Xml.Linq;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Presentation;
@@ -46,11 +47,21 @@ public static class EcgStripSvgPreview
                     new XAttribute("stroke-dasharray", "2 2"), new XAttribute("clip-path", $"url(#{id})")));
             }
         }
+        StringBuilder?[] patientPaths = new StringBuilder?[strip.PatientFrame.Geometry.Regions.Count];
         foreach (SweepFrameSegment segment in strip.PatientFrame.Segments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            trace.Add(new XElement(Svg + "path", new XAttribute("d", $"M {Point(segment.Segment.Start)} L {Point(segment.Segment.End)}"),
-                new XAttribute("clip-path", $"url(#region-{Integer(segment.RegionIndex)})")));
+            StringBuilder path = patientPaths[segment.RegionIndex] ??= new StringBuilder();
+            if (path.Length != 0) { path.Append(' '); }
+            // Keep every segment independent: batching must never bridge a source gap.
+            path.Append("M ").Append(Point(segment.Segment.Start)).Append(" L ").Append(Point(segment.Segment.End));
+        }
+        for (int index = 0; index < patientPaths.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (patientPaths[index] is not { } path) { continue; }
+            trace.Add(new XElement(Svg + "path", new XAttribute("d", path.ToString()),
+                new XAttribute("clip-path", $"url(#region-{Integer(index)})")));
         }
         root.Add(definitions, trace);
         string pulse = string.Join(" ", strip.Calibration.Points.Select((point, index) =>

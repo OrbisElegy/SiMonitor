@@ -10,30 +10,46 @@ namespace Monitor.Specs;
 // Developer fixture only: these triangles are not a physiological ECG model.
 internal static class SvgFixtureCommand
 {
+    private sealed record Scenario(string Name, TemporalViewMode View, SessionRunState Run,
+        bool NoData, bool Return = false);
+
+    private static readonly Scenario[] Scenarios =
+    [
+        new("live", TemporalViewMode.LiveSweep, SessionRunState.Running, false),
+        new("nodata", TemporalViewMode.LiveSweep, SessionRunState.Running, true),
+        new("frozen", TemporalViewMode.FrozenSnapshot, SessionRunState.Running, false),
+        new("frozen-nodata", TemporalViewMode.FrozenSnapshot, SessionRunState.Running, true),
+        new("review", TemporalViewMode.HistoricalReview, SessionRunState.Running, false),
+        new("review-nodata", TemporalViewMode.HistoricalReview, SessionRunState.Running, true),
+        new("paused", TemporalViewMode.LiveSweep, SessionRunState.Paused, false),
+        new("paused-nodata", TemporalViewMode.LiveSweep, SessionRunState.Paused, true),
+        new("stopped", TemporalViewMode.LiveSweep, SessionRunState.Stopped, false),
+        new("stopped-nodata", TemporalViewMode.LiveSweep, SessionRunState.Stopped, true),
+        new("frozen-return", TemporalViewMode.FrozenSnapshot, SessionRunState.Running, true, true),
+        new("review-return", TemporalViewMode.HistoricalReview, SessionRunState.Running, true, true),
+    ];
+
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
-        if (args.Length != 2 || args[0] != "--svg-fixture" ||
-            args[1] is not ("live" or "nodata" or "frozen" or "frozen-nodata" or "review" or "review-nodata" or
-                "paused" or "paused-nodata" or "stopped" or "stopped-nodata" or "frozen-return" or "review-return"))
+        if (args.Length == 1 && args[0] == "--list-svg-fixtures")
         {
-            error.WriteLine("Usage: Monitor.Specs --svg-fixture live|nodata|frozen|frozen-nodata|review|review-nodata|paused|paused-nodata|stopped|stopped-nodata|frozen-return|review-return");
+            foreach (Scenario item in Scenarios)
+            {
+                output.WriteLine($"{item.Name}\t{item.Run} / {item.View} / {(item.NoData ? "NoData" : "Authoritative")}" +
+                    (item.Return ? " -> LiveSweep at 10500000000 ns presentation time" : ""));
+            }
+            return 0;
+        }
+        Scenario? scenario = args.Length == 2 && args[0] == "--svg-fixture"
+            ? Array.Find(Scenarios, item => item.Name == args[1]) : null;
+        if (scenario is null)
+        {
+            error.WriteLine("Usage: Monitor.Specs --list-svg-fixtures | --svg-fixture " +
+                string.Join("|", Scenarios.Select(item => item.Name)));
             return 2;
         }
-        TemporalViewMode view = args[1] switch
-        {
-            "frozen" or "frozen-nodata" or "frozen-return" => TemporalViewMode.FrozenSnapshot,
-            "review" or "review-nodata" or "review-return" => TemporalViewMode.HistoricalReview,
-            _ => TemporalViewMode.LiveSweep,
-        };
-        SessionRunState run = args[1] switch
-        {
-            "paused" or "paused-nodata" => SessionRunState.Paused,
-            "stopped" or "stopped-nodata" => SessionRunState.Stopped,
-            _ => SessionRunState.Running,
-        };
-        bool returning = args[1] is "frozen-return" or "review-return";
-        EcgStripCheckpoint input = Create(returning || args[1] is "nodata" or "frozen-nodata" or "review-nodata" or "paused-nodata" or "stopped-nodata", view, run);
-        if (returning) { input = ReturnToLive(input, 10_500_000_000); }
+        EcgStripCheckpoint input = Create(scenario.NoData, scenario.View, scenario.Run);
+        if (scenario.Return) { input = ReturnToLive(input, 10_500_000_000); }
         string rendered = EcgStripSvgPreview.Render(input, 5000, 5000);
         XNamespace svg = "http://www.w3.org/2000/svg";
         XElement root = XElement.Parse(rendered);

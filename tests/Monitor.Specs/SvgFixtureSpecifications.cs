@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FixtureCatalogListsEveryRunnableScenario), FixtureCatalogListsEveryRunnableScenario),
+        new(nameof(FixtureCatalogRejectsAmbiguousCommandsWithoutOutput), FixtureCatalogRejectsAmbiguousCommandsWithoutOutput),
         new(nameof(ReturnFixturesJoinCurrentLiveNoData), ReturnFixturesJoinCurrentLiveNoData),
         new(nameof(ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput), ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput),
         new(nameof(HeldRunFixturesKeepPatientClockWhileNoDataSweeps), HeldRunFixturesKeepPatientClockWhileNoDataSweeps),
@@ -22,6 +24,45 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private static void FixtureCatalogListsEveryRunnableScenario()
+    {
+        using StringWriter listing = new(CultureInfo.InvariantCulture);
+        using StringWriter replay = new(CultureInfo.InvariantCulture);
+        using StringWriter error = new(CultureInfo.InvariantCulture);
+        Check.That(SvgFixtureCommand.Run(["--list-svg-fixtures"], listing, error) == 0 &&
+            SvgFixtureCommand.Run(["--list-svg-fixtures"], replay, error) == 0 &&
+            listing.ToString() == replay.ToString() && error.ToString().Length == 0,
+            "listing is deterministic and emits no stderr");
+        string[] entries = listing.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Check.That(entries.Length == 12 && entries.Select(line => line.Split('\t')[0]).Distinct(StringComparer.Ordinal).Count() == 12 &&
+            entries[0] == "live\tRunning / LiveSweep / Authoritative" &&
+            entries[^1] == "review-return\tRunning / HistoricalReview / NoData -> LiveSweep at 10500000000 ns presentation time",
+            "catalog preserves distinct names and explains initial axes and return transitions");
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        foreach (string entry in entries)
+        {
+            string name = entry.Split('\t')[0];
+            using StringWriter rendered = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Run(["--svg-fixture", name], rendered, error) == 0 &&
+                XElement.Parse(rendered.ToString()).Element(svg + "title")!.Value.EndsWith(" - " + name, StringComparison.Ordinal),
+                "every advertised scenario exports the matching standalone SVG");
+        }
+    }
+
+    private static void FixtureCatalogRejectsAmbiguousCommandsWithoutOutput()
+    {
+        string[][] invalid = [["--list-svg-fixtures", "live"], ["--svg-fixture", "LIVE"],
+            ["--svg-fixture", "live "], ["--svg-fixture", "frozen-ret"], ["--list-svg-fixtures", "--svg-fixture", "live"]];
+        foreach (string[] args in invalid)
+        {
+            using StringWriter output = new(CultureInfo.InvariantCulture);
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Run(args, output, error) == 2 && output.ToString().Length == 0 &&
+                error.ToString().Contains("--list-svg-fixtures", StringComparison.Ordinal),
+                "ambiguous or malformed command shapes reject without partial listing or SVG");
+        }
+    }
 
     private static void ReturnFixturesJoinCurrentLiveNoData()
     {

@@ -18,9 +18,14 @@ public static class EcgStripSvgPreview
     {
         ReconstructedEcgStrip strip = new EcgStripReconstructor(maximumSamples, maximumSegments).Replace(checkpoint, cancellationToken);
         SweepFramePathState seed = strip.Checkpoint.Source.Frame;
-        long width = (long)seed.PlotLeftPixels + seed.PlotWidthPixels;
+        const string teachingLabel = "TEACHING SIMULATION / GEOMETRY PREVIEW / NOT FOR CLINICAL USE";
+        string stateLabel = $"{seed.Presentation.SessionRunState} / {seed.Presentation.TemporalViewMode} / {seed.Presentation.ContinuityState.DataAvailability}";
+        // Reserve annotation space without resizing the patient plot or glyph.
+        long width = Math.Max((long)seed.PlotLeftPixels + seed.PlotWidthPixels,
+            Math.Max(teachingLabel.Length, stateLabel.Length) * 5L + 16);
         long bottom = (long)seed.PlotTopPixels + seed.PlotHeightPixels;
         XElement root = new(Svg + "svg", new XAttribute("viewBox", $"0 0 {Integer(width)} {Integer(bottom + 32)}"),
+            new XAttribute("width", Integer(width)), new XAttribute("height", Integer(bottom + 32)),
             new XAttribute("role", "img"), new XElement(Svg + "title", "ECG teaching geometry preview"),
             new XElement(Svg + "desc", "Logical pixels only; not physically calibrated. Diagnostic preview, not a product skin."));
         root.Add(new XElement(Svg + "rect", new XAttribute("width", Integer(width)), new XAttribute("height", Integer(bottom + 32)),
@@ -73,15 +78,17 @@ public static class EcgStripSvgPreview
         root.Add(new XElement(Svg + "path", new XAttribute("id", "calibration"), new XAttribute("d", pulse),
             new XAttribute("clip-path", "url(#gutter)"),
             new XAttribute("fill", "none"), new XAttribute("stroke", "#000000"), new XAttribute("stroke-width", "1")));
-        root.Add(new XElement(Svg + "text", new XAttribute("x", "0"), new XAttribute("y", Integer(bottom + 12)),
-            new XAttribute("font-size", "8"), "TEACHING SIMULATION / GEOMETRY PREVIEW / NOT FOR CLINICAL USE"));
-        root.Add(new XElement(Svg + "text", new XAttribute("x", "0"), new XAttribute("y", Integer(bottom + 24)),
-            new XAttribute("font-size", "8"), $"{seed.Presentation.SessionRunState} / {seed.Presentation.TemporalViewMode} / {seed.Presentation.ContinuityState.DataAvailability}"));
+        root.Add(Label(teachingLabel, bottom + 12), Label(stateLabel, bottom + 24));
         cancellationToken.ThrowIfCancellationRequested();
         return root.ToString(SaveOptions.DisableFormatting);
     }
 
     private static string Integer(long value) => value.ToString(CultureInfo.InvariantCulture);
+    private static XElement Label(string value, long baseline) => new(Svg + "text",
+        new XAttribute("x", "8"), new XAttribute("y", Integer(baseline)),
+        new XAttribute("font-size", "8"), new XAttribute("font-family", "monospace"),
+        new XAttribute("textLength", Integer(value.Length * 5L)),
+        new XAttribute("lengthAdjust", "spacingAndGlyphs"), value);
     private static bool AtRightEdge(ExactPlotCoordinate x, SweepPixelPosition right) =>
         x.Numerator * right.FractionDenominator ==
         ((BigInteger)right.WholePixels * right.FractionDenominator + right.FractionNumerator) * x.Denominator;

@@ -12,6 +12,8 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewReservesNarrowCanvasLabels), SvgPreviewReservesNarrowCanvasLabels),
+        new(nameof(SvgPreviewDeclaresLogicalDimensionsWithoutChangingEvidence), SvgPreviewDeclaresLogicalDimensionsWithoutChangingEvidence),
         new(nameof(SvgPreviewExcludesExactRightEdgeBeforeRounding), SvgPreviewExcludesExactRightEdgeBeforeRounding),
         new(nameof(SvgPreviewPreservesInclusiveAndArrivingEdges), SvgPreviewPreservesInclusiveAndArrivingEdges),
         new(nameof(SvgPreviewBatchesDisconnectedSegmentsWithoutBridging), SvgPreviewBatchesDisconnectedSegmentsWithoutBridging),
@@ -54,6 +56,37 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void SvgPreviewReservesNarrowCanvasLabels()
+    {
+        EcgStripReconstructor reconstructor = new(2, 2);
+        reconstructor.Replace(Input());
+        EcgStripCheckpoint input = reconstructor.ResizeHorizontal(30, 50, 0, 5).Checkpoint;
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
+        long width = long.Parse(root.Attribute("width")!.Value, CultureInfo.InvariantCulture);
+        Check.That(width > 80 && root.Elements(svg + "text").All(label =>
+            (long)label.Attribute("x")! + (long)label.Attribute("textLength")! <= width - 8 &&
+            (string?)label.Attribute("lengthAdjust") == "spacingAndGlyphs"),
+            "narrow plots reserve complete teaching and state label extents with both margins");
+        Check.That((string?)root.Elements(svg + "path").Single().Attribute("d") == "M 5 60 L 5 40 L 6 40 L 6 60" &&
+            (string?)root.Elements(svg + "g").Single().Elements(svg + "path").Single().Attribute("d") == "M 35 40 L 36 40",
+            "annotation canvas expansion does not stretch patient geometry or calibration");
+    }
+
+    private static void SvgPreviewDeclaresLogicalDimensionsWithoutChangingEvidence()
+    {
+        EcgStripCheckpoint input = Input();
+        string before = EcgStripSvgPreview.Render(input, 2, 2);
+        XElement root = XElement.Parse(before);
+        Check.That((string?)root.Attribute("width") == "530" && (string?)root.Attribute("height") == "132" &&
+            (string?)root.Attribute("viewBox") == "0 0 530 132",
+            "standalone intrinsic dimensions match the logical viewBox instead of browser defaults");
+        Check.That(EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!, 2, 2) == before &&
+            Reason(() => EcgStripSvgPreview.Render(input with { PulseLeftPixels = 29 }, 2, 2)) == "EcgCalibration.InsufficientSpace" &&
+            EcgStripSvgPreview.Render(input, 2, 2) == before,
+            "annotation layout remains deterministic across restore and rejected reconstruction");
+    }
 
     private static EcgStripCheckpoint SvgEdgeInput(ulong firstOffset, ulong lastOffset)
     {

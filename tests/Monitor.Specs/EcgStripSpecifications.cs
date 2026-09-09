@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Globalization;
+using System.Xml.Linq;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
@@ -10,6 +12,10 @@ internal static class EcgStripSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(SvgPreviewSeparatesPatientAndCalibrationLayers), SvgPreviewSeparatesPatientAndCalibrationLayers),
+        new(nameof(SvgPreviewNoDataKeepsCalibrationAndStateLabel), SvgPreviewNoDataKeepsCalibrationAndStateLabel),
+        new(nameof(SvgPreviewFormatsFractionsIndependentlyOfCulture), SvgPreviewFormatsFractionsIndependentlyOfCulture),
+        new(nameof(SvgPreviewRestoreAndFailurePreserveSourceEvidence), SvgPreviewRestoreAndFailurePreserveSourceEvidence),
         new(nameof(StripDisplayRequiresRequestedColumnResults), StripDisplayRequiresRequestedColumnResults),
         new(nameof(StripDisplayReductionRequirementKeepsCurrentSafety), StripDisplayReductionRequirementKeepsCurrentSafety),
         new(nameof(StripDisplayRestoredReductionDoesNotBypassStateChecks), StripDisplayRestoredReductionDoesNotBypassStateChecks),
@@ -44,6 +50,76 @@ internal static class EcgStripSpecifications
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
         new(nameof(StripNoDataAndCancellationKeepCalibrationIndependent), StripNoDataAndCancellationKeepCalibrationIndependent),
     ];
+
+    private static void SvgPreviewSeparatesPatientAndCalibrationLayers()
+    {
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement root = XElement.Parse(EcgStripSvgPreview.Render(Input(), 2, 2));
+        XElement trace = root.Elements(svg + "g").Single();
+        XElement calibration = root.Elements(svg + "path").Single();
+        Check.That(root.Name == svg + "svg" && (string?)root.Attribute("viewBox") == "0 0 530 132" &&
+            trace.Elements(svg + "path").Single().Attribute("clip-path") is not null &&
+            (string?)calibration.Attribute("clip-path") == "url(#gutter)" &&
+            (string?)calibration.Attribute("d") == "M 5 60 L 5 40 L 15 40 L 15 60" &&
+            root.Elements().ToList().IndexOf(trace) < root.Elements().ToList().IndexOf(calibration),
+            "preview emits clipped patient geometry before the separate persistent scale path");
+        Check.That(root.Elements(svg + "text").Any(text => text.Value.Contains("NOT FOR CLINICAL USE", StringComparison.Ordinal)),
+            "preview visibly identifies teaching-only diagnostic use");
+    }
+
+    private static void SvgPreviewNoDataKeepsCalibrationAndStateLabel()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Restore(input.Source.Frame.Presentation);
+        machine.SynchronizeContinuity(DataContinuityStateMachine.Restore(machine.CaptureState().ContinuityState).Disconnect(false, 1), 0, 0);
+        machine.Advance(10_000_000_000, 0);
+        input = input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
+        XNamespace svg = "http://www.w3.org/2000/svg";
+        XElement root = XElement.Parse(EcgStripSvgPreview.Render(input, 2, 2));
+        Check.That(root.Elements(svg + "g").Single().Elements(svg + "path").All(path => path.Attribute("stroke-dasharray") is not null) &&
+            root.Elements(svg + "path").Single().Attribute("id")!.Value == "calibration" &&
+            root.Elements(svg + "text").Any(text => text.Value.Contains("NoData", StringComparison.Ordinal)),
+            "NoData draws a distinguished baseline, retains calibration and labels the actual availability");
+    }
+
+    private static void SvgPreviewFormatsFractionsIndependentlyOfCulture()
+    {
+        EcgStripCheckpoint input = Input();
+        SweepPathSample first = input.Source.Samples[0];
+        first = first with
+        {
+            Voltage = new(1, 3),
+            Point = first.Point with
+            {
+                Y = EcgVerticalGeometry.MapMicrovolts(input.Source.Frame.VerticalScale!, 1, 3),
+            }
+        };
+        input = input with { Source = input.Source with { Samples = new[] { first, input.Source.Samples[1] } } };
+        string expected = EcgStripSvgPreview.Render(input, 2, 2);
+        CultureInfo previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            Check.That(EcgStripSvgPreview.Render(input, 2, 2) == expected && expected.Contains("59.993333", StringComparison.Ordinal),
+                "fractional geometry serializes at documented precision with invariant decimal syntax");
+        }
+        finally { CultureInfo.CurrentCulture = previous; }
+    }
+
+    private static void SvgPreviewRestoreAndFailurePreserveSourceEvidence()
+    {
+        EcgStripCheckpoint input = Input();
+        EcgStripCheckpoint restored = EcgStripReconstructor.Restore(2, 2, input).CaptureCheckpoint()!;
+        string before = EcgStripSvgPreview.Render(input, 2, 2);
+        Check.That(before == EcgStripSvgPreview.Render(restored, 2, 2) &&
+            Reason(() => EcgStripSvgPreview.Render(input with { PulseLeftPixels = 29 }, 2, 2)) == "EcgCalibration.InsufficientSpace",
+            "restored evidence emits identical SVG and invalid gutter fails before returning output");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { _ = EcgStripSvgPreview.Render(input, 2, 2, cancellation.Token); throw new InvalidOperationException("cancelled preview accepted"); }
+        catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "preview cancellation retains identity"); }
+        Check.That(before == EcgStripSvgPreview.Render(input, 2, 2), "failed previews do not change source geometry");
+    }
 
     private static EcgStripDisplaySelection SelectColumns(ReconstructedEcgStrip strip, SweepStateProjectionState? state = null) =>
         EcgStripDisplayGate.Select(state ?? strip.Checkpoint.Source.Frame.Presentation,

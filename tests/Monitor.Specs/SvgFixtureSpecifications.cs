@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FixtureCancellationPreventsOutputAndAllowsRetry), FixtureCancellationPreventsOutputAndAllowsRetry),
+        new(nameof(FixtureCancellationAfterWriteEntryDoesNotReportRollback), FixtureCancellationAfterWriteEntryDoesNotReportRollback),
         new(nameof(FixtureCatalogListsEveryRunnableScenario), FixtureCatalogListsEveryRunnableScenario),
         new(nameof(FixtureCatalogRejectsAmbiguousCommandsWithoutOutput), FixtureCatalogRejectsAmbiguousCommandsWithoutOutput),
         new(nameof(ReturnFixturesJoinCurrentLiveNoData), ReturnFixturesJoinCurrentLiveNoData),
@@ -24,6 +26,47 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private static void FixtureCancellationPreventsOutputAndAllowsRetry()
+    {
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        string[][] commands = [["--svg-fixture", "live"], ["--list-svg-fixtures"]];
+        foreach (string[] args in commands)
+        {
+            using StringWriter output = new(CultureInfo.InvariantCulture);
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            try { _ = SvgFixtureCommand.Run(args, output, error, cancellation.Token); throw new InvalidOperationException("cancelled command accepted"); }
+            catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "command retains cancellation token"); }
+            Check.That(output.ToString().Length == 0 && error.ToString().Length == 0 &&
+                SvgFixtureCommand.Run(args, output, error) == 0 && output.ToString().Length > 0,
+                "cancelled commands produce no output and a fresh invocation succeeds");
+        }
+        try { _ = SvgFixtureCommand.Create(false, TemporalViewMode.LiveSweep, cancellationToken: cancellation.Token); throw new InvalidOperationException("cancelled generation accepted"); }
+        catch (OperationCanceledException exception) { Check.That(exception.CancellationToken == cancellation.Token, "fixture generation also observes cancellation"); }
+    }
+
+    private sealed class CancellingWriter(CancellationTokenSource cancellation) : StringWriter(CultureInfo.InvariantCulture)
+    {
+        public int Writes { get; private set; }
+        public override void WriteLine(string? value)
+        {
+            Writes++;
+            cancellation.Cancel();
+            base.WriteLine(value);
+        }
+    }
+
+    private static void FixtureCancellationAfterWriteEntryDoesNotReportRollback()
+    {
+        using CancellationTokenSource cancellation = new();
+        using CancellingWriter output = new(cancellation);
+        using StringWriter error = new(CultureInfo.InvariantCulture);
+        Check.That(SvgFixtureCommand.Run(["--svg-fixture", "nodata"], output, error, cancellation.Token) == 0 &&
+            cancellation.IsCancellationRequested && output.Writes == 1 && error.ToString().Length == 0 &&
+            XElement.Parse(output.ToString()).Name.LocalName == "svg",
+            "once stream writing starts, a complete successful write is not falsely reported as rolled back by cancellation");
+    }
 
     private static void FixtureCatalogListsEveryRunnableScenario()
     {

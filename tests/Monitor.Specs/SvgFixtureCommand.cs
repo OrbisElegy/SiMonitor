@@ -29,15 +29,16 @@ internal static class SvgFixtureCommand
         new("review-return", TemporalViewMode.HistoricalReview, SessionRunState.Running, true, true),
     ];
 
-    public static int Run(string[] args, TextWriter output, TextWriter error)
+    public static int Run(string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (args.Length == 1 && args[0] == "--list-svg-fixtures")
         {
-            foreach (Scenario item in Scenarios)
-            {
-                output.WriteLine($"{item.Name}\t{item.Run} / {item.View} / {(item.NoData ? "NoData" : "Authoritative")}" +
-                    (item.Return ? " -> LiveSweep at 10500000000 ns presentation time" : ""));
-            }
+            string listing = string.Join(Environment.NewLine, Scenarios.Select(item =>
+                $"{item.Name}\t{item.Run} / {item.View} / {(item.NoData ? "NoData" : "Authoritative")}" +
+                    (item.Return ? " -> LiveSweep at 10500000000 ns presentation time" : "")));
+            cancellationToken.ThrowIfCancellationRequested();
+            output.WriteLine(listing);
             return 0;
         }
         Scenario? scenario = args.Length == 2 && args[0] == "--svg-fixture"
@@ -48,14 +49,17 @@ internal static class SvgFixtureCommand
                 string.Join("|", Scenarios.Select(item => item.Name)));
             return 2;
         }
-        EcgStripCheckpoint input = Create(scenario.NoData, scenario.View, scenario.Run);
+        EcgStripCheckpoint input = Create(scenario.NoData, scenario.View, scenario.Run, cancellationToken);
         if (scenario.Return) { input = ReturnToLive(input, 10_500_000_000); }
-        string rendered = EcgStripSvgPreview.Render(input, 5000, 5000);
+        string rendered = EcgStripSvgPreview.Render(input, 5000, 5000, cancellationToken);
         XNamespace svg = "http://www.w3.org/2000/svg";
         XElement root = XElement.Parse(rendered);
         root.Element(svg + "title")!.Value = "Synthetic triangle geometry fixture - " + args[1];
         root.Element(svg + "desc")!.Value += " Synthetic triangles only; not a physiological ECG model.";
-        output.WriteLine(root.ToString(SaveOptions.DisableFormatting));
+        string completed = root.ToString(SaveOptions.DisableFormatting);
+        cancellationToken.ThrowIfCancellationRequested();
+        // Cancellation fences entry to the write; it cannot roll back stream I/O.
+        output.WriteLine(completed);
         return 0;
     }
 
@@ -69,8 +73,10 @@ internal static class SvgFixtureCommand
         return input with { Source = input.Source with { Frame = input.Source.Frame with { Presentation = machine.CaptureState() } } };
     }
 
-    internal static EcgStripCheckpoint Create(bool noData, TemporalViewMode view, SessionRunState run = SessionRunState.Running)
+    internal static EcgStripCheckpoint Create(bool noData, TemporalViewMode view, SessionRunState run = SessionRunState.Running,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (view is not (TemporalViewMode.LiveSweep or TemporalViewMode.FrozenSnapshot or TemporalViewMode.HistoricalReview))
         { throw new ArgumentOutOfRangeException(nameof(view)); }
         SweepStateProjectionStateMachine machine = SweepStateProjectionStateMachine.Start(
@@ -94,11 +100,13 @@ internal static class SvgFixtureCommand
         List<SweepPathSample> samples = new(5000);
         for (ulong index = 0; index < 5000; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             long phase = (long)(index % 500);
             long voltage = (phase <= 250 ? phase : 500 - phase) * 8 - 1000;
-            builder.AppendVoltageAtOffset(source, index, 0, true, index * 2_000_000, new(voltage, 1));
+            builder.AppendVoltageAtOffset(source, index, 0, true, index * 2_000_000, new(voltage, 1), cancellationToken);
             samples.Add(builder.CaptureState().Previous!);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         return new(new(frame, samples), 0, 5);
     }
 }

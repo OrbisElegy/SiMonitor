@@ -55,6 +55,7 @@ internal static class Program
             .. SweepVoltageMappingSpecifications.All,
             .. SweepSampleOffsetSpecifications.All,
             .. EcgStripSpecifications.All,
+            .. EcgManualMeasurementSpecifications.All,
             .. SvgFixtureSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,

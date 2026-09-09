@@ -11,6 +11,8 @@ internal static class SvgFixtureSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(ReturnFixturesJoinCurrentLiveNoData), ReturnFixturesJoinCurrentLiveNoData),
+        new(nameof(ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput), ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput),
         new(nameof(HeldRunFixturesKeepPatientClockWhileNoDataSweeps), HeldRunFixturesKeepPatientClockWhileNoDataSweeps),
         new(nameof(HeldRunFixturesRestoreAndRejectInvalidRunState), HeldRunFixturesRestoreAndRejectInvalidRunState),
         new(nameof(ReviewFixtureKeepsHistoryDuringNoData), ReviewFixtureKeepsHistoryDuringNoData),
@@ -20,6 +22,49 @@ internal static class SvgFixtureSpecifications
         new(nameof(FixtureCommandEmitsDeterministicSeparatedScenarios), FixtureCommandEmitsDeterministicSeparatedScenarios),
         new(nameof(FixtureCommandRejectsUnknownArgumentsWithoutOutput), FixtureCommandRejectsUnknownArgumentsWithoutOutput),
     ];
+
+    private static void ReturnFixturesJoinCurrentLiveNoData()
+    {
+        foreach (string mode in new[] { "frozen-return", "review-return" })
+        {
+            using StringWriter output = new(CultureInfo.InvariantCulture);
+            using StringWriter error = new(CultureInfo.InvariantCulture);
+            Check.That(SvgFixtureCommand.Run(["--svg-fixture", mode], output, error) == 0 && error.ToString().Length == 0,
+                "return scenarios export complete SVG");
+            XNamespace svg = "http://www.w3.org/2000/svg";
+            XElement root = XElement.Parse(output.ToString());
+            Check.That(root.Element(svg + "g")!.Elements(svg + "path").Any() &&
+                root.Element(svg + "g")!.Elements(svg + "path").All(path => path.Attribute("stroke-dasharray") is not null) &&
+                root.Elements(svg + "text").Any(text => text.Value == "Running / LiveSweep / NoData") &&
+                !root.Elements(svg + "text").Any(text => text.Value.Contains("DATA TIME", StringComparison.Ordinal)) &&
+                root.Elements(svg + "path").Single().Attribute("id")!.Value == "calibration",
+                "return removes pinned labels and source paths in favor of current NoData while retaining calibration");
+        }
+    }
+
+    private static void ReturnFixturesRestoreAndRejectWithoutChangingPinnedInput()
+    {
+        EcgStripCheckpoint live = SvgFixtureCommand.Create(true, TemporalViewMode.LiveSweep);
+        SweepStateProjectionStateMachine current = SweepStateProjectionStateMachine.Restore(live.Source.Frame.Presentation);
+        current.Advance(10_500_000_000, 0);
+        foreach (TemporalViewMode view in new[] { TemporalViewMode.FrozenSnapshot, TemporalViewMode.HistoricalReview })
+        {
+            EcgStripCheckpoint pinned = SvgFixtureCommand.Create(true, view);
+            string before = EcgStripSvgPreview.Render(pinned, 5000, 5000);
+            EcgStripCheckpoint returned = SvgFixtureCommand.ReturnToLive(pinned, 10_500_000_000);
+            SweepStateProjectionSnapshot actual = SweepStateProjectionStateMachine.Restore(returned.Source.Frame.Presentation).CaptureProjection();
+            Check.That(actual.WriteHeadPhasePpm == current.CaptureProjection().WriteHeadPhasePpm &&
+                actual.CycleIndex == current.CaptureProjection().CycleIndex && actual.PlayheadDataSimTimeNs == 0 &&
+                returned.Source.Samples.SequenceEqual(pinned.Source.Samples),
+                "return joins independently advanced Live phase without changing the supplied data frontier or samples");
+            Check.That(EcgStripSvgPreview.Render(returned, 5000, 5000) ==
+                EcgStripSvgPreview.Render(EcgStripReconstructor.Restore(5000, 5000, returned).CaptureCheckpoint()!, 5000, 5000),
+                "returned checkpoint restores deterministically");
+            try { _ = SvgFixtureCommand.ReturnToLive(pinned, 9_000_000_000); throw new InvalidOperationException("reversed return accepted"); }
+            catch (SweepStateProjectionException exception) { Check.That(exception.ReasonCode == "SweepState.TimeReversed", "reversed return rejects"); }
+            Check.That(EcgStripSvgPreview.Render(pinned, 5000, 5000) == before, "return and rejection preserve original pinned input");
+        }
+    }
 
     private static void HeldRunFixturesKeepPatientClockWhileNoDataSweeps()
     {

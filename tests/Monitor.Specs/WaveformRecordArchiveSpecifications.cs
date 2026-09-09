@@ -30,6 +30,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(RecordMeasurementUsesBoundCursorValues), RecordMeasurementUsesBoundCursorValues),
+        new(nameof(RecordMeasurementEnforcesHalfOpenRange), RecordMeasurementEnforcesHalfOpenRange),
+        new(nameof(RecordMeasurementRejectsForeignCursorsWithoutMutation), RecordMeasurementRejectsForeignCursorsWithoutMutation),
+        new(nameof(RestoredRecordMeasurementRequiresFreshCursors), RestoredRecordMeasurementRequiresFreshCursors),
         new(nameof(CompletedRecordBindsExplicitSlots), CompletedRecordBindsExplicitSlots),
         new(nameof(RecordBindingRejectsIncompleteAndMismatchedInputs), RecordBindingRejectsIncompleteAndMismatchedInputs),
         new(nameof(RecordBindingCheckpointIsDefensive), RecordBindingCheckpointIsDefensive),
@@ -48,6 +52,64 @@ internal static class WaveformRecordArchiveSpecifications
         new(nameof(ArchiveCheckpointAndReadsAreDefensive),
             ArchiveCheckpointAndReadsAreDefensive),
     ];
+
+    private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
+        BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void RecordMeasurementUsesBoundCursorValues()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord());
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1));
+        CapturedRecordCursor second = measurement.CreateCursor(new(100_000_000, 1000, 1));
+        EcgManualMeasurementResult result = measurement.Calculate(first, second, true);
+        Check.That(result.ElapsedMilliseconds == new EcgMeasurementRatio(100, 1) &&
+            result.AmplitudeChangeMillivolts == new EcgMeasurementRatio(1, 1) &&
+            result.AuxiliaryRatePerMinute == new EcgMeasurementRatio(600, 1) &&
+            measurement.Calculate(first, second, false).AuxiliaryRatePerMinute is null,
+            "bound manual values preserve exact calculation and explicit auxiliary-rate permission");
+    }
+
+    private static void RecordMeasurementEnforcesHalfOpenRange()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord());
+        Check.That(measurement.CreateCursor(new(0, 0, 1)).Value.DataTimeNs == 0 &&
+            measurement.CreateCursor(new(199_999_999, 0, 1)).Value.DataTimeNs == 199_999_999,
+            "record start and last included nanosecond accept manual cursors");
+        foreach (long time in new long[] { 200_000_000, long.MaxValue })
+        {
+            try { _ = measurement.CreateCursor(new(time, 0, 1)); throw new InvalidOperationException("outside cursor accepted"); }
+            catch (CapturedRecordMeasurementException exception) { Check.That(exception.ReasonCode == "RecordMeasurement.CursorOutsideRecord", "exclusive end and later times reject"); }
+        }
+        try { _ = measurement.CreateCursor(new(0, 1, 0)); throw new InvalidOperationException("invalid voltage accepted"); }
+        catch (EcgManualMeasurementException exception) { Check.That(exception.ReasonCode == "ManualMeasurement.InvalidCursor", "bound cursors still validate voltage"); }
+    }
+
+    private static void RecordMeasurementRejectsForeignCursorsWithoutMutation()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordMeasurement measurement = new(record), other = new(record);
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(1, 1, 1));
+        EcgManualMeasurementResult accepted = measurement.Calculate(first, second, false);
+        CapturedRecordCursor[] foreign = [null!, other.CreateCursor(second.Value)];
+        foreach (CapturedRecordCursor cursor in foreign)
+        {
+            try { _ = measurement.Calculate(first, cursor, true); throw new InvalidOperationException("foreign cursor accepted"); }
+            catch (CapturedRecordMeasurementException exception) { Check.That(exception.ReasonCode == "RecordMeasurement.ForeignCursor", "foreign ownership rejects even with equal record identity"); }
+        }
+        Check.That(measurement.Calculate(first, second, false) == accepted, "rejected foreign values leave issued cursors unchanged");
+    }
+
+    private static void RestoredRecordMeasurementRequiresFreshCursors()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordMeasurement original = new(record);
+        CapturedRecordCursor first = original.CreateCursor(new(0, 1000, 3)), second = original.CreateCursor(new(199_999_999, -1000, 3));
+        CapturedRecordMeasurement restored = new(CapturedRecordBinding.Restore(record.CaptureState()));
+        try { _ = restored.Calculate(first, second, true); throw new InvalidOperationException("old handles accepted"); }
+        catch (CapturedRecordMeasurementException exception) { Check.That(exception.ReasonCode == "RecordMeasurement.ForeignCursor", "restored ownership rejects old handles"); }
+        Check.That(restored.Calculate(restored.CreateCursor(first.Value), restored.CreateCursor(second.Value), true) ==
+            original.Calculate(first, second, true), "explicit reissue revalidates values and recreates exact measurement after record restore");
+    }
 
     private static FillOnceThenHoldStateMachine BindingPresentation(long playhead = 200_000_000)
     {

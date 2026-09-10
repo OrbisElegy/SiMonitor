@@ -30,6 +30,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementSlotResolvesExplicitChannelMapping), MeasurementSlotResolvesExplicitChannelMapping),
+        new(nameof(MeasurementSlotRejectsUnknownIdentity), MeasurementSlotRejectsUnknownIdentity),
+        new(nameof(MeasurementSlotPreventsCrossLeadCursorMixing), MeasurementSlotPreventsCrossLeadCursorMixing),
+        new(nameof(MeasurementSlotSurvivesInputMutationAndRecordRestore), MeasurementSlotSurvivesInputMutationAndRecordRestore),
         new(nameof(MeasurementPolicyRejectsDisabledAndLockedEntry), MeasurementPolicyRejectsDisabledAndLockedEntry),
         new(nameof(MeasurementPolicyRevokesExistingCursorCalculation), MeasurementPolicyRevokesExistingCursorCalculation),
         new(nameof(InvalidMeasurementPolicyPreservesAcceptedState), InvalidMeasurementPolicyPreservesAcceptedState),
@@ -60,6 +64,49 @@ internal static class WaveformRecordArchiveSpecifications
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
 
+    private static void MeasurementSlotResolvesExplicitChannelMapping()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        Check.That(measurement.Slot.SlotId == "ecg.slot0" && measurement.Slot.ChannelId == ChannelIds[11] &&
+            cursor.Slot == measurement.Slot, "measurement resolves the declared reversed slot mapping rather than channel array position");
+    }
+
+    private static void MeasurementSlotRejectsUnknownIdentity()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        string[] invalid = [null!, "", "ecg.slot12", "ECG.SLOT0", "ecg.slot0 "];
+        foreach (string slot in invalid)
+        {
+            Check.That(MeasurementReason(() => { _ = new CapturedRecordMeasurement(record, slot, SystemViewCommandAssessmentPolicy.Enabled); }) ==
+                "RecordMeasurement.UnknownSlot", "missing or nonmatching slot identities reject without guessing a lead");
+        }
+    }
+
+    private static void MeasurementSlotPreventsCrossLeadCursorMixing()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordMeasurement firstLead = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement secondLead = new(record, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = firstLead.CreateCursor(new(0, 0, 1)), second = firstLead.CreateCursor(new(1, 1, 1));
+        EcgManualMeasurementResult accepted = firstLead.Calculate(first, second, false);
+        Check.That(MeasurementReason(() => firstLead.Calculate(first, secondLead.CreateCursor(second.Value), true)) ==
+            "RecordMeasurement.ForeignCursor" && firstLead.Calculate(first, second, false) == accepted,
+            "another lead's cursor cannot alter an accepted same-lead calculation");
+    }
+
+    private static void MeasurementSlotSurvivesInputMutationAndRecordRestore()
+    {
+        RecordSlotBinding[] slots = BindingSlots();
+        CapturedRecordBinding record = CapturedRecordBinding.Create(BindingPresentation().CaptureState(), BindingArchive(), slots);
+        CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        slots[0] = new("ecg.slot0", Guid.Empty);
+        CapturedRecordMeasurement restored = new(CapturedRecordBinding.Restore(record.CaptureState()), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(measurement.Slot.ChannelId == ChannelIds[11] && restored.Slot == measurement.Slot &&
+            restored.CreateCursor(new(0, 1000, 3)).Slot == measurement.Slot,
+            "caller array mutation and record restore preserve the verified channel mapping");
+    }
+
     private static string MeasurementReason(Action action)
     {
         try { action(); }
@@ -71,7 +118,7 @@ internal static class WaveformRecordArchiveSpecifications
     {
         foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
         {
-            CapturedRecordMeasurement measurement = new(MeasurementRecord(), policy);
+            CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", policy);
             string expected = policy == SystemViewCommandAssessmentPolicy.Disabled ? "RecordMeasurement.Disabled" : "RecordMeasurement.CourseLocked";
             Check.That(MeasurementReason(() => measurement.CreateCursor(new(0, 0, 1))) == expected &&
                 MeasurementReason(() => measurement.Calculate(null!, null!, true)) == expected,
@@ -81,7 +128,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static void MeasurementPolicyRevokesExistingCursorCalculation()
     {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(1, 1, 1));
         EcgManualMeasurementResult accepted = measurement.Calculate(first, second, false);
         measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
@@ -94,17 +141,17 @@ internal static class WaveformRecordArchiveSpecifications
     private static void InvalidMeasurementPolicyPreservesAcceptedState()
     {
         CapturedRecordBinding record = MeasurementRecord();
-        CapturedRecordMeasurement measurement = new(record, SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
         Check.That(MeasurementReason(() => measurement.UpdatePolicy((SystemViewCommandAssessmentPolicy)999)) == "RecordMeasurement.InvalidPolicy" &&
             MeasurementReason(() => measurement.CreateCursor(new(0, 0, 1))) == "RecordMeasurement.Disabled" &&
-            MeasurementReason(() => { _ = new CapturedRecordMeasurement(record, (SystemViewCommandAssessmentPolicy)999); }) == "RecordMeasurement.InvalidPolicy",
+            MeasurementReason(() => { _ = new CapturedRecordMeasurement(record, "ecg.slot0", (SystemViewCommandAssessmentPolicy)999); }) == "RecordMeasurement.InvalidPolicy",
             "invalid updates and construction fail closed without relaxing accepted policy");
     }
 
     private static void RestoredMeasurementUsesExplicitCurrentPolicy()
     {
         CapturedRecordBinding record = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
-        CapturedRecordMeasurement measurement = new(record, SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(MeasurementReason(() => measurement.CreateCursor(new(0, 0, 1))) == "RecordMeasurement.CourseLocked",
             "restoring a record does not restore an old enabled policy implicitly");
         measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
@@ -115,7 +162,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static void RecordMeasurementUsesBoundCursorValues()
     {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1));
         CapturedRecordCursor second = measurement.CreateCursor(new(100_000_000, 1000, 1));
         EcgManualMeasurementResult result = measurement.Calculate(first, second, true);
@@ -128,7 +175,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static void RecordMeasurementEnforcesHalfOpenRange()
     {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         Check.That(measurement.CreateCursor(new(0, 0, 1)).Value.DataTimeNs == 0 &&
             measurement.CreateCursor(new(199_999_999, 0, 1)).Value.DataTimeNs == 199_999_999,
             "record start and last included nanosecond accept manual cursors");
@@ -144,7 +191,7 @@ internal static class WaveformRecordArchiveSpecifications
     private static void RecordMeasurementRejectsForeignCursorsWithoutMutation()
     {
         CapturedRecordBinding record = MeasurementRecord();
-        CapturedRecordMeasurement measurement = new(record, SystemViewCommandAssessmentPolicy.Enabled), other = new(record, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled), other = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(1, 1, 1));
         EcgManualMeasurementResult accepted = measurement.Calculate(first, second, false);
         CapturedRecordCursor[] foreign = [null!, other.CreateCursor(second.Value)];
@@ -159,9 +206,9 @@ internal static class WaveformRecordArchiveSpecifications
     private static void RestoredRecordMeasurementRequiresFreshCursors()
     {
         CapturedRecordBinding record = MeasurementRecord();
-        CapturedRecordMeasurement original = new(record, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement original = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordCursor first = original.CreateCursor(new(0, 1000, 3)), second = original.CreateCursor(new(199_999_999, -1000, 3));
-        CapturedRecordMeasurement restored = new(CapturedRecordBinding.Restore(record.CaptureState()), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement restored = new(CapturedRecordBinding.Restore(record.CaptureState()), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         try { _ = restored.Calculate(first, second, true); throw new InvalidOperationException("old handles accepted"); }
         catch (CapturedRecordMeasurementException exception) { Check.That(exception.ReasonCode == "RecordMeasurement.ForeignCursor", "restored ownership rejects old handles"); }
         Check.That(restored.Calculate(restored.CreateCursor(first.Value), restored.CreateCursor(second.Value), true) ==

@@ -11,8 +11,10 @@ public sealed class CapturedRecordMeasurementException(string reasonCode, string
 
 public sealed class CapturedRecordCursor
 {
-    internal CapturedRecordCursor(object owner, EcgManualCursor value) { Owner = owner; Value = value; }
+    internal CapturedRecordCursor(object owner, RecordSlotBinding slot, EcgManualCursor value)
+    { Owner = owner; Slot = slot; Value = value; }
     internal object Owner { get; }
+    public RecordSlotBinding Slot { get; }
     public EcgManualCursor Value { get; }
 }
 
@@ -23,12 +25,16 @@ public sealed class CapturedRecordMeasurement
     private readonly PinnedRecordRange _range;
     private SystemViewCommandAssessmentPolicy _policy;
 
-    public CapturedRecordMeasurement(CapturedRecordBinding record, SystemViewCommandAssessmentPolicy policy)
+    public CapturedRecordMeasurement(CapturedRecordBinding record, string slotId, SystemViewCommandAssessmentPolicy policy)
     {
         ArgumentNullException.ThrowIfNull(record);
         _range = record.CapturePinnedRecordRange();
+        Slot = record.Slots.FirstOrDefault(slot => string.Equals(slot.SlotId, slotId, StringComparison.Ordinal))
+            ?? throw new CapturedRecordMeasurementException("RecordMeasurement.UnknownSlot", nameof(slotId));
         UpdatePolicy(policy);
     }
+
+    public RecordSlotBinding Slot { get; }
 
     // Serialized caller supplies the currently resolved course policy.
     public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy)
@@ -44,7 +50,7 @@ public sealed class CapturedRecordMeasurement
         _ = EcgManualMeasurement.Calculate(value, value, false);
         if (value.DataTimeNs < _range.StartDataSimTimeNs || value.DataTimeNs >= _range.EndExclusiveDataSimTimeNs)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.CursorOutsideRecord", nameof(value)); }
-        return new(_owner, value);
+        return new(_owner, Slot, value);
     }
 
     public EcgManualMeasurementResult Calculate(CapturedRecordCursor first, CapturedRecordCursor second,

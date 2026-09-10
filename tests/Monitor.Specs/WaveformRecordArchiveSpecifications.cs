@@ -30,6 +30,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementCheckpointReissuesOwnedCursorPair), MeasurementCheckpointReissuesOwnedCursorPair),
+        new(nameof(MeasurementCheckpointRejectsTamperedValues), MeasurementCheckpointRejectsTamperedValues),
+        new(nameof(MeasurementCheckpointUsesCurrentCoursePolicy), MeasurementCheckpointUsesCurrentCoursePolicy),
+        new(nameof(MeasurementCheckpointRejectsForeignCaptureAndOwnsRecord), MeasurementCheckpointRejectsForeignCaptureAndOwnsRecord),
         new(nameof(MeasurementSlotResolvesExplicitChannelMapping), MeasurementSlotResolvesExplicitChannelMapping),
         new(nameof(MeasurementSlotRejectsUnknownIdentity), MeasurementSlotRejectsUnknownIdentity),
         new(nameof(MeasurementSlotPreventsCrossLeadCursorMixing), MeasurementSlotPreventsCrossLeadCursorMixing),
@@ -63,6 +67,64 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementCheckpointReissuesOwnedCursorPair()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 1000, 3)), second = measurement.CreateCursor(new(199_999_999, -1000, 3));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(first, second), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Measurement.Calculate(restored.First, restored.Second, true) == measurement.Calculate(first, second, true) &&
+            restored.First.Slot == first.Slot && MeasurementReason(() => restored.Measurement.Calculate(first, second, true)) == "RecordMeasurement.ForeignCursor",
+            "restore rebuilds verified record and exact cursor values with fresh ownership");
+    }
+
+    private static void MeasurementCheckpointRejectsTamperedValues()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(1, 1, 1));
+        CapturedRecordMeasurementCheckpoint checkpoint = measurement.CaptureCheckpoint(first, second);
+        CapturedRecordMeasurementCheckpoint[] invalid = [null!, checkpoint with { SlotId = "unknown" },
+            checkpoint with { First = second.Value, Second = first.Value }, checkpoint with { Second = new(200_000_000, 0, 1) },
+            checkpoint with { First = new(0, 0, 0) }, checkpoint with { Record = null! }];
+        foreach (CapturedRecordMeasurementCheckpoint state in invalid)
+        {
+            Check.That(MeasurementReason(() => CapturedRecordMeasurement.Restore(state, SystemViewCommandAssessmentPolicy.Enabled)) ==
+                "RecordMeasurement.InvalidCheckpoint", "invalid restored identity, range and values reject before a pair is published");
+        }
+        Check.That(measurement.Calculate(first, second, false).ElapsedMilliseconds == new EcgMeasurementRatio(1, 1_000_000),
+            "failed restores leave the original pair unchanged");
+    }
+
+    private static void MeasurementCheckpointUsesCurrentCoursePolicy()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        CapturedRecordMeasurementCheckpoint state = measurement.CaptureCheckpoint(cursor, cursor);
+        Check.That(MeasurementReason(() => CapturedRecordMeasurement.Restore(state, SystemViewCommandAssessmentPolicy.CourseLocked)) == "RecordMeasurement.CourseLocked" &&
+            MeasurementReason(() => CapturedRecordMeasurement.Restore(state, SystemViewCommandAssessmentPolicy.Disabled)) == "RecordMeasurement.Disabled" &&
+            MeasurementReason(() => CapturedRecordMeasurement.Restore(state, (SystemViewCommandAssessmentPolicy)999)) == "RecordMeasurement.InvalidPolicy",
+            "checkpoint cannot restore past course permission or accept an invalid current policy");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.CaptureCheckpoint(cursor, cursor)) == "RecordMeasurement.CourseLocked",
+            "locked measurement cannot export a pair through the checkpoint path");
+    }
+
+    private static void MeasurementCheckpointRejectsForeignCaptureAndOwnsRecord()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement other = new(record, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        Check.That(MeasurementReason(() => measurement.CaptureCheckpoint(cursor, other.CreateCursor(cursor.Value))) == "RecordMeasurement.ForeignCursor",
+            "capture cannot persist foreign lead handles");
+        CapturedRecordMeasurementCheckpoint state = measurement.CaptureCheckpoint(cursor, cursor);
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(state, SystemViewCommandAssessmentPolicy.Enabled);
+        RecordSlotBinding[] changed = state.Record.Slots.ToArray();
+        changed[0] = new("ecg.slot0", Guid.Empty);
+        Check.That(MeasurementReason(() => CapturedRecordMeasurement.Restore(state with { Record = state.Record with { Slots = changed } },
+            SystemViewCommandAssessmentPolicy.Enabled)) == "RecordMeasurement.InvalidCheckpoint" &&
+            restored.First.Slot.ChannelId == ChannelIds[11], "record restore revalidates mapping and previously restored pair remains owned");
+    }
 
     private static void MeasurementSlotResolvesExplicitChannelMapping()
     {

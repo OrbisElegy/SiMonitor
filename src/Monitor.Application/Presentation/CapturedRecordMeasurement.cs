@@ -18,16 +18,23 @@ public sealed class CapturedRecordCursor
     public EcgManualCursor Value { get; }
 }
 
+public sealed record CapturedRecordMeasurementCheckpoint(CapturedRecordBindingState Record,
+    string SlotId, EcgManualCursor First, EcgManualCursor Second);
+public sealed record RestoredRecordMeasurement(CapturedRecordMeasurement Measurement,
+    CapturedRecordCursor First, CapturedRecordCursor Second);
+
 // Local measurement ownership, not authority identity or authentication of amplitude.
 public sealed class CapturedRecordMeasurement
 {
     private readonly object _owner = new();
+    private readonly CapturedRecordBinding _record;
     private readonly PinnedRecordRange _range;
     private SystemViewCommandAssessmentPolicy _policy;
 
     public CapturedRecordMeasurement(CapturedRecordBinding record, string slotId, SystemViewCommandAssessmentPolicy policy)
     {
         ArgumentNullException.ThrowIfNull(record);
+        _record = record;
         _range = record.CapturePinnedRecordRange();
         Slot = record.Slots.FirstOrDefault(slot => string.Equals(slot.SlotId, slotId, StringComparison.Ordinal))
             ?? throw new CapturedRecordMeasurementException("RecordMeasurement.UnknownSlot", nameof(slotId));
@@ -35,6 +42,33 @@ public sealed class CapturedRecordMeasurement
     }
 
     public RecordSlotBinding Slot { get; }
+
+    public CapturedRecordMeasurementCheckpoint CaptureCheckpoint(CapturedRecordCursor first, CapturedRecordCursor second)
+    {
+        _ = Calculate(first, second, false);
+        return new(_record.CaptureState(), Slot.SlotId, first.Value, second.Value);
+    }
+
+    public static RestoredRecordMeasurement Restore(CapturedRecordMeasurementCheckpoint checkpoint,
+        SystemViewCommandAssessmentPolicy currentPolicy)
+    {
+        if (!Enum.IsDefined(currentPolicy))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidPolicy", nameof(currentPolicy)); }
+        try
+        {
+            ArgumentNullException.ThrowIfNull(checkpoint);
+            CapturedRecordMeasurement measurement = new(CapturedRecordBinding.Restore(checkpoint.Record), checkpoint.SlotId, currentPolicy);
+            CapturedRecordCursor first = measurement.CreateCursor(checkpoint.First);
+            CapturedRecordCursor second = measurement.CreateCursor(checkpoint.Second);
+            _ = measurement.Calculate(first, second, false);
+            return new(measurement, first, second);
+        }
+        catch (CapturedRecordMeasurementException exception) when
+            (exception.ReasonCode is "RecordMeasurement.Disabled" or "RecordMeasurement.CourseLocked")
+        { throw; }
+        catch (ArgumentException)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidCheckpoint", nameof(checkpoint)); }
+    }
 
     // Serialized caller supplies the currently resolved course policy.
     public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy)

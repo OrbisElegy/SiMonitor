@@ -21,15 +21,26 @@ public sealed class CapturedRecordMeasurement
 {
     private readonly object _owner = new();
     private readonly PinnedRecordRange _range;
+    private SystemViewCommandAssessmentPolicy _policy;
 
-    public CapturedRecordMeasurement(CapturedRecordBinding record)
+    public CapturedRecordMeasurement(CapturedRecordBinding record, SystemViewCommandAssessmentPolicy policy)
     {
         ArgumentNullException.ThrowIfNull(record);
         _range = record.CapturePinnedRecordRange();
+        UpdatePolicy(policy);
+    }
+
+    // Serialized caller supplies the currently resolved course policy.
+    public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidPolicy", nameof(policy)); }
+        _policy = policy;
     }
 
     public CapturedRecordCursor CreateCursor(EcgManualCursor value)
     {
+        EnsureEnabled();
         _ = EcgManualMeasurement.Calculate(value, value, false);
         if (value.DataTimeNs < _range.StartDataSimTimeNs || value.DataTimeNs >= _range.EndExclusiveDataSimTimeNs)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.CursorOutsideRecord", nameof(value)); }
@@ -39,9 +50,19 @@ public sealed class CapturedRecordMeasurement
     public EcgManualMeasurementResult Calculate(CapturedRecordCursor first, CapturedRecordCursor second,
         bool allowAuxiliaryRate)
     {
+        EnsureEnabled();
         ValidateOwner(first, nameof(first));
         ValidateOwner(second, nameof(second));
         return EcgManualMeasurement.Calculate(first.Value, second.Value, allowAuxiliaryRate);
+    }
+
+    private void EnsureEnabled()
+    {
+        if (_policy != SystemViewCommandAssessmentPolicy.Enabled)
+        {
+            throw new CapturedRecordMeasurementException(_policy == SystemViewCommandAssessmentPolicy.CourseLocked
+                ? "RecordMeasurement.CourseLocked" : "RecordMeasurement.Disabled", "policy");
+        }
     }
 
     private void ValidateOwner(CapturedRecordCursor cursor, string parameterName)

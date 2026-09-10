@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Numerics;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
@@ -30,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementPointerMapsPageTimeAndVoltage), MeasurementPointerMapsPageTimeAndVoltage),
+        new(nameof(MeasurementPointerRejectsEdgesAndUnrepresentableValues), MeasurementPointerRejectsEdgesAndUnrepresentableValues),
+        new(nameof(MeasurementPointerRoundTripsFractionalEvidence), MeasurementPointerRoundTripsFractionalEvidence),
+        new(nameof(MeasurementPointerPolicyAndFailurePreserveExistingPair), MeasurementPointerPolicyAndFailurePreserveExistingPair),
         new(nameof(MeasurementPagesOwnSharedBoundaryOnce), MeasurementPagesOwnSharedBoundaryOnce),
         new(nameof(MeasurementPageZoomPreservesDataValues), MeasurementPageZoomPreservesDataValues),
         new(nameof(MeasurementPagesValidateEvenHiddenCursors), MeasurementPagesValidateEvenHiddenCursors),
@@ -75,6 +80,67 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementPointerMapsPageTimeAndVoltage()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport viewport = new(100_000_000, 200_000_000, 30, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursor cursor = measurement.CreateCursorFromPoint(new(80, 1), new(40, 1), viewport, scale);
+        Check.That(cursor.Value == new EcgManualCursor(150_000_000, 1000, 1) && cursor.Slot.ChannelId == ChannelIds[11],
+            "manual point maps through page offset and declared gain into an owned lead cursor");
+        Check.That(measurement.CreateCursorFromPoint(new(30, 1), new(100, 1), viewport, scale).Value == new EcgManualCursor(100_000_000, -2000, 1),
+            "inclusive left and bottom geometry preserve signed amplitude");
+    }
+
+    private static void MeasurementPointerRejectsEdgesAndUnrepresentableValues()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport viewport = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ExactPlotCoordinate[] invalid = [null!, new(100, 1), new(-1, 1), new(0, 0)];
+        foreach (ExactPlotCoordinate x in invalid)
+        {
+            Check.That(MeasurementReason(() => measurement.CreateCursorFromPoint(x, new(60, 1), viewport, scale)) == "RecordMeasurement.InvalidPoint",
+                "invalid rational positions and exclusive right edge reject");
+        }
+        Check.That(MeasurementReason(() => measurement.CreateCursorFromPoint(new(1, 3), new(60, 1), viewport, scale)) == "RecordMeasurement.UnrepresentableTime" &&
+            MeasurementReason(() => measurement.CreateCursorFromPoint(new(0, 1), new(0, 1), viewport,
+                new(0, int.MaxValue, int.MaxValue, 1, uint.MaxValue))) == "RecordMeasurement.UnrepresentableAmplitude",
+            "unrepresentable time or voltage rejects without rounding or overflow");
+    }
+
+    private static void MeasurementPointerRoundTripsFractionalEvidence()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor source = measurement.CreateCursor(new(123456789, -1000, 3));
+        RecordCursorViewport viewport = new(100_000_000, 200_000_000, 30, 333);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ProjectedRecordCursor projected = measurement.ProjectCursor(source, viewport, scale)!;
+        ExactPlotCoordinate x = new((BigInteger)projected.X.WholePixels * projected.X.FractionDenominator + projected.X.FractionNumerator,
+            projected.X.FractionDenominator);
+        CapturedRecordCursor mapped = measurement.CreateCursorFromPoint(x,
+            new((BigInteger)projected.Y.PixelNumerator, (BigInteger)projected.Y.PixelDenominator), viewport, scale);
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(source, mapped), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(mapped.Value == source.Value && restored.Second.Value == source.Value,
+            "fractional forward/inverse mapping and checkpoint restore preserve exact manual data");
+    }
+
+    private static void MeasurementPointerPolicyAndFailurePreserveExistingPair()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        RecordCursorViewport viewport = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => measurement.CreateCursorFromPoint(new(0, 1), new(101, 1), viewport, scale)) == "RecordMeasurement.InvalidPoint",
+            "off-plot pointer amplitude rejects instead of clamping");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.CreateCursorFromPoint(new(0, 1), new(60, 1), viewport, scale)) == "RecordMeasurement.CourseLocked",
+            "pointer entry cannot bypass current course policy");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(measurement.Calculate(cursor, cursor, false).ElapsedMilliseconds == new EcgMeasurementRatio(0, 1),
+            "failed pointer entry leaves existing cursors untouched");
+    }
 
     private static void MeasurementPagesOwnSharedBoundaryOnce()
     {

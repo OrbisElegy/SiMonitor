@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Numerics;
 using Monitor.Domain.Presentation;
 
 namespace Monitor.Application.Presentation;
@@ -89,6 +90,36 @@ public sealed class CapturedRecordMeasurement
         return new(_owner, Slot, value);
     }
 
+    // Explicit rational pointer coordinates. No snapping or implicit quantization.
+    public CapturedRecordCursor CreateCursorFromPoint(ExactPlotCoordinate x, ExactPlotCoordinate y,
+        RecordCursorViewport viewport, EcgVerticalScale verticalScale)
+    {
+        EnsureEnabled();
+        ValidateViewport(viewport);
+        _ = EcgVerticalGeometry.MapMicrovolts(verticalScale, 0, 1);
+        if (x is null || y is null || x.Denominator <= 0 || y.Denominator <= 0 ||
+            x.Numerator < (BigInteger)viewport.PlotLeftPixels * x.Denominator ||
+            x.Numerator >= ((BigInteger)viewport.PlotLeftPixels + viewport.PlotWidthPixels) * x.Denominator ||
+            y.Numerator < (BigInteger)verticalScale.PlotTopPixels * y.Denominator ||
+            y.Numerator > ((BigInteger)verticalScale.PlotTopPixels + verticalScale.PlotHeightPixels) * y.Denominator)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidPoint", nameof(x)); }
+        BigInteger elapsed = BigInteger.DivRem(
+            (x.Numerator - (BigInteger)viewport.PlotLeftPixels * x.Denominator) *
+                (viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs),
+            x.Denominator * viewport.PlotWidthPixels, out BigInteger remainder);
+        if (!remainder.IsZero)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.UnrepresentableTime", nameof(x)); }
+        BigInteger numerator = ((BigInteger)verticalScale.ZeroBaselinePixels * y.Denominator - y.Numerator) *
+            1000 * verticalScale.PixelsPerMillivoltDenominator;
+        BigInteger denominator = y.Denominator * verticalScale.PixelsPerMillivoltNumerator;
+        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        numerator /= divisor;
+        denominator /= divisor;
+        if (numerator < long.MinValue || numerator > long.MaxValue || denominator > uint.MaxValue)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.UnrepresentableAmplitude", nameof(y)); }
+        return CreateCursor(new((long)(viewport.StartDataTimeNs + elapsed), (long)numerator, (uint)denominator));
+    }
+
     // Pixel layout is never written back to cursor evidence.
     public ProjectedRecordCursor ProjectCursor(CapturedRecordCursor cursor, int plotLeftPixels, int plotWidthPixels,
         EcgVerticalScale verticalScale) => ProjectCursor(cursor,
@@ -100,11 +131,8 @@ public sealed class CapturedRecordMeasurement
     {
         EnsureEnabled();
         ValidateOwner(cursor, nameof(cursor));
-        if (viewport is null || viewport.StartDataTimeNs < _range.StartDataSimTimeNs ||
-            viewport.EndExclusiveDataTimeNs > _range.EndExclusiveDataSimTimeNs || viewport.StartDataTimeNs >= viewport.EndExclusiveDataTimeNs)
-        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidViewport", nameof(viewport)); }
+        ValidateViewport(viewport);
         ulong duration = (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs);
-        _ = SweepPlotGeometry.MapSampleOffset(0, duration, viewport.PlotLeftPixels, viewport.PlotWidthPixels);
         EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(verticalScale,
             cursor.Value.MicrovoltsNumerator, cursor.Value.MicrovoltsDenominator);
         if (cursor.Value.DataTimeNs < viewport.StartDataTimeNs || cursor.Value.DataTimeNs >= viewport.EndExclusiveDataTimeNs) { return null; }
@@ -120,6 +148,15 @@ public sealed class CapturedRecordMeasurement
         ValidateOwner(first, nameof(first));
         ValidateOwner(second, nameof(second));
         return EcgManualMeasurement.Calculate(first.Value, second.Value, allowAuxiliaryRate);
+    }
+
+    private void ValidateViewport(RecordCursorViewport viewport)
+    {
+        if (viewport is null || viewport.StartDataTimeNs < _range.StartDataSimTimeNs ||
+            viewport.EndExclusiveDataTimeNs > _range.EndExclusiveDataSimTimeNs || viewport.StartDataTimeNs >= viewport.EndExclusiveDataTimeNs)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidViewport", nameof(viewport)); }
+        _ = SweepPlotGeometry.MapSampleOffset(0, (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs),
+            viewport.PlotLeftPixels, viewport.PlotWidthPixels);
     }
 
     private void EnsureEnabled()

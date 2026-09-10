@@ -30,6 +30,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementPagesOwnSharedBoundaryOnce), MeasurementPagesOwnSharedBoundaryOnce),
+        new(nameof(MeasurementPageZoomPreservesDataValues), MeasurementPageZoomPreservesDataValues),
+        new(nameof(MeasurementPagesValidateEvenHiddenCursors), MeasurementPagesValidateEvenHiddenCursors),
+        new(nameof(MeasurementPagesReprojectRestoredValues), MeasurementPagesReprojectRestoredValues),
         new(nameof(MeasurementProjectionPreservesValuesAcrossResize), MeasurementProjectionPreservesValuesAcrossResize),
         new(nameof(MeasurementProjectionRetainsFractionalAndOutsideCoordinates), MeasurementProjectionRetainsFractionalAndOutsideCoordinates),
         new(nameof(MeasurementProjectionEnforcesPolicyOwnershipAndBounds), MeasurementProjectionEnforcesPolicyOwnershipAndBounds),
@@ -71,6 +75,62 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementPagesOwnSharedBoundaryOnce()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor boundary = measurement.CreateCursor(new(100_000_000, 0, 1));
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(measurement.ProjectCursor(boundary, new(0, 100_000_000, 30, 500), scale) is null &&
+            measurement.ProjectCursor(boundary, new(100_000_000, 200_000_000, 30, 500), scale)!.X.WholePixels == 30,
+            "shared page boundary appears only at the next page's inclusive left edge");
+        Check.That(measurement.ProjectCursor(measurement.CreateCursor(new(99_999_999, 0, 1)), new(100_000_000, 200_000_000, 30, 500), scale) is null,
+            "off-page cursors are omitted instead of clamped to page edges");
+    }
+
+    private static void MeasurementPageZoomPreservesDataValues()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = measurement.CreateCursor(new(50_000_000, 0, 1)), second = measurement.CreateCursor(new(150_000_000, 1000, 1));
+        EcgManualMeasurementResult before = measurement.Calculate(first, second, true);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ProjectedRecordCursor full = measurement.ProjectCursor(second, 30, 100, scale);
+        ProjectedRecordCursor page = measurement.ProjectCursor(second, new(100_000_000, 200_000_000, 30, 100), scale)!;
+        Check.That(full.X.WholePixels == 105 && page.X.WholePixels == 80 && full.Y == page.Y &&
+            ReferenceEquals(page.Cursor, second) && measurement.Calculate(first, second, true) == before,
+            "subrange projection changes only layout, not source values or measurements spanning pages");
+    }
+
+    private static void MeasurementPagesValidateEvenHiddenCursors()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordCursorViewport[] invalid = [null!, new(-1, 100, 0, 100), new(1, 1, 0, 100), new(100, 99, 0, 100), new(0, 200_000_001, 0, 100)];
+        foreach (RecordCursorViewport viewport in invalid)
+        {
+            Check.That(MeasurementReason(() => measurement.ProjectCursor(cursor, viewport, scale)) == "RecordMeasurement.InvalidViewport",
+                "invalid record subranges reject before output");
+        }
+        try { _ = measurement.ProjectCursor(cursor, new(1, 100, 0, 0), scale); throw new InvalidOperationException("invalid hidden layout accepted"); }
+        catch (SweepPlotGeometryException exception) { Check.That(exception.ReasonCode == "SweepGeometry.InvalidPlotBounds", "hidden cursors do not bypass layout validation"); }
+        Check.That(measurement.ProjectCursor(cursor, new(0, 100, 0, 100), scale)!.X.WholePixels == 0, "rejected projection leaves cursor unchanged");
+    }
+
+    private static void MeasurementPagesReprojectRestoredValues()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(123456789, 1000, 3));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(cursor, cursor), SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport viewport = new(100_000_000, 200_000_000, 30, 333);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ProjectedRecordCursor expected = measurement.ProjectCursor(cursor, viewport, scale)!;
+        ProjectedRecordCursor actual = restored.Measurement.ProjectCursor(restored.First, viewport, scale)!;
+        Check.That(expected.X == actual.X && expected.Y == actual.Y, "restored data values reproject without saved page pixels");
+        restored.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(MeasurementReason(() => restored.Measurement.ProjectCursor(restored.First, viewport, scale)) == "RecordMeasurement.Disabled",
+            "page projection retains current course policy enforcement");
+    }
 
     private static void MeasurementProjectionPreservesValuesAcrossResize()
     {

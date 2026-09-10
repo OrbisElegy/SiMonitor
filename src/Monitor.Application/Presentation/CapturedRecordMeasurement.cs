@@ -23,6 +23,7 @@ public sealed record CapturedRecordMeasurementCheckpoint(CapturedRecordBindingSt
 public sealed record RestoredRecordMeasurement(CapturedRecordMeasurement Measurement,
     CapturedRecordCursor First, CapturedRecordCursor Second);
 public sealed record ProjectedRecordCursor(CapturedRecordCursor Cursor, SweepPixelPosition X, EcgVerticalPosition Y);
+public sealed record RecordCursorViewport(long StartDataTimeNs, long EndExclusiveDataTimeNs, int PlotLeftPixels, int PlotWidthPixels);
 
 // Local measurement ownership, not authority identity or authentication of amplitude.
 public sealed class CapturedRecordMeasurement
@@ -88,17 +89,27 @@ public sealed class CapturedRecordMeasurement
         return new(_owner, Slot, value);
     }
 
-    // Full-record viewport only. Pixel layout is never written back to cursor evidence.
+    // Pixel layout is never written back to cursor evidence.
     public ProjectedRecordCursor ProjectCursor(CapturedRecordCursor cursor, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale verticalScale) => ProjectCursor(cursor,
+            new RecordCursorViewport(_range.StartDataSimTimeNs, _range.EndExclusiveDataSimTimeNs, plotLeftPixels, plotWidthPixels), verticalScale)!;
+
+    // Null means the valid cursor lies outside this half-open page, not missing data.
+    public ProjectedRecordCursor? ProjectCursor(CapturedRecordCursor cursor, RecordCursorViewport viewport,
         EcgVerticalScale verticalScale)
     {
         EnsureEnabled();
         ValidateOwner(cursor, nameof(cursor));
-        ulong offset = (ulong)(cursor.Value.DataTimeNs - _range.StartDataSimTimeNs);
-        ulong duration = (ulong)(_range.EndExclusiveDataSimTimeNs - _range.StartDataSimTimeNs);
-        SweepPixelPosition x = SweepPlotGeometry.MapSampleOffset(offset, duration, plotLeftPixels, plotWidthPixels);
+        if (viewport is null || viewport.StartDataTimeNs < _range.StartDataSimTimeNs ||
+            viewport.EndExclusiveDataTimeNs > _range.EndExclusiveDataSimTimeNs || viewport.StartDataTimeNs >= viewport.EndExclusiveDataTimeNs)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidViewport", nameof(viewport)); }
+        ulong duration = (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs);
+        _ = SweepPlotGeometry.MapSampleOffset(0, duration, viewport.PlotLeftPixels, viewport.PlotWidthPixels);
         EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(verticalScale,
             cursor.Value.MicrovoltsNumerator, cursor.Value.MicrovoltsDenominator);
+        if (cursor.Value.DataTimeNs < viewport.StartDataTimeNs || cursor.Value.DataTimeNs >= viewport.EndExclusiveDataTimeNs) { return null; }
+        ulong offset = (ulong)(cursor.Value.DataTimeNs - viewport.StartDataTimeNs);
+        SweepPixelPosition x = SweepPlotGeometry.MapSampleOffset(offset, duration, viewport.PlotLeftPixels, viewport.PlotWidthPixels);
         return new(cursor, x, y);
     }
 

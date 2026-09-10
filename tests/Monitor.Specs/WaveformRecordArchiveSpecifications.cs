@@ -30,6 +30,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementProjectionPreservesValuesAcrossResize), MeasurementProjectionPreservesValuesAcrossResize),
+        new(nameof(MeasurementProjectionRetainsFractionalAndOutsideCoordinates), MeasurementProjectionRetainsFractionalAndOutsideCoordinates),
+        new(nameof(MeasurementProjectionEnforcesPolicyOwnershipAndBounds), MeasurementProjectionEnforcesPolicyOwnershipAndBounds),
+        new(nameof(MeasurementProjectionRestoresFromDataEvidence), MeasurementProjectionRestoresFromDataEvidence),
         new(nameof(MeasurementCheckpointReissuesOwnedCursorPair), MeasurementCheckpointReissuesOwnedCursorPair),
         new(nameof(MeasurementCheckpointRejectsTamperedValues), MeasurementCheckpointRejectsTamperedValues),
         new(nameof(MeasurementCheckpointUsesCurrentCoursePolicy), MeasurementCheckpointUsesCurrentCoursePolicy),
@@ -67,6 +71,62 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementProjectionPreservesValuesAcrossResize()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(100_000_000, 1000, 1));
+        EcgManualMeasurementResult before = measurement.Calculate(first, second, true);
+        ProjectedRecordCursor narrow = measurement.ProjectCursor(second, 30, 100, new(0, 100, 60, 20, 1));
+        ProjectedRecordCursor wide = measurement.ProjectCursor(second, 40, 200, new(0, 200, 120, 40, 1));
+        Check.That(narrow.X.WholePixels == 80 && narrow.Y.PixelNumerator == 40 &&
+            wide.X.WholePixels == 140 && wide.Y.PixelNumerator == 80 && ReferenceEquals(wide.Cursor, second) &&
+            measurement.Calculate(first, second, true) == before,
+            "layout and gain alter only projected pixels while preserving data cursors and exact measurement");
+    }
+
+    private static void MeasurementProjectionRetainsFractionalAndOutsideCoordinates()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(1, 1000, 3));
+        ProjectedRecordCursor point = measurement.ProjectCursor(cursor, 0, 100, new(0, 100, 60, 20, 1));
+        Check.That(point.X.WholePixels == 0 && point.X.FractionNumerator == 100 && point.X.FractionDenominator == 200_000_000 &&
+            point.Y.PixelNumerator == 160 && point.Y.PixelDenominator == 3,
+            "subpixel time and rational voltage remain exact at projection");
+        ProjectedRecordCursor above = measurement.ProjectCursor(measurement.CreateCursor(new(199_999_999, 10000, 1)),
+            0, 100, new(0, 100, 60, 20, 1));
+        Check.That(above.X.WholePixels == 99 && above.Y.Relation == VerticalPlotRelation.AbovePlot && above.Y.PixelNumerator == -140,
+            "last included time remains left of the right edge and outside amplitudes are not clamped");
+    }
+
+    private static void MeasurementProjectionEnforcesPolicyOwnershipAndBounds()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement other = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => measurement.ProjectCursor(other.CreateCursor(cursor.Value), 0, 100, scale)) == "RecordMeasurement.ForeignCursor",
+            "projection cannot expose foreign cursor geometry");
+        try { _ = measurement.ProjectCursor(cursor, 0, 0, scale); throw new InvalidOperationException("zero viewport accepted"); }
+        catch (SweepPlotGeometryException exception) { Check.That(exception.ReasonCode == "SweepGeometry.InvalidPlotBounds", "invalid viewport rejects"); }
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.ProjectCursor(cursor, 0, 100, scale)) == "RecordMeasurement.CourseLocked",
+            "course locking covers the projection entry point too");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(measurement.ProjectCursor(cursor, 0, 100, scale).X.WholePixels == 0, "failed projections preserve accepted evidence");
+    }
+
+    private static void MeasurementProjectionRestoresFromDataEvidence()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(123456789, -1000, 3));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(first, second), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ProjectedRecordCursor expected = measurement.ProjectCursor(second, 30, 500, scale);
+        ProjectedRecordCursor actual = restored.Measurement.ProjectCursor(restored.Second, 30, 500, scale);
+        Check.That(expected.X == actual.X && expected.Y == actual.Y && actual.Cursor.Slot == second.Slot,
+            "restore rebuilds identical display coordinates from record values without persisting pixels");
+    }
 
     private static void MeasurementCheckpointReissuesOwnedCursorPair()
     {

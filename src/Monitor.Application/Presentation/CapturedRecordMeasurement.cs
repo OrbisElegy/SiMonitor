@@ -22,6 +22,7 @@ public sealed record CapturedRecordMeasurementCheckpoint(CapturedRecordBindingSt
     string SlotId, EcgManualCursor First, EcgManualCursor Second);
 public sealed record RestoredRecordMeasurement(CapturedRecordMeasurement Measurement,
     CapturedRecordCursor First, CapturedRecordCursor Second);
+public sealed record ProjectedRecordCursor(CapturedRecordCursor Cursor, SweepPixelPosition X, EcgVerticalPosition Y);
 
 // Local measurement ownership, not authority identity or authentication of amplitude.
 public sealed class CapturedRecordMeasurement
@@ -85,6 +86,20 @@ public sealed class CapturedRecordMeasurement
         if (value.DataTimeNs < _range.StartDataSimTimeNs || value.DataTimeNs >= _range.EndExclusiveDataSimTimeNs)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.CursorOutsideRecord", nameof(value)); }
         return new(_owner, Slot, value);
+    }
+
+    // Full-record viewport only. Pixel layout is never written back to cursor evidence.
+    public ProjectedRecordCursor ProjectCursor(CapturedRecordCursor cursor, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale verticalScale)
+    {
+        EnsureEnabled();
+        ValidateOwner(cursor, nameof(cursor));
+        ulong offset = (ulong)(cursor.Value.DataTimeNs - _range.StartDataSimTimeNs);
+        ulong duration = (ulong)(_range.EndExclusiveDataSimTimeNs - _range.StartDataSimTimeNs);
+        SweepPixelPosition x = SweepPlotGeometry.MapSampleOffset(offset, duration, plotLeftPixels, plotWidthPixels);
+        EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(verticalScale,
+            cursor.Value.MicrovoltsNumerator, cursor.Value.MicrovoltsDenominator);
+        return new(cursor, x, y);
     }
 
     public EcgManualMeasurementResult Calculate(CapturedRecordCursor first, CapturedRecordCursor second,

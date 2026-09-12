@@ -7,7 +7,10 @@ public sealed record CapturedRecordStudyDisplay(Ecg12ViewAdmissionDecision Admis
     CapturedRecordBinding? Record, RecordMeasurementDisplay? Measurement, RecordSlotBinding? MeasurementSlot);
 
 public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
-    CapturedRecordPage? Page, RecordCursorViewport? Viewport);
+    CapturedRecordNavigationDisplay? Navigation, RecordCursorViewport? Viewport)
+{
+    public CapturedRecordPage? Page => Navigation?.Page;
+}
 
 // Serialized composition. The shell must replace the old display with this result.
 public sealed class CapturedRecordStudyView
@@ -49,11 +52,12 @@ public sealed class CapturedRecordStudyView
         Ecg12ViewAdmissionDecision admission = Ecg12ViewAdmission.Evaluate(_context,
             TemporalViewMode.CapturedRecord, canPreserveGlobalSafetyOverlay);
         if (!admission.MayEnter) { return new(new(admission, null, null, null), null, null); }
-        CapturedRecordPage page = navigation.CurrentPage;
+        CapturedRecordNavigationDisplay commands = navigation.CaptureDisplay();
+        CapturedRecordPage page = commands.Page;
         _ = SweepPlotGeometry.MapSampleOffset(0, (ulong)(page.EndExclusiveDataTimeNs - page.StartDataTimeNs), plotLeftPixels, plotWidthPixels);
         _ = EcgVerticalGeometry.MapMicrovolts(scale, 0, 1);
         RecordCursorViewport viewport = new(page.StartDataTimeNs, page.EndExclusiveDataTimeNs, plotLeftPixels, plotWidthPixels);
-        return new(CaptureDisplay(canPreserveGlobalSafetyOverlay, viewport, scale, allowAuxiliaryRate), page, viewport);
+        return new(CaptureDisplay(canPreserveGlobalSafetyOverlay, viewport, scale, allowAuxiliaryRate), commands, viewport);
     }
 
     public CapturedRecordStudyDisplay CaptureDisplay(bool canPreserveGlobalSafetyOverlay,

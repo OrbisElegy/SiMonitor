@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(NavigationCommandDisplayTracksPageBoundaries), NavigationCommandDisplayTracksPageBoundaries),
+        new(nameof(NavigationCommandDisplayCannotAuthorizeStaleActions), NavigationCommandDisplayCannotAuthorizeStaleActions),
+        new(nameof(NavigationCommandDisplayRestoresCurrentPolicy), NavigationCommandDisplayRestoresCurrentPolicy),
+        new(nameof(StudyDisplayIncludesAndSuppressesNavigationCommands), StudyDisplayIncludesAndSuppressesNavigationCommands),
         new(nameof(NavigatedDisplayUsesCurrentPage), NavigatedDisplayUsesCurrentPage),
         new(nameof(NavigatedDisplayRejectsForeignRecord), NavigatedDisplayRejectsForeignRecord),
         new(nameof(NavigatedDisplaySuppressesDeniedPage), NavigatedDisplaySuppressesDeniedPage),
@@ -122,6 +126,62 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void NavigationCommandDisplayTracksPageBoundaries()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigationDisplay first = navigation.CaptureDisplay();
+        Check.That(!first.Previous.IsEnabled && first.Previous.ReasonCode == "RecordPagination.NoPreviousPage" && first.Next.IsEnabled && first.Select.IsEnabled,
+            "first-page chrome disables only previous");
+        navigation.NextPage();
+        CapturedRecordNavigationDisplay middle = navigation.CaptureDisplay();
+        Check.That(middle.Previous.IsEnabled && middle.Next.IsEnabled && middle.Select.IsEnabled, "middle page enables both directions");
+        navigation.NextPage();
+        CapturedRecordNavigationDisplay last = navigation.CaptureDisplay();
+        Check.That(last.Previous.IsEnabled && !last.Next.IsEnabled && last.Next.ReasonCode == "RecordPagination.NoNextPage" && first.Page.PageIndex == 0,
+            "last-page chrome and immutable old snapshot retain their respective pages");
+        CapturedRecordNavigationDisplay single = new CapturedRecordNavigation(MeasurementRecord(), long.MaxValue, 0, SystemViewCommandAssessmentPolicy.Enabled).CaptureDisplay();
+        Check.That(!single.Previous.IsEnabled && !single.Next.IsEnabled && single.Select.IsEnabled, "single page has no directional navigation but permits valid explicit selection");
+    }
+
+    private static void NavigationCommandDisplayCannotAuthorizeStaleActions()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigationDisplay stale = navigation.CaptureDisplay();
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            navigation.UpdatePolicy(policy);
+            CapturedRecordNavigationDisplay current = navigation.CaptureDisplay();
+            Check.That(current.Policy == policy && !current.Previous.IsEnabled && !current.Next.IsEnabled && !current.Select.IsEnabled &&
+                current.Previous.ReasonCode == $"RecordPagination.{policy}" && current.Previous == current.Next && current.Next == current.Select,
+                "course restriction supplies consistent status and reason for every command");
+            ExpectPaginationReason(() => navigation.NextPage(), current.Next.ReasonCode);
+            Check.That(stale.Next.IsEnabled && navigation.CurrentPage.PageIndex == 1, "old enabled snapshot cannot authorize a new command");
+        }
+    }
+
+    private static void NavigationCommandDisplayRestoresCurrentPolicy()
+    {
+        CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(restored.CaptureDisplay().Previous.ReasonCode == "RecordPagination.CourseLocked", "restored current policy takes precedence over page boundary reason");
+        CapturedRecordNavigationDisplay locked = restored.CaptureDisplay();
+        ExpectPaginationReason(() => restored.UpdatePolicy((SystemViewCommandAssessmentPolicy)99), "RecordPagination.InvalidPolicy");
+        Check.That(restored.CaptureDisplay() == locked, "invalid update preserves complete command display");
+        restored.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.CaptureDisplay() == original.CaptureDisplay(), "unlock recomputes boundary availability from restored page");
+    }
+
+    private static void StudyDisplayIncludesAndSuppressesNavigationCommands()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPageDisplay display = view.CapturePageDisplay(navigation, true, 0, 100, new(0, 100, 60, 20, 1), false);
+        Check.That(display.Navigation == navigation.CaptureDisplay() && display.Page == display.Navigation!.Page &&
+            display.Viewport!.StartDataTimeNs == display.Page!.StartDataTimeNs, "page, commands and viewport share the captured navigation state");
+        CapturedRecordPageDisplay denied = view.CapturePageDisplay(navigation, false, 0, 100, new(0, 100, 60, 20, 1), false);
+        Check.That(denied.Navigation is null && denied.Page is null && denied.Viewport is null, "admission denial does not expose navigation chrome");
+    }
 
     private static void NavigatedDisplayUsesCurrentPage()
     {

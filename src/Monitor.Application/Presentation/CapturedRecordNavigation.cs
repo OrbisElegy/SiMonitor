@@ -6,6 +6,11 @@ namespace Monitor.Application.Presentation;
 public sealed record CapturedRecordNavigationState(CapturedRecordBindingState Record,
     long PageDurationNs, ulong PageIndex);
 
+public sealed record RecordNavigationCommandDisplay(bool IsEnabled, string ReasonCode);
+public sealed record CapturedRecordNavigationDisplay(CapturedRecordPage Page,
+    SystemViewCommandAssessmentPolicy Policy, RecordNavigationCommandDisplay Previous,
+    RecordNavigationCommandDisplay Next, RecordNavigationCommandDisplay Select);
+
 // Serialized commands; constructor/restore receive the trusted initial page.
 public sealed class CapturedRecordNavigation
 {
@@ -24,6 +29,21 @@ public sealed class CapturedRecordNavigation
 
     public CapturedRecordPage CurrentPage { get; private set; }
     public SystemViewCommandAssessmentPolicy CurrentPolicy => _policy;
+
+    public CapturedRecordNavigationDisplay CaptureDisplay()
+    {
+        if (_policy != SystemViewCommandAssessmentPolicy.Enabled)
+        {
+            RecordNavigationCommandDisplay denied = new(false, _policy == SystemViewCommandAssessmentPolicy.CourseLocked
+                ? "RecordPagination.CourseLocked" : "RecordPagination.Disabled");
+            return new(CurrentPage, _policy, denied, denied, denied);
+        }
+        RecordNavigationCommandDisplay enabled = new(true, "RecordPagination.Enabled");
+        return new(CurrentPage, _policy,
+            CurrentPage.PageIndex == 0 ? new(false, "RecordPagination.NoPreviousPage") : enabled,
+            CurrentPage.PageIndex == CurrentPage.PageCount - 1 ? new(false, "RecordPagination.NoNextPage") : enabled,
+            enabled);
+    }
 
     internal bool IsBoundTo(CapturedRecordBinding record) => ReferenceEquals(_record, record);
 

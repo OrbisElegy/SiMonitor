@@ -57,6 +57,7 @@ internal static class Program
             .. EcgStripSpecifications.All,
             .. EcgManualMeasurementSpecifications.All,
             .. Ecg12ViewAdmissionSpecifications.All,
+            .. Ecg12ThemeSpecifications.All,
             .. SvgFixtureSpecifications.All,
             .. SweepDisplayCompositionSpecifications.All,
             .. FillOnceThenHoldSpecifications.All,

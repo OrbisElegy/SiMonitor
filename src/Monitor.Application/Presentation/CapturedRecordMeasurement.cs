@@ -27,6 +27,8 @@ public sealed record ProjectedRecordCursor(CapturedRecordCursor Cursor, SweepPix
 public sealed record RecordCursorViewport(long StartDataTimeNs, long EndExclusiveDataTimeNs, int PlotLeftPixels, int PlotWidthPixels);
 public enum RecordCursorEnd { First, Second }
 public sealed record CapturedRecordCursorPair(CapturedRecordCursor First, CapturedRecordCursor Second);
+public sealed record RecordMeasurementDisplay(string ReasonCode, ProjectedRecordCursor? First,
+    ProjectedRecordCursor? Second, EcgManualMeasurementResult? Measurement);
 
 // Local measurement ownership, not authority identity or authentication of amplitude.
 public sealed class CapturedRecordMeasurement
@@ -48,6 +50,23 @@ public sealed class CapturedRecordMeasurement
 
     public RecordSlotBinding Slot { get; }
     public CapturedRecordCursorPair? CurrentPair { get; private set; }
+
+    // Serialized UI composition; callers must replace their prior display with this result.
+    public RecordMeasurementDisplay CaptureDisplay(RecordCursorViewport viewport, EcgVerticalScale verticalScale,
+        bool allowAuxiliaryRate)
+    {
+        if (_policy != SystemViewCommandAssessmentPolicy.Enabled)
+        {
+            return new(_policy == SystemViewCommandAssessmentPolicy.CourseLocked
+                ? "RecordMeasurement.CourseLocked" : "RecordMeasurement.Disabled", null, null, null);
+        }
+        CapturedRecordCursorPair? pair = CurrentPair;
+        if (pair is null) { return new("RecordMeasurement.NoCursorPair", null, null, null); }
+        ProjectedRecordCursor? first = ProjectCursor(pair.First, viewport, verticalScale);
+        ProjectedRecordCursor? second = ProjectCursor(pair.Second, viewport, verticalScale);
+        EcgManualMeasurementResult result = Calculate(pair.First, pair.Second, allowAuxiliaryRate);
+        return new("RecordMeasurement.Ready", first, second, result);
+    }
 
     public void ClearPair()
     {

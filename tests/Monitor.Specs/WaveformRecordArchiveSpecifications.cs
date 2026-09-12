@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementDisplayCombinesPagePositionsAndResults), MeasurementDisplayCombinesPagePositionsAndResults),
+        new(nameof(MeasurementDisplaySuppressesLockedAndClearedResults), MeasurementDisplaySuppressesLockedAndClearedResults),
+        new(nameof(MeasurementDisplayFailurePreservesSelection), MeasurementDisplayFailurePreservesSelection),
+        new(nameof(MeasurementDisplayRebuildsAfterRestore), MeasurementDisplayRebuildsAfterRestore),
         new(nameof(MeasurementClearRemovesActivePairAndAllowsReplacement), MeasurementClearRemovesActivePairAndAllowsReplacement),
         new(nameof(MeasurementClearObeysPolicyAndPreservesCheckpoints), MeasurementClearObeysPolicyAndPreservesCheckpoints),
         new(nameof(MeasurementPairReplacementIsAtomic), MeasurementPairReplacementIsAtomic),
@@ -86,6 +90,65 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementDisplayCombinesPagePositionsAndResults()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        measurement.ReplacePair(new(50_000_000, 0, 1), new(150_000_000, 1000, 1));
+        RecordCursorViewport page = new(100_000_000, 200_000_000, 30, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordMeasurementDisplay display = measurement.CaptureDisplay(page, scale, true);
+        Check.That(display.ReasonCode == "RecordMeasurement.Ready" && display.First is null && display.Second!.X.WholePixels == 80 &&
+            display.Measurement!.ElapsedMilliseconds == new EcgMeasurementRatio(100, 1) &&
+            display.Measurement.AuxiliaryRatePerMinute == new EcgMeasurementRatio(600, 1) &&
+            measurement.CaptureDisplay(page, scale, false).Measurement!.AuxiliaryRatePerMinute is null,
+            "one composition combines page visibility and full data measurement with explicit auxiliary-rate permission");
+    }
+
+    private static void MeasurementDisplaySuppressesLockedAndClearedResults()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        measurement.ReplacePair(new(0, 0, 1), new(1, 1, 1));
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            measurement.UpdatePolicy(policy);
+            RecordMeasurementDisplay hidden = measurement.CaptureDisplay(page, scale, true);
+            Check.That(hidden.First is null && hidden.Second is null && hidden.Measurement is null &&
+                hidden.ReasonCode == (policy == SystemViewCommandAssessmentPolicy.Disabled ? "RecordMeasurement.Disabled" : "RecordMeasurement.CourseLocked"),
+                "current denied policy removes both geometry and derived results");
+        }
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        measurement.ClearPair();
+        Check.That(measurement.CaptureDisplay(page, scale, true) == new RecordMeasurementDisplay("RecordMeasurement.NoCursorPair", null, null, null),
+            "cleared selection produces an explicit empty display instead of cached results");
+    }
+
+    private static void MeasurementDisplayFailurePreservesSelection()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordCursorViewport valid = new(0, 200_000_000, 0, 100);
+        RecordMeasurementDisplay before = measurement.CaptureDisplay(valid, scale, false);
+        Check.That(MeasurementReason(() => measurement.CaptureDisplay(valid with { EndExclusiveDataTimeNs = 0 }, scale, true)) == "RecordMeasurement.InvalidViewport" &&
+            ReferenceEquals(measurement.CurrentPair, pair) && measurement.CaptureDisplay(valid, scale, false) == before,
+            "failed composition publishes no partial result and preserves accepted selection");
+    }
+
+    private static void MeasurementDisplayRebuildsAfterRestore()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        measurement.ReplacePair(new(0, 1000, 3), new(123456789, -1000, 3));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport page = new(100_000_000, 200_000_000, 30, 333);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordMeasurementDisplay before = measurement.CaptureDisplay(page, scale, true), after = restored.Measurement.CaptureDisplay(page, scale, true);
+        Check.That(before.Measurement == after.Measurement && before.First is null && after.First is null &&
+            before.Second!.X == after.Second!.X && before.Second.Y == after.Second.Y,
+            "restored data evidence regenerates matching display without persisted derived values");
+    }
 
     private static void MeasurementClearRemovesActivePairAndAllowsReplacement()
     {

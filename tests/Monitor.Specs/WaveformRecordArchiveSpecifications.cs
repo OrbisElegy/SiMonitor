@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(RecordPagesPartitionWithoutGapsOrEmptyTail), RecordPagesPartitionWithoutGapsOrEmptyTail),
+        new(nameof(RecordPagesRejectInvalidRequestsWithoutMutation), RecordPagesRejectInvalidRequestsWithoutMutation),
+        new(nameof(RecordPagesPreserveCursorEvidenceAcrossDisplay), RecordPagesPreserveCursorEvidenceAcrossDisplay),
+        new(nameof(RecordPagesRestoreAndHandleExtremeDurations), RecordPagesRestoreAndHandleExtremeDurations),
         new(nameof(StudySlotSelectionStartsWithIndependentCursors), StudySlotSelectionStartsWithIndependentCursors),
         new(nameof(StudySlotSelectionPreservesCurrentPolicy), StudySlotSelectionPreservesCurrentPolicy),
         new(nameof(StudySlotSelectionFailureAndReselectionPreserveState), StudySlotSelectionFailureAndReselectionPreserveState),
@@ -110,6 +114,66 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void RecordPagesPartitionWithoutGapsOrEmptyTail()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordPage first = CapturedRecordPagination.Resolve(record, 75_000_000, 0);
+        CapturedRecordPage second = CapturedRecordPagination.Resolve(record, 75_000_000, 1);
+        CapturedRecordPage last = CapturedRecordPagination.Resolve(record, 75_000_000, 2);
+        Check.That(first == new CapturedRecordPage(0, 3, 0, 75_000_000) &&
+            second == new CapturedRecordPage(1, 3, 75_000_000, 150_000_000) &&
+            last == new CapturedRecordPage(2, 3, 150_000_000, 200_000_000), "half-open pages exactly partition record with a short final page");
+        Check.That(CapturedRecordPagination.Resolve(record, 100_000_000, 1) == new CapturedRecordPage(1, 2, 100_000_000, 200_000_000),
+            "exactly divisible duration creates no empty extra page");
+    }
+
+    private static void RecordPagesRejectInvalidRequestsWithoutMutation()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        foreach (long invalid in new[] { 0L, -1L, long.MinValue })
+        { ExpectPaginationReason(() => view.ResolvePage(invalid, 0), "RecordPagination.InvalidPageDuration"); }
+        ExpectPaginationReason(() => view.ResolvePage(100_000_000, 2), "RecordPagination.PageOutsideRecord");
+        ExpectPaginationReason(() => view.ResolvePage(1, ulong.MaxValue), "RecordPagination.PageOutsideRecord");
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair) && view.ResolvePage(100_000_000, 0).PageCount == 2,
+            "failed page queries neither edit measurement nor poison subsequent queries");
+    }
+
+    private static void RecordPagesPreserveCursorEvidenceAcrossDisplay()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(50_000_000, 0, 1), new(100_000_000, 1000, 1));
+        CapturedRecordPage first = view.ResolvePage(100_000_000, 0), second = view.ResolvePage(100_000_000, 1);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordStudyDisplay a = view.CaptureDisplay(false, new(first.StartDataTimeNs, first.EndExclusiveDataTimeNs, 0, 100), scale, true);
+        CapturedRecordStudyDisplay b = view.CaptureDisplay(false, new(second.StartDataTimeNs, second.EndExclusiveDataTimeNs, 0, 100), scale, true);
+        Check.That(a.Measurement!.First is not null && a.Measurement.Second is null && b.Measurement!.First is null && b.Measurement.Second is not null &&
+            a.Measurement.Measurement == b.Measurement.Measurement && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "shared page boundary owns cursor once while elapsed time and voltage remain unchanged");
+    }
+
+    private static void RecordPagesRestoreAndHandleExtremeDurations()
+    {
+        CapturedRecordBinding original = MeasurementRecord();
+        CapturedRecordBinding restored = CapturedRecordBinding.Restore(original.CaptureState());
+        Check.That(CapturedRecordPagination.Resolve(restored, 75_000_000, 2) == CapturedRecordPagination.Resolve(original, 75_000_000, 2),
+            "restored verified record produces the same page ranges");
+        Check.That(CapturedRecordPagination.Resolve(restored, long.MaxValue, 0) == new CapturedRecordPage(0, 1, 0, 200_000_000) &&
+            CapturedRecordPagination.Resolve(restored, 1, 199_999_999) == new CapturedRecordPage(199_999_999, 200_000_000, 199_999_999, 200_000_000),
+            "oversized and one-nanosecond pages use bounded arithmetic without materializing page collections");
+    }
+
+    private static void ExpectPaginationReason(Action action, string expected)
+    {
+        try { action(); }
+        catch (CapturedRecordPaginationException exception)
+        {
+            Check.That(exception.ReasonCode == expected, "pagination rejects with stable reason");
+            return;
+        }
+        throw new InvalidOperationException("invalid pagination request accepted");
+    }
 
     private static void StudySlotSelectionStartsWithIndependentCursors()
     {

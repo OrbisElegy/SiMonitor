@@ -24,6 +24,9 @@ public sealed class CapturedRecordStudyView
 
     public CapturedRecordMeasurement Measurement { get; private set; }
 
+    public CapturedRecordPage ResolvePage(long pageDurationNs, ulong pageIndex) =>
+        CapturedRecordPagination.Resolve(_record, pageDurationNs, pageIndex);
+
     public void SelectMeasurementSlot(string slotId)
     {
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }

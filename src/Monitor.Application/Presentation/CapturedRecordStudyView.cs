@@ -12,6 +12,8 @@ public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
     public CapturedRecordPage? Page => Navigation?.Page;
 }
 
+public sealed record ThemedCapturedRecordPageDisplay(CapturedRecordPageDisplay Content, Ecg12ThemeDisplay? Theme);
+
 // Serialized composition. The shell must replace the old display with this result.
 public sealed class CapturedRecordStudyView
 {
@@ -29,6 +31,16 @@ public sealed class CapturedRecordStudyView
     }
 
     public CapturedRecordMeasurement Measurement { get; private set; }
+
+    public ThemedCapturedRecordPageDisplay CaptureThemedPageDisplay(CapturedRecordNavigation navigation,
+        Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,
+        int plotWidthPixels, EcgVerticalScale scale, bool allowAuxiliaryRate)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        CapturedRecordPageDisplay content = CapturePageDisplay(navigation, canPreserveGlobalSafetyOverlay,
+            plotLeftPixels, plotWidthPixels, scale, allowAuxiliaryRate);
+        return new(content, content.Study.Admission.MayEnter ? theme.CaptureDisplay() : null);
+    }
 
     // Trusted serialized policy delivery; validate the full update before changing either command group.
     public void UpdateCommandPolicies(CapturedRecordNavigation navigation,

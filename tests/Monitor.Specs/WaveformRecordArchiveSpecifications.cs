@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyThemeSwitchPreservesContentAndGesture), StudyThemeSwitchPreservesContentAndGesture),
+        new(nameof(StudyThemeDisplayKeepsCommandPoliciesIndependent), StudyThemeDisplayKeepsCommandPoliciesIndependent),
+        new(nameof(StudyThemeDisplayRestoresWithoutBypassingAdmission), StudyThemeDisplayRestoresWithoutBypassingAdmission),
         new(nameof(StudyPolicyUpdatePublishesBothCommandGroups), StudyPolicyUpdatePublishesBothCommandGroups),
         new(nameof(StudyPolicyUpdateRejectsPartialAndForeignChanges), StudyPolicyUpdateRejectsPartialAndForeignChanges),
         new(nameof(StudyPolicyUpdateAppliesToRestoredSelectionAndGesture), StudyPolicyUpdateAppliesToRestoredSelectionAndGesture),
@@ -147,6 +150,57 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyThemeSwitchPreservesContentAndGesture()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        ThemedCapturedRecordPageDisplay before = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, scale, true);
+        theme.Select(Ecg12Theme.PaperGridBlack);
+        ThemedCapturedRecordPageDisplay after = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, scale, true);
+        Check.That(before.Theme!.Theme == Ecg12Theme.MonitorDarkGreen && after.Theme!.Theme == Ecg12Theme.PaperGridBlack &&
+            before.Content == after.Content && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "theme change modifies only theme display while preserving record, page, viewport and manual results");
+        Check.That(ReferenceEquals(drag.Commit(false, 0, 100, scale), pair), "theme change does not invalidate unchanged gesture geometry");
+    }
+
+    private static void StudyThemeDisplayKeepsCommandPoliciesIndependent()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.CourseLocked);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        ThemedCapturedRecordPageDisplay display = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, scale, true);
+        Check.That(display.Theme!.CanSelect && !display.Content.Navigation!.Next.IsEnabled &&
+            display.Content.Study.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked", "separate course command policies are not conflated");
+        theme.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked, true);
+        ThemedCapturedRecordPageDisplay locked = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, scale, true);
+        Check.That(!locked.Theme!.CanSelect && locked.Theme.ReasonCode == "Ecg12Theme.CourseLocked" && locked.Content == display.Content,
+            "locking theme selection retains the selected theme and record display");
+    }
+
+    private static void StudyThemeDisplayRestoresWithoutBypassingAdmission()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = Ecg12ThemeSelection.Restore(new(Ecg12Theme.PaperGridBlack), SystemViewCommandAssessmentPolicy.Enabled, false);
+        ThemedCapturedRecordPageDisplay denied = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 0, new(0, 100, 60, 20, 1), true);
+        Check.That(denied.Theme is null && denied.Content.Page is null && denied.Content.Study.Record is null, "denied admission suppresses theme chrome and record content");
+        try
+        {
+            view.CaptureThemedPageDisplay(navigation, theme, true, 0, 0, new(0, 100, 60, 20, 1), true);
+            throw new InvalidOperationException("invalid themed layout accepted");
+        }
+        catch (SweepPlotGeometryException exception)
+        { Check.That(exception.ReasonCode == "SweepGeometry.InvalidPlotBounds", "theme cannot bypass current page validation"); }
+        ThemedCapturedRecordPageDisplay recovered = view.CaptureThemedPageDisplay(navigation, theme, true, 0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(recovered.Theme!.Theme == Ecg12Theme.PaperGridBlack && !recovered.Theme.CanSelect && recovered.Content.Page!.PageIndex == 1,
+            "fresh valid display retains restored theme and current local permission after failure");
+    }
 
     private static void StudyPolicyUpdatePublishesBothCommandGroups()
     {

@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudySessionRestoresPageLeadAndCursorValues), StudySessionRestoresPageLeadAndCursorValues),
+        new(nameof(StudySessionRestoresEmptyLockedView), StudySessionRestoresEmptyLockedView),
+        new(nameof(StudySessionRejectsIncompleteAndForeignState), StudySessionRejectsIncompleteAndForeignState),
+        new(nameof(StudySessionUsesCurrentMeasurementPolicy), StudySessionUsesCurrentMeasurementPolicy),
         new(nameof(StudyDragRejectsPageRoundTripBetweenEvents), StudyDragRejectsPageRoundTripBetweenEvents),
         new(nameof(StudyDragSurvivesNoOpAndRejectedNavigation), StudyDragSurvivesNoOpAndRejectedNavigation),
         new(nameof(StudyDragCanRestartAfterPageRoundTripRollback), StudyDragCanRestartAfterPageRoundTripRollback),
@@ -140,6 +144,76 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudySessionRestoresPageLeadAndCursorValues()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair original = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        CapturedRecordStudySessionState checkpoint = view.CaptureSession(navigation);
+        view.SelectMeasurementSlot("ecg.slot0");
+        navigation.PreviousPage();
+        RestoredRecordStudySession restored = CapturedRecordStudySession.Restore(checkpoint, Ecg12RecordContext.ActiveInstance,
+            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPageDisplay display = restored.View.CapturePageDisplay(restored.Navigation, true, 0, 200, new(0, 100, 60, 40, 1), true);
+        Check.That(display.Page!.PageIndex == 1 && display.Study.MeasurementSlot!.SlotId == "ecg.slot1" &&
+            restored.View.Measurement.CurrentPair!.Second.Value == original.Second.Value && display.Navigation!.Policy == SystemViewCommandAssessmentPolicy.CourseLocked,
+            "one restored record binds the saved page, lead and data values under current policies");
+        Check.That(!restored.View.CapturePageDisplay(restored.Navigation, false, 0, 100, new(0, 100, 60, 20, 1), false).Study.Admission.MayEnter,
+            "restored current context requires current overlay capability");
+        Check.That(MeasurementReason(() => restored.View.Measurement.Calculate(original.First, original.Second, true)) == "RecordMeasurement.ForeignCursor",
+            "restoration issues fresh measurement ownership");
+    }
+
+    private static void StudySessionRestoresEmptyLockedView()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudySessionState checkpoint = view.CaptureSession(navigation);
+        RestoredRecordStudySession restored = CapturedRecordStudySession.Restore(checkpoint, Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(checkpoint.First is null && checkpoint.Second is null && restored.View.Measurement.CurrentPair is null &&
+            restored.View.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled,
+            "empty selection restores without inventing cursors while retaining explicitly supplied policy");
+        ExpectPaginationReason(() => restored.Navigation.NextPage(), "RecordPagination.CourseLocked");
+    }
+
+    private static void StudySessionRejectsIncompleteAndForeignState()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudySessionState checkpoint = view.CaptureSession(navigation);
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.CaptureSession(foreign), "RecordPagination.ForeignNavigation");
+        foreach (CapturedRecordStudySessionState invalid in new[]
+        {
+            checkpoint with { First = new(0, 0, 1) },
+            checkpoint with { SlotId = "unknown" },
+            checkpoint with { Navigation = checkpoint.Navigation with { PageIndex = 2 } },
+            checkpoint with { First = new(100_000_000, 0, 1), Second = new(0, 0, 1) },
+        })
+        {
+            ExpectPaginationReason(() => CapturedRecordStudySession.Restore(invalid, Ecg12RecordContext.IndependentCapturedRecord,
+                SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled), "RecordStudy.InvalidCheckpoint");
+        }
+        Check.That(view.Measurement.CurrentPair is null && navigation.CurrentPage.PageIndex == 0, "invalid session trials cannot alter the original session");
+    }
+
+    private static void StudySessionUsesCurrentMeasurementPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordStudySessionState checkpoint = view.CaptureSession(navigation);
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => view.CaptureSession(navigation)) == "RecordMeasurement.CourseLocked" &&
+            MeasurementReason(() => CapturedRecordStudySession.Restore(checkpoint, Ecg12RecordContext.IndependentCapturedRecord,
+                SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Disabled)) == "RecordMeasurement.Disabled",
+            "session capture and populated restore preserve existing caliper permission gates");
+        RestoredRecordStudySession restored = CapturedRecordStudySession.Restore(checkpoint, Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.View.Measurement.CurrentPair!.Second.Value == checkpoint.Second, "fresh authorized restore remains possible after denied attempt");
+    }
 
     private static void StudyDragRejectsPageRoundTripBetweenEvents()
     {

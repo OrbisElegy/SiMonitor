@@ -36,6 +36,15 @@ public sealed class CapturedRecordStudyView
     public CapturedRecordNavigation CreateNavigation(long pageDurationNs, ulong initialPageIndex,
         SystemViewCommandAssessmentPolicy paginationPolicy) => new(_record, pageDurationNs, initialPageIndex, paginationPolicy);
 
+    public CapturedRecordStudySessionState CaptureSession(CapturedRecordNavigation navigation)
+    {
+        if (navigation is null || !navigation.IsBoundTo(_record))
+        { throw new CapturedRecordPaginationException("RecordPagination.ForeignNavigation", nameof(navigation)); }
+        CapturedRecordCursorPair? pair = Measurement.CurrentPair;
+        if (pair is not null) { _ = Measurement.Calculate(pair.First, pair.Second, false); }
+        return new(navigation.CaptureState(), Measurement.Slot.SlotId, pair?.First.Value, pair?.Second.Value);
+    }
+
     public void SelectMeasurementSlot(string slotId)
     {
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }

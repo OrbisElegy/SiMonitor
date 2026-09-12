@@ -6,10 +6,23 @@ namespace Monitor.Application.Presentation;
 public sealed record CapturedRecordStudySessionState(CapturedRecordNavigationState Navigation,
     string SlotId, EcgManualCursor? First, EcgManualCursor? Second);
 public sealed record RestoredRecordStudySession(CapturedRecordNavigation Navigation, CapturedRecordStudyView View);
+public sealed record ThemedCapturedRecordStudySessionState(CapturedRecordStudySessionState Study, Ecg12ThemeState Theme);
+public sealed record RestoredThemedRecordStudySession(RestoredRecordStudySession Study, Ecg12ThemeSelection Theme);
 
 // In-memory state only. Context, permissions, display pixels and gestures are not persisted.
 public static class CapturedRecordStudySession
 {
+    public static RestoredThemedRecordStudySession RestoreThemed(ThemedCapturedRecordStudySessionState state,
+        Ecg12RecordContext currentContext, SystemViewCommandAssessmentPolicy paginationPolicy,
+        SystemViewCommandAssessmentPolicy measurementPolicy, SystemViewCommandAssessmentPolicy themePolicy,
+        bool allowLocalThemeSelection)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        Ecg12ThemeSelection theme = Ecg12ThemeSelection.Restore(state.Theme, themePolicy, allowLocalThemeSelection);
+        RestoredRecordStudySession study = Restore(state.Study, currentContext, paginationPolicy, measurementPolicy);
+        return new(study, theme);
+    }
+
     public static RestoredRecordStudySession Restore(CapturedRecordStudySessionState state,
         Ecg12RecordContext currentContext, SystemViewCommandAssessmentPolicy paginationPolicy,
         SystemViewCommandAssessmentPolicy measurementPolicy)

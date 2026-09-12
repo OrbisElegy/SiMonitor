@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ThemedSessionRestoresCoherentDisplayState), ThemedSessionRestoresCoherentDisplayState),
+        new(nameof(ThemedSessionUsesCurrentPermissions), ThemedSessionUsesCurrentPermissions),
+        new(nameof(ThemedSessionRejectsInvalidComponentsWithoutMutation), ThemedSessionRejectsInvalidComponentsWithoutMutation),
         new(nameof(StudyThemeSwitchPreservesContentAndGesture), StudyThemeSwitchPreservesContentAndGesture),
         new(nameof(StudyThemeDisplayKeepsCommandPoliciesIndependent), StudyThemeDisplayKeepsCommandPoliciesIndependent),
         new(nameof(StudyThemeDisplayRestoresWithoutBypassingAdmission), StudyThemeDisplayRestoresWithoutBypassingAdmission),
@@ -150,6 +153,64 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ThemedSessionRestoresCoherentDisplayState()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
+        theme.Select(Ecg12Theme.MonitorDarkGreen);
+        navigation.PreviousPage();
+        view.SelectMeasurementSlot("ecg.slot0");
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
+        ThemedCapturedRecordPageDisplay display = restored.Study.View.CaptureThemedPageDisplay(restored.Study.Navigation, restored.Theme, false,
+            0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(display.Theme!.Theme == Ecg12Theme.PaperGridBlack && display.Content.Page!.PageIndex == 1 &&
+            display.Content.Study.MeasurementSlot!.SlotId == "ecg.slot1" && restored.Study.View.Measurement.CurrentPair!.Second.Value == pair.Second.Value,
+            "combined checkpoint retains captured theme, page, lead and manual data independently of later source edits");
+    }
+
+    private static void ThemedSessionUsesCurrentPermissions()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.ActiveInstance,
+            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Enabled, false);
+        Check.That(restored.Study.Navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked &&
+            restored.Study.View.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
+            restored.Theme.CaptureDisplay().ReasonCode == "Ecg12Theme.LocalSelectionNotAllowed", "all current command gates are explicit restore inputs");
+        ExpectPaginationReason(() => restored.Study.Navigation.NextPage(), "RecordPagination.CourseLocked");
+        Check.That(restored.Study.View.CaptureThemedPageDisplay(restored.Study.Navigation, restored.Theme, false, 0, 100, new(0, 100, 60, 20, 1), false).Theme is null,
+            "restored theme does not bypass current context admission");
+    }
+
+    private static void ThemedSessionRejectsInvalidComponentsWithoutMutation()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
+        try
+        {
+            CapturedRecordStudySession.RestoreThemed(state with { Theme = new((Ecg12Theme)99) }, Ecg12RecordContext.IndependentCapturedRecord,
+                SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
+            throw new InvalidOperationException("invalid saved theme accepted");
+        }
+        catch (Ecg12ThemeSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Theme.InvalidTheme", "invalid theme rejects combined restoration"); }
+        ExpectPaginationReason(() => CapturedRecordStudySession.RestoreThemed(state with { Study = state.Study with { SlotId = "unknown" } },
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled,
+            SystemViewCommandAssessmentPolicy.Enabled, true), "RecordStudy.InvalidCheckpoint");
+        RestoredThemedRecordStudySession recovered = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        Check.That(recovered.Theme.Theme == theme.Theme && navigation.CurrentPage.PageIndex == 0 && view.Measurement.CurrentPair is null,
+            "invalid components publish no combined session and leave source state available for a valid retry");
+    }
 
     private static void StudyThemeSwitchPreservesContentAndGesture()
     {

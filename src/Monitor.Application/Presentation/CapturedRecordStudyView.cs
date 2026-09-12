@@ -71,6 +71,12 @@ public sealed class CapturedRecordStudyView
         return new(navigation.CaptureState(), Measurement.Slot.SlotId, pair?.First.Value, pair?.Second.Value);
     }
 
+    public ThemedCapturedRecordStudySessionState CaptureThemedSession(CapturedRecordNavigation navigation, Ecg12ThemeSelection theme)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        return new(CaptureSession(navigation), theme.CaptureState());
+    }
+
     public void SelectMeasurementSlot(string slotId)
     {
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }

@@ -43,6 +43,32 @@ public sealed class CapturedRecordStudyView
         Measurement = replacement;
     }
 
+    public CapturedRecordCursorPair PlacePairOnCurrentPage(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        ExactPlotCoordinate firstX, ExactPlotCoordinate firstY, ExactPlotCoordinate secondX, ExactPlotCoordinate secondY)
+    {
+        RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        return Measurement.ReplacePairFromPoints(firstX, firstY, secondX, secondY, viewport, scale);
+    }
+
+    public CapturedRecordCursorPair MoveCursorOnCurrentPage(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y)
+    {
+        RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        return Measurement.MoveCursor(end, x, y, viewport, scale);
+    }
+
+    private RecordCursorViewport RequireCurrentViewport(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale)
+    {
+        CapturedRecordPageDisplay display = CapturePageDisplay(navigation, canPreserveGlobalSafetyOverlay,
+            plotLeftPixels, plotWidthPixels, scale, false);
+        if (!display.Study.Admission.MayEnter)
+        { throw new Ecg12ViewAdmissionException(display.Study.Admission.ReasonCode, nameof(canPreserveGlobalSafetyOverlay)); }
+        return display.Viewport!;
+    }
+
     public CapturedRecordPageDisplay CapturePageDisplay(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
         EcgVerticalScale scale, bool allowAuxiliaryRate)

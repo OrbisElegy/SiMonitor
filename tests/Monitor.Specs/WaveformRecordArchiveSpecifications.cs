@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(CurrentPageEditingUsesNavigationTimeRange), CurrentPageEditingUsesNavigationTimeRange),
+        new(nameof(CurrentPageEditingRespectsIndependentPolicies), CurrentPageEditingRespectsIndependentPolicies),
+        new(nameof(CurrentPageEditingDenialPreservesSelection), CurrentPageEditingDenialPreservesSelection),
+        new(nameof(CurrentPageEditingRecoversAndCheckpointsData), CurrentPageEditingRecoversAndCheckpointsData),
         new(nameof(NavigationCommandDisplayTracksPageBoundaries), NavigationCommandDisplayTracksPageBoundaries),
         new(nameof(NavigationCommandDisplayCannotAuthorizeStaleActions), NavigationCommandDisplayCannotAuthorizeStaleActions),
         new(nameof(NavigationCommandDisplayRestoresCurrentPolicy), NavigationCommandDisplayRestoresCurrentPolicy),
@@ -126,6 +130,69 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void CurrentPageEditingUsesNavigationTimeRange()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair first = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        navigation.NextPage();
+        CapturedRecordCursorPair moved = view.MoveCursorOnCurrentPage(navigation, false, 0, 100, scale, RecordCursorEnd.Second, new(50, 1), new(40, 1));
+        Check.That(first.Second.Value.DataTimeNs == 50_000_000 && moved.Second.Value.DataTimeNs == 150_000_000 &&
+            ReferenceEquals(first.First, moved.First), "identical pixels on a new page resolve through current navigation and preserve other endpoint");
+        CapturedRecordCursorPair replaced = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        Check.That(replaced.First.Value.DataTimeNs == 100_000_000 && replaced.Second.Value.MicrovoltsNumerator == 1000,
+            "new pair uses current page time and calibrated manual voltage");
+    }
+
+    private static void CurrentPageEditingRespectsIndependentPolicies()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.CourseLocked);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            view.Measurement.UpdatePolicy(policy);
+            Check.That(MeasurementReason(() => view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1))) == $"RecordMeasurement.{policy}" &&
+                MeasurementReason(() => view.MoveCursorOnCurrentPage(navigation, false, 0, 100, scale, RecordCursorEnd.Second, new(75, 1), new(40, 1))) == $"RecordMeasurement.{policy}" &&
+                ReferenceEquals(view.Measurement.CurrentPair, pair), "caliper policy gates both edits independently of locked pagination");
+        }
+    }
+
+    private static void CurrentPageEditingDenialPreservesSelection()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, true, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        try
+        {
+            view.MoveCursorOnCurrentPage(navigation, false, 0, 100, scale, RecordCursorEnd.Second, new(75, 1), new(40, 1));
+            throw new InvalidOperationException("denied study edit accepted");
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable", "current safety capability gates edits"); }
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.PlacePairOnCurrentPage(foreign, true, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1)),
+            "RecordPagination.ForeignNavigation");
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "denied and foreign edits preserve active selection");
+    }
+
+    private static void CurrentPageEditingRecoversAndCheckpointsData()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair initial = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        Check.That(MeasurementReason(() => view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(100, 1), new(40, 1))) ==
+            "RecordMeasurement.InvalidPoint" && ReferenceEquals(initial, view.Measurement.CurrentPair), "invalid second point cannot partially replace current-page selection");
+        CapturedRecordCursorPair moved = view.MoveCursorOnCurrentPage(navigation, false, 0, 100, scale, RecordCursorEnd.Second, new(75, 1), new(40, 1));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == moved.Second.Value && restored.Second.Value.DataTimeNs == 175_000_000,
+            "recovered editing persists absolute record time rather than page-relative pixels");
+    }
 
     private static void NavigationCommandDisplayTracksPageBoundaries()
     {

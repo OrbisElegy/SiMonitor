@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementDragRejectsVerticallyHiddenEndpoints), MeasurementDragRejectsVerticallyHiddenEndpoints),
+        new(nameof(MeasurementDragAcceptsExactVerticalEdges), MeasurementDragAcceptsExactVerticalEdges),
+        new(nameof(MeasurementHiddenCursorRecoversAfterGainChangeAndRestore), MeasurementHiddenCursorRecoversAfterGainChangeAndRestore),
         new(nameof(CurrentPageEditingUsesNavigationTimeRange), CurrentPageEditingUsesNavigationTimeRange),
         new(nameof(CurrentPageEditingRespectsIndependentPolicies), CurrentPageEditingRespectsIndependentPolicies),
         new(nameof(CurrentPageEditingDenialPreservesSelection), CurrentPageEditingDenialPreservesSelection),
@@ -130,6 +133,54 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementDragRejectsVerticallyHiddenEndpoints()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        // Fractional excursions must not be rounded onto the visible edge.
+        CapturedRecordCursorPair pair = measurement.ReplacePair(new(0, 6_000_001, 2000), new(100_000_000, -4_000_001, 2000));
+        Check.That(MeasurementReason(() => { _ = new CapturedRecordDrag(measurement, RecordCursorEnd.First, page, scale); }) ==
+            "RecordMeasurement.DragCursorNotVisible" &&
+            MeasurementReason(() => { _ = new CapturedRecordDrag(measurement, RecordCursorEnd.Second, page, scale); }) ==
+            "RecordMeasurement.DragCursorNotVisible" && ReferenceEquals(measurement.CurrentPair, pair),
+            "exactly off-plot endpoints reject drag start without snapping or changing values");
+        Check.That(measurement.ProjectCursor(pair.First, page, scale)!.Y.Relation == VerticalPlotRelation.AbovePlot &&
+            measurement.ProjectCursor(pair.Second, page, scale)!.Y.Relation == VerticalPlotRelation.BelowPlot,
+            "projection still retains unclamped evidence for hidden cursors");
+    }
+
+    private static void MeasurementDragAcceptsExactVerticalEdges()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        measurement.ReplacePair(new(0, 3000, 1), new(100_000_000, -2000, 1));
+        CapturedRecordDrag top = new(measurement, RecordCursorEnd.First, page, scale);
+        top.Preview(new(0, 1), new(0, 1), page, scale);
+        top.Commit(page, scale);
+        CapturedRecordDrag bottom = new(measurement, RecordCursorEnd.Second, page, scale);
+        bottom.Preview(new(50, 1), new(100, 1), page, scale);
+        CapturedRecordCursorPair committed = bottom.Commit(page, scale);
+        Check.That(committed.First.Value.MicrovoltsNumerator == 3000 && committed.Second.Value.MicrovoltsNumerator == -2000,
+            "both closed vertical edges accept drag start and exact pointer round trips");
+    }
+
+    private static void MeasurementHiddenCursorRecoversAfterGainChangeAndRestore()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair original = measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 4000, 1));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        Check.That(MeasurementReason(() => { _ = new CapturedRecordDrag(restored.Measurement, RecordCursorEnd.Second, page, new(0, 100, 60, 20, 1)); }) ==
+            "RecordMeasurement.DragCursorNotVisible", "restore preserves hidden amplitude rather than clamping it");
+        EcgVerticalScale reducedGain = new(0, 100, 60, 10, 1);
+        CapturedRecordDrag visible = new(restored.Measurement, RecordCursorEnd.Second, page, reducedGain);
+        visible.Preview(new(75, 1), new(30, 1), page, reducedGain);
+        Check.That(visible.Cancel().Second.Value == original.Second.Value,
+            "a fresh gesture at a visible gain can cancel back to exact original data");
+    }
 
     private static void CurrentPageEditingUsesNavigationTimeRange()
     {

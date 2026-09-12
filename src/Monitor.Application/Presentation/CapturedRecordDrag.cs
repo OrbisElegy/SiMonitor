@@ -23,7 +23,9 @@ public sealed class CapturedRecordDrag
         { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidCursorEnd", nameof(end)); }
         _initial = measurement.CurrentPair ?? throw new CapturedRecordMeasurementException("RecordMeasurement.NoCursorPair", nameof(measurement));
         _ = measurement.Calculate(_initial.First, _initial.Second, false);
-        if (measurement.ProjectCursor(end == RecordCursorEnd.First ? _initial.First : _initial.Second, viewport, scale) is null)
+        ProjectedRecordCursor? projected = measurement.ProjectCursor(
+            end == RecordCursorEnd.First ? _initial.First : _initial.Second, viewport, scale);
+        if (projected is null || projected.Y.Relation != VerticalPlotRelation.WithinPlot)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.DragCursorNotVisible", nameof(viewport)); }
         _viewport = viewport;
         _scale = scale;

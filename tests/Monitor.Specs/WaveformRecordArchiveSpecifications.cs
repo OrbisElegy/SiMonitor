@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementDragCancelRestoresInitialValues), MeasurementDragCancelRestoresInitialValues),
+        new(nameof(MeasurementDragCommitClosesGesture), MeasurementDragCommitClosesGesture),
+        new(nameof(MeasurementOldGestureCannotOverwriteReplacement), MeasurementOldGestureCannotOverwriteReplacement),
+        new(nameof(MeasurementGestureFailurePreservesPreview), MeasurementGestureFailurePreservesPreview),
         new(nameof(MeasurementDisplayCombinesPagePositionsAndResults), MeasurementDisplayCombinesPagePositionsAndResults),
         new(nameof(MeasurementDisplaySuppressesLockedAndClearedResults), MeasurementDisplaySuppressesLockedAndClearedResults),
         new(nameof(MeasurementDisplayFailurePreservesSelection), MeasurementDisplayFailurePreservesSelection),
@@ -90,6 +94,66 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static CapturedRecordMeasurement EditableMeasurement()
+    {
+        CapturedRecordMeasurement result = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        result.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        return result;
+    }
+
+    private static void MeasurementDragCancelRestoresInitialValues()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair initial = measurement.CurrentPair!;
+        CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second);
+        drag.Preview(new(75, 1), new(40, 1), new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
+        CapturedRecordCursorPair restored = drag.Cancel();
+        Check.That(restored.First.Value == initial.First.Value && restored.Second.Value == initial.Second.Value &&
+            ReferenceEquals(measurement.CurrentPair, restored) && MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished",
+            "cancel restores pre-gesture data exactly and ends the gesture");
+        RestoredRecordMeasurement replay = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(replay.Second.Value == initial.Second.Value, "checkpoint after cancel contains restored values");
+    }
+
+    private static void MeasurementDragCommitClosesGesture()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second);
+        CapturedRecordCursorPair preview = drag.Preview(new(75, 1), new(40, 1), new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
+        Check.That(ReferenceEquals(drag.Commit(), preview) && preview.Second.Value == new EcgManualCursor(150_000_000, 1000, 1) &&
+            MeasurementReason(() => drag.Commit()) == "RecordMeasurement.DragFinished" &&
+            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished",
+            "commit keeps the final preview and closed gestures cannot commit or roll it back again");
+    }
+
+    private static void MeasurementOldGestureCannotOverwriteReplacement()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second);
+        CapturedRecordCursorPair replacement = measurement.ReplacePair(new(1, 0, 1), new(2, 0, 1));
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragSuperseded" &&
+            MeasurementReason(() => drag.Commit()) == "RecordMeasurement.DragSuperseded" &&
+            ReferenceEquals(measurement.CurrentPair, replacement), "old gesture cannot undo a replacement");
+        CapturedRecordDrag cleared = new(measurement, RecordCursorEnd.First);
+        measurement.ClearPair();
+        Check.That(MeasurementReason(() => cleared.Cancel()) == "RecordMeasurement.DragSuperseded" && measurement.CurrentPair is null,
+            "old gesture cannot resurrect a cleared pair");
+    }
+
+    private static void MeasurementGestureFailurePreservesPreview()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second);
+        CapturedRecordCursorPair accepted = measurement.CurrentPair!;
+        Check.That(MeasurementReason(() => drag.Preview(new(100, 1), new(60, 1), new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1))) ==
+            "RecordMeasurement.InvalidPoint" && ReferenceEquals(measurement.CurrentPair, accepted), "invalid preview preserves gesture state");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => drag.Commit()) == "RecordMeasurement.CourseLocked" &&
+            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.CourseLocked", "current policy applies to gesture completion");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(drag.Cancel().Second.Value == accepted.Second.Value, "failed completion does not consume the gesture");
+    }
 
     private static void MeasurementDisplayCombinesPagePositionsAndResults()
     {

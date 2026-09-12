@@ -30,6 +30,20 @@ public sealed class CapturedRecordStudyView
 
     public CapturedRecordMeasurement Measurement { get; private set; }
 
+    // Trusted serialized policy delivery; validate the full update before changing either command group.
+    public void UpdateCommandPolicies(CapturedRecordNavigation navigation,
+        SystemViewCommandAssessmentPolicy paginationPolicy, SystemViewCommandAssessmentPolicy measurementPolicy)
+    {
+        if (navigation is null || !navigation.IsBoundTo(_record))
+        { throw new CapturedRecordPaginationException("RecordPagination.ForeignNavigation", nameof(navigation)); }
+        if (!Enum.IsDefined(paginationPolicy))
+        { throw new CapturedRecordPaginationException("RecordStudy.InvalidPolicy", nameof(paginationPolicy)); }
+        if (!Enum.IsDefined(measurementPolicy))
+        { throw new CapturedRecordPaginationException("RecordStudy.InvalidPolicy", nameof(measurementPolicy)); }
+        navigation.UpdatePolicy(paginationPolicy);
+        Measurement.UpdatePolicy(measurementPolicy);
+    }
+
     public CapturedRecordPage ResolvePage(long pageDurationNs, ulong pageIndex) =>
         CapturedRecordPagination.Resolve(_record, pageDurationNs, pageIndex);
 

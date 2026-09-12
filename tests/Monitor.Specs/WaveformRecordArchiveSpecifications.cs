@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyPolicyUpdatePublishesBothCommandGroups), StudyPolicyUpdatePublishesBothCommandGroups),
+        new(nameof(StudyPolicyUpdateRejectsPartialAndForeignChanges), StudyPolicyUpdateRejectsPartialAndForeignChanges),
+        new(nameof(StudyPolicyUpdateAppliesToRestoredSelectionAndGesture), StudyPolicyUpdateAppliesToRestoredSelectionAndGesture),
         new(nameof(StudySessionRestoresPageLeadAndCursorValues), StudySessionRestoresPageLeadAndCursorValues),
         new(nameof(StudySessionRestoresEmptyLockedView), StudySessionRestoresEmptyLockedView),
         new(nameof(StudySessionRejectsIncompleteAndForeignState), StudySessionRejectsIncompleteAndForeignState),
@@ -144,6 +147,57 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyPolicyUpdatePublishesBothCommandGroups()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordPageDisplay display = view.CapturePageDisplay(navigation, false, 0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(display.Navigation!.Policy == SystemViewCommandAssessmentPolicy.Disabled && !display.Navigation.Next.IsEnabled &&
+            display.Study.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked" && display.Study.Measurement.Measurement is null &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "complete update changes both command displays without destroying selected evidence");
+        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.Disabled");
+        Check.That(MeasurementReason(() => view.Measurement.ClearPair()) == "RecordMeasurement.CourseLocked", "measurement command sees the same update");
+        view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(navigation.NextPage().PageIndex == 1 && view.Measurement.Calculate(pair.First, pair.Second, true).AmplitudeChangeMillivolts == new EcgMeasurementRatio(1, 1),
+            "explicit complete unlock restores both groups independently of retained data");
+    }
+
+    private static void StudyPolicyUpdateRejectsPartialAndForeignChanges()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        ExpectPaginationReason(() => view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Enabled, (SystemViewCommandAssessmentPolicy)99),
+            "RecordStudy.InvalidPolicy");
+        ExpectPaginationReason(() => view.UpdateCommandPolicies(navigation, (SystemViewCommandAssessmentPolicy)99, SystemViewCommandAssessmentPolicy.Enabled),
+            "RecordStudy.InvalidPolicy");
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
+        ExpectPaginationReason(() => view.UpdateCommandPolicies(foreign, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled),
+            "RecordPagination.ForeignNavigation");
+        Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
+            foreign.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled, "invalid second policy, first policy and foreign binding leave all prior policies intact");
+    }
+
+    private static void StudyPolicyUpdateAppliesToRestoredSelectionAndGesture()
+    {
+        CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView originalView = original.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        originalView.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        RestoredRecordStudySession restored = CapturedRecordStudySession.Restore(originalView.CaptureSession(original), Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordStudyDrag drag = restored.View.BeginCursorDrag(restored.Navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        restored.View.UpdateCommandPolicies(restored.Navigation, SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(MeasurementReason(() => drag.Commit(false, 0, 100, scale)) == "RecordMeasurement.Disabled", "already-issued gesture observes the updated measurement policy");
+        restored.View.UpdateCommandPolicies(restored.Navigation, SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Enabled);
+        drag.Cancel();
+        restored.View.SelectMeasurementSlot("ecg.slot1");
+        restored.View.UpdateCommandPolicies(restored.Navigation, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(restored.View.Measurement.Slot.SlotId == "ecg.slot1" && restored.View.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked &&
+            restored.Navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled, "update targets current selected lead after restoration and replacement");
+    }
 
     private static void StudySessionRestoresPageLeadAndCursorValues()
     {

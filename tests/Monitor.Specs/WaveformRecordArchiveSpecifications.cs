@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(NavigatedDisplayUsesCurrentPage), NavigatedDisplayUsesCurrentPage),
+        new(nameof(NavigatedDisplayRejectsForeignRecord), NavigatedDisplayRejectsForeignRecord),
+        new(nameof(NavigatedDisplaySuppressesDeniedPage), NavigatedDisplaySuppressesDeniedPage),
+        new(nameof(NavigatedDisplayRebindsRestoredNavigation), NavigatedDisplayRebindsRestoredNavigation),
         new(nameof(RecordNavigationMovesWithoutChangingMeasurements), RecordNavigationMovesWithoutChangingMeasurements),
         new(nameof(RecordNavigationBoundariesPreservePage), RecordNavigationBoundariesPreservePage),
         new(nameof(RecordNavigationGatesEveryCommand), RecordNavigationGatesEveryCommand),
@@ -118,6 +122,64 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void NavigatedDisplayUsesCurrentPage()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(50_000_000, 0, 1), new(100_000_000, 1000, 1));
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordPageDisplay first = view.CapturePageDisplay(navigation, false, 0, 100, scale, true);
+        navigation.NextPage();
+        navigation.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordPageDisplay second = view.CapturePageDisplay(navigation, false, 0, 100, scale, true);
+        Check.That(first.Page!.PageIndex == 0 && second.Page!.PageIndex == 1 && second.Viewport!.StartDataTimeNs == 100_000_000 &&
+            first.Study.Measurement!.First is not null && first.Study.Measurement.Second is null &&
+            second.Study.Measurement!.First is null && second.Study.Measurement.Second is not null &&
+            first.Study.Measurement.Measurement == second.Study.Measurement.Measurement && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "current navigation page determines visibility without changing evidence, including locked page display");
+    }
+
+    private static void NavigatedDisplayRejectsForeignRecord()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.CapturePageDisplay(foreign, false, 0, 100, new(0, 100, 60, 20, 1), true),
+            "RecordPagination.ForeignNavigation");
+        Check.That(view.Measurement.CurrentPair is null && foreign.CurrentPage.PageIndex == 0,
+            "even equivalent record bytes require explicit shared binding and rejection changes neither state");
+    }
+
+    private static void NavigatedDisplaySuppressesDeniedPage()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPageDisplay denied = view.CapturePageDisplay(navigation, false, 0, 0, new(0, 100, 60, 20, 1), true);
+        Check.That(!denied.Study.Admission.MayEnter && denied.Page is null && denied.Viewport is null && denied.Study.Record is null,
+            "denied admission suppresses page metadata without depending on a usable layout");
+        try
+        {
+            view.CapturePageDisplay(navigation, true, 0, 0, new(0, 100, 60, 20, 1), true);
+            throw new InvalidOperationException("invalid empty-display layout accepted");
+        }
+        catch (SweepPlotGeometryException exception)
+        { Check.That(exception.ReasonCode == "SweepGeometry.InvalidPlotBounds", "empty or disabled calipers do not bypass page layout validation"); }
+        CapturedRecordPageDisplay recovered = view.CapturePageDisplay(navigation, true, 0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(recovered.Page!.PageIndex == 0 && recovered.Study.Measurement!.ReasonCode == "RecordMeasurement.Disabled",
+            "valid layout recovers without navigating and keeps caliper policy distinct");
+    }
+
+    private static void NavigatedDisplayRebindsRestoredNavigation()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 2, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(navigation.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudyView view = restored.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPageDisplay display = view.CapturePageDisplay(restored, false, 10, 100, new(0, 100, 60, 20, 1), false);
+        Check.That(display.Page == navigation.CurrentPage && display.Viewport == new RecordCursorViewport(150_000_000, 200_000_000, 10, 100) &&
+            display.Study.MeasurementSlot!.SlotId == "ecg.slot1", "restored navigation creates a view bound to its revalidated record");
+        ExpectPaginationReason(() => view.CapturePageDisplay(navigation, false, 10, 100, new(0, 100, 60, 20, 1), false),
+            "RecordPagination.ForeignNavigation");
+    }
 
     private static void RecordNavigationMovesWithoutChangingMeasurements()
     {

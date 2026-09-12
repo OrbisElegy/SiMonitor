@@ -25,6 +25,11 @@ public sealed class CapturedRecordNavigation
     public CapturedRecordPage CurrentPage { get; private set; }
     public SystemViewCommandAssessmentPolicy CurrentPolicy => _policy;
 
+    internal bool IsBoundTo(CapturedRecordBinding record) => ReferenceEquals(_record, record);
+
+    public CapturedRecordStudyView CreateStudyView(Ecg12RecordContext context, string slotId,
+        SystemViewCommandAssessmentPolicy measurementPolicy) => new(_record, context, slotId, measurementPolicy);
+
     public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy)
     {
         if (!Enum.IsDefined(policy))

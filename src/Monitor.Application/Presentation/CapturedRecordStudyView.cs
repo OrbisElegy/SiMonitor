@@ -6,6 +6,9 @@ namespace Monitor.Application.Presentation;
 public sealed record CapturedRecordStudyDisplay(Ecg12ViewAdmissionDecision Admission,
     CapturedRecordBinding? Record, RecordMeasurementDisplay? Measurement, RecordSlotBinding? MeasurementSlot);
 
+public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
+    CapturedRecordPage? Page, RecordCursorViewport? Viewport);
+
 // Serialized composition. The shell must replace the old display with this result.
 public sealed class CapturedRecordStudyView
 {
@@ -35,6 +38,22 @@ public sealed class CapturedRecordStudyView
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }
         CapturedRecordMeasurement replacement = new(_record, slotId, Measurement.CurrentPolicy);
         Measurement = replacement;
+    }
+
+    public CapturedRecordPageDisplay CapturePageDisplay(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, bool allowAuxiliaryRate)
+    {
+        if (navigation is null || !navigation.IsBoundTo(_record))
+        { throw new CapturedRecordPaginationException("RecordPagination.ForeignNavigation", nameof(navigation)); }
+        Ecg12ViewAdmissionDecision admission = Ecg12ViewAdmission.Evaluate(_context,
+            TemporalViewMode.CapturedRecord, canPreserveGlobalSafetyOverlay);
+        if (!admission.MayEnter) { return new(new(admission, null, null, null), null, null); }
+        CapturedRecordPage page = navigation.CurrentPage;
+        _ = SweepPlotGeometry.MapSampleOffset(0, (ulong)(page.EndExclusiveDataTimeNs - page.StartDataTimeNs), plotLeftPixels, plotWidthPixels);
+        _ = EcgVerticalGeometry.MapMicrovolts(scale, 0, 1);
+        RecordCursorViewport viewport = new(page.StartDataTimeNs, page.EndExclusiveDataTimeNs, plotLeftPixels, plotWidthPixels);
+        return new(CaptureDisplay(canPreserveGlobalSafetyOverlay, viewport, scale, allowAuxiliaryRate), page, viewport);
     }
 
     public CapturedRecordStudyDisplay CaptureDisplay(bool canPreserveGlobalSafetyOverlay,

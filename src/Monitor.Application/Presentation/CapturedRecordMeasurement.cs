@@ -25,6 +25,8 @@ public sealed record RestoredRecordMeasurement(CapturedRecordMeasurement Measure
     CapturedRecordCursor First, CapturedRecordCursor Second);
 public sealed record ProjectedRecordCursor(CapturedRecordCursor Cursor, SweepPixelPosition X, EcgVerticalPosition Y);
 public sealed record RecordCursorViewport(long StartDataTimeNs, long EndExclusiveDataTimeNs, int PlotLeftPixels, int PlotWidthPixels);
+public enum RecordCursorEnd { First, Second }
+public sealed record CapturedRecordCursorPair(CapturedRecordCursor First, CapturedRecordCursor Second);
 
 // Local measurement ownership, not authority identity or authentication of amplitude.
 public sealed class CapturedRecordMeasurement
@@ -45,6 +47,37 @@ public sealed class CapturedRecordMeasurement
     }
 
     public RecordSlotBinding Slot { get; }
+    public CapturedRecordCursorPair? CurrentPair { get; private set; }
+
+    public CapturedRecordCursorPair ReplacePair(EcgManualCursor first, EcgManualCursor second)
+    {
+        CapturedRecordCursor a = CreateCursor(first), b = CreateCursor(second);
+        _ = Calculate(a, b, false);
+        return CurrentPair = new(a, b);
+    }
+
+    public CapturedRecordCursorPair MoveCursor(RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y,
+        RecordCursorViewport viewport, EcgVerticalScale verticalScale)
+    {
+        EnsureEnabled();
+        if (!Enum.IsDefined(end))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidCursorEnd", nameof(end)); }
+        CapturedRecordCursorPair pair = RequirePair();
+        CapturedRecordCursor moved = CreateCursorFromPoint(x, y, viewport, verticalScale);
+        CapturedRecordCursorPair candidate = end == RecordCursorEnd.First ? pair with { First = moved } : pair with { Second = moved };
+        _ = Calculate(candidate.First, candidate.Second, false);
+        return CurrentPair = candidate;
+    }
+
+    public CapturedRecordMeasurementCheckpoint CaptureCheckpoint()
+    {
+        EnsureEnabled();
+        CapturedRecordCursorPair pair = RequirePair();
+        return CaptureCheckpoint(pair.First, pair.Second);
+    }
+
+    private CapturedRecordCursorPair RequirePair() => CurrentPair ??
+        throw new CapturedRecordMeasurementException("RecordMeasurement.NoCursorPair", nameof(CurrentPair));
 
     public CapturedRecordMeasurementCheckpoint CaptureCheckpoint(CapturedRecordCursor first, CapturedRecordCursor second)
     {
@@ -61,10 +94,8 @@ public sealed class CapturedRecordMeasurement
         {
             ArgumentNullException.ThrowIfNull(checkpoint);
             CapturedRecordMeasurement measurement = new(CapturedRecordBinding.Restore(checkpoint.Record), checkpoint.SlotId, currentPolicy);
-            CapturedRecordCursor first = measurement.CreateCursor(checkpoint.First);
-            CapturedRecordCursor second = measurement.CreateCursor(checkpoint.Second);
-            _ = measurement.Calculate(first, second, false);
-            return new(measurement, first, second);
+            CapturedRecordCursorPair pair = measurement.ReplacePair(checkpoint.First, checkpoint.Second);
+            return new(measurement, pair.First, pair.Second);
         }
         catch (CapturedRecordMeasurementException exception) when
             (exception.ReasonCode is "RecordMeasurement.Disabled" or "RecordMeasurement.CourseLocked")

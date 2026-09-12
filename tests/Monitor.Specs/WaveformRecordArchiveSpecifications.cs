@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementPairReplacementIsAtomic), MeasurementPairReplacementIsAtomic),
+        new(nameof(MeasurementDragCommitsOnlyOrderedPairs), MeasurementDragCommitsOnlyOrderedPairs),
+        new(nameof(MeasurementDragRejectsMissingInvalidAndLockedEntry), MeasurementDragRejectsMissingInvalidAndLockedEntry),
+        new(nameof(MeasurementActivePairRestoresForFurtherEditing), MeasurementActivePairRestoresForFurtherEditing),
         new(nameof(MeasurementPointerMapsPageTimeAndVoltage), MeasurementPointerMapsPageTimeAndVoltage),
         new(nameof(MeasurementPointerRejectsEdgesAndUnrepresentableValues), MeasurementPointerRejectsEdgesAndUnrepresentableValues),
         new(nameof(MeasurementPointerRoundTripsFractionalEvidence), MeasurementPointerRoundTripsFractionalEvidence),
@@ -80,6 +84,61 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementPairReplacementIsAtomic()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair accepted = measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        Check.That(MeasurementReason(() => measurement.ReplacePair(new(1, 0, 1), new(200_000_000, 0, 1))) == "RecordMeasurement.CursorOutsideRecord" &&
+            ReferenceEquals(measurement.CurrentPair, accepted), "late second-cursor rejection cannot publish half a replacement");
+        CapturedRecordCursorPair replacement = measurement.ReplacePair(new(1, 0, 1), new(2, 0, 1));
+        Check.That(ReferenceEquals(measurement.CurrentPair, replacement) && accepted.First.Value.DataTimeNs == 0,
+            "complete replacement commits once and leaves previous immutable pair unchanged");
+    }
+
+    private static void MeasurementDragCommitsOnlyOrderedPairs()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair initial = measurement.ReplacePair(new(50_000_000, 0, 1), new(150_000_000, 1000, 1));
+        RecordCursorViewport viewport = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        try { _ = measurement.MoveCursor(RecordCursorEnd.First, new(90, 1), new(60, 1), viewport, scale); throw new InvalidOperationException("crossed cursor accepted"); }
+        catch (EcgManualMeasurementException exception) { Check.That(exception.ReasonCode == "ManualMeasurement.TimeReversed", "crossing rejects without swapping endpoints"); }
+        Check.That(ReferenceEquals(measurement.CurrentPair, initial), "rejected drag preserves the previous pair");
+        CapturedRecordCursorPair moved = measurement.MoveCursor(RecordCursorEnd.First, new(75, 1), new(40, 1), viewport, scale);
+        Check.That(ReferenceEquals(moved.Second, initial.Second) && moved.First.Value == moved.Second.Value &&
+            measurement.Calculate(moved.First, moved.Second, true).AuxiliaryRatePerMinute is null,
+            "moving one endpoint preserves the other and equal times produce no auxiliary rate");
+    }
+
+    private static void MeasurementDragRejectsMissingInvalidAndLockedEntry()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        RecordCursorViewport viewport = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => measurement.MoveCursor(RecordCursorEnd.First, new(0, 1), new(60, 1), viewport, scale)) == "RecordMeasurement.NoCursorPair" &&
+            MeasurementReason(() => measurement.CaptureCheckpoint()) == "RecordMeasurement.NoCursorPair",
+            "editing and capture require an initialized pair");
+        CapturedRecordCursorPair pair = measurement.ReplacePair(new(0, 0, 1), new(1, 0, 1));
+        Check.That(MeasurementReason(() => measurement.MoveCursor((RecordCursorEnd)999, new(0, 1), new(60, 1), viewport, scale)) == "RecordMeasurement.InvalidCursorEnd",
+            "invalid endpoint rejects explicitly");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.MoveCursor(RecordCursorEnd.Second, new(0, 1), new(60, 1), viewport, scale)) == "RecordMeasurement.CourseLocked" &&
+            ReferenceEquals(pair, measurement.CurrentPair), "locking prevents editing without mutating the saved pair");
+    }
+
+    private static void MeasurementActivePairRestoresForFurtherEditing()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(ReferenceEquals(restored.Measurement.CurrentPair!.First, restored.First) && restored.Second.Value == pair.Second.Value,
+            "restore initializes a complete active pair with fresh owned handles");
+        CapturedRecordCursorPair moved = restored.Measurement.MoveCursor(RecordCursorEnd.Second, new(75, 1), new(60, 1),
+            new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
+        Check.That(moved.Second.Value.DataTimeNs == 150_000_000 && measurement.CurrentPair!.Second.Value.DataTimeNs == 100_000_000,
+            "restored editing is independent from the original measurement context");
+    }
 
     private static void MeasurementPointerMapsPageTimeAndVoltage()
     {

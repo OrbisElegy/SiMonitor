@@ -49,6 +49,7 @@ public sealed class CapturedRecordMeasurement
     }
 
     public RecordSlotBinding Slot { get; }
+    public SystemViewCommandAssessmentPolicy CurrentPolicy => _policy;
     public CapturedRecordCursorPair? CurrentPair { get; private set; }
 
     // Serialized UI composition; callers must replace their prior display with this result.

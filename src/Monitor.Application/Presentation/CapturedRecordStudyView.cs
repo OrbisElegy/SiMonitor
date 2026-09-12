@@ -4,7 +4,7 @@ using Monitor.Domain.Presentation;
 namespace Monitor.Application.Presentation;
 
 public sealed record CapturedRecordStudyDisplay(Ecg12ViewAdmissionDecision Admission,
-    CapturedRecordBinding? Record, RecordMeasurementDisplay? Measurement);
+    CapturedRecordBinding? Record, RecordMeasurementDisplay? Measurement, RecordSlotBinding? MeasurementSlot);
 
 // Serialized composition. The shell must replace the old display with this result.
 public sealed class CapturedRecordStudyView
@@ -22,15 +22,22 @@ public sealed class CapturedRecordStudyView
         Measurement = new(record, slotId, measurementPolicy);
     }
 
-    public CapturedRecordMeasurement Measurement { get; }
+    public CapturedRecordMeasurement Measurement { get; private set; }
+
+    public void SelectMeasurementSlot(string slotId)
+    {
+        if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }
+        CapturedRecordMeasurement replacement = new(_record, slotId, Measurement.CurrentPolicy);
+        Measurement = replacement;
+    }
 
     public CapturedRecordStudyDisplay CaptureDisplay(bool canPreserveGlobalSafetyOverlay,
         RecordCursorViewport viewport, EcgVerticalScale scale, bool allowAuxiliaryRate)
     {
         Ecg12ViewAdmissionDecision admission = Ecg12ViewAdmission.Evaluate(_context,
             TemporalViewMode.CapturedRecord, canPreserveGlobalSafetyOverlay);
-        if (!admission.MayEnter) { return new(admission, null, null); }
+        if (!admission.MayEnter) { return new(admission, null, null, null); }
         RecordMeasurementDisplay measurement = Measurement.CaptureDisplay(viewport, scale, allowAuxiliaryRate);
-        return new(admission, _record, measurement);
+        return new(admission, _record, measurement, Measurement.Slot);
     }
 }

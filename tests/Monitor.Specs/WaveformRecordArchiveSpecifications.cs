@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudySlotSelectionStartsWithIndependentCursors), StudySlotSelectionStartsWithIndependentCursors),
+        new(nameof(StudySlotSelectionPreservesCurrentPolicy), StudySlotSelectionPreservesCurrentPolicy),
+        new(nameof(StudySlotSelectionFailureAndReselectionPreserveState), StudySlotSelectionFailureAndReselectionPreserveState),
+        new(nameof(StudySlotSelectionIsolatesOldGesturesAndRestoresValues), StudySlotSelectionIsolatesOldGesturesAndRestoresValues),
         new(nameof(StudyViewSuppressesContentWhenOverlayIsLost), StudyViewSuppressesContentWhenOverlayIsLost),
         new(nameof(StudyViewSeparatesAdmissionAndMeasurementPolicy), StudyViewSeparatesAdmissionAndMeasurementPolicy),
         new(nameof(StudyViewCompositionFailurePreservesRecordAndSelection), StudyViewCompositionFailurePreservesRecordAndSelection),
@@ -106,6 +110,62 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudySlotSelectionStartsWithIndependentCursors()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair old = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        view.SelectMeasurementSlot("ecg.slot1");
+        CapturedRecordStudyDisplay display = view.CaptureDisplay(true, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1), true);
+        Check.That(view.Measurement.CurrentPair is null && display.MeasurementSlot == new RecordSlotBinding("ecg.slot1", ChannelIds[10]) &&
+            display.Measurement!.ReasonCode == "RecordMeasurement.NoCursorPair", "selection resolves verified mapping and never transfers another lead's voltage");
+        Check.That(MeasurementReason(() => view.Measurement.Calculate(old.First, old.Second, true)) == "RecordMeasurement.ForeignCursor",
+            "old lead handles cannot measure the selected lead");
+        Check.That(view.CaptureDisplay(false, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1), true).MeasurementSlot is null,
+            "denied admission also suppresses selected slot metadata");
+    }
+
+    private static void StudySlotSelectionPreservesCurrentPolicy()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled })
+        {
+            view.Measurement.UpdatePolicy(policy);
+            view.SelectMeasurementSlot(view.Measurement.Slot.SlotId == "ecg.slot0" ? "ecg.slot1" : "ecg.slot0");
+            Check.That(view.Measurement.CurrentPolicy == policy && MeasurementReason(() => view.Measurement.ReplacePair(new(0, 0, 1), new(1, 0, 1))) ==
+                $"RecordMeasurement.{policy}", "switching leads does not re-enable course-locked or disabled calipers");
+        }
+    }
+
+    private static void StudySlotSelectionFailureAndReselectionPreserveState()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordMeasurement initial = view.Measurement;
+        CapturedRecordCursorPair pair = initial.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        view.SelectMeasurementSlot("ecg.slot0");
+        Check.That(ReferenceEquals(view.Measurement, initial) && ReferenceEquals(view.Measurement.CurrentPair, pair), "same-slot selection preserves gestures and values");
+        Check.That(MeasurementReason(() => view.SelectMeasurementSlot("ECG.slot1")) == "RecordMeasurement.UnknownSlot" &&
+            ReferenceEquals(view.Measurement, initial) && ReferenceEquals(view.Measurement.CurrentPair, pair), "invalid exact slot leaves selection unchanged");
+    }
+
+    private static void StudySlotSelectionIsolatesOldGesturesAndRestoresValues()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordDrag oldDrag = new(view.Measurement, RecordCursorEnd.Second, page, scale);
+        view.SelectMeasurementSlot("ecg.slot1");
+        CapturedRecordCursorPair selected = view.Measurement.ReplacePair(new(0, 0, 1), new(150_000_000, 500, 1));
+        oldDrag.Preview(new(75, 1), new(40, 1), page, scale);
+        oldDrag.Cancel();
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, selected), "detached old gesture cannot overwrite current lead");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Measurement.Slot == view.Measurement.Slot && restored.Second.Value == selected.Second.Value,
+            "selected lead checkpoint retains its own channel and cursor values");
+        view.SelectMeasurementSlot("ecg.slot0");
+        Check.That(view.Measurement.CurrentPair is null, "returning to a lead does not resurrect detached selections");
+    }
 
     private static void StudyViewSuppressesContentWhenOverlayIsLost()
     {

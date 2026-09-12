@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyDragRejectsPageRoundTripBetweenEvents), StudyDragRejectsPageRoundTripBetweenEvents),
+        new(nameof(StudyDragSurvivesNoOpAndRejectedNavigation), StudyDragSurvivesNoOpAndRejectedNavigation),
+        new(nameof(StudyDragCanRestartAfterPageRoundTripRollback), StudyDragCanRestartAfterPageRoundTripRollback),
         new(nameof(StudyDragCommitsCurrentPagePreview), StudyDragCommitsCurrentPagePreview),
         new(nameof(StudyDragRejectsObservedPageChange), StudyDragRejectsObservedPageChange),
         new(nameof(StudyDragRejectsChangedLead), StudyDragRejectsChangedLead),
@@ -137,6 +140,59 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyDragRejectsPageRoundTripBetweenEvents()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair initial = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        CapturedRecordPage initialPage = navigation.CurrentPage;
+        navigation.NextPage();
+        navigation.PreviousPage();
+        Check.That(navigation.CurrentPage == initialPage && !ReferenceEquals(navigation.CurrentPage, initialPage),
+            "equal page values after navigation retain distinct local page instances");
+        Check.That(MeasurementReason(() => drag.Preview(false, 0, 100, scale, new(75, 1), new(40, 1))) == "RecordMeasurement.DragLayoutChanged" &&
+            MeasurementReason(() => drag.Commit(false, 0, 100, scale)) == "RecordMeasurement.DragLayoutChanged" &&
+            ReferenceEquals(view.Measurement.CurrentPair, initial), "unobserved round trip rejects both preview and completion without changing evidence");
+    }
+
+    private static void StudyDragSurvivesNoOpAndRejectedNavigation()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        CapturedRecordPage page = navigation.CurrentPage;
+        Check.That(ReferenceEquals(navigation.SelectPage(0), page), "same-page command preserves instance identity after policy validation");
+        ExpectPaginationReason(() => navigation.PreviousPage(), "RecordPagination.NoPreviousPage");
+        ExpectPaginationReason(() => navigation.SelectPage(99), "RecordPagination.PageOutsideRecord");
+        navigation.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        ExpectPaginationReason(() => navigation.SelectPage(0), "RecordPagination.CourseLocked");
+        Check.That(ReferenceEquals(navigation.CurrentPage, page), "failed navigation and policy changes preserve page identity");
+        CapturedRecordCursorPair preview = drag.Preview(false, 0, 100, scale, new(75, 1), new(40, 1));
+        Check.That(ReferenceEquals(drag.Commit(false, 0, 100, scale), preview), "unmoved page permits separately enabled caliper gesture");
+    }
+
+    private static void StudyDragCanRestartAfterPageRoundTripRollback()
+    {
+        CapturedRecordNavigation originalNavigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = CapturedRecordNavigation.Restore(originalNavigation.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair initial = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag old = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        old.Preview(false, 0, 100, scale, new(75, 1), new(30, 1));
+        navigation.NextPage();
+        navigation.PreviousPage();
+        Check.That(old.Cancel().Second.Value == initial.Second.Value, "rollback remains possible after a round trip on restored navigation");
+        CapturedRecordStudyDrag fresh = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        fresh.Preview(false, 0, 100, scale, new(75, 1), new(30, 1));
+        Check.That(fresh.Commit(false, 0, 100, scale).Second.Value.DataTimeNs == 75_000_000,
+            "fresh gesture binds the current page instance after rollback");
+    }
 
     private static void StudyDragCommitsCurrentPagePreview()
     {

@@ -10,6 +10,7 @@ public sealed class CapturedRecordStudyDrag
     private readonly CapturedRecordNavigation _navigation;
     private readonly CapturedRecordMeasurement _measurement;
     private readonly CapturedRecordDrag _drag;
+    private readonly CapturedRecordPage _initialPage;
 
     internal CapturedRecordStudyDrag(CapturedRecordStudyView view, CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
@@ -19,6 +20,7 @@ public sealed class CapturedRecordStudyDrag
             plotLeftPixels, plotWidthPixels, scale);
         _view = view;
         _navigation = navigation;
+        _initialPage = navigation.CurrentPage;
         _measurement = view.Measurement;
         _drag = new(_measurement, end, viewport, scale);
     }
@@ -27,6 +29,7 @@ public sealed class CapturedRecordStudyDrag
         int plotWidthPixels, EcgVerticalScale scale, ExactPlotCoordinate x, ExactPlotCoordinate y)
     {
         ValidateSelection();
+        ValidatePage();
         RecordCursorViewport viewport = _view.RequireCurrentViewport(_navigation, canPreserveGlobalSafetyOverlay,
             plotLeftPixels, plotWidthPixels, scale);
         return _drag.Preview(x, y, viewport, scale);
@@ -36,6 +39,7 @@ public sealed class CapturedRecordStudyDrag
         int plotWidthPixels, EcgVerticalScale scale)
     {
         ValidateSelection();
+        ValidatePage();
         RecordCursorViewport viewport = _view.RequireCurrentViewport(_navigation, canPreserveGlobalSafetyOverlay,
             plotLeftPixels, plotWidthPixels, scale);
         return _drag.Commit(viewport, scale);
@@ -52,5 +56,11 @@ public sealed class CapturedRecordStudyDrag
     {
         if (!ReferenceEquals(_view.Measurement, _measurement))
         { throw new CapturedRecordMeasurementException("RecordMeasurement.DragSuperseded", nameof(_view)); }
+    }
+
+    private void ValidatePage()
+    {
+        if (!ReferenceEquals(_navigation.CurrentPage, _initialPage))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.DragLayoutChanged", nameof(_navigation)); }
     }
 }

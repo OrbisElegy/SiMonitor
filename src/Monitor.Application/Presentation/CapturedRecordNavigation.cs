@@ -61,6 +61,7 @@ public sealed class CapturedRecordNavigation
     {
         EnsureEnabled();
         CapturedRecordPage candidate = CapturedRecordPagination.Resolve(_record, _pageDurationNs, pageIndex);
+        if (pageIndex == CurrentPage.PageIndex) { return CurrentPage; }
         return CurrentPage = candidate;
     }
 

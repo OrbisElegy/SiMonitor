@@ -31,6 +31,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ThemedPolicyUpdateChangesAllCurrentGates), ThemedPolicyUpdateChangesAllCurrentGates),
+        new(nameof(ThemedPolicyUpdateRejectsEveryPartialUpdate), ThemedPolicyUpdateRejectsEveryPartialUpdate),
+        new(nameof(ThemedPolicyUpdateWorksAfterSessionRestore), ThemedPolicyUpdateWorksAfterSessionRestore),
         new(nameof(ThemedSessionRestoresCoherentDisplayState), ThemedSessionRestoresCoherentDisplayState),
         new(nameof(ThemedSessionUsesCurrentPermissions), ThemedSessionUsesCurrentPermissions),
         new(nameof(ThemedSessionRejectsInvalidComponentsWithoutMutation), ThemedSessionRejectsInvalidComponentsWithoutMutation),
@@ -153,6 +156,61 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ThemedPolicyUpdateChangesAllCurrentGates()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked,
+            SystemViewCommandAssessmentPolicy.Enabled, false);
+        ThemedCapturedRecordPageDisplay display = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(display.Content.Navigation!.Policy == SystemViewCommandAssessmentPolicy.Disabled &&
+            display.Content.Study.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked" && display.Theme!.ReasonCode == "Ecg12Theme.LocalSelectionNotAllowed" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair) && theme.Theme == Ecg12Theme.PaperGridBlack,
+            "grouped update applies every current gate without changing theme, page or cursor values");
+        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.Disabled");
+        Check.That(MeasurementReason(() => view.Measurement.ClearPair()) == "RecordMeasurement.CourseLocked", "caliper execution observes grouped update");
+    }
+
+    private static void ThemedPolicyUpdateRejectsEveryPartialUpdate()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, false);
+        Ecg12ThemeDisplay before = theme.CaptureDisplay();
+        SystemViewCommandAssessmentPolicy invalid = (SystemViewCommandAssessmentPolicy)99;
+        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, invalid, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true),
+            "RecordStudy.InvalidPolicy");
+        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Enabled, invalid, SystemViewCommandAssessmentPolicy.Enabled, true),
+            "RecordStudy.InvalidPolicy");
+        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, invalid, true),
+            "RecordStudy.InvalidPolicy");
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
+        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(foreign, theme, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true),
+            "RecordPagination.ForeignNavigation");
+        Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
+            theme.CaptureDisplay() == before && foreign.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled, "every rejected update preserves all gates including local permission");
+    }
+
+    private static void ThemedPolicyUpdateWorksAfterSessionRestore()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        restored.Study.View.UpdateThemedCommandPolicies(restored.Study.Navigation, restored.Theme, SystemViewCommandAssessmentPolicy.Enabled,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
+        restored.Study.Navigation.NextPage();
+        restored.Theme.Select(Ecg12Theme.PaperGridBlack);
+        CapturedRecordCursorPair pair = restored.Study.View.PlacePairOnCurrentPage(restored.Study.Navigation, false, 0, 100, new(0, 100, 60, 20, 1),
+            new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        Check.That(restored.Theme.Theme == Ecg12Theme.PaperGridBlack && pair.First.Value.DataTimeNs == 100_000_000 &&
+            navigation.CurrentPage.PageIndex == 0 && theme.Theme == Ecg12Theme.MonitorDarkGreen, "fresh grouped permission enables all restored commands without changing original objects");
+    }
 
     private static void ThemedSessionRestoresCoherentDisplayState()
     {

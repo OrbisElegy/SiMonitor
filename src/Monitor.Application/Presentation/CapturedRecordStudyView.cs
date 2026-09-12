@@ -42,7 +42,18 @@ public sealed class CapturedRecordStudyView
         return new(content, content.Study.Admission.MayEnter ? theme.CaptureDisplay() : null);
     }
 
-    // Trusted serialized policy delivery; validate the full update before changing either command group.
+    // Trusted serialized policy delivery; validate the full update before changing any command group.
+    public void UpdateThemedCommandPolicies(CapturedRecordNavigation navigation, Ecg12ThemeSelection theme,
+        SystemViewCommandAssessmentPolicy paginationPolicy, SystemViewCommandAssessmentPolicy measurementPolicy,
+        SystemViewCommandAssessmentPolicy themePolicy, bool allowLocalThemeSelection)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        if (!Enum.IsDefined(themePolicy))
+        { throw new CapturedRecordPaginationException("RecordStudy.InvalidPolicy", nameof(themePolicy)); }
+        UpdateCommandPolicies(navigation, paginationPolicy, measurementPolicy);
+        theme.UpdatePolicy(themePolicy, allowLocalThemeSelection);
+    }
+
     public void UpdateCommandPolicies(CapturedRecordNavigation navigation,
         SystemViewCommandAssessmentPolicy paginationPolicy, SystemViewCommandAssessmentPolicy measurementPolicy)
     {

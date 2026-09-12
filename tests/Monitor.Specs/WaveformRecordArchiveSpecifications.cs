@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementPointPairCreatesAndRestoresSelection), MeasurementPointPairCreatesAndRestoresSelection),
+        new(nameof(MeasurementPointPairFailurePreservesSelection), MeasurementPointPairFailurePreservesSelection),
+        new(nameof(MeasurementPointPairPreservesOrderAndEqualTime), MeasurementPointPairPreservesOrderAndEqualTime),
+        new(nameof(MeasurementPointPairEnforcesCurrentPolicy), MeasurementPointPairEnforcesCurrentPolicy),
         new(nameof(MeasurementDragLayoutChangeLatchesUntilCancel), MeasurementDragLayoutChangeLatchesUntilCancel),
         new(nameof(MeasurementDragChecksLayoutAtCommit), MeasurementDragChecksLayoutAtCommit),
         new(nameof(MeasurementDragAcceptsEquivalentGainRatios), MeasurementDragAcceptsEquivalentGainRatios),
@@ -98,6 +102,72 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementPointPairCreatesAndRestoresSelection()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = measurement.ReplacePairFromPoints(new(25, 1), new(60, 1), new(75, 1), new(40, 1),
+            new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
+        Check.That(ReferenceEquals(measurement.CurrentPair, pair) && pair.First.Value == new EcgManualCursor(50_000_000, 0, 1) &&
+            pair.Second.Value == new EcgManualCursor(150_000_000, 1000, 1), "two manual points initialize calibrated data selection");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        RecordMeasurementDisplay display = restored.Measurement.CaptureDisplay(new(0, 200_000_000, 0, 200), new(0, 100, 60, 40, 1), true);
+        Check.That(restored.First.Value == pair.First.Value && restored.Second.Value == pair.Second.Value &&
+            display.Measurement!.ElapsedMilliseconds == new EcgMeasurementRatio(100, 1) &&
+            display.Measurement.AmplitudeChangeMillivolts == new EcgMeasurementRatio(1, 1), "restore and changed display preserve data differences");
+    }
+
+    private static void MeasurementPointPairFailurePreservesSelection()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair original = measurement.CurrentPair!;
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => measurement.ReplacePairFromPoints(new(25, 1), new(60, 1), new(100, 1), new(40, 1), page, scale)) ==
+            "RecordMeasurement.InvalidPoint" && ReferenceEquals(measurement.CurrentPair, original), "exclusive right edge rejects second point without partial publication");
+        Check.That(MeasurementReason(() => measurement.ReplacePairFromPoints(new(0, 1), new(60, 1), new(1, 3), new(40, 1), page, scale)) ==
+            "RecordMeasurement.UnrepresentableTime" && ReferenceEquals(measurement.CurrentPair, original), "nonintegral time is not silently rounded");
+        measurement.ClearPair();
+        Check.That(MeasurementReason(() => measurement.ReplacePairFromPoints(new(-1, 1), new(60, 1), new(50, 1), new(40, 1), page, scale)) ==
+            "RecordMeasurement.InvalidPoint" && measurement.CurrentPair is null, "invalid first placement leaves an empty selection empty");
+    }
+
+    private static void MeasurementPointPairPreservesOrderAndEqualTime()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair original = measurement.CurrentPair!;
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        try
+        {
+            measurement.ReplacePairFromPoints(new(75, 1), new(60, 1), new(25, 1), new(40, 1), page, scale);
+            throw new InvalidOperationException("reversed point pair accepted");
+        }
+        catch (EcgManualMeasurementException exception)
+        { Check.That(exception.ReasonCode == "ManualMeasurement.TimeReversed", "manual endpoint order is never silently swapped"); }
+        Check.That(ReferenceEquals(measurement.CurrentPair, original), "order failure preserves original pair");
+        CapturedRecordCursorPair pair = measurement.ReplacePairFromPoints(new(0, 1), new(0, 1), new(0, 1), new(100, 1), page, scale);
+        EcgManualMeasurementResult result = measurement.Calculate(pair.First, pair.Second, true);
+        Check.That(result.ElapsedMilliseconds == new EcgMeasurementRatio(0, 1) && result.AuxiliaryRatePerMinute is null &&
+            result.AmplitudeChangeMillivolts == new EcgMeasurementRatio(-5, 1), "equal time and closed vertical edges support amplitude-only placement");
+    }
+
+    private static void MeasurementPointPairEnforcesCurrentPolicy()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair original = measurement.CurrentPair!;
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            measurement.UpdatePolicy(policy);
+            Check.That(MeasurementReason(() => measurement.ReplacePairFromPoints(new(0, 1), new(60, 1), new(50, 1), new(40, 1),
+                new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1))) == $"RecordMeasurement.{policy}" &&
+                ReferenceEquals(measurement.CurrentPair, original), "manual placement has no disabled-policy bypass");
+        }
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair replacement = measurement.ReplacePairFromPoints(new(0, 1), new(60, 1), new(50, 1), new(40, 1),
+            new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
+        Check.That(ReferenceEquals(measurement.CurrentPair, replacement) && !ReferenceEquals(original, replacement), "current enabled policy permits complete replacement");
+    }
 
     private static void MeasurementDragLayoutChangeLatchesUntilCancel()
     {

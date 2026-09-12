@@ -81,6 +81,17 @@ public sealed class CapturedRecordMeasurement
         return CurrentPair = new(a, b);
     }
 
+    // Both manually placed points share one resolved page and calibration.
+    public CapturedRecordCursorPair ReplacePairFromPoints(ExactPlotCoordinate firstX, ExactPlotCoordinate firstY,
+        ExactPlotCoordinate secondX, ExactPlotCoordinate secondY, RecordCursorViewport viewport,
+        EcgVerticalScale verticalScale)
+    {
+        CapturedRecordCursor first = CreateCursorFromPoint(firstX, firstY, viewport, verticalScale);
+        CapturedRecordCursor second = CreateCursorFromPoint(secondX, secondY, viewport, verticalScale);
+        _ = Calculate(first, second, false);
+        return CurrentPair = new(first, second);
+    }
+
     public CapturedRecordCursorPair MoveCursor(RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y,
         RecordCursorViewport viewport, EcgVerticalScale verticalScale)
     {

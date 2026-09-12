@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyViewSuppressesContentWhenOverlayIsLost), StudyViewSuppressesContentWhenOverlayIsLost),
+        new(nameof(StudyViewSeparatesAdmissionAndMeasurementPolicy), StudyViewSeparatesAdmissionAndMeasurementPolicy),
+        new(nameof(StudyViewCompositionFailurePreservesRecordAndSelection), StudyViewCompositionFailurePreservesRecordAndSelection),
+        new(nameof(StudyViewRestoredRecordRequiresCurrentAdmission), StudyViewRestoredRecordRequiresCurrentAdmission),
         new(nameof(MeasurementPointPairCreatesAndRestoresSelection), MeasurementPointPairCreatesAndRestoresSelection),
         new(nameof(MeasurementPointPairFailurePreservesSelection), MeasurementPointPairFailurePreservesSelection),
         new(nameof(MeasurementPointPairPreservesOrderAndEqualTime), MeasurementPointPairPreservesOrderAndEqualTime),
@@ -102,6 +106,67 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyViewSuppressesContentWhenOverlayIsLost()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordStudyView view = new(record, Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordStudyDisplay initial = view.CaptureDisplay(true, page, scale, true);
+        CapturedRecordStudyDisplay denied = view.CaptureDisplay(false, page, scale, true);
+        Check.That(initial.Admission.MayEnter && ReferenceEquals(initial.Record, record) && initial.Measurement!.Measurement is not null &&
+            !denied.Admission.MayEnter && denied.Record is null && denied.Measurement is null,
+            "lost overlay publishes a complete denial without record or cursor content");
+        CapturedRecordStudyDisplay recovered = view.CaptureDisplay(true, page, scale, true);
+        Check.That(ReferenceEquals(recovered.Record, record) && ReferenceEquals(view.Measurement.CurrentPair, pair) &&
+            recovered.Measurement == initial.Measurement, "capability recovery recomposes unchanged record-time evidence");
+    }
+
+    private static void StudyViewSeparatesAdmissionAndMeasurementPolicy()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord,
+            "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudyDisplay display = view.CaptureDisplay(false, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1), true);
+        Check.That(display.Admission.MayEnter && !display.Admission.InheritPatientAlarmAggregate && display.Record is not null &&
+            display.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked" && display.Measurement.First is null &&
+            display.Measurement.Second is null && display.Measurement.Measurement is null,
+            "independent record remains viewable while locked calipers disclose no geometry or results");
+    }
+
+    private static void StudyViewCompositionFailurePreservesRecordAndSelection()
+    {
+        CapturedRecordBinding record = MeasurementRecord();
+        CapturedRecordStudyView view = new(record, Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        RecordCursorViewport invalid = new(0, 0, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => view.CaptureDisplay(true, invalid, scale, true)) == "RecordMeasurement.InvalidViewport" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "composition validates before returning a display and never edits evidence");
+        CapturedRecordStudyDisplay denied = view.CaptureDisplay(false, invalid, scale, true);
+        Check.That(!denied.Admission.MayEnter && denied.Record is null && denied.Measurement is null,
+            "safety denial needs no successful measurement layout");
+        Check.That(ReferenceEquals(view.CaptureDisplay(true, new(0, 200_000_000, 0, 100), scale, true).Record, record),
+            "fresh valid composition recovers after a layout failure");
+    }
+
+    private static void StudyViewRestoredRecordRequiresCurrentAdmission()
+    {
+        CapturedRecordBinding restored = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
+        CapturedRecordStudyView view = new(restored, Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordStudyDisplay denied = view.CaptureDisplay(false, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1), false);
+        Check.That(!denied.Admission.MayEnter && denied.Record is null, "restored record bytes grant no persisted overlay capability");
+        try
+        {
+            _ = new CapturedRecordStudyView(restored, (Ecg12RecordContext)99, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+            throw new InvalidOperationException("invalid context accepted");
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.InvalidContext", "construction validates explicit context"); }
+    }
 
     private static void MeasurementPointPairCreatesAndRestoresSelection()
     {

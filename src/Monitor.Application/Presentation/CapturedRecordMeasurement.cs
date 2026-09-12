@@ -49,6 +49,12 @@ public sealed class CapturedRecordMeasurement
     public RecordSlotBinding Slot { get; }
     public CapturedRecordCursorPair? CurrentPair { get; private set; }
 
+    public void ClearPair()
+    {
+        EnsureEnabled();
+        CurrentPair = null;
+    }
+
     public CapturedRecordCursorPair ReplacePair(EcgManualCursor first, EcgManualCursor second)
     {
         CapturedRecordCursor a = CreateCursor(first), b = CreateCursor(second);

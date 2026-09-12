@@ -31,6 +31,8 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(MeasurementClearRemovesActivePairAndAllowsReplacement), MeasurementClearRemovesActivePairAndAllowsReplacement),
+        new(nameof(MeasurementClearObeysPolicyAndPreservesCheckpoints), MeasurementClearObeysPolicyAndPreservesCheckpoints),
         new(nameof(MeasurementPairReplacementIsAtomic), MeasurementPairReplacementIsAtomic),
         new(nameof(MeasurementDragCommitsOnlyOrderedPairs), MeasurementDragCommitsOnlyOrderedPairs),
         new(nameof(MeasurementDragRejectsMissingInvalidAndLockedEntry), MeasurementDragRejectsMissingInvalidAndLockedEntry),
@@ -84,6 +86,36 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void MeasurementClearRemovesActivePairAndAllowsReplacement()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair previous = measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        measurement.ClearPair();
+        measurement.ClearPair();
+        Check.That(measurement.CurrentPair is null && MeasurementReason(() => measurement.CaptureCheckpoint()) == "RecordMeasurement.NoCursorPair" &&
+            MeasurementReason(() => measurement.MoveCursor(RecordCursorEnd.Second, new(75, 1), new(60, 1),
+                new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1))) == "RecordMeasurement.NoCursorPair",
+            "idempotent clear removes active editing and checkpoint state");
+        CapturedRecordCursorPair next = measurement.ReplacePair(new(1, 0, 1), new(2, 0, 1));
+        Check.That(ReferenceEquals(measurement.CurrentPair, next) && previous.First.Value.DataTimeNs == 0,
+            "replacement after clear is independent of previously issued immutable values");
+    }
+
+    private static void MeasurementClearObeysPolicyAndPreservesCheckpoints()
+    {
+        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = measurement.ReplacePair(new(0, 0, 1), new(1, 1, 1));
+        CapturedRecordMeasurementCheckpoint checkpoint = measurement.CaptureCheckpoint();
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.ClearPair()) == "RecordMeasurement.CourseLocked" && ReferenceEquals(measurement.CurrentPair, pair),
+            "course lock denies clear without deleting accepted values");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        measurement.ClearPair();
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(checkpoint, SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(measurement.CurrentPair is null && restored.First.Value == pair.First.Value && restored.Second.Value == pair.Second.Value,
+            "clearing local selection does not mutate an earlier independently captured checkpoint");
+    }
 
     private static void MeasurementPairReplacementIsAtomic()
     {

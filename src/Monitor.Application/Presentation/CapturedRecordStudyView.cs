@@ -59,7 +59,12 @@ public sealed class CapturedRecordStudyView
         return Measurement.MoveCursor(end, x, y, viewport, scale);
     }
 
-    private RecordCursorViewport RequireCurrentViewport(CapturedRecordNavigation navigation,
+    public CapturedRecordStudyDrag BeginCursorDrag(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, RecordCursorEnd end) =>
+        new(this, navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, end);
+
+    internal RecordCursorViewport RequireCurrentViewport(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale)
     {
         CapturedRecordPageDisplay display = CapturePageDisplay(navigation, canPreserveGlobalSafetyOverlay,

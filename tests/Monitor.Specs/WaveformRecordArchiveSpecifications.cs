@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyDragCommitsCurrentPagePreview), StudyDragCommitsCurrentPagePreview),
+        new(nameof(StudyDragRejectsObservedPageChange), StudyDragRejectsObservedPageChange),
+        new(nameof(StudyDragRejectsChangedLead), StudyDragRejectsChangedLead),
+        new(nameof(StudyDragSafetyLossAllowsPolicyCheckedRollback), StudyDragSafetyLossAllowsPolicyCheckedRollback),
         new(nameof(MeasurementDragRejectsVerticallyHiddenEndpoints), MeasurementDragRejectsVerticallyHiddenEndpoints),
         new(nameof(MeasurementDragAcceptsExactVerticalEdges), MeasurementDragAcceptsExactVerticalEdges),
         new(nameof(MeasurementHiddenCursorRecoversAfterGainChangeAndRestore), MeasurementHiddenCursorRecoversAfterGainChangeAndRestore),
@@ -133,6 +137,69 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyDragCommitsCurrentPagePreview()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 1, SystemViewCommandAssessmentPolicy.CourseLocked);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        CapturedRecordCursorPair preview = drag.Preview(false, 0, 100, scale, new(75, 1), new(30, 1));
+        Check.That(ReferenceEquals(drag.Commit(false, 0, 100, scale), preview) && preview.Second.Value == new EcgManualCursor(175_000_000, 1500, 1),
+            "view gesture uses current page and independent measurement policy");
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished", "committed view gesture cannot roll back");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == preview.Second.Value, "committed gesture checkpoints only data evidence");
+    }
+
+    private static void StudyDragRejectsObservedPageChange()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair original = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        CapturedRecordCursorPair preview = drag.Preview(false, 0, 100, scale, new(75, 1), new(40, 1));
+        navigation.NextPage();
+        Check.That(MeasurementReason(() => drag.Commit(false, 0, 100, scale)) == "RecordMeasurement.DragLayoutChanged" &&
+            ReferenceEquals(view.Measurement.CurrentPair, preview), "release reads the current navigation page and preserves rejected preview");
+        navigation.PreviousPage();
+        Check.That(MeasurementReason(() => drag.Preview(false, 0, 100, scale, new(75, 1), new(40, 1))) == "RecordMeasurement.DragLayoutChanged" &&
+            drag.Cancel().Second.Value == original.Second.Value, "observed page change remains latched until rollback");
+    }
+
+    private static void StudyDragRejectsChangedLead()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        view.SelectMeasurementSlot("ecg.slot1");
+        Check.That(MeasurementReason(() => drag.Preview(false, 0, 100, scale, new(75, 1), new(40, 1))) == "RecordMeasurement.DragSuperseded" &&
+            MeasurementReason(() => drag.Commit(false, 0, 100, scale)) == "RecordMeasurement.DragSuperseded" &&
+            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragSuperseded" && view.Measurement.CurrentPair is null,
+            "all view gesture operations reject after lead replacement without resurrecting old data");
+    }
+
+    private static void StudyDragSafetyLossAllowsPolicyCheckedRollback()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair original = view.PlacePairOnCurrentPage(navigation, true, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDrag(navigation, true, 0, 100, scale, RecordCursorEnd.Second);
+        CapturedRecordCursorPair preview = drag.Preview(true, 0, 100, scale, new(75, 1), new(30, 1));
+        try { drag.Commit(false, 0, 100, scale); throw new InvalidOperationException("unsafe commit accepted"); }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable", "gesture release checks current safety capability"); }
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.CourseLocked" && ReferenceEquals(view.Measurement.CurrentPair, preview),
+            "rollback still obeys current caliper policy");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(drag.Cancel().Second.Value == original.Second.Value, "permitted rollback needs no visible viewport");
+    }
 
     private static void MeasurementDragRejectsVerticallyHiddenEndpoints()
     {

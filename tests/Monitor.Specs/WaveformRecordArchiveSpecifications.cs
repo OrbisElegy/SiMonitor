@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(RecordNavigationMovesWithoutChangingMeasurements), RecordNavigationMovesWithoutChangingMeasurements),
+        new(nameof(RecordNavigationBoundariesPreservePage), RecordNavigationBoundariesPreservePage),
+        new(nameof(RecordNavigationGatesEveryCommand), RecordNavigationGatesEveryCommand),
+        new(nameof(RecordNavigationRestoresWithCurrentPolicy), RecordNavigationRestoresWithCurrentPolicy),
         new(nameof(RecordPagesPartitionWithoutGapsOrEmptyTail), RecordPagesPartitionWithoutGapsOrEmptyTail),
         new(nameof(RecordPagesRejectInvalidRequestsWithoutMutation), RecordPagesRejectInvalidRequestsWithoutMutation),
         new(nameof(RecordPagesPreserveCursorEvidenceAcrossDisplay), RecordPagesPreserveCursorEvidenceAcrossDisplay),
@@ -114,6 +118,63 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void RecordNavigationMovesWithoutChangingMeasurements()
+    {
+        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordNavigation navigation = view.CreateNavigation(75_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(navigation.NextPage().PageIndex == 1 && navigation.NextPage().EndExclusiveDataTimeNs == 200_000_000 &&
+            navigation.PreviousPage().PageIndex == 1 && navigation.SelectPage(0).PageIndex == 0,
+            "next, previous and explicit page selection share one bounded record");
+        Check.That(view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked && view.Measurement.CurrentPair is null,
+            "pagination policy is independent of caliper policy");
+    }
+
+    private static void RecordNavigationBoundariesPreservePage()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPage first = navigation.CurrentPage;
+        ExpectPaginationReason(() => navigation.PreviousPage(), "RecordPagination.NoPreviousPage");
+        ExpectPaginationReason(() => navigation.SelectPage(ulong.MaxValue), "RecordPagination.PageOutsideRecord");
+        Check.That(ReferenceEquals(navigation.CurrentPage, first), "boundary and invalid page failures preserve the current page");
+        CapturedRecordPage last = navigation.NextPage();
+        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.NoNextPage");
+        Check.That(ReferenceEquals(navigation.CurrentPage, last) && navigation.PreviousPage() == first,
+            "last page never wraps and navigation recovers after rejection");
+    }
+
+    private static void RecordNavigationGatesEveryCommand()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordPage initial = navigation.CurrentPage;
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            navigation.UpdatePolicy(policy);
+            ExpectPaginationReason(() => navigation.NextPage(), $"RecordPagination.{policy}");
+            ExpectPaginationReason(() => navigation.PreviousPage(), $"RecordPagination.{policy}");
+            ExpectPaginationReason(() => navigation.SelectPage(1), $"RecordPagination.{policy}");
+            ExpectPaginationReason(() => navigation.UpdatePolicy((SystemViewCommandAssessmentPolicy)99), "RecordPagination.InvalidPolicy");
+            Check.That(navigation.CurrentPolicy == policy && ReferenceEquals(navigation.CurrentPage, initial),
+                "all entry paths including same-page selection respect current policy and invalid policy cannot unlock");
+        }
+        navigation.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(navigation.NextPage().PageIndex == 2, "explicit enabled policy allows subsequent navigation");
+    }
+
+    private static void RecordNavigationRestoresWithCurrentPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        navigation.SelectPage(2);
+        CapturedRecordNavigationState checkpoint = navigation.CaptureState();
+        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(checkpoint, SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(restored.CurrentPage == navigation.CurrentPage, "restore retains the validated selected page");
+        ExpectPaginationReason(() => restored.PreviousPage(), "RecordPagination.CourseLocked");
+        ExpectPaginationReason(() => CapturedRecordNavigation.Restore(checkpoint with { PageIndex = 3 }, SystemViewCommandAssessmentPolicy.Enabled),
+            "RecordPagination.InvalidCheckpoint");
+        ExpectPaginationReason(() => CapturedRecordNavigation.Restore(checkpoint with { PageDurationNs = 0 }, SystemViewCommandAssessmentPolicy.Enabled),
+            "RecordPagination.InvalidCheckpoint");
+        Check.That(restored.CurrentPage.PageIndex == 2, "invalid restoration cannot mutate the accepted navigation instance");
+    }
 
     private static void RecordPagesPartitionWithoutGapsOrEmptyTail()
     {

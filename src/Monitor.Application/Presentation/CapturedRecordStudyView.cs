@@ -27,6 +27,9 @@ public sealed class CapturedRecordStudyView
     public CapturedRecordPage ResolvePage(long pageDurationNs, ulong pageIndex) =>
         CapturedRecordPagination.Resolve(_record, pageDurationNs, pageIndex);
 
+    public CapturedRecordNavigation CreateNavigation(long pageDurationNs, ulong initialPageIndex,
+        SystemViewCommandAssessmentPolicy paginationPolicy) => new(_record, pageDurationNs, initialPageIndex, paginationPolicy);
+
     public void SelectMeasurementSlot(string slotId)
     {
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }

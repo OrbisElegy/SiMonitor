@@ -4,7 +4,7 @@ using Monitor.Domain.Presentation;
 
 namespace Monitor.Infrastructure.Presentation;
 
-public enum CapturedRecordSvgStatus { NotRendered, Refreshing, Ready, Denied, Cancelled, Failed }
+public enum CapturedRecordSvgStatus { NotRendered, Refreshing, Ready, Denied, Cancelled, Failed, Withdrawn }
 public sealed record CapturedRecordSvgPublication(CapturedRecordSvgStatus Status, string ReasonCode,
     CapturedRecordSvgInputSession? Input);
 
@@ -33,6 +33,14 @@ public sealed class CapturedRecordSvgPresentation
     public CapturedRecordSvgPublication Publication { get; private set; } =
         new(CapturedRecordSvgStatus.NotRendered, "SvgPresentation.NotRendered", null);
     public CapturedRecordSvgInputSession? Current => Publication.Input;
+
+    // Trusted shell lifecycle action; command authorization is enforced by its caller.
+    // Data and retained drag objects are not deleted or implicitly committed/cancelled.
+    public void Withdraw()
+    {
+        if (Publication.Status == CapturedRecordSvgStatus.Withdrawn) { return; }
+        Publication = new(CapturedRecordSvgStatus.Withdrawn, "SvgPresentation.Withdrawn", null);
+    }
 
     public CapturedRecordSvgInputSession Refresh(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen, EcgPaperGridSvgStyle gridStyle,

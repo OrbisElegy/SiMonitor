@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgWithdrawRemovesPublicationWithoutChangingEvidence), SvgWithdrawRemovesPublicationWithoutChangingEvidence),
+        new(nameof(SvgWithdrawRetainsExplicitGestureRollbackAndRecovery), SvgWithdrawRetainsExplicitGestureRollbackAndRecovery),
+
         new(nameof(SvgPublicationReportsCoherentAdmissionStatus), SvgPublicationReportsCoherentAdmissionStatus),
         new(nameof(SvgPublicationDistinguishesCancellationFromFailure), SvgPublicationDistinguishesCancellationFromFailure),
 
@@ -259,6 +262,51 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgWithdrawRemovesPublicationWithoutChangingEvidence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgPresentation presentation = new(view, navigation, theme, zoom);
+        presentation.Withdraw();
+        Check.That(presentation.Current is null && presentation.Publication.Status == CapturedRecordSvgStatus.Withdrawn, "withdraw is safe before first render");
+        CapturedRecordSvgInputSession ready = presentation.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        presentation.Withdraw();
+        CapturedRecordSvgPublication withdrawn = presentation.Publication;
+        presentation.Withdraw();
+        Check.That(ReferenceEquals(presentation.Publication, withdrawn) && withdrawn.ReasonCode == "SvgPresentation.Withdrawn" && withdrawn.Input is null &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair) && ready.Display.CursorOverlaySvg is not null, "repeated withdrawal is idempotent and does not erase data or retained snapshots");
+        CapturedRecordSvgInputSession reopened = presentation.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Ready && !ReferenceEquals(reopened, ready), "reopening renders a fresh publication");
+    }
+
+    private static void SvgWithdrawRetainsExplicitGestureRollbackAndRecovery()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgPresentation presentation = new(view, navigation, theme, zoom);
+        CapturedRecordSvgInputSession input = presentation.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(1, 1));
+        CapturedRecordCursorPair preview = drag.PreviewPointer(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1));
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        presentation.Withdraw();
+        Check.That(presentation.Current is null && ReferenceEquals(view.Measurement.CurrentPair, preview), "withdraw does not implicitly commit or roll back active preview");
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.CourseLocked", "retained gesture rollback still checks current policy");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(drag.Cancel().Second.Value == pair.Second.Value && presentation.Current is null, "explicit rollback cannot republish a hidden view");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == pair.Second.Value, "withdrawn session retains restorable evidence");
+    }
 
     private static void SvgPublicationReportsCoherentAdmissionStatus()
     {

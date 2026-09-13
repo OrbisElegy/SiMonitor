@@ -62,7 +62,7 @@ public static class EcgStripSvgPreview
                     new XAttribute("stroke-dasharray", "2 2"), new XAttribute("clip-path", $"url(#{id})")));
             }
         }
-        StringBuilder?[] patientPaths = new StringBuilder?[strip.PatientFrame.Geometry.Regions.Count];
+        var patientPaths = new StringBuilder?[strip.PatientFrame.Geometry.Regions.Count];
         foreach (SweepFrameSegment segment in strip.PatientFrame.Segments)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,7 +98,7 @@ public static class EcgStripSvgPreview
     private static string Integer(long value) => value.ToString(CultureInfo.InvariantCulture);
     private static string Ratio(BigInteger numerator, BigInteger denominator)
     {
-        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
         numerator /= divisor;
         denominator /= divisor;
         return numerator.ToString(CultureInfo.InvariantCulture) +
@@ -118,11 +118,5 @@ public static class EcgStripSvgPreview
     // Raster-adapter serialization only: six decimal pixel places, nearest with
     // ties away from zero. Exact domain/checkpoint coordinates remain untouched.
     private static string Number(BigInteger numerator, BigInteger denominator)
-    {
-        BigInteger scaled = BigInteger.DivRem(BigInteger.Abs(numerator) * 1_000_000, denominator, out BigInteger remainder);
-        if (remainder * 2 >= denominator) { scaled++; }
-        string sign = numerator.Sign < 0 && scaled != 0 ? "-" : "";
-        string fraction = (scaled % 1_000_000).ToString("D6", CultureInfo.InvariantCulture).TrimEnd('0');
-        return sign + (scaled / 1_000_000).ToString(CultureInfo.InvariantCulture) + (fraction.Length == 0 ? "" : "." + fraction);
-    }
+        => SvgLogicalNumber.Format(numerator, denominator);
 }

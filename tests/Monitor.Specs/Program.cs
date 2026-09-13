@@ -58,6 +58,7 @@ internal static class Program
             .. EcgManualMeasurementSpecifications.All,
             .. Ecg12ViewAdmissionSpecifications.All,
             .. Ecg12ThemeSpecifications.All,
+            .. Ecg12ZoomSpecifications.All,
             .. EcgPaperGridSpecifications.All,
             .. EcgPaperGridSvgSpecifications.All,
             .. SvgFixtureSpecifications.All,

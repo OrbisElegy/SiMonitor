@@ -31,6 +31,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyPaperGridUsesCurrentCalibratedViewport), StudyPaperGridUsesCurrentCalibratedViewport),
+        new(nameof(StudyPaperGridSuppressesDarkAndDeniedOutput), StudyPaperGridSuppressesDarkAndDeniedOutput),
+        new(nameof(StudyPaperGridFailurePreservesAcceptedState), StudyPaperGridFailurePreservesAcceptedState),
+        new(nameof(StudyPaperGridRebuildsAfterSessionRestore), StudyPaperGridRebuildsAfterSessionRestore),
         new(nameof(ThemedPolicyUpdateChangesAllCurrentGates), ThemedPolicyUpdateChangesAllCurrentGates),
         new(nameof(ThemedPolicyUpdateRejectsEveryPartialUpdate), ThemedPolicyUpdateRejectsEveryPartialUpdate),
         new(nameof(ThemedPolicyUpdateWorksAfterSessionRestore), ThemedPolicyUpdateWorksAfterSessionRestore),
@@ -156,6 +160,76 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyPaperGridUsesCurrentCalibratedViewport()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        GridCapturedRecordPageDisplay display = view.CaptureGridPageDisplay(navigation, theme, false, 10, 10,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, true);
+        Check.That(display.GridPlan!.MinorSpacingNumerator == 2 && display.GridLines.Count == 55 &&
+            display.GridLines[0] == new EcgPaperGridLine(true, new(10, 1), true) &&
+            display.Content.Content.Viewport!.PlotLeftPixels == display.GridPlan.LeftPixels && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "paper theme composes calibrated current viewport geometry with unchanged cursor evidence");
+        Check.That(((ICollection<EcgPaperGridLine>)display.GridLines).IsReadOnly, "published grid remains immutable");
+    }
+
+    private static void StudyPaperGridSuppressesDarkAndDeniedOutput()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        GridCapturedRecordPageDisplay dark = view.CaptureGridPageDisplay(navigation, theme, true, 10, 10,
+            new(0, 100, 60, 20, 1), new(0, 0, 0, 0), 10, 60, 0, false);
+        Check.That(dark.GridPlan is null && dark.GridLines.Count == 0 && dark.Content.Theme!.Theme == Ecg12Theme.MonitorDarkGreen,
+            "dark theme omits grid and does not consume unused paper-only inputs");
+        theme.Select(Ecg12Theme.PaperGridBlack);
+        GridCapturedRecordPageDisplay denied = view.CaptureGridPageDisplay(navigation, theme, false, 0, 0,
+            new(0, 100, 60, 20, 1), new(0, 0, 0, 0), 0, 0, 0, false);
+        Check.That(denied.GridPlan is null && denied.GridLines.Count == 0 && denied.Content.Theme is null && denied.Content.Content.Page is null,
+            "safety denial produces no grid or page metadata without requiring usable layout");
+    }
+
+    private static void StudyPaperGridFailurePreservesAcceptedState()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        foreach (bool inconsistent in new[] { false, true })
+        {
+            try
+            {
+                view.CaptureGridPageDisplay(navigation, theme, false, 10, inconsistent ? 20 : 10,
+                    new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 54, true);
+                throw new InvalidOperationException("invalid paper display accepted");
+            }
+            catch (EcgPaperGridException exception)
+            { Check.That(exception.ReasonCode == (inconsistent ? "PaperGrid.InconsistentAxisScale" : "PaperGrid.LineLimitExceeded"), "grid failures preserve component reason codes"); }
+        }
+        GridCapturedRecordPageDisplay recovered = view.CaptureGridPageDisplay(navigation, theme, false, 10, 10,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, true);
+        Check.That(recovered.GridLines.Count == 55 && ReferenceEquals(view.Measurement.CurrentPair, pair) && navigation.CurrentPage.PageIndex == 0,
+            "valid retry publishes a complete display without losing accepted state");
+    }
+
+    private static void StudyPaperGridRebuildsAfterSessionRestore()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        GridCapturedRecordPageDisplay before = view.CaptureGridPageDisplay(navigation, theme, false, 10, 10,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, false);
+        GridCapturedRecordPageDisplay after = restored.Study.View.CaptureGridPageDisplay(restored.Study.Navigation, restored.Theme, false, 10, 10,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, false);
+        Check.That(before.GridPlan == after.GridPlan && before.GridLines.SequenceEqual(after.GridLines) && !after.Content.Theme!.CanSelect,
+            "restoration rebuilds geometry from current scales without persisting grid or old permission");
+    }
 
     private static void ThemedPolicyUpdateChangesAllCurrentGates()
     {

@@ -13,6 +13,8 @@ public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
 }
 
 public sealed record ThemedCapturedRecordPageDisplay(CapturedRecordPageDisplay Content, Ecg12ThemeDisplay? Theme);
+public sealed record GridCapturedRecordPageDisplay(ThemedCapturedRecordPageDisplay Content,
+    EcgPaperGridPlan? GridPlan, IReadOnlyList<EcgPaperGridLine> GridLines);
 
 // Serialized composition. The shell must replace the old display with this result.
 public sealed class CapturedRecordStudyView
@@ -31,6 +33,22 @@ public sealed class CapturedRecordStudyView
     }
 
     public CapturedRecordMeasurement Measurement { get; private set; }
+
+    public GridCapturedRecordPageDisplay CaptureGridPageDisplay(CapturedRecordNavigation navigation,
+        Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,
+        int plotWidthPixels, EcgVerticalScale scale, EcgPaperScale paperScale,
+        int gridOriginXPixels, int gridOriginYPixels, int maximumGridLines, bool allowAuxiliaryRate)
+    {
+        ThemedCapturedRecordPageDisplay content = CaptureThemedPageDisplay(navigation, theme,
+            canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, allowAuxiliaryRate);
+        if (content.Theme?.Theme != Ecg12Theme.PaperGridBlack)
+        { return new(content, null, Array.Empty<EcgPaperGridLine>()); }
+        RecordCursorViewport viewport = content.Content.Viewport!;
+        EcgPaperGridPlan plan = EcgPaperGridCalibration.Resolve(viewport.PlotLeftPixels, viewport.PlotWidthPixels,
+            (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs), scale, paperScale, gridOriginXPixels, gridOriginYPixels);
+        IReadOnlyList<EcgPaperGridLine> lines = EcgPaperGridGeometry.Build(plan, maximumGridLines);
+        return new(content, plan, lines);
+    }
 
     public ThemedCapturedRecordPageDisplay CaptureThemedPageDisplay(CapturedRecordNavigation navigation,
         Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,

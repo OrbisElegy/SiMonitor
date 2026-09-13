@@ -18,6 +18,7 @@ public sealed class NativeDragInput : IDisposable
     private NativeStudyDrag? _gesture;
     private bool _disposed;
     private bool _processing;
+    private object _deactivationToken = new();
 
     public NativeDragInput(RecordStudyPresenter presenter, Func<RecordStudyCommandContext> currentContext,
         double radius, Action<NativeStudyDrag> interrupted)
@@ -40,6 +41,7 @@ public sealed class NativeDragInput : IDisposable
         _window.PointerReleased += Released;
         _window.PointerCaptureLost += CaptureLost;
         _window.Closed += Closed;
+        _window.Deactivated += Deactivated;
         _window.PublicationChanging += PublicationChanging;
     }
 
@@ -50,10 +52,11 @@ public sealed class NativeDragInput : IDisposable
             !ReferenceEquals(e.Source, control) || !control.IsHitTestVisible || e.Pointer.Type != PointerType.Mouse ||
             e.GetCurrentPoint(_window).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed) { return; }
         _processing = true;
+        object deactivationToken = _deactivationToken;
         try
         {
             RecordStudyCommandContext context = _context();
-            if (_disposed) { return; }
+            if (_disposed || !ReferenceEquals(deactivationToken, _deactivationToken)) { return; }
             _gesture = _presenter.BeginDrag(control.InputSession, context, e.GetPosition(_window), Origin(control), _radius);
             _pointer = e.Pointer;
             _pointer.Capture(_window);
@@ -158,6 +161,12 @@ public sealed class NativeDragInput : IDisposable
         Dispose();
     }
 
+    private void Deactivated(object? sender, EventArgs e)
+    {
+        _deactivationToken = new();
+        Interrupt();
+    }
+
     public void Dispose()
     {
         Dispatcher.UIThread.VerifyAccess();
@@ -168,6 +177,7 @@ public sealed class NativeDragInput : IDisposable
         _window.PointerReleased -= Released;
         _window.PointerCaptureLost -= CaptureLost;
         _window.Closed -= Closed;
+        _window.Deactivated -= Deactivated;
         _window.PublicationChanging -= PublicationChanging;
         _window.SetDragInput(null);
         Interrupt();

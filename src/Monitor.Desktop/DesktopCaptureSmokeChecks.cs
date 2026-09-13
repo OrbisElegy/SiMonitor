@@ -86,6 +86,34 @@ internal static class DesktopCaptureSmokeChecks
             if (presenter.ActiveDrag is not null || pointer.Captured is not null)
             { throw new InvalidOperationException("Missing-release recovery blocked the next gesture."); }
         }
+        Action deactivate = () => NotifyActivation(window, false);
+        int deactivations = 0;
+        using (NativeDragInput activationRoute = new(presenter, () => context, 4,
+            gesture => { deactivations++; gesture.Cancel(context); }))
+        {
+            Press(window, pointer, new(70, 50));
+            Move(window, pointer, new(80, 50));
+            deactivate();
+            RequireX(source, 35);
+            if (pointer.Captured is not null || presenter.ActiveDrag is not null || deactivations != 1)
+            { throw new InvalidOperationException("Window deactivation retained drag capture."); }
+            CapturedRecordSvgPublication restored = source.Publication;
+            deactivate();
+            Release(window, pointer, new(100, 50));
+            if (deactivations != 1 || !ReferenceEquals(restored, source.Publication))
+            { throw new InvalidOperationException("Repeated deactivation or late release changed recovered data."); }
+            NotifyActivation(window, true);
+            Press(window, pointer, new(70, 50));
+            Release(window, pointer, new(70, 50));
+        }
+        using (NativeDragInput duringContext = new(presenter, () => { deactivate(); return context; },
+            4, gesture => gesture.Cancel(context)))
+        {
+            Press(window, pointer, new(70, 50));
+            if (pointer.Captured is not null || presenter.ActiveDrag is not null)
+            { throw new InvalidOperationException("Deactivation during context resolution started capture afterwards."); }
+        }
+        NotifyActivation(window, true);
         NativeDragInput? disposedDuringContext = null;
         disposedDuringContext = new(presenter, () => { disposedDuringContext!.Dispose(); return context; },
             4, gesture => gesture.Cancel(context));
@@ -117,6 +145,16 @@ internal static class DesktopCaptureSmokeChecks
         if (pointer.Captured is not null || closingPresenter.ActiveDrag is not null || closingSource.Current is not null || closing.DragInput is not null)
         { throw new InvalidOperationException("Window close retained drag capture or native input."); }
         Console.WriteLine("ok: native press/move/release capture, redraw continuity, interruption and cleanup");
+    }
+
+    // Smoke-only invocation of the locked framework's notification handler.
+    // No OS focus event is synthesized and production code uses public events.
+    private static void NotifyActivation(MainWindow window, bool activated)
+    {
+        System.Reflection.MethodInfo handler = typeof(Avalonia.Controls.WindowBase).GetMethod(
+            activated ? "HandleActivated" : "HandleDeactivated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Locked framework activation handler is unavailable.");
+        handler.Invoke(window, null);
     }
 
     private static Point Position(MainWindow window, Point local)

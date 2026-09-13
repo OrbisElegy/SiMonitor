@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Domain.Presentation;
+using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Application.Presentation;
 
@@ -13,6 +14,8 @@ public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
 }
 
 public sealed record ThemedCapturedRecordPageDisplay(CapturedRecordPageDisplay Content, Ecg12ThemeDisplay? Theme);
+public sealed record CapturedRecordWaveformPageDisplay(CapturedRecordPageDisplay Content,
+    ArchivedWaveformChannelRead? Waveform);
 public sealed record RecordScreenZoomLayout(int PageWidth, int PageHeight, int AvailableWidth, int AvailableHeight);
 public sealed record ZoomedCapturedRecordPageDisplay(ThemedCapturedRecordPageDisplay Content,
     Ecg12ZoomDisplay? Zoom, Ecg12ScreenTransform? Transform);
@@ -36,6 +39,28 @@ public sealed class CapturedRecordStudyView
     }
 
     public CapturedRecordMeasurement Measurement { get; private set; }
+
+    // Serialized capture from current navigation and slot selection, not a saved
+    // display supplied by the caller. Raw samples still need trusted unit/quality resolution.
+    public CapturedRecordWaveformPageDisplay CaptureWaveformPageDisplay(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, bool allowAuxiliaryRate, int maximumSamples,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        CapturedRecordPageDisplay content = CapturePageDisplay(navigation, canPreserveGlobalSafetyOverlay,
+            plotLeftPixels, plotWidthPixels, scale, allowAuxiliaryRate);
+        if (!content.Study.Admission.MayEnter)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new(content, null);
+        }
+        CapturedRecordPage page = content.Page!;
+        ArchivedWaveformChannelRead waveform = _record.ReadChannel(content.Study.MeasurementSlot!.ChannelId,
+            page.StartDataTimeNs, page.EndExclusiveDataTimeNs, maximumSamples, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(content, waveform);
+    }
 
     // Coordinates in Content remain unscaled. Apply Transform to the whole page once.
     public ZoomedCapturedRecordPageDisplay CaptureZoomedPageDisplay(CapturedRecordNavigation navigation,

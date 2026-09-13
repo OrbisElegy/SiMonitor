@@ -99,6 +99,10 @@ public sealed class CapturedRecordBinding
 
     public IReadOnlyList<ArchivedWaveformBlock> ReadBlocks() => _archive.ReadBlocks();
 
+    internal ArchivedWaveformChannelRead ReadChannel(Guid channelId, long startSimTimeNs,
+        long endExclusiveSimTimeNs, int maximumSamples, CancellationToken cancellationToken) =>
+        _archive.ReadChannel(channelId, startSimTimeNs, endExclusiveSimTimeNs, maximumSamples, cancellationToken);
+
     public CapturedRecordBindingState CaptureState() => new(
         _presentation.CaptureState(), _archive.CaptureState(), _slots);
 

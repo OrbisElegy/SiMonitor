@@ -33,6 +33,10 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(WaveformPageFollowsCurrentPageAndMappedSlot), WaveformPageFollowsCurrentPageAndMappedSlot),
+        new(nameof(WaveformPageRechecksSafetyIndependentlyOfCommands), WaveformPageRechecksSafetyIndependentlyOfCommands),
+        new(nameof(WaveformPageFailurePreservesStudyEvidence), WaveformPageFailurePreservesStudyEvidence),
+        new(nameof(WaveformPageRestoresWithFreshBindingAndCurrentAdmission), WaveformPageRestoresWithFreshBindingAndCurrentAdmission),
         new(nameof(ChannelReadClipsSamplesAndQualityAcrossBlocks), ChannelReadClipsSamplesAndQualityAcrossBlocks),
         new(nameof(ChannelReadUsesExactHalfOpenSampleTimes), ChannelReadUsesExactHalfOpenSampleTimes),
         new(nameof(ChannelReadRejectsWithoutChangingArchive), ChannelReadRejectsWithoutChangingArchive),

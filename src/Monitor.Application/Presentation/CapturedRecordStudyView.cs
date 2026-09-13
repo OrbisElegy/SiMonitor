@@ -98,6 +98,19 @@ public sealed class CapturedRecordStudyView
         theme.UpdatePolicy(themePolicy, allowLocalThemeSelection);
     }
 
+    // Trusted serialized delivery. No command group changes until every input validates.
+    public void UpdateZoomedCommandPolicies(CapturedRecordNavigation navigation, Ecg12ThemeSelection theme,
+        Ecg12ZoomSelection zoom, SystemViewCommandAssessmentPolicy paginationPolicy,
+        SystemViewCommandAssessmentPolicy measurementPolicy, SystemViewCommandAssessmentPolicy themePolicy,
+        bool allowLocalThemeSelection, SystemViewCommandAssessmentPolicy zoomPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(zoom);
+        if (!Enum.IsDefined(zoomPolicy))
+        { throw new CapturedRecordPaginationException("RecordStudy.InvalidPolicy", nameof(zoomPolicy)); }
+        UpdateThemedCommandPolicies(navigation, theme, paginationPolicy, measurementPolicy, themePolicy, allowLocalThemeSelection);
+        zoom.UpdatePolicy(zoomPolicy);
+    }
+
     public void UpdateCommandPolicies(CapturedRecordNavigation navigation,
         SystemViewCommandAssessmentPolicy paginationPolicy, SystemViewCommandAssessmentPolicy measurementPolicy)
     {

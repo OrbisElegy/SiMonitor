@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedPoliciesUpdateIndependentGates), ZoomedPoliciesUpdateIndependentGates),
+        new(nameof(ZoomedPoliciesRejectPartialUpdates), ZoomedPoliciesRejectPartialUpdates),
+        new(nameof(ZoomedPoliciesEnableRestoredSession), ZoomedPoliciesEnableRestoredSession),
+
         new(nameof(ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence), ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence),
         new(nameof(ZoomedDisplaySuppressesDeniedContent), ZoomedDisplaySuppressesDeniedContent),
         new(nameof(ZoomedDisplayRestoresAndRejectsInvalidLayout), ZoomedDisplayRestoresAndRejectsInvalidLayout),
@@ -193,6 +197,68 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedPoliciesUpdateIndependentGates()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        view.UpdateZoomedCommandPolicies(navigation, theme, zoom, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Enabled, false,
+            SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked &&
+            !theme.CaptureDisplay().CanSelect && zoom.CaptureDisplay().Policy == SystemViewCommandAssessmentPolicy.CourseLocked &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair) && zoom.Selection == new Ecg12ZoomState(Ecg12ZoomMode.ExplicitScale, 3, 2),
+            "grouped policy changes preserve evidence and independently govern all four commands");
+        try { zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1)); throw new InvalidOperationException("locked zoom accepted"); }
+        catch (Ecg12ZoomSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Zoom.CourseLocked", "current grouped policy blocks stale zoom action"); }
+    }
+
+    private static void ZoomedPoliciesRejectPartialUpdates()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        for (int invalidIndex = 0; invalidIndex < 4; invalidIndex++)
+        {
+            SystemViewCommandAssessmentPolicy[] policies = [SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled,
+                SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled];
+            policies[invalidIndex] = (SystemViewCommandAssessmentPolicy)99;
+            ExpectPaginationReason(() => view.UpdateZoomedCommandPolicies(navigation, theme, zoom, policies[0], policies[1], policies[2], false, policies[3]), "RecordStudy.InvalidPolicy");
+            Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled &&
+                theme.CaptureDisplay().CanSelect && zoom.CaptureDisplay().CanSelect, "each invalid policy leaves every group and local theme permission unchanged");
+        }
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.UpdateZoomedCommandPolicies(foreign, theme, zoom, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled, false, SystemViewCommandAssessmentPolicy.Disabled), "RecordPagination.ForeignNavigation");
+        Check.That(foreign.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled && theme.CaptureDisplay().CanSelect && zoom.CaptureDisplay().CanSelect,
+            "foreign navigation cannot partially change supplied selectors");
+    }
+
+    private static void ZoomedPoliciesEnableRestoredSession()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.Disabled, false, SystemViewCommandAssessmentPolicy.Disabled);
+        restored.Content.Study.View.UpdateZoomedCommandPolicies(restored.Content.Study.Navigation, restored.Content.Theme, restored.Zoom,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true,
+            SystemViewCommandAssessmentPolicy.Enabled);
+        restored.Content.Study.Navigation.NextPage();
+        restored.Content.Theme.Select(Ecg12Theme.MonitorDarkGreen);
+        restored.Zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1));
+        restored.Content.Study.View.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        Check.That(restored.Content.Study.Navigation.CurrentPage.PageIndex == 1 && restored.Zoom.Selection.Mode == Ecg12ZoomMode.ActualSize &&
+            navigation.CurrentPage.PageIndex == 0 && zoom.Selection.Mode == Ecg12ZoomMode.ExplicitScale && view.Measurement.CurrentPair is null,
+            "trusted update enables restored commands without affecting original session");
+    }
 
     private static void ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence()
     {

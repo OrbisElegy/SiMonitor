@@ -52,6 +52,7 @@ public sealed class MainWindow : Window
         MinWidth = 640;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        ToolTip.SetShowOnDisabled(_clearCursors, true);
         _resetDemo.Click += (_, _) => _resetDemoAction?.Invoke();
         _clearCursors.Click += (_, _) =>
         {
@@ -188,6 +189,13 @@ public sealed class MainWindow : Window
         _clearCursors.IsVisible = _clearCommand is not null &&
             reason is "RecordMeasurement.Ready" or "RecordMeasurement.NoCursorPair" or "RecordMeasurement.CourseLocked";
         _clearCursors.IsEnabled = _clearCursors.IsVisible && reason == "RecordMeasurement.Ready";
+        ToolTip.SetTip(_clearCursors, _clearCursors.IsVisible ? reason switch
+        {
+            "RecordMeasurement.NoCursorPair" => "当前没有可清除的卡尺",
+            "RecordMeasurement.CourseLocked" => "课程已锁定快速测量",
+            _ => null,
+        } : null);
+        if (!_clearCursors.IsVisible || _clearCursors.IsEnabled) { ToolTip.SetIsOpen(_clearCursors, false); }
     }
 
     internal Button ClearCursorButton => _clearCursors;

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Monitor.Domain.Presentation;
 using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Desktop;
@@ -33,11 +34,13 @@ internal static class DesktopButtonSmokeChecks
         Click(window);
         if (resolutions != 1 || !window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled || source.Current?.Display.CursorOverlaySvg is not null)
         { throw new InvalidOperationException("Native clear activation did not redraw without cursors."); }
+        RequireTip(window, "当前没有可清除的卡尺");
         Click(window);
         if (resolutions != 1) { throw new InvalidOperationException("Disabled button invoked the provider."); }
         presenter.UnbindClearButton();
         if (window.ClearCursorButton.IsVisible || window.HasNoRecordContent)
         { throw new InvalidOperationException("Unbind did not preserve the displayed record."); }
+        RequireTip(window, null);
         presenter.Withdraw();
 
         source = DesktopStudySmokeFixture.CreatePresentation(activeInstance: true);
@@ -73,16 +76,30 @@ internal static class DesktopButtonSmokeChecks
         Refresh(presenter);
         if (window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled)
         { throw new InvalidOperationException("Disabled measurement exposed clear."); }
+        RequireTip(window, null);
         Click(window);
         if (window.HasNoRecordContent) { throw new InvalidOperationException("Disabled click changed the record."); }
         presenter.UnbindClearButton();
         presenter.Withdraw();
+        source = DesktopStudySmokeFixture.CreatePresentation(measurementPolicy: SystemViewCommandAssessmentPolicy.CourseLocked);
+        presenter = new(window, source);
+        presenter.BindClearButton(() => throw new InvalidOperationException("Locked button invoked provider"));
+        Refresh(presenter);
+        if (!window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("Course lock did not retain an explained disabled action."); }
+        RequireTip(window, "课程已锁定快速测量");
+        Click(window);
+        if (window.HasNoRecordContent) { throw new InvalidOperationException("Locked click changed the record."); }
+        presenter.UnbindClearButton();
+        presenter.Withdraw();
+        RequireTip(window, null);
         source = DesktopStudySmokeFixture.CreatePresentation();
         presenter = new(window, source);
         presenter.BindClearButton(() => Context(true));
         Refresh(presenter);
         if (!window.ClearCursorButton.IsVisible || !window.ClearCursorButton.IsEnabled)
         { throw new InvalidOperationException("Enabled publication did not restore clear after disabled measurement."); }
+        RequireTip(window, null);
         Click(window);
         if (source.Current?.Display.CursorOverlaySvg is not null || window.ClearCursorButton.IsEnabled)
         { throw new InvalidOperationException("Restored clear action did not execute."); }
@@ -93,6 +110,12 @@ internal static class DesktopButtonSmokeChecks
     }
 
     private static void Click(MainWindow window) => window.ClearCursorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    private static void RequireTip(MainWindow window, string? expected)
+    {
+        if (!ToolTip.GetShowOnDisabled(window.ClearCursorButton) || !Equals(ToolTip.GetTip(window.ClearCursorButton), expected))
+        { throw new InvalidOperationException("Clear action retained an incorrect unavailability reason."); }
+    }
 
     private static RecordStudyCommandContext Context(bool overlay) => new(overlay,
         DesktopStudySmokeFixture.Layout, DesktopStudySmokeFixture.Screen,

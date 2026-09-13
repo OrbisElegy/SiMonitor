@@ -176,7 +176,7 @@ internal static class DesktopPresenterSmokeChecks
     private static void RequireEmpty(MainWindow window, CapturedRecordSvgPresentation source,
         CapturedRecordSvgStatus status, string reason)
     {
-        if (!window.HasNoRecordContent || source.Current is not null || window.CurrentPublication is not { Input: null } publication ||
+        if (!window.HasNoRecordContent || window.MeasurementReadoutText is not null || source.Current is not null || window.CurrentPublication is not { Input: null } publication ||
             publication.Status != status || publication.ReasonCode != reason)
         { throw new InvalidOperationException("Failed presenter retained content/input or lost failure status."); }
     }

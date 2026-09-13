@@ -21,6 +21,12 @@ public sealed class MainWindow : Window
         HorizontalAlignment = HorizontalAlignment.Center,
     };
     private readonly ContentControl _recordContent = new();
+    private readonly TextBlock _measurementReadout = new()
+    {
+        IsVisible = false,
+        TextWrapping = TextWrapping.Wrap,
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
     private readonly Button _resetDemo = new()
     {
         Content = "重置测试卡尺",
@@ -73,6 +79,7 @@ public sealed class MainWindow : Window
                     _recordStatus,
                     _demoNotice,
                     _recordContent,
+                    _measurementReadout,
                     _clearCursors,
                     _resetDemo,
                     new TextBlock { Text = "仅用于教学模拟", TextWrapping = TextWrapping.Wrap,
@@ -111,6 +118,8 @@ public sealed class MainWindow : Window
         if (_recordContent.Content is RecordStudyControl previous) { previous.BindPointerQuery(null); }
         _recordContent.Content = null;
         CurrentPublication = null;
+        _measurementReadout.Text = null;
+        _measurementReadout.IsVisible = false;
         PublicationChanging?.Invoke(this, EventArgs.Empty);
         UpdateClearButton();
         _recordStatus.Text = "暂时无法显示记录";
@@ -130,6 +139,8 @@ public sealed class MainWindow : Window
         if (publication.Status == CapturedRecordSvgStatus.Ready) { _recordContent.Content = readyContent; }
         _recordStatus.Text = message;
         CurrentPublication = publication;
+        _measurementReadout.Text = MeasurementReadout.Format(publication.Input?.Display.Content.Content.Display.Content.Content.Study.Measurement);
+        _measurementReadout.IsVisible = _measurementReadout.Text is not null;
         UpdateClearButton();
         UpdatePointerQuery();
     }
@@ -162,6 +173,7 @@ public sealed class MainWindow : Window
     }
 
     internal RecordStudyControl? RecordControl => _recordContent.Content as RecordStudyControl;
+    internal string? MeasurementReadoutText => _measurementReadout.Text;
 
     internal void SetClearCommand(Action<CapturedRecordSvgInputSession>? command)
     {

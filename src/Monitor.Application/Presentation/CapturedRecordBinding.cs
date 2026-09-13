@@ -42,7 +42,7 @@ public sealed class CapturedRecordBinding
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(archive);
-        FillOnceThenHoldStateMachine restored =
+        var restored =
             FillOnceThenHoldStateMachine.Restore(presentation);
         if (restored.CaptureProjection().TemporalViewMode !=
             TemporalViewMode.CapturedRecord)
@@ -98,6 +98,8 @@ public sealed class CapturedRecordBinding
     public IReadOnlyList<RecordSlotBinding> Slots => _slots;
 
     public IReadOnlyList<ArchivedWaveformBlock> ReadBlocks() => _archive.ReadBlocks();
+
+    internal ArchivedWaveformChannelShape ReadChannelShape(Guid channelId) => _archive.ReadChannelShape(channelId);
 
     internal ArchivedWaveformChannelRead ReadChannel(Guid channelId, long startSimTimeNs,
         long endExclusiveSimTimeNs, int maximumSamples, CancellationToken cancellationToken) =>

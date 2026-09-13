@@ -33,6 +33,12 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(RawVoltageConvertsExactUnitsAndSignedCalibration), RawVoltageConvertsExactUnitsAndSignedCalibration),
+        new(nameof(RawVoltageRejectsInvalidAndUnrepresentableValues), RawVoltageRejectsInvalidAndUnrepresentableValues),
+        new(nameof(VoltagePageCombinesRawEvidenceAndUnclampedGeometry), VoltagePageCombinesRawEvidenceAndUnclampedGeometry),
+        new(nameof(VoltageBindingRejectsMismatchedAndForeignSources), VoltageBindingRejectsMismatchedAndForeignSources),
+        new(nameof(VoltagePageFailureAndSafetyLossPreserveEvidence), VoltagePageFailureAndSafetyLossPreserveEvidence),
+        new(nameof(VoltagePageRestoreRequiresFreshResolution), VoltagePageRestoreRequiresFreshResolution),
         new(nameof(WaveformHorizontalUsesFractionalSourceClock), WaveformHorizontalUsesFractionalSourceClock),
         new(nameof(WaveformHorizontalResizePreservesRawEvidence), WaveformHorizontalResizePreservesRawEvidence),
         new(nameof(WaveformHorizontalDenialAndFailurePublishNoGeometry), WaveformHorizontalDenialAndFailurePublishNoGeometry),

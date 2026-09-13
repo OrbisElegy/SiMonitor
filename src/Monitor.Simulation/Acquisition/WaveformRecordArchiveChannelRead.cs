@@ -15,8 +15,23 @@ public sealed record ArchivedWaveformChannelRead(
     long EndExclusiveSimTimeNs,
     IReadOnlyList<ArchivedWaveformPlaneBlock> Blocks);
 
+public sealed record ArchivedWaveformChannelShape(Guid ChannelId, uint SampleRateNumerator,
+    uint SampleRateDenominator, int ScaleNumerator, uint ScaleDenominator,
+    int OffsetNumerator, uint OffsetDenominator);
+
 public sealed partial class WaveformRecordArchive
 {
+    public ArchivedWaveformChannelShape ReadChannelShape(Guid channelId)
+    {
+        if (!_plan.ChannelIds.Contains(channelId))
+        { throw Error("WaveformRecordArchive.UnknownChannel", nameof(channelId)); }
+        // Archive admission already proves this shape across every stored block.
+        WaveformPlane plane = WaveformEnvelopeCodec.Decode(_blocks[0].RawEnvelope).Planes
+            .Single(candidate => candidate.ChannelId == channelId);
+        return new(channelId, plane.SampleRateNumerator, plane.SampleRateDenominator,
+            plane.ScaleNumerator, plane.ScaleDenominator, plane.OffsetNumerator, plane.OffsetDenominator);
+    }
+
     // Local raw-data projection only: no unit inference, quality interpretation,
     // interpolation, predecessor padding, or permission to display the result.
     public ArchivedWaveformChannelRead ReadChannel(

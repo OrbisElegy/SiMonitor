@@ -40,6 +40,21 @@ public sealed class CapturedRecordStudyView
 
     public CapturedRecordMeasurement Measurement { get; private set; }
 
+    public CapturedRecordVoltagePageDisplay CaptureVoltagePageDisplay(CapturedRecordNavigation navigation,
+        CapturedRecordVoltageBinding voltageBinding, bool canPreserveGlobalSafetyOverlay,
+        int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale, bool allowAuxiliaryRate,
+        int maximumSamples, CancellationToken cancellationToken = default)
+    {
+        CapturedRecordWaveformHorizontalPageDisplay content = CaptureWaveformHorizontalPageDisplay(navigation,
+            canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale,
+            allowAuxiliaryRate, maximumSamples, cancellationToken);
+        if (!content.Content.Content.Study.Admission.MayEnter)
+        { return new(content, null, null, Array.Empty<CapturedRecordVoltageBlock>()); }
+        ArgumentNullException.ThrowIfNull(voltageBinding);
+        voltageBinding.RequireBinding(_record, content.Content.Content.Study.MeasurementSlot!);
+        return CapturedRecordVoltageProjection.Build(content, voltageBinding, scale, cancellationToken);
+    }
+
     public CapturedRecordWaveformHorizontalPageDisplay CaptureWaveformHorizontalPageDisplay(
         CapturedRecordNavigation navigation, bool canPreserveGlobalSafetyOverlay,
         int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,

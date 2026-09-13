@@ -14,8 +14,10 @@ public sealed class EcgPaperGridException(string reasonCode, string parameterNam
 // Logical geometry only. Caller resolves spacing against time/gain calibration.
 public static class EcgPaperGridGeometry
 {
-    public static IReadOnlyList<EcgPaperGridLine> Build(EcgPaperGridPlan plan, int maximumLines)
+    public static IReadOnlyList<EcgPaperGridLine> Build(EcgPaperGridPlan plan, int maximumLines,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(plan);
         if (maximumLines <= 0)
         { throw new EcgPaperGridException("PaperGrid.InvalidLimit", nameof(maximumLines)); }
@@ -28,9 +30,11 @@ public static class EcgPaperGridGeometry
         BigInteger count = endX - firstX + endY - firstY;
         if (count > maximumLines)
         { throw new EcgPaperGridException("PaperGrid.LineLimitExceeded", nameof(maximumLines)); }
+        cancellationToken.ThrowIfCancellationRequested();
         List<EcgPaperGridLine> lines = new((int)count);
-        AddLines(lines, firstX, endX, plan.OriginXPixels, true, plan);
-        AddLines(lines, firstY, endY, plan.OriginYPixels, false, plan);
+        AddLines(lines, firstX, endX, plan.OriginXPixels, true, plan, cancellationToken);
+        AddLines(lines, firstY, endY, plan.OriginYPixels, false, plan, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         return lines.AsReadOnly();
     }
 
@@ -40,17 +44,18 @@ public static class EcgPaperGridGeometry
 
     private static BigInteger Ceiling(BigInteger numerator, BigInteger denominator)
     {
-        BigInteger quotient = BigInteger.DivRem(numerator, denominator, out BigInteger remainder);
+        var quotient = BigInteger.DivRem(numerator, denominator, out BigInteger remainder);
         return remainder > 0 ? quotient + 1 : quotient;
     }
 
     private static void AddLines(List<EcgPaperGridLine> lines, BigInteger first, BigInteger end,
-        int origin, bool vertical, EcgPaperGridPlan plan)
+        int origin, bool vertical, EcgPaperGridPlan plan, CancellationToken cancellationToken)
     {
         for (BigInteger index = first; index < end; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             BigInteger numerator = (BigInteger)origin * plan.MinorSpacingDenominator + index * plan.MinorSpacingNumerator;
-            BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, plan.MinorSpacingDenominator);
+            var divisor = BigInteger.GreatestCommonDivisor(numerator, plan.MinorSpacingDenominator);
             lines.Add(new(vertical, new(numerator / divisor, plan.MinorSpacingDenominator / divisor), index % 5 == 0));
         }
     }

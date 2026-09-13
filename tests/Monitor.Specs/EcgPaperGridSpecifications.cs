@@ -7,6 +7,7 @@ internal static class EcgPaperGridSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(PaperGridCancellationPreservesAcceptedGeometry), PaperGridCancellationPreservesAcceptedGeometry),
         new(nameof(PaperGridCalibrationMatchesFrozenReferenceScale), PaperGridCalibrationMatchesFrozenReferenceScale),
         new(nameof(PaperGridCalibrationPreservesFractionalZoom), PaperGridCalibrationPreservesFractionalZoom),
         new(nameof(PaperGridCalibrationRejectsInconsistentAndInvalidScale), PaperGridCalibrationRejectsInconsistentAndInvalidScale),
@@ -16,6 +17,23 @@ internal static class EcgPaperGridSpecifications
         new(nameof(PaperGridRejectsExcessBeforeGeneratingLines), PaperGridRejectsExcessBeforeGeneratingLines),
         new(nameof(PaperGridValidatesBoundsAndKeepsImmutableResults), PaperGridValidatesBoundsAndKeepsImmutableResults),
     ];
+
+    private static void PaperGridCancellationPreservesAcceptedGeometry()
+    {
+        EcgPaperGridPlan plan = new(0, 0, 10, 10, 0, 0, 2, 1);
+        IReadOnlyList<EcgPaperGridLine> accepted = EcgPaperGridGeometry.Build(plan, 10);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            EcgPaperGridGeometry.Build(plan, 10, cancellation.Token);
+            throw new InvalidOperationException("cancelled grid build accepted");
+        }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == cancellation.Token, "grid cancellation preserves caller token identity"); }
+        Check.That(accepted.Count == 10 && accepted.SequenceEqual(EcgPaperGridGeometry.Build(plan, 10)),
+            "cancellation never changes a prior result and fresh generation remains deterministic");
+    }
 
     private static void PaperGridCalibrationMatchesFrozenReferenceScale()
     {

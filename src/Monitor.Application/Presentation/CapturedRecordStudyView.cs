@@ -37,16 +37,22 @@ public sealed class CapturedRecordStudyView
     public GridCapturedRecordPageDisplay CaptureGridPageDisplay(CapturedRecordNavigation navigation,
         Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,
         int plotWidthPixels, EcgVerticalScale scale, EcgPaperScale paperScale,
-        int gridOriginXPixels, int gridOriginYPixels, int maximumGridLines, bool allowAuxiliaryRate)
+        int gridOriginXPixels, int gridOriginYPixels, int maximumGridLines, bool allowAuxiliaryRate,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ThemedCapturedRecordPageDisplay content = CaptureThemedPageDisplay(navigation, theme,
             canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, allowAuxiliaryRate);
         if (content.Theme?.Theme != Ecg12Theme.PaperGridBlack)
-        { return new(content, null, Array.Empty<EcgPaperGridLine>()); }
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new(content, null, Array.Empty<EcgPaperGridLine>());
+        }
         RecordCursorViewport viewport = content.Content.Viewport!;
         EcgPaperGridPlan plan = EcgPaperGridCalibration.Resolve(viewport.PlotLeftPixels, viewport.PlotWidthPixels,
             (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs), scale, paperScale, gridOriginXPixels, gridOriginYPixels);
-        IReadOnlyList<EcgPaperGridLine> lines = EcgPaperGridGeometry.Build(plan, maximumGridLines);
+        IReadOnlyList<EcgPaperGridLine> lines = EcgPaperGridGeometry.Build(plan, maximumGridLines, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         return new(content, plan, lines);
     }
 

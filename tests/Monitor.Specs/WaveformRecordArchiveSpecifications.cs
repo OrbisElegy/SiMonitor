@@ -31,6 +31,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyGridCancellationPreservesSessionAndAllowsRetry), StudyGridCancellationPreservesSessionAndAllowsRetry),
         new(nameof(StudyPaperGridUsesCurrentCalibratedViewport), StudyPaperGridUsesCurrentCalibratedViewport),
         new(nameof(StudyPaperGridSuppressesDarkAndDeniedOutput), StudyPaperGridSuppressesDarkAndDeniedOutput),
         new(nameof(StudyPaperGridFailurePreservesAcceptedState), StudyPaperGridFailurePreservesAcceptedState),
@@ -160,6 +161,35 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void StudyGridCancellationPreservesSessionAndAllowsRetry()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        foreach (Ecg12Theme selected in Enum.GetValues<Ecg12Theme>())
+        {
+            theme.Select(selected);
+            foreach (bool admitted in new[] { false, true })
+            {
+                try
+                {
+                    view.CaptureGridPageDisplay(navigation, theme, admitted, 0, 10, new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 0, 60, 55, true, cancellation.Token);
+                    throw new InvalidOperationException("cancelled study composition accepted");
+                }
+                catch (OperationCanceledException exception)
+                { Check.That(exception.CancellationToken == cancellation.Token, "cancellation applies to paper, dark and denied composition"); }
+            }
+        }
+        theme.Select(Ecg12Theme.PaperGridBlack);
+        GridCapturedRecordPageDisplay recovered = view.CaptureGridPageDisplay(navigation, theme, true, 0, 10,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 0, 60, 55, true);
+        Check.That(recovered.GridLines.Count == 55 && ReferenceEquals(view.Measurement.CurrentPair, pair) && navigation.CurrentPage.PageIndex == 0,
+            "fresh composition succeeds after cancellation without losing session evidence");
+    }
 
     private static void StudyPaperGridUsesCurrentCalibratedViewport()
     {

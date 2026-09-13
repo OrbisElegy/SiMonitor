@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(HiddenSvgRequiresRefreshBeforeEnabledInput), HiddenSvgRequiresRefreshBeforeEnabledInput),
+        new(nameof(RestoredDisabledSvgCannotEnableEmptyPlacementWithoutRefresh), RestoredDisabledSvgCannotEnableEmptyPlacementWithoutRefresh),
+
         new(nameof(SvgClearRemovesOverlayAndSupersedesOldDrag), SvgClearRemovesOverlayAndSupersedesOldDrag),
         new(nameof(SvgClearChecksCurrentSafetyAndPolicy), SvgClearChecksCurrentSafetyAndPolicy),
         new(nameof(SvgClearRestoresEmptyStateWithoutOldPermissions), SvgClearRestoresEmptyStateWithoutOldPermissions),
@@ -245,6 +248,54 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void HiddenSvgRequiresRefreshBeforeEnabledInput()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        foreach (SystemViewCommandAssessmentPolicy policy in new[] { SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked })
+        {
+            view.Measurement.UpdatePolicy(policy);
+            CapturedRecordSvgInputSession hidden = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+            Check.That(hidden.Display.CursorOverlaySvg is null, "disabled measurement picture omits manual markers");
+            view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+            Check.That(MeasurementReason(() => hidden.HitTest(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(2, 1))) == "RecordMeasurement.StaleRenderedView" &&
+                MeasurementReason(() => hidden.ClearPair(false, layout, screen)) == "RecordMeasurement.StaleRenderedView" &&
+                MeasurementReason(() => hidden.BeginDrag(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(2, 1))) == "RecordMeasurement.StaleRenderedView" &&
+                ReferenceEquals(view.Measurement.CurrentPair, pair), "enabling policy alone cannot activate invisible targets or clear from old picture");
+        }
+        CapturedRecordSvgInputSession refreshed = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(refreshed.Display.CursorOverlaySvg is not null && refreshed.HitTest(false, layout, screen,
+            new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(2, 1)) == RecordCursorHits.Second, "fresh enabled picture permits visible cursor input");
+    }
+
+    private static void RestoredDisabledSvgCannotEnableEmptyPlacementWithoutRefresh()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgInputSession hidden = new(restored.Content.Study.View, restored.Content.Study.Navigation, restored.Content.Theme,
+            restored.Zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(MeasurementReason(() => hidden.ClearPair(false, layout, screen)) == "RecordMeasurement.Disabled", "still-disabled picture uses current permission rejection");
+        restored.Content.Study.View.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(MeasurementReason(() => hidden.PlacePair(false, layout, screen, new(0, 1), new(60, 1), new(50, 1), new(40, 1), new(0, 1), new(0, 1))) ==
+            "RecordMeasurement.StaleRenderedView" && restored.Content.Study.View.Measurement.CurrentPair is null, "restored disabled empty display cannot create cursors after policy change without redraw");
+        CapturedRecordSvgInputSession refreshed = new(restored.Content.Study.View, restored.Content.Study.Navigation, restored.Content.Theme,
+            restored.Zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(refreshed.PlacePair(false, layout, screen, new(0, 1), new(60, 1), new(50, 1), new(40, 1), new(0, 1), new(0, 1)).Second.Value.DataTimeNs == 50_000_000,
+            "fresh enabled empty picture accepts first placement");
+    }
 
     private static void SvgClearRemovesOverlayAndSupersedesOldDrag()
     {

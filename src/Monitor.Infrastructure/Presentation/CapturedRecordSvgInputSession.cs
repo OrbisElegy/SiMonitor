@@ -12,6 +12,7 @@ public sealed class CapturedRecordSvgInputSession
     private readonly Ecg12ZoomSelection _zoom;
     private readonly CapturedRecordMeasurement _measurement;
     private readonly CapturedRecordCursorPair? _renderedPair;
+    private readonly SystemViewCommandAssessmentPolicy _renderedMeasurementPolicy;
     private readonly CapturedRecordPage _page;
     private readonly Ecg12ZoomState _selection;
     private readonly CapturedRecordSvgLayout _layout;
@@ -32,6 +33,7 @@ public sealed class CapturedRecordSvgInputSession
         _zoom = zoom;
         _measurement = view.Measurement;
         _renderedPair = _measurement.CurrentPair;
+        _renderedMeasurementPolicy = _measurement.CurrentPolicy;
         _page = navigation.CurrentPage;
         _selection = zoom.Selection;
         _layout = layout;
@@ -105,7 +107,9 @@ public sealed class CapturedRecordSvgInputSession
     private void ValidateCurrent(CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
     {
         ValidateGeometry(layout, screen);
-        if (!ReferenceEquals(_measurement.CurrentPair, _renderedPair))
+        if (!ReferenceEquals(_measurement.CurrentPair, _renderedPair) ||
+            (_renderedMeasurementPolicy != SystemViewCommandAssessmentPolicy.Enabled &&
+                _measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled))
         { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(layout)); }
     }
 

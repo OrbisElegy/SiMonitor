@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Avalonia;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Presentation;
@@ -110,28 +111,67 @@ public sealed class RecordStudyPresenter
         RecordScreenZoomLayout screen, EcgPaperGridSvgStyle gridStyle,
         EcgManualCursorSvgStyle cursorStyle, bool allowAuxiliaryRate)
     {
-        Dispatcher.UIThread.VerifyAccess();
-        ArgumentNullException.ThrowIfNull(expectedInput);
-        if (!ReferenceEquals(expectedInput, _presentation.Current) ||
-            !ReferenceEquals(expectedInput, _window.CurrentPublication?.Input))
-        { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(expectedInput)); }
+        RequireCurrentInput(expectedInput);
         try
         {
             expectedInput.ClearPair(canPreserveGlobalSafetyOverlay, layout, screen);
         }
         catch (Exception exception)
         {
-            _presentation.Withdraw();
-            CapturedRecordSvgPublication failed = exception switch
-            {
-                Ecg12ViewAdmissionException admission => new(CapturedRecordSvgStatus.Denied, admission.ReasonCode, null),
-                CapturedRecordMeasurementException measurement => new(CapturedRecordSvgStatus.Failed, measurement.ReasonCode, null),
-                _ => new(CapturedRecordSvgStatus.Failed, "DesktopStudy.CommandFailed", null),
-            };
-            _window.ApplyPublication(failed);
+            WithdrawCommandFailure(exception);
             throw;
         }
         // The accepted edit is not rolled back if the subsequent paint fails.
         Refresh(canPreserveGlobalSafetyOverlay, layout, screen, gridStyle, cursorStyle, allowAuxiliaryRate);
+    }
+
+    public RecordCursorHits HitTest(CapturedRecordSvgInputSession expectedInput,
+        bool canPreserveGlobalSafetyOverlay, CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
+        Point windowPoint, Point currentPageOrigin, double radius)
+    {
+        RequireCurrentInput(expectedInput);
+        ExactPlotCoordinate x = NativeLogicalCoordinate.FromDouble(windowPoint.X);
+        ExactPlotCoordinate y = NativeLogicalCoordinate.FromDouble(windowPoint.Y);
+        ExactPlotCoordinate originX = NativeLogicalCoordinate.FromDouble(currentPageOrigin.X);
+        ExactPlotCoordinate originY = NativeLogicalCoordinate.FromDouble(currentPageOrigin.Y);
+        ExactPlotCoordinate exactRadius = NativeLogicalCoordinate.FromDouble(radius);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
+        try
+        {
+            return expectedInput.HitTest(canPreserveGlobalSafetyOverlay, layout, screen,
+                x, y, originX, originY, exactRadius);
+        }
+        catch (CapturedRecordMeasurementException exception) when (exception.ReasonCode == "RecordMeasurement.InvalidPoint")
+        {
+            // A pointer outside the plot is invalid query input, not loss of
+            // admission. Preserve the picture so a subsequent point can retry.
+            throw;
+        }
+        catch (Exception exception)
+        {
+            WithdrawCommandFailure(exception);
+            throw;
+        }
+    }
+
+    private void RequireCurrentInput(CapturedRecordSvgInputSession expectedInput)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(expectedInput);
+        if (!ReferenceEquals(expectedInput, _presentation.Current) ||
+            !ReferenceEquals(expectedInput, _window.CurrentPublication?.Input))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(expectedInput)); }
+    }
+
+    private void WithdrawCommandFailure(Exception exception)
+    {
+        _presentation.Withdraw();
+        CapturedRecordSvgPublication failed = exception switch
+        {
+            Ecg12ViewAdmissionException admission => new(CapturedRecordSvgStatus.Denied, admission.ReasonCode, null),
+            CapturedRecordMeasurementException measurement => new(CapturedRecordSvgStatus.Failed, measurement.ReasonCode, null),
+            _ => new(CapturedRecordSvgStatus.Failed, "DesktopStudy.CommandFailed", null),
+        };
+        _window.ApplyPublication(failed);
     }
 }

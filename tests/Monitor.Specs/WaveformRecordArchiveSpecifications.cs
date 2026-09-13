@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Numerics;
+using System.Xml.Linq;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
@@ -32,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudyCursorSvgRendersExactVisibleMarkersSeparately), StudyCursorSvgRendersExactVisibleMarkersSeparately),
+        new(nameof(StudyCursorSvgOmitsHiddenAndLockedMarkers), StudyCursorSvgOmitsHiddenAndLockedMarkers),
+        new(nameof(StudyCursorSvgValidatesStylesAndRecovers), StudyCursorSvgValidatesStylesAndRecovers),
+        new(nameof(StudyCursorSvgRestoresAndCancelsWithoutMutation), StudyCursorSvgRestoresAndCancelsWithoutMutation),
         new(nameof(StudySvgLayersRenderCurrentAdmittedGrid), StudySvgLayersRenderCurrentAdmittedGrid),
         new(nameof(StudySvgLayersSuppressUnavailableGrid), StudySvgLayersSuppressUnavailableGrid),
         new(nameof(StudySvgLayersRejectStylesWithoutChangingSession), StudySvgLayersRejectStylesWithoutChangingSession),
@@ -166,6 +171,80 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static EcgManualCursorSvgStyle SvgCursorStyle() => new("#0055ff", "#ff5500", 1000, 2000);
+
+    private static void StudyCursorSvgRendersExactVisibleMarkersSeparately()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(50_000_000, 0, 1), new(100_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordSvgScreenLayers result = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true);
+        XElement root = XElement.Parse(result.CursorOverlaySvg!);
+        XElement[] groups = root.Elements().ToArray();
+        Check.That(groups.Length == 2 && (string?)groups[0].Attribute("data-cursor") == "first" &&
+            (string?)groups[0].Elements().Last().Attribute("cx") == "12.5" && (string?)groups[1].Elements().Last().Attribute("cy") == "40" &&
+            (string?)root.Attribute("overflow") == "hidden", "screen markers use exact projected positions and clipped crosshairs");
+        Check.That(!result.Content.GridSvg!.Contains("manual-measurement", StringComparison.Ordinal) && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "manual overlay remains separate from grid SVG and changes no data");
+    }
+
+    private static void StudyCursorSvgOmitsHiddenAndLockedMarkers()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        view.Measurement.ReplacePair(new(0, 4000, 1), new(100_000_000, 0, 1));
+        Check.That(CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, true, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg is null,
+            "above-plot first cursor and next-page second cursor emit no markers");
+        navigation.NextPage();
+        CapturedRecordSvgScreenLayers one = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, true, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true);
+        Check.That(XElement.Parse(one.CursorOverlaySvg!).Elements().Count() == 1 && one.Content.GridSvg is null,
+            "dark theme can display the one visible manual cursor without a paper grid");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, true, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg is null &&
+            CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg is null,
+            "locked or denied displays disclose no cursor overlay");
+    }
+
+    private static void StudyCursorSvgValidatesStylesAndRecovers()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 3000, 1), new(100_000_000, -2000, 1));
+        foreach (EcgManualCursorSvgStyle invalid in new[] { SvgCursorStyle() with { RadiusMilliPixels = 0 }, SvgCursorStyle() with { FirstColor = "url(#external)" } })
+        {
+            Check.That(MeasurementReason(() => CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), invalid, true)) ==
+                "RecordMeasurement.InvalidSvgStyle", "visible markers reject invalid styles before returning screen layers");
+        }
+        CapturedRecordSvgScreenLayers recovered = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true);
+        Check.That(XElement.Parse(recovered.CursorOverlaySvg!).Elements().Count() == 2 && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "closed vertical edges render after failure without modifying selected evidence");
+    }
+
+    private static void StudyCursorSvgRestoresAndCancelsWithoutMutation()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        string? before = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg;
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme), Ecg12RecordContext.IndependentCapturedRecord,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            CapturedRecordSvgLayers.RenderScreen(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true, cancellation.Token);
+            throw new InvalidOperationException("cancelled cursor rendering accepted");
+        }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == cancellation.Token, "screen cancellation preserves caller token"); }
+        Check.That(CapturedRecordSvgLayers.RenderScreen(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg == before,
+            "restored manual coordinates rebuild identical screen-only markers after cancellation");
+    }
 
     private static CapturedRecordSvgLayout SvgStudyLayout() => new(10, 10, new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55);
     private static EcgPaperGridSvgStyle SvgStudyStyle() => new("#f0cccc", "#cc9999", 500, 1000);

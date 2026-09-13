@@ -8,10 +8,23 @@ public sealed record CapturedRecordSvgLayout(int PlotLeftPixels, int PlotWidthPi
     EcgVerticalScale VerticalScale, EcgPaperScale PaperScale,
     int GridOriginXPixels, int GridOriginYPixels, int MaximumGridLines);
 public sealed record CapturedRecordSvgLayersResult(GridCapturedRecordPageDisplay Display, string? GridSvg);
+public sealed record CapturedRecordSvgScreenLayers(CapturedRecordSvgLayersResult Content, string? CursorOverlaySvg);
 
 // Serialized screen-layer composition, not a waveform renderer or print/export document.
 public static class CapturedRecordSvgLayers
 {
+    public static CapturedRecordSvgScreenLayers RenderScreen(CapturedRecordStudyView view,
+        CapturedRecordNavigation navigation, Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay,
+        CapturedRecordSvgLayout layout, EcgPaperGridSvgStyle gridStyle, EcgManualCursorSvgStyle cursorStyle,
+        bool allowAuxiliaryRate, CancellationToken cancellationToken = default)
+    {
+        CapturedRecordSvgLayersResult content = Render(view, navigation, theme, canPreserveGlobalSafetyOverlay,
+            layout, gridStyle, allowAuxiliaryRate, cancellationToken);
+        string? cursors = EcgManualCursorSvg.Render(content.Display.Content.Content, layout.VerticalScale, cursorStyle, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new(content, cursors);
+    }
+
     public static CapturedRecordSvgLayersResult Render(CapturedRecordStudyView view,
         CapturedRecordNavigation navigation, Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, EcgPaperGridSvgStyle gridStyle, bool allowAuxiliaryRate,

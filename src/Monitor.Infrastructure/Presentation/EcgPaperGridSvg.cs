@@ -65,6 +65,6 @@ public static class EcgPaperGridSvg
             new XAttribute("stroke", color), new XAttribute("stroke-width", SvgLogicalNumber.Format(width, 1000))));
     }
 
-    private static bool IsColor(string value) => value is { Length: 7 } && value[0] == '#' && !value.AsSpan(1).ContainsAnyExcept(HexDigits);
+    internal static bool IsColor(string value) => value is { Length: 7 } && value[0] == '#' && !value.AsSpan(1).ContainsAnyExcept(HexDigits);
     private static string Integer(long value) => value.ToString(CultureInfo.InvariantCulture);
 }

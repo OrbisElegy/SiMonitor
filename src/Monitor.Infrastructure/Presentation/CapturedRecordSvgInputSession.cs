@@ -40,6 +40,13 @@ public sealed class CapturedRecordSvgInputSession
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
 
+    public void ClearPair(bool canPreserveGlobalSafetyOverlay, CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
+    {
+        ValidateCurrent(layout, screen);
+        _view.ClearPairOnCurrentPage(_navigation, canPreserveGlobalSafetyOverlay,
+            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale);
+    }
+
     public CapturedRecordSvgDrag BeginDrag(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
         ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX,

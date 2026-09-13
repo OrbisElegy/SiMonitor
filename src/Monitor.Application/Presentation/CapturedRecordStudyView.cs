@@ -159,6 +159,13 @@ public sealed class CapturedRecordStudyView
         Measurement = replacement;
     }
 
+    public void ClearPairOnCurrentPage(CapturedRecordNavigation navigation, bool canPreserveGlobalSafetyOverlay,
+        int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale)
+    {
+        _ = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        Measurement.ClearPair();
+    }
+
     public CapturedRecordCursorPair PlacePairOnCurrentPage(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
         ExactPlotCoordinate firstX, ExactPlotCoordinate firstY, ExactPlotCoordinate secondX, ExactPlotCoordinate secondY)

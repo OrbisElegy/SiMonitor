@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgClearRemovesOverlayAndSupersedesOldDrag), SvgClearRemovesOverlayAndSupersedesOldDrag),
+        new(nameof(SvgClearChecksCurrentSafetyAndPolicy), SvgClearChecksCurrentSafetyAndPolicy),
+        new(nameof(SvgClearRestoresEmptyStateWithoutOldPermissions), SvgClearRestoresEmptyStateWithoutOldPermissions),
+
         new(nameof(SvgDragKeepsActualScaleOffsetThroughRelease), SvgDragKeepsActualScaleOffsetThroughRelease),
         new(nameof(SvgDragRejectsLayoutChangeAndAllowsRollback), SvgDragRejectsLayoutChangeAndAllowsRollback),
         new(nameof(SvgDragRejectsReplacementAndRetriesInvalidRelease), SvgDragRejectsReplacementAndRetriesInvalidRelease),
@@ -241,6 +245,73 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgClearRemovesOverlayAndSupersedesOldDrag()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        CapturedRecordSvgDrag drag = input.BeginDrag(true, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(2, 1));
+        input.ClearPair(true, layout, screen);
+        Check.That(view.Measurement.CurrentPair is null && MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragSuperseded",
+            "clear removes active evidence and old drag cannot restore deleted cursors");
+        Check.That(MeasurementReason(() => input.ClearPair(true, layout, screen)) == "RecordMeasurement.StaleRenderedView",
+            "old populated display cannot submit another clear after deletion");
+        CapturedRecordSvgInputSession refreshed = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(refreshed.Display.CursorOverlaySvg is null && pair.Second.Value.DataTimeNs == 50_000_000, "fresh display omits overlay while old immutable evidence stays intact");
+        refreshed.ClearPair(true, layout, screen);
+        Check.That(view.Measurement.CurrentPair is null, "clearing an already empty current picture is harmless");
+    }
+
+    private static void SvgClearChecksCurrentSafetyAndPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        try
+        {
+            input.ClearPair(false, layout, screen);
+            throw new InvalidOperationException("unsafe clear accepted");
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable", "clear checks current safety admission"); }
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => input.ClearPair(true, layout, screen)) == "RecordMeasurement.CourseLocked" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "denied clear preserves active pair and old input remains nonmutating");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        input.ClearPair(true, layout, screen);
+        Check.That(view.Measurement.CurrentPair is null, "valid retry after current permission recovery succeeds");
+    }
+
+    private static void SvgClearRestoresEmptyStateWithoutOldPermissions()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        input.ClearPair(true, layout, screen);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.ActiveInstance, SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled,
+            SystemViewCommandAssessmentPolicy.Disabled, false, SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(restored.Content.Study.View.Measurement.CurrentPair is null && pair.First.Value.DataTimeNs == 0, "empty selection survives restoration without mutating prior evidence");
+        CapturedRecordSvgInputSession current = new(restored.Content.Study.View, restored.Content.Study.Navigation, restored.Content.Theme, restored.Zoom,
+            true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(MeasurementReason(() => current.ClearPair(true, layout, screen)) == "RecordMeasurement.Disabled", "even empty clear requires current measurement permission after restore");
+    }
 
     private static void SvgDragKeepsActualScaleOffsetThroughRelease()
     {

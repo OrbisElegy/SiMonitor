@@ -12,7 +12,7 @@ internal static class DesktopDemoSmokeChecks
     public static void Verify()
     {
         MainWindow window = new();
-        if (window.ResetDemoButton.IsVisible || window.DemoViews.IsVisible) { throw new InvalidOperationException("Ordinary startup exposed synthetic controls."); }
+        if (window.ResetDemoButton.IsVisible || window.DemoViews.IsVisible || window.DemoMeasurement.IsVisible) { throw new InvalidOperationException("Ordinary startup exposed synthetic controls."); }
         DesktopStudyDemo.Start(window);
         window.Show();
         window.UpdateLayout();
@@ -57,6 +57,7 @@ internal static class DesktopDemoSmokeChecks
         if (window.MeasurementAccessibilityText != window.MeasurementReadoutText || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：0.025 mV")
         { throw new InvalidOperationException("Vertical movement did not update signed amplitude readout."); }
         VerifyViews(window, pointer);
+        VerifyPolicies(window, pointer);
         window.Close();
         if (window.DragInput is not null || pointer.Captured is not null)
         { throw new InvalidOperationException("Demo close retained input routing."); }
@@ -126,5 +127,53 @@ internal static class DesktopDemoSmokeChecks
         if (window.RecordControl!.Width != 400 || window.DemoViews.Paper.IsEnabled || window.DemoViews.Zoom400.IsEnabled)
         { throw new InvalidOperationException("Reset did not restore initial view selection."); }
         Console.WriteLine("ok: grouped demo zoom, theme, coordinate preservation, drag interruption and reset");
+    }
+
+    private static void VerifyPolicies(MainWindow window, Pointer pointer)
+    {
+        static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(104, 100));
+        DesktopCaptureSmokeChecks.Move(window, pointer, new(144, 100));
+        Click(window.DemoMeasurement.Disabled);
+        if (pointer.Captured is not null || window.ClearCursorButton.IsVisible || window.RecordControl!.IsHitTestVisible ||
+            window.MeasurementReadoutText is not null || window.MeasurementAccessibilityText is not null)
+        { throw new InvalidOperationException("Demo disabled policy retained measurement interaction."); }
+        var disabled = window.CurrentPublication;
+        Click(window.ClearCursorButton);
+        DesktopCaptureSmokeChecks.Release(window, pointer, new(180, 100));
+        if (!ReferenceEquals(disabled, window.CurrentPublication))
+        { throw new InvalidOperationException("Disabled demo accepted stale native input."); }
+        Click(window.DemoMeasurement.Locked);
+        if (!window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled ||
+            !Equals(ToolTip.GetTip(window.ClearCursorButton), "课程已锁定快速测量"))
+        { throw new InvalidOperationException("Demo course lock lost its disabled explanation."); }
+        Click(window.DemoMeasurement.Enabled);
+        if (window.MeasurementReadoutText != "Δt：100 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Policy recovery did not preserve pre-drag evidence."); }
+        window.DemoMeasurement.Auxiliary.IsChecked = true;
+        if (window.MeasurementReadoutText != "Δt：100 ms    ΔV（终点−起点）：-0.05 mV    辅助频率：600 次/分")
+        { throw new InvalidOperationException("Demo auxiliary permission did not show the calibrated result."); }
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(100, 100));
+        DesktopCaptureSmokeChecks.Release(window, pointer, new(140, 100));
+        if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV    辅助频率：750 次/分")
+        { throw new InvalidOperationException("Auxiliary result did not follow manual movement."); }
+        window.DemoMeasurement.Auxiliary.IsChecked = false;
+        if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Revoked auxiliary permission retained the result."); }
+        window.DemoMeasurement.Auxiliary.IsChecked = true;
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(140, 100));
+        DesktopCaptureSmokeChecks.Release(window, pointer, new(300, 100));
+        if (window.MeasurementReadoutText != "Δt：0 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Zero time interval fabricated an auxiliary rate."); }
+        Click(window.ClearCursorButton);
+        Click(window.DemoMeasurement.Disabled);
+        Click(window.DemoMeasurement.Enabled);
+        if (window.MeasurementReadoutText is not null || window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("Policy switching recreated cleared measurements."); }
+        Click(window.ResetDemoButton);
+        RequireReset(window);
+        if (window.DemoMeasurement.Auxiliary.IsChecked == true || window.DemoMeasurement.Enabled.IsEnabled)
+        { throw new InvalidOperationException("Reset did not restore demo policy defaults."); }
+        Console.WriteLine("ok: grouped demo policies, auxiliary gating, zero interval and recovery");
     }
 }

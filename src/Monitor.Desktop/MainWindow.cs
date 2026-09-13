@@ -82,6 +82,7 @@ public sealed class MainWindow : Window
                     _recordStatus,
                     _demoNotice,
                     DemoViews,
+                    DemoMeasurement,
                     _recordContent,
                     _measurementReadout,
                     _clearCursors,
@@ -97,6 +98,7 @@ public sealed class MainWindow : Window
     internal bool HasDemoNotice => _demoNotice.IsVisible;
     internal Button ResetDemoButton => _resetDemo;
     internal DemoViewControls DemoViews { get; } = new();
+    internal DemoMeasurementControls DemoMeasurement { get; } = new();
 
     internal void SetDemoReset(Action reset)
     {

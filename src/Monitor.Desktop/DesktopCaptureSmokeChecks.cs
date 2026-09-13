@@ -60,6 +60,7 @@ internal static class DesktopCaptureSmokeChecks
         route.Dispose();
         if (pointer.Captured is not null || presenter.ActiveDrag is not null || window.RecordControl!.IsHitTestVisible || interruptions != 4)
         { throw new InvalidOperationException("Route disposal did not remove capture and handlers."); }
+        VerifyRejectedRelease(window, source, presenter, context, pointer);
         int missingReleases = 0;
         int moveContexts = 0;
         using (NativeDragInput recovery = new(presenter, () => { moveContexts++; return context; },
@@ -145,6 +146,47 @@ internal static class DesktopCaptureSmokeChecks
         if (pointer.Captured is not null || closingPresenter.ActiveDrag is not null || closingSource.Current is not null || closing.DragInput is not null)
         { throw new InvalidOperationException("Window close retained drag capture or native input."); }
         Console.WriteLine("ok: native press/move/release capture, redraw continuity, interruption and cleanup");
+    }
+
+    private static void VerifyRejectedRelease(MainWindow window, CapturedRecordSvgPresentation source,
+        RecordStudyPresenter presenter, RecordStudyCommandContext context, Pointer pointer)
+    {
+        int rejected = 0;
+        using (NativeDragInput route = new(presenter, () => context, 4,
+            gesture => { rejected++; gesture.Cancel(context); }))
+        {
+            foreach (Point target in new Point[] { new(-10, 50), new(180, 50), new(70 + 1.0 / 1024, 50) })
+            {
+                int before = rejected;
+                Press(window, pointer, new(70, 50));
+                Move(window, pointer, new(80, 50));
+                RequireX(source, 40);
+                Release(window, pointer, target);
+                RequireX(source, 35);
+                if (pointer.Captured is not null || presenter.ActiveDrag is not null || rejected != before + 1 ||
+                    window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+                { throw new InvalidOperationException("Rejected release did not restore a usable measurement."); }
+                CapturedRecordSvgPublication restored = source.Publication;
+                Release(window, pointer, new(100, 50));
+                if (!ReferenceEquals(restored, source.Publication) || rejected != before + 1)
+                { throw new InvalidOperationException("Late release changed rejected-target recovery."); }
+                Press(window, pointer, new(70, 50));
+                Release(window, pointer, new(70, 50));
+                RequireX(source, 35);
+            }
+        }
+        using (NativeDragInput failing = new(presenter, () => context, 4,
+            _ => throw new InvalidOperationException("Synthetic rejected-release rollback failure")))
+        {
+            Press(window, pointer, new(70, 50));
+            Release(window, pointer, new(-10, 50));
+            if (pointer.Captured is not null || presenter.ActiveDrag is null || source.Current is not null || window.MeasurementReadoutText is not null)
+            { throw new InvalidOperationException("Failed rejection policy retained output or discarded gesture ownership."); }
+            presenter.ActiveDrag.ReleaseWithoutRollback();
+        }
+        presenter.Refresh(context);
+        RequireX(source, 35);
+        Console.WriteLine("ok: rejected release rollback, late-event isolation, next drag and policy failure");
     }
 
     // Smoke-only invocation of the locked framework's notification handler.

@@ -112,6 +112,13 @@ public sealed class NativeDragInput : IDisposable
             _gesture.Commit(context, e.GetPosition(_window), Origin(control));
             ReleasePointer();
         }
+        // The button is already up: a rejected target cannot remain retryable
+        // as a captured gesture. Resolve it through the caller's chosen policy.
+        catch (CapturedRecordMeasurementException exception) when
+            (exception.ReasonCode is "RecordMeasurement.InvalidPoint" or "RecordMeasurement.UnrepresentableTime" or "RecordMeasurement.UnrepresentableAmplitude")
+        { Interrupt(); }
+        catch (Monitor.Domain.Presentation.EcgManualMeasurementException exception) when (exception.ReasonCode == "ManualMeasurement.TimeReversed")
+        { Interrupt(); }
         catch (Exception exception) { Fail(exception); }
         finally { _processing = false; }
     }

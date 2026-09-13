@@ -25,6 +25,7 @@ public sealed class MonitorApp : Avalonia.Application
                     bool valid = window.IsVisible && window.HasUnloadedRecordState;
                     if (valid) { DesktopSmokeChecks.VerifyPublicationStates(window); }
                     if (valid) { DesktopPresenterSmokeChecks.Verify(window); }
+                    if (valid) { DesktopPresenterSmokeChecks.VerifyClear(window); }
                     if (valid)
                     {
                         Directory.CreateDirectory("artifacts");

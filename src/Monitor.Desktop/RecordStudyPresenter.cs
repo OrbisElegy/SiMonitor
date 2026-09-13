@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Domain.Presentation;
 using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Desktop;
@@ -59,5 +60,37 @@ public sealed class RecordStudyPresenter
         Dispatcher.UIThread.VerifyAccess();
         _presentation.Withdraw();
         _window.ApplyPublication(_presentation.Publication);
+    }
+
+    // The caller captures the input shown when the command is issued. A queued
+    // command from an older picture must not be redirected to the latest one.
+    public void ClearPair(CapturedRecordSvgInputSession expectedInput,
+        bool canPreserveGlobalSafetyOverlay, CapturedRecordSvgLayout layout,
+        RecordScreenZoomLayout screen, EcgPaperGridSvgStyle gridStyle,
+        EcgManualCursorSvgStyle cursorStyle, bool allowAuxiliaryRate)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(expectedInput);
+        if (!ReferenceEquals(expectedInput, _presentation.Current) ||
+            !ReferenceEquals(expectedInput, _window.CurrentPublication?.Input))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(expectedInput)); }
+        try
+        {
+            expectedInput.ClearPair(canPreserveGlobalSafetyOverlay, layout, screen);
+        }
+        catch (Exception exception)
+        {
+            _presentation.Withdraw();
+            CapturedRecordSvgPublication failed = exception switch
+            {
+                Ecg12ViewAdmissionException admission => new(CapturedRecordSvgStatus.Denied, admission.ReasonCode, null),
+                CapturedRecordMeasurementException measurement => new(CapturedRecordSvgStatus.Failed, measurement.ReasonCode, null),
+                _ => new(CapturedRecordSvgStatus.Failed, "DesktopStudy.CommandFailed", null),
+            };
+            _window.ApplyPublication(failed);
+            throw;
+        }
+        // The accepted edit is not rolled back if the subsequent paint fails.
+        Refresh(canPreserveGlobalSafetyOverlay, layout, screen, gridStyle, cursorStyle, allowAuxiliaryRate);
     }
 }

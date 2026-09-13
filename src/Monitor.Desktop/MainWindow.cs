@@ -81,6 +81,7 @@ public sealed class MainWindow : Window
                         HorizontalAlignment = HorizontalAlignment.Center },
                     _recordStatus,
                     _demoNotice,
+                    DemoViews,
                     _recordContent,
                     _measurementReadout,
                     _clearCursors,
@@ -95,6 +96,7 @@ public sealed class MainWindow : Window
     public CapturedRecordSvgPublication? CurrentPublication { get; private set; }
     internal bool HasDemoNotice => _demoNotice.IsVisible;
     internal Button ResetDemoButton => _resetDemo;
+    internal DemoViewControls DemoViews { get; } = new();
 
     internal void SetDemoReset(Action reset)
     {

@@ -24,7 +24,8 @@ internal static class DesktopStudySmokeFixture
 
     public static CapturedRecordSvgPresentation CreatePresentation(bool hideMeasurement = false,
         bool firstOutsidePlot = false, bool activeInstance = false, uint zoomNumerator = 2,
-        SystemViewCommandAssessmentPolicy? measurementPolicy = null)
+        SystemViewCommandAssessmentPolicy? measurementPolicy = null,
+        Ecg12ThemeSelection? theme = null, Ecg12ZoomSelection? zoom = null)
     {
         Guid session = Guid.Parse("11111111-1111-4111-8111-111111111111");
         Guid instance = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -53,7 +54,7 @@ internal static class DesktopStudySmokeFixture
         view.Measurement.UpdatePolicy(measurementPolicy ?? (hideMeasurement
             ? SystemViewCommandAssessmentPolicy.Disabled : SystemViewCommandAssessmentPolicy.Enabled));
         return new(view, navigation,
-            new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true),
-            new(new(Ecg12ZoomMode.ExplicitScale, zoomNumerator, 1), SystemViewCommandAssessmentPolicy.Enabled));
+            theme ?? new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true),
+            zoom ?? new(new(Ecg12ZoomMode.ExplicitScale, zoomNumerator, 1), SystemViewCommandAssessmentPolicy.Enabled));
     }
 }

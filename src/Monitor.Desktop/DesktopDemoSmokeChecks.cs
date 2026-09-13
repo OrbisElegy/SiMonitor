@@ -12,7 +12,7 @@ internal static class DesktopDemoSmokeChecks
     public static void Verify()
     {
         MainWindow window = new();
-        if (window.ResetDemoButton.IsVisible) { throw new InvalidOperationException("Ordinary startup exposed synthetic reset."); }
+        if (window.ResetDemoButton.IsVisible || window.DemoViews.IsVisible) { throw new InvalidOperationException("Ordinary startup exposed synthetic controls."); }
         DesktopStudyDemo.Start(window);
         window.Show();
         window.UpdateLayout();
@@ -56,6 +56,7 @@ internal static class DesktopDemoSmokeChecks
         { throw new InvalidOperationException("Demo incorrectly locked vertical amplitude order."); }
         if (window.MeasurementAccessibilityText != window.MeasurementReadoutText || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：0.025 mV")
         { throw new InvalidOperationException("Vertical movement did not update signed amplitude readout."); }
+        VerifyViews(window, pointer);
         window.Close();
         if (window.DragInput is not null || pointer.Captured is not null)
         { throw new InvalidOperationException("Demo close retained input routing."); }
@@ -68,5 +69,62 @@ internal static class DesktopDemoSmokeChecks
         if (!window.ResetDemoButton.IsVisible || !window.ClearCursorButton.IsEnabled ||
             measurement?.First?.X.WholePixels != 25 || measurement.Second?.X.WholePixels != 75)
         { throw new InvalidOperationException("Demo reset did not restore both initial calipers."); }
+    }
+
+    private static void VerifyViews(MainWindow window, Pointer pointer)
+    {
+        static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Click(window.ResetDemoButton);
+        var initial = window.CurrentPublication!.Input!.Display.Content.Content.Display.Content.Content.Study.Measurement!;
+        foreach (var (button, width) in new[] { (window.DemoViews.Zoom100, 100d), (window.DemoViews.Zoom200, 200d), (window.DemoViews.Zoom400, 400d) })
+        {
+            Click(button);
+            var measurement = window.CurrentPublication!.Input!.Display.Content.Content.Display.Content.Content.Study.Measurement!;
+            if (window.RecordControl!.Width != width || measurement.First!.Cursor != initial.First!.Cursor ||
+                measurement.Second!.Cursor != initial.Second!.Cursor || window.MeasurementReadoutText != "Δt：100 ms    ΔV（终点−起点）：-0.05 mV" || button.IsEnabled)
+            { throw new InvalidOperationException("Zoom changed record coordinates or did not update selection."); }
+            var selected = window.CurrentPublication;
+            Click(button);
+            if (!ReferenceEquals(selected, window.CurrentPublication))
+            { throw new InvalidOperationException("Selected scale unnecessarily refreshed the study."); }
+        }
+        Click(window.DemoViews.Dark);
+        if (window.CurrentPublication!.Input!.Display.Content.Content.Display.Content.Theme!.Theme != Monitor.Domain.Presentation.Ecg12Theme.MonitorDarkGreen || window.DemoViews.Dark.IsEnabled)
+        { throw new InvalidOperationException("Dark theme was not selected."); }
+        Click(window.DemoViews.Zoom200);
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(50, 50));
+        DesktopCaptureSmokeChecks.Release(window, pointer, new(70, 50));
+        if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Scaled dark-theme drag did not preserve calibrated mapping."); }
+        window.UpdateLayout();
+        using (RenderTargetBitmap image = new(new PixelSize(1280, 720), new Vector(96, 96)))
+        {
+            image.Render(window);
+            image.Save(Path.Combine("artifacts", "desktop-study-dark.png"), PngBitmapEncoderOptions.Default);
+        }
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(70, 50));
+        DesktopCaptureSmokeChecks.Move(window, pointer, new(80, 50));
+        Click(window.DemoViews.Zoom400);
+        if (pointer.Captured is not null || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Zoom during drag did not restore the original measurement."); }
+        var restored = window.CurrentPublication;
+        DesktopCaptureSmokeChecks.Release(window, pointer, new(180, 100));
+        if (!ReferenceEquals(restored, window.CurrentPublication))
+        { throw new InvalidOperationException("Late pre-zoom release mutated the new view."); }
+        DesktopCaptureSmokeChecks.Press(window, pointer, new(140, 100));
+        DesktopCaptureSmokeChecks.Move(window, pointer, new(160, 100));
+        Click(window.DemoViews.Paper);
+        if (pointer.Captured is not null || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+        { throw new InvalidOperationException("Theme during drag did not roll back."); }
+        Click(window.ClearCursorButton);
+        Click(window.DemoViews.Dark);
+        Click(window.DemoViews.Zoom100);
+        if (window.MeasurementReadoutText is not null || window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("View changes recreated cleared calipers."); }
+        Click(window.ResetDemoButton);
+        RequireReset(window);
+        if (window.RecordControl!.Width != 400 || window.DemoViews.Paper.IsEnabled || window.DemoViews.Zoom400.IsEnabled)
+        { throw new InvalidOperationException("Reset did not restore initial view selection."); }
+        Console.WriteLine("ok: grouped demo zoom, theme, coordinate preservation, drag interruption and reset");
     }
 }

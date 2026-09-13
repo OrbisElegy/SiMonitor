@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(CursorHitTestUsesExactCircularDistance), CursorHitTestUsesExactCircularDistance),
+        new(nameof(CursorHitTestReportsAmbiguityAndHiddenEndpoints), CursorHitTestReportsAmbiguityAndHiddenEndpoints),
+        new(nameof(CursorHitTestGatesInvalidInputsAndRestores), CursorHitTestGatesInvalidInputsAndRestores),
         new(nameof(StudyCursorSvgRendersExactVisibleMarkersSeparately), StudyCursorSvgRendersExactVisibleMarkersSeparately),
         new(nameof(StudyCursorSvgOmitsHiddenAndLockedMarkers), StudyCursorSvgOmitsHiddenAndLockedMarkers),
         new(nameof(StudyCursorSvgValidatesStylesAndRecovers), StudyCursorSvgValidatesStylesAndRecovers),
@@ -171,6 +174,50 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void CursorHitTestUsesExactCircularDistance()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair pair = measurement.CurrentPair!;
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(measurement.HitTestCursors(new(3, 1), new(64, 1), new(5, 1), page, scale) == RecordCursorHits.First &&
+            measurement.HitTestCursors(new(3, 1), new(64_001, 1000), new(5, 1), page, scale) == RecordCursorHits.None,
+            "exact closed circular boundary accepts 3-4-5 distance but rejects fractional excursion");
+        Check.That(measurement.HitTestCursors(new(151, 3), new(60, 1), new(1, 2), page, scale) == RecordCursorHits.Second &&
+            ReferenceEquals(measurement.CurrentPair, pair), "hit testing accepts subpixel coordinates without inverse-time quantization or mutation");
+    }
+
+    private static void CursorHitTestReportsAmbiguityAndHiddenEndpoints()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        measurement.ReplacePair(new(0, 0, 1), new(0, 0, 1));
+        Check.That(measurement.HitTestCursors(new(0, 1), new(60, 1), new(1, 1), page, scale) == (RecordCursorHits.First | RecordCursorHits.Second),
+            "coincident endpoints report both hits without implicit tie breaking");
+        measurement.ReplacePair(new(0, 4000, 1), new(100_000_000, 0, 1));
+        Check.That(measurement.HitTestCursors(new(0, 1), new(0, 1), new(100, 1), new(0, 100_000_000, 0, 100), scale) == RecordCursorHits.None,
+            "large radius cannot select vertically hidden or off-page endpoints");
+        measurement.ClearPair();
+        Check.That(measurement.HitTestCursors(new(0, 1), new(60, 1), new(1, 1), page, scale) == RecordCursorHits.None, "empty selection has no hit targets");
+    }
+
+    private static void CursorHitTestGatesInvalidInputsAndRestores()
+    {
+        CapturedRecordMeasurement measurement = EditableMeasurement();
+        CapturedRecordCursorPair pair = measurement.CurrentPair!;
+        RecordCursorViewport page = new(0, 200_000_000, 0, 100);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => measurement.HitTestCursors(new(0, 1), new(60, 1), new(0, 1), page, scale)) == "RecordMeasurement.InvalidHitRadius" &&
+            MeasurementReason(() => measurement.HitTestCursors(new(100, 1), new(60, 1), new(1, 1), page, scale)) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(measurement.CurrentPair, pair), "invalid radius and exclusive right-edge pointer leave data unchanged");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Measurement.HitTestCursors(new(50, 1), new(60, 1), new(1, 1), page, scale) == RecordCursorHits.Second, "fresh ownership rebuilds the same geometric hit");
+        measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => measurement.HitTestCursors(new(0, 1), new(60, 1), new(1, 1), page, scale)) == "RecordMeasurement.CourseLocked",
+            "locked measurements expose no endpoint hits");
+    }
 
     private static EcgManualCursorSvgStyle SvgCursorStyle() => new("#0055ff", "#ff5500", 1000, 2000);
 

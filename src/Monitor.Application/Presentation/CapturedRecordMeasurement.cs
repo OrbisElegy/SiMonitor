@@ -26,6 +26,8 @@ public sealed record RestoredRecordMeasurement(CapturedRecordMeasurement Measure
 public sealed record ProjectedRecordCursor(CapturedRecordCursor Cursor, SweepPixelPosition X, EcgVerticalPosition Y);
 public sealed record RecordCursorViewport(long StartDataTimeNs, long EndExclusiveDataTimeNs, int PlotLeftPixels, int PlotWidthPixels);
 public enum RecordCursorEnd { First, Second }
+[Flags]
+public enum RecordCursorHits { None = 0, First = 1, Second = 2 }
 public sealed record CapturedRecordCursorPair(CapturedRecordCursor First, CapturedRecordCursor Second);
 public sealed record RecordMeasurementDisplay(string ReasonCode, ProjectedRecordCursor? First,
     ProjectedRecordCursor? Second, EcgManualMeasurementResult? Measurement);
@@ -51,6 +53,42 @@ public sealed class CapturedRecordMeasurement
     public RecordSlotBinding Slot { get; }
     public SystemViewCommandAssessmentPolicy CurrentPolicy => _policy;
     public CapturedRecordCursorPair? CurrentPair { get; private set; }
+
+    public RecordCursorHits HitTestCursors(ExactPlotCoordinate x, ExactPlotCoordinate y, ExactPlotCoordinate radius,
+        RecordCursorViewport viewport, EcgVerticalScale verticalScale)
+    {
+        EnsureEnabled();
+        ValidateViewport(viewport);
+        _ = EcgVerticalGeometry.MapMicrovolts(verticalScale, 0, 1);
+        if (radius is null || radius.Denominator <= 0 || radius.Numerator <= 0)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidHitRadius", nameof(radius)); }
+        if (x is null || y is null || x.Denominator <= 0 || y.Denominator <= 0 ||
+            x.Numerator < (BigInteger)viewport.PlotLeftPixels * x.Denominator ||
+            x.Numerator >= ((BigInteger)viewport.PlotLeftPixels + viewport.PlotWidthPixels) * x.Denominator ||
+            y.Numerator < (BigInteger)verticalScale.PlotTopPixels * y.Denominator ||
+            y.Numerator > ((BigInteger)verticalScale.PlotTopPixels + verticalScale.PlotHeightPixels) * y.Denominator)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidPoint", nameof(x)); }
+        CapturedRecordCursorPair? pair = CurrentPair;
+        if (pair is null) { return RecordCursorHits.None; }
+        RecordCursorHits hits = RecordCursorHits.None;
+        if (IsHit(ProjectCursor(pair.First, viewport, verticalScale), x, y, radius)) { hits |= RecordCursorHits.First; }
+        if (IsHit(ProjectCursor(pair.Second, viewport, verticalScale), x, y, radius)) { hits |= RecordCursorHits.Second; }
+        return hits;
+    }
+
+    private static bool IsHit(ProjectedRecordCursor? cursor, ExactPlotCoordinate x, ExactPlotCoordinate y, ExactPlotCoordinate radius)
+    {
+        if (cursor is null || cursor.Y.Relation != VerticalPlotRelation.WithinPlot) { return false; }
+        BigInteger cursorXNumerator = (BigInteger)cursor.X.WholePixels * cursor.X.FractionDenominator + cursor.X.FractionNumerator;
+        BigInteger dx = x.Numerator * cursor.X.FractionDenominator - cursorXNumerator * x.Denominator;
+        BigInteger dxDenominator = x.Denominator * cursor.X.FractionDenominator;
+        BigInteger dy = y.Numerator * (BigInteger)cursor.Y.PixelDenominator - (BigInteger)cursor.Y.PixelNumerator * y.Denominator;
+        BigInteger dyDenominator = y.Denominator * (BigInteger)cursor.Y.PixelDenominator;
+        BigInteger dxDenominatorSquared = dxDenominator * dxDenominator;
+        BigInteger dyDenominatorSquared = dyDenominator * dyDenominator;
+        return (dx * dx * dyDenominatorSquared + dy * dy * dxDenominatorSquared) * radius.Denominator * radius.Denominator <=
+            radius.Numerator * radius.Numerator * dxDenominatorSquared * dyDenominatorSquared;
+    }
 
     // Serialized UI composition; callers must replace their prior display with this result.
     public RecordMeasurementDisplay CaptureDisplay(RecordCursorViewport viewport, EcgVerticalScale verticalScale,

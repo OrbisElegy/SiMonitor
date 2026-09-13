@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(PointerReleaseCommitsFinalPositionAndRestores), PointerReleaseCommitsFinalPositionAndRestores),
+        new(nameof(PointerReleaseFailurePreservesPreviewForRetry), PointerReleaseFailurePreservesPreviewForRetry),
+        new(nameof(PointerReleaseChecksCurrentPolicyAndPage), PointerReleaseChecksCurrentPolicyAndPage),
+
         new(nameof(PointerDragPreservesGrabOffsetWithoutInitialJump), PointerDragPreservesGrabOffsetWithoutInitialJump),
         new(nameof(PointerDragKeepsFractionalAnchorExact), PointerDragKeepsFractionalAnchorExact),
         new(nameof(PointerDragRejectsInvalidTargetsWithoutLosingPreview), PointerDragRejectsInvalidTargetsWithoutLosingPreview),
@@ -181,6 +185,57 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void PointerReleaseCommitsFinalPositionAndRestores()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(52, 1), new(42, 1), new(3, 1));
+        drag.PreviewPointer(false, 0, 100, scale, new(62, 1), new(42, 1));
+        CapturedRecordCursorPair released = drag.CommitPointer(false, 0, 100, scale, new(77, 1), new(32, 1));
+        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1), "release uses its own final position and original grab offset");
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, new(82, 1), new(32, 1))) == "RecordMeasurement.DragFinished" &&
+            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished" && ReferenceEquals(view.Measurement.CurrentPair, released),
+            "release closes gesture and cannot be replayed or rolled back");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == released.Second.Value, "checkpoint retains final release evidence");
+    }
+
+    private static void PointerReleaseFailurePreservesPreviewForRetry()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(52, 1), new(42, 1), new(3, 1));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, 0, 100, scale, new(62, 1), new(42, 1));
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, new(102, 1), new(32, 1))) == "RecordMeasurement.InvalidPoint" &&
+            MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, new(217, 3), new(32, 1))) == "RecordMeasurement.UnrepresentableTime" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "exclusive right edge and fractional nanosecond reject before mutation or completion");
+        Check.That(drag.CommitPointer(false, 0, 100, scale, new(77, 1), new(32, 1)).Second.Value.DataTimeNs == 75_000_000,
+            "failed release leaves gesture available for valid retry");
+    }
+
+    private static void PointerReleaseChecksCurrentPolicyAndPage()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(52, 1), new(42, 1), new(3, 1));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, 0, 100, scale, new(62, 1), new(42, 1));
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, new(77, 1), new(32, 1))) == "RecordMeasurement.CourseLocked" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "release rechecks current policy before moving endpoint");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        navigation.NextPage();
+        navigation.PreviousPage();
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, new(77, 1), new(32, 1))) == "RecordMeasurement.DragLayoutChanged" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "page round trip invalidates release before mutation");
+        Check.That(drag.Cancel().Second.Value == new EcgManualCursor(50_000_000, 1000, 1), "rejected release still permits original-value rollback");
+    }
 
     private static void PointerDragPreservesGrabOffsetWithoutInitialJump()
     {

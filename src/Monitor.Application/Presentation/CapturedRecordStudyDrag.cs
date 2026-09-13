@@ -49,11 +49,19 @@ public sealed class CapturedRecordStudyDrag
             Subtract(x, _pointerOffsetX), Subtract(y, _pointerOffsetY));
     }
 
+    // Serialized release applies its final position even when no last move event arrived.
+    public CapturedRecordCursorPair CommitPointer(bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,
+        int plotWidthPixels, EcgVerticalScale scale, ExactPlotCoordinate x, ExactPlotCoordinate y)
+    {
+        PreviewPointer(canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, x, y);
+        return Commit(canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+    }
+
     private static ExactPlotCoordinate Subtract(ExactPlotCoordinate left, ExactPlotCoordinate right)
     {
         BigInteger numerator = left.Numerator * right.Denominator - right.Numerator * left.Denominator;
         BigInteger denominator = left.Denominator * right.Denominator;
-        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
         return new(numerator / divisor, denominator / divisor);
     }
 

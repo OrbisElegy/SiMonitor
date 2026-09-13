@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -113,7 +114,8 @@ internal static class DesktopButtonSmokeChecks
 
     private static void RequireTip(MainWindow window, string? expected)
     {
-        if (!ToolTip.GetShowOnDisabled(window.ClearCursorButton) || !Equals(ToolTip.GetTip(window.ClearCursorButton), expected))
+        if (!ToolTip.GetShowOnDisabled(window.ClearCursorButton) || !Equals(ToolTip.GetTip(window.ClearCursorButton), expected) ||
+            AutomationProperties.GetHelpText(window.ClearCursorButton) != expected)
         { throw new InvalidOperationException("Clear action retained an incorrect unavailability reason."); }
     }
 

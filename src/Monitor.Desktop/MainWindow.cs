@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -53,6 +54,7 @@ public sealed class MainWindow : Window
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ToolTip.SetShowOnDisabled(_clearCursors, true);
+        AutomationProperties.SetName(_measurementReadout, "人工卡尺测量结果");
         _resetDemo.Click += (_, _) => _resetDemoAction?.Invoke();
         _clearCursors.Click += (_, _) =>
         {
@@ -121,6 +123,7 @@ public sealed class MainWindow : Window
         CurrentPublication = null;
         _measurementReadout.Text = null;
         _measurementReadout.IsVisible = false;
+        AutomationProperties.SetHelpText(_measurementReadout, null);
         PublicationChanging?.Invoke(this, EventArgs.Empty);
         UpdateClearButton();
         _recordStatus.Text = "暂时无法显示记录";
@@ -142,6 +145,7 @@ public sealed class MainWindow : Window
         CurrentPublication = publication;
         _measurementReadout.Text = MeasurementReadout.Format(publication.Input?.Display.Content.Content.Display.Content.Content.Study.Measurement);
         _measurementReadout.IsVisible = _measurementReadout.Text is not null;
+        AutomationProperties.SetHelpText(_measurementReadout, _measurementReadout.Text);
         UpdateClearButton();
         UpdatePointerQuery();
     }
@@ -175,6 +179,7 @@ public sealed class MainWindow : Window
 
     internal RecordStudyControl? RecordControl => _recordContent.Content as RecordStudyControl;
     internal string? MeasurementReadoutText => _measurementReadout.Text;
+    internal string? MeasurementAccessibilityText => AutomationProperties.GetHelpText(_measurementReadout);
 
     internal void SetClearCommand(Action<CapturedRecordSvgInputSession>? command)
     {
@@ -189,12 +194,14 @@ public sealed class MainWindow : Window
         _clearCursors.IsVisible = _clearCommand is not null &&
             reason is "RecordMeasurement.Ready" or "RecordMeasurement.NoCursorPair" or "RecordMeasurement.CourseLocked";
         _clearCursors.IsEnabled = _clearCursors.IsVisible && reason == "RecordMeasurement.Ready";
-        ToolTip.SetTip(_clearCursors, _clearCursors.IsVisible ? reason switch
+        string? explanation = _clearCursors.IsVisible ? reason switch
         {
             "RecordMeasurement.NoCursorPair" => "当前没有可清除的卡尺",
             "RecordMeasurement.CourseLocked" => "课程已锁定快速测量",
             _ => null,
-        } : null);
+        } : null;
+        ToolTip.SetTip(_clearCursors, explanation);
+        AutomationProperties.SetHelpText(_clearCursors, explanation);
         if (!_clearCursors.IsVisible || _clearCursors.IsEnabled) { ToolTip.SetIsOpen(_clearCursors, false); }
     }
 

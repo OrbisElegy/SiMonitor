@@ -18,7 +18,7 @@ internal static class DesktopDemoSmokeChecks
         window.UpdateLayout();
         if (!window.HasDemoNotice || window.RecordControl is null || !window.ClearCursorButton.IsEnabled || window.DragInput is null)
         { throw new InvalidOperationException("Explicit demo did not bind labelled interactive content."); }
-        if (window.MeasurementReadoutText != "Δt：100 ms    ΔV（终点−起点）：-0.05 mV")
+        if (window.MeasurementAccessibilityText != window.MeasurementReadoutText || window.MeasurementReadoutText != "Δt：100 ms    ΔV（终点−起点）：-0.05 mV")
         { throw new InvalidOperationException("Initial demo readout did not match calibrated evidence."); }
         Pointer pointer = new(99, PointerType.Mouse, true);
         DesktopCaptureSmokeChecks.Press(window, pointer, new(104, 100));
@@ -26,7 +26,7 @@ internal static class DesktopDemoSmokeChecks
         DesktopCaptureSmokeChecks.Release(window, pointer, new(144, 100));
         if (window.CurrentPublication?.Input?.Display.Content.Content.Display.Content.Content.Study.Measurement?.First?.X.WholePixels != 35)
         { throw new InvalidOperationException("Demo drag did not update the synthetic record."); }
-        if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+        if (window.MeasurementAccessibilityText != window.MeasurementReadoutText || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
         { throw new InvalidOperationException("Drag did not update the time readout."); }
         window.UpdateLayout();
         using (RenderTargetBitmap image = new(new PixelSize(1280, 720), new Vector(96, 96)))
@@ -35,7 +35,7 @@ internal static class DesktopDemoSmokeChecks
             image.Save(Path.Combine("artifacts", "desktop-study-demo.png"), PngBitmapEncoderOptions.Default);
         }
         window.ClearCursorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        if (window.CurrentPublication?.Input?.Display.CursorOverlaySvg is not null || window.ClearCursorButton.IsEnabled || window.MeasurementReadoutText is not null)
+        if (window.CurrentPublication?.Input?.Display.CursorOverlaySvg is not null || window.ClearCursorButton.IsEnabled || window.MeasurementReadoutText is not null || window.MeasurementAccessibilityText is not null)
         { throw new InvalidOperationException("Demo clear did not remove synthetic calipers."); }
         window.ResetDemoButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         RequireReset(window);
@@ -54,7 +54,7 @@ internal static class DesktopDemoSmokeChecks
         if (moved.First!.Y.PixelNumerator != 40 * moved.First.Y.PixelDenominator ||
             moved.Second!.Y.PixelNumerator != 35 * moved.Second.Y.PixelDenominator)
         { throw new InvalidOperationException("Demo incorrectly locked vertical amplitude order."); }
-        if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：0.025 mV")
+        if (window.MeasurementAccessibilityText != window.MeasurementReadoutText || window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：0.025 mV")
         { throw new InvalidOperationException("Vertical movement did not update signed amplitude readout."); }
         window.Close();
         if (window.DragInput is not null || pointer.Captured is not null)

@@ -7,11 +7,61 @@ internal static class EcgPaperGridSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(PaperGridCalibrationMatchesFrozenReferenceScale), PaperGridCalibrationMatchesFrozenReferenceScale),
+        new(nameof(PaperGridCalibrationPreservesFractionalZoom), PaperGridCalibrationPreservesFractionalZoom),
+        new(nameof(PaperGridCalibrationRejectsInconsistentAndInvalidScale), PaperGridCalibrationRejectsInconsistentAndInvalidScale),
+        new(nameof(PaperGridCalibrationRejectsUnrepresentableExactSpacing), PaperGridCalibrationRejectsUnrepresentableExactSpacing),
         new(nameof(PaperGridUsesExactOneToFiveSpacing), PaperGridUsesExactOneToFiveSpacing),
         new(nameof(PaperGridPreservesOriginAcrossClippedWindows), PaperGridPreservesOriginAcrossClippedWindows),
         new(nameof(PaperGridRejectsExcessBeforeGeneratingLines), PaperGridRejectsExcessBeforeGeneratingLines),
         new(nameof(PaperGridValidatesBoundsAndKeepsImmutableResults), PaperGridValidatesBoundsAndKeepsImmutableResults),
     ];
+
+    private static void PaperGridCalibrationMatchesFrozenReferenceScale()
+    {
+        EcgPaperGridPlan plan = EcgPaperGridCalibration.Resolve(10, 100, 2_000_000_000,
+            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60);
+        Check.That(plan.MinorSpacingNumerator == 2 && plan.MinorSpacingDenominator == 1 && plan.OriginYPixels == 60,
+            "25 mm/s and 10 mm/mV resolve the same two logical pixels per equivalent millimeter");
+        IReadOnlyList<EcgPaperGridLine> lines = EcgPaperGridGeometry.Build(plan, 100);
+        Check.That(lines[25].Position == new ExactPlotCoordinate(60, 1) && lines[25].IsMajor &&
+            lines.Count(line => !line.IsVertical && line.Position.Numerator >= 40 && line.Position.Numerator < 60) == 10,
+            "one second spans 25 minor intervals and one millivolt spans 10 at the frozen reference scale");
+        EcgPaperGridPlan faster = EcgPaperGridCalibration.Resolve(10, 200, 2_000_000_000,
+            new(0, 100, 60, 20, 1), new(50, 1, 10, 1), 10, 60);
+        Check.That(faster.MinorSpacingNumerator == 2 && faster.MinorSpacingDenominator == 1,
+            "doubling paper speed and time pixel density preserves square equivalent millimeters");
+    }
+
+    private static void PaperGridCalibrationPreservesFractionalZoom()
+    {
+        EcgVerticalScale vertical = new(0, 100, 60, 5, 1);
+        EcgPaperGridPlan plan = EcgPaperGridCalibration.Resolve(0, 25, 2_000_000_000, vertical, new(25, 1, 10, 1), 0, 60);
+        EcgPaperGridPlan equivalent = EcgPaperGridCalibration.Resolve(0, 25, 2_000_000_000,
+            vertical with { PixelsPerMillivoltNumerator = 10, PixelsPerMillivoltDenominator = 2 }, new(50, 2, 20, 2), 0, 60);
+        Check.That(plan.MinorSpacingNumerator == 1 && plan.MinorSpacingDenominator == 2 && plan == equivalent,
+            "zoom and equivalent rational scales resolve canonical spacing without rounding");
+    }
+
+    private static void PaperGridCalibrationRejectsInconsistentAndInvalidScale()
+    {
+        EcgVerticalScale vertical = new(0, 100, 60, 20, 1);
+        ExpectReason(() => EcgPaperGridCalibration.Resolve(0, 100, 2_000_000_000, vertical, new(50, 1, 10, 1), 0, 60),
+            "PaperGrid.InconsistentAxisScale");
+        ExpectReason(() => EcgPaperGridCalibration.Resolve(0, 100, 2_000_000_000, vertical, new(25, 0, 10, 1), 0, 60),
+            "PaperGrid.InvalidPaperScale");
+        ExpectReason(() => EcgPaperGridCalibration.Resolve(0, 100, 2_000_000_000, vertical, new(25, 1, 0, 1), 0, 60),
+            "PaperGrid.InvalidPaperScale");
+        Check.That(EcgPaperGridCalibration.Resolve(0, 100, 2_000_000_000, vertical, new(25, 1, 10, 1), 0, 60).MinorSpacingNumerator == 2,
+            "failed resolution leaves explicit scale reusable for corrected inputs");
+    }
+
+    private static void PaperGridCalibrationRejectsUnrepresentableExactSpacing()
+    {
+        ExpectReason(() => EcgPaperGridCalibration.Resolve(0, 1, uint.MaxValue,
+            new(0, 100, 60, 1, uint.MaxValue), new(uint.MaxValue, 1, uint.MaxValue, 1_000_000_000), 0, 60),
+            "PaperGrid.UnrepresentableSpacing");
+    }
 
     private static void PaperGridUsesExactOneToFiveSpacing()
     {

@@ -16,6 +16,7 @@ public sealed record RecordStudyCommandContext(bool CanPreserveGlobalSafetyOverl
 public sealed class RecordStudyPresenter
 {
     private readonly MainWindow _window;
+    internal MainWindow Window => _window;
     private readonly CapturedRecordSvgPresentation _presentation;
     public NativeStudyDrag? ActiveDrag { get; private set; }
 

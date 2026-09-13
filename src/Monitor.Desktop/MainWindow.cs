@@ -66,6 +66,7 @@ public sealed class MainWindow : Window
     }
 
     public CapturedRecordSvgPublication? CurrentPublication { get; private set; }
+    internal event EventHandler? PublicationChanging;
 
     // Caller supplies a native record control built for this same publication.
     // Invoke on the UI thread; native waveform/input integration remains separate.
@@ -76,6 +77,7 @@ public sealed class MainWindow : Window
         if (_recordContent.Content is RecordStudyControl previous) { previous.BindPointerQuery(null); }
         _recordContent.Content = null;
         CurrentPublication = null;
+        PublicationChanging?.Invoke(this, EventArgs.Empty);
         UpdateClearButton();
         _recordStatus.Text = "暂时无法显示记录";
         if (publication is null || !Enum.IsDefined(publication.Status) || string.IsNullOrWhiteSpace(publication.ReasonCode) ||
@@ -112,6 +114,17 @@ public sealed class MainWindow : Window
         if (control.InputSession.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode != "RecordMeasurement.Ready")
         { query = null; }
         control.BindPointerQuery(query is null ? null : point => query(control.InputSession, point));
+        if (DragInput is not null && control.InputSession.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode == "RecordMeasurement.Ready")
+        { control.IsHitTestVisible = true; }
+    }
+
+    internal NativeDragInput? DragInput { get; private set; }
+
+    internal void SetDragInput(NativeDragInput? input)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        DragInput = input;
+        UpdatePointerQuery();
     }
 
     internal RecordStudyControl? RecordControl => _recordContent.Content as RecordStudyControl;

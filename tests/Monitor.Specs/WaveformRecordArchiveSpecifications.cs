@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgRefreshPublishesCurrentEvidenceAndPermissions), SvgRefreshPublishesCurrentEvidenceAndPermissions),
+        new(nameof(SvgRefreshDuringDragKeepsRetainedGesture), SvgRefreshDuringDragKeepsRetainedGesture),
+        new(nameof(SvgRefreshFailurePreservesCurrentEvidence), SvgRefreshFailurePreservesCurrentEvidence),
+
         new(nameof(HiddenSvgRequiresRefreshBeforeEnabledInput), HiddenSvgRequiresRefreshBeforeEnabledInput),
         new(nameof(RestoredDisabledSvgCannotEnableEmptyPlacementWithoutRefresh), RestoredDisabledSvgCannotEnableEmptyPlacementWithoutRefresh),
 
@@ -248,6 +252,77 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgRefreshPublishesCurrentEvidenceAndPermissions()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        input.MoveCursor(false, layout, screen, RecordCursorEnd.Second, new(75, 1), new(30, 1), new(0, 1), new(0, 1));
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordSvgInputSession hidden = input.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(hidden.Display.CursorOverlaySvg is null && input.Display.CursorOverlaySvg is not null, "refresh publishes new permission-controlled output without changing old immutable display");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgInputSession current = hidden.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(current.HitTest(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second &&
+            pair.Second.Value.DataTimeNs == 50_000_000, "refresh binds edited current evidence and enabled permission");
+    }
+
+    private static void SvgRefreshDuringDragKeepsRetainedGesture()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(1, 1));
+        drag.PreviewPointer(false, layout, screen, new(60, 1), new(40, 1), new(0, 1), new(0, 1));
+        CapturedRecordSvgInputSession preview = input.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(preview.Display.CursorOverlaySvg is not null, "preview redraw returns current overlay");
+        CapturedRecordCursorPair released = drag.CommitPointer(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1));
+        CapturedRecordSvgInputSession final = preview.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) &&
+            final.HitTest(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second &&
+            pair.Second.Value.DataTimeNs == 50_000_000, "redraw leaves active gesture intact and final refresh binds release evidence");
+    }
+
+    private static void SvgRefreshFailurePreservesCurrentEvidence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            input.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false, cancellation.Token);
+            throw new InvalidOperationException("cancelled refresh accepted");
+        }
+        catch (OperationCanceledException) { }
+        try
+        {
+            input.Refresh(false, layout, screen with { PageWidth = 99 }, SvgStudyStyle(), SvgCursorStyle(), false);
+            throw new InvalidOperationException("clipped refresh accepted");
+        }
+        catch (Ecg12ZoomSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Zoom.PlotOutsidePage", "invalid refresh fails before returning replacement"); }
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair) &&
+            input.HitTest(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second,
+            "failed refresh preserves state and still-current original input");
+    }
 
     private static void HiddenSvgRequiresRefreshBeforeEnabledInput()
     {

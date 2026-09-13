@@ -10,6 +10,7 @@ public sealed class CapturedRecordSvgInputSession
     private readonly CapturedRecordStudyView _view;
     private readonly CapturedRecordNavigation _navigation;
     private readonly Ecg12ZoomSelection _zoom;
+    private readonly Ecg12ThemeSelection _theme;
     private readonly CapturedRecordMeasurement _measurement;
     private readonly CapturedRecordCursorPair? _renderedPair;
     private readonly SystemViewCommandAssessmentPolicy _renderedMeasurementPolicy;
@@ -31,6 +32,7 @@ public sealed class CapturedRecordSvgInputSession
         _view = view;
         _navigation = navigation;
         _zoom = zoom;
+        _theme = theme;
         _measurement = view.Measurement;
         _renderedPair = _measurement.CurrentPair;
         _renderedMeasurementPolicy = _measurement.CurrentPolicy;
@@ -41,6 +43,13 @@ public sealed class CapturedRecordSvgInputSession
     }
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
+
+    // Build a replacement from current shared state. Do not replace a retained active drag.
+    public CapturedRecordSvgInputSession Refresh(bool canPreserveGlobalSafetyOverlay,
+        CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen, EcgPaperGridSvgStyle gridStyle,
+        EcgManualCursorSvgStyle cursorStyle, bool allowAuxiliaryRate, CancellationToken cancellationToken = default) =>
+        new(_view, _navigation, _theme, _zoom, canPreserveGlobalSafetyOverlay,
+            layout, screen, gridStyle, cursorStyle, allowAuxiliaryRate, cancellationToken);
 
     public void ClearPair(bool canPreserveGlobalSafetyOverlay, CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
     {

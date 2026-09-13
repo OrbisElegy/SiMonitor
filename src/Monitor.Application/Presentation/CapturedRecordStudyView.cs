@@ -202,6 +202,19 @@ public sealed class CapturedRecordStudyView
         ExactPlotCoordinate radius) => new(this, navigation, zoom, canPreserveGlobalSafetyOverlay,
             plotLeftPixels, plotWidthPixels, scale, layout, x, y, radius);
 
+    public CapturedRecordCursorPair MoveCursorOnZoomedPage(CapturedRecordNavigation navigation,
+        Ecg12ZoomSelection zoom, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, RecordScreenZoomLayout layout, RecordCursorEnd end,
+        ExactPlotCoordinate x, ExactPlotCoordinate y)
+    {
+        RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        ArgumentNullException.ThrowIfNull(zoom);
+        ArgumentNullException.ThrowIfNull(layout);
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
+            layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
+        return Measurement.MoveCursor(end, transform.Inverse(x), transform.Inverse(y), viewport, scale);
+    }
+
     public CapturedRecordCursorPair MoveCursorOnCurrentPage(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
         RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y)

@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedMovePreservesOtherEndpointAndSupersedesDrag), ZoomedMovePreservesOtherEndpointAndSupersedesDrag),
+        new(nameof(ZoomedMoveRejectsCrossingAndCurrentPolicy), ZoomedMoveRejectsCrossingAndCurrentPolicy),
+        new(nameof(ZoomedMoveUsesRestoredPageAndScale), ZoomedMoveUsesRestoredPageAndScale),
+
         new(nameof(ZoomedDragSurvivesEquivalentZoomSet), ZoomedDragSurvivesEquivalentZoomSet),
         new(nameof(ZoomedSvgReportsActualSerializedMapping), ZoomedSvgReportsActualSerializedMapping),
         new(nameof(ZoomedSvgRejectsClippedPageGeometry), ZoomedSvgRejectsClippedPageGeometry),
@@ -218,6 +222,67 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedMovePreservesOtherEndpointAndSupersedesDrag()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        CapturedRecordZoomedDrag drag = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(100, 1), new(80, 1), new(2, 1));
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordCursorPair moved = view.MoveCursorOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            RecordCursorEnd.Second, new(150, 1), new(60, 1));
+        Check.That(ReferenceEquals(moved.First, pair.First) && moved.Second.Value == new EcgManualCursor(175_000_000, 1500, 1),
+            "single endpoint moves under current scale independently of zoom selection lock");
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragSuperseded" && ReferenceEquals(view.Measurement.CurrentPair, moved),
+            "old drag cannot overwrite a newer direct move");
+    }
+
+    private static void ZoomedMoveRejectsCrossingAndCurrentPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        try
+        {
+            view.MoveCursorOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, RecordCursorEnd.First, new(150, 1), new(60, 1));
+            throw new InvalidOperationException("crossing accepted");
+        }
+        catch (EcgManualMeasurementException exception)
+        { Check.That(exception.ReasonCode == "ManualMeasurement.TimeReversed", "direct move cannot swap cursor order"); }
+        Check.That(MeasurementReason(() => view.MoveCursorOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            RecordCursorEnd.Second, new(200, 1), new(60, 1))) == "RecordMeasurement.InvalidPoint" && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "crossing and exclusive right edge leave both endpoints unchanged");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(MeasurementReason(() => view.MoveCursorOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            RecordCursorEnd.Second, new(150, 1), new(60, 1))) == "RecordMeasurement.Disabled" && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "current measurement policy blocks direct input");
+    }
+
+    private static void ZoomedMoveUsesRestoredPageAndScale()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Enabled);
+        restored.Zoom.Select(new(Ecg12ZoomMode.FitPage, 1, 1));
+        CapturedRecordCursorPair moved = restored.Content.Study.View.MoveCursorOnZoomedPage(restored.Content.Study.Navigation,
+            restored.Zoom, false, 0, 100, scale, layout, RecordCursorEnd.Second, new(75, 2), new(15, 1));
+        Check.That(moved.Second.Value == new EcgManualCursor(175_000_000, 1500, 1) && pair.Second.Value.DataTimeNs == 150_000_000,
+            "restored current page and changed fit scale determine exact data without changing original session");
+    }
 
     private static void ZoomedDragSurvivesEquivalentZoomSet()
     {

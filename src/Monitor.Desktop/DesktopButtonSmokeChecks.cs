@@ -31,7 +31,7 @@ internal static class DesktopButtonSmokeChecks
             image.Save(Path.Combine("artifacts", "desktop-study-actions.png"), PngBitmapEncoderOptions.Default);
         }
         Click(window);
-        if (resolutions != 1 || window.ClearCursorButton.IsEnabled || source.Current?.Display.CursorOverlaySvg is not null)
+        if (resolutions != 1 || !window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled || source.Current?.Display.CursorOverlaySvg is not null)
         { throw new InvalidOperationException("Native clear activation did not redraw without cursors."); }
         Click(window);
         if (resolutions != 1) { throw new InvalidOperationException("Disabled button invoked the provider."); }
@@ -71,9 +71,21 @@ internal static class DesktopButtonSmokeChecks
         presenter = new(window, source);
         presenter.BindClearButton(() => throw new InvalidOperationException("Disabled button invoked provider"));
         Refresh(presenter);
-        if (window.ClearCursorButton.IsEnabled) { throw new InvalidOperationException("Locked measurement exposed clear."); }
+        if (window.ClearCursorButton.IsVisible || window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("Disabled measurement exposed clear."); }
         Click(window);
         if (window.HasNoRecordContent) { throw new InvalidOperationException("Disabled click changed the record."); }
+        presenter.UnbindClearButton();
+        presenter.Withdraw();
+        source = DesktopStudySmokeFixture.CreatePresentation();
+        presenter = new(window, source);
+        presenter.BindClearButton(() => Context(true));
+        Refresh(presenter);
+        if (!window.ClearCursorButton.IsVisible || !window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("Enabled publication did not restore clear after disabled measurement."); }
+        Click(window);
+        if (source.Current?.Display.CursorOverlaySvg is not null || window.ClearCursorButton.IsEnabled)
+        { throw new InvalidOperationException("Restored clear action did not execute."); }
         presenter.UnbindClearButton();
         presenter.Withdraw();
         window.ApplyPublication(new(CapturedRecordSvgStatus.NotRendered, "SvgPresentation.NotRendered", null));

@@ -184,9 +184,10 @@ public sealed class MainWindow : Window
 
     private void UpdateClearButton()
     {
-        _clearCursors.IsVisible = _clearCommand is not null && CurrentPublication?.Input is not null;
-        _clearCursors.IsEnabled = _clearCursors.IsVisible &&
-            CurrentPublication!.Input!.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode == "RecordMeasurement.Ready";
+        string? reason = CurrentPublication?.Input?.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode;
+        _clearCursors.IsVisible = _clearCommand is not null &&
+            reason is "RecordMeasurement.Ready" or "RecordMeasurement.NoCursorPair" or "RecordMeasurement.CourseLocked";
+        _clearCursors.IsEnabled = _clearCursors.IsVisible && reason == "RecordMeasurement.Ready";
     }
 
     internal Button ClearCursorButton => _clearCursors;

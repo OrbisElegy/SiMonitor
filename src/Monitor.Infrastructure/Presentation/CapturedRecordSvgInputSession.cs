@@ -40,10 +40,33 @@ public sealed class CapturedRecordSvgInputSession
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
 
+    public CapturedRecordCursorPair PlacePair(bool canPreserveGlobalSafetyOverlay,
+        CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
+        ExactPlotCoordinate firstWindowX, ExactPlotCoordinate firstWindowY,
+        ExactPlotCoordinate secondWindowX, ExactPlotCoordinate secondWindowY,
+        ExactPlotCoordinate originX, ExactPlotCoordinate originY)
+    {
+        ValidateCurrent(layout, screen);
+        Ecg12ScreenTransform transform = Display.RenderedTransform!;
+        return _view.PlacePairOnCurrentPage(_navigation, canPreserveGlobalSafetyOverlay,
+            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale,
+            transform.InverseAt(firstWindowX, originX), transform.InverseAt(firstWindowY, originY),
+            transform.InverseAt(secondWindowX, originX), transform.InverseAt(secondWindowY, originY));
+    }
+
     // Window points and current scrolled origins are in the same logical-pixel space.
     public CapturedRecordCursorPair MoveCursor(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen, RecordCursorEnd end,
         ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX, ExactPlotCoordinate originY)
+    {
+        ValidateCurrent(layout, screen);
+        Ecg12ScreenTransform transform = Display.RenderedTransform!;
+        return _view.MoveCursorOnCurrentPage(_navigation, canPreserveGlobalSafetyOverlay,
+            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale, end,
+            transform.InverseAt(windowX, originX), transform.InverseAt(windowY, originY));
+    }
+
+    private void ValidateCurrent(CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
     {
         if (_stale || !ReferenceEquals(_view.Measurement, _measurement) || !ReferenceEquals(_navigation.CurrentPage, _page) ||
             !ReferenceEquals(_measurement.CurrentPair, _renderedPair) ||
@@ -52,9 +75,5 @@ public sealed class CapturedRecordSvgInputSession
             _stale = true;
             throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(layout));
         }
-        Ecg12ScreenTransform transform = Display.RenderedTransform!;
-        return _view.MoveCursorOnCurrentPage(_navigation, canPreserveGlobalSafetyOverlay,
-            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale, end,
-            transform.InverseAt(windowX, originX), transform.InverseAt(windowY, originY));
     }
 }

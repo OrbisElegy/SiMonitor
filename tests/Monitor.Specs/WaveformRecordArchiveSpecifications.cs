@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgPairPlacementCreatesExactRestorableEvidence), SvgPairPlacementCreatesExactRestorableEvidence),
+        new(nameof(SvgPairPlacementFailureAllowsRetry), SvgPairPlacementFailureAllowsRetry),
+        new(nameof(SvgPairPlacementRechecksSafetyAndPolicy), SvgPairPlacementRechecksSafetyAndPolicy),
+
         new(nameof(SvgInputRejectsReplacedAndRestoredPairIdentity), SvgInputRejectsReplacedAndRestoredPairIdentity),
         new(nameof(SvgInputRequiresRefreshAfterSuccessButAllowsFailedRetry), SvgInputRequiresRefreshAfterSuccessButAllowsFailedRetry),
 
@@ -229,6 +233,76 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgPairPlacementCreatesExactRestorableEvidence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        CapturedRecordCursorPair pair = input.PlacePair(true, layout, screen,
+            actual.ForwardAt(new(0, 1), ox), actual.ForwardAt(new(60, 1), oy),
+            actual.ForwardAt(new(75, 1), ox), actual.ForwardAt(new(30, 1), oy), ox, oy);
+        Check.That(pair.First.Value == new EcgManualCursor(100_000_000, 0, 1) && pair.Second.Value == new EcgManualCursor(175_000_000, 1500, 1),
+            "empty SVG picture accepts exact pair through actual scale and current window origin");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.First.Value == pair.First.Value && restored.Second.Value == pair.Second.Value,
+            "created pair persists as data evidence rather than screen coordinates");
+        Check.That(MeasurementReason(() => input.PlacePair(true, layout, screen, new(0, 1), new(0, 1), new(1, 1), new(1, 1), ox, oy)) ==
+            "RecordMeasurement.StaleRenderedView", "successful pair creation invalidates old empty picture");
+    }
+
+    private static void SvgPairPlacementFailureAllowsRetry()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        Check.That(MeasurementReason(() => input.PlacePair(true, layout, screen,
+            actual.ForwardAt(new(0, 1), ox), actual.ForwardAt(new(60, 1), oy),
+            actual.ForwardAt(new(100, 1), ox), actual.ForwardAt(new(30, 1), oy), ox, oy)) == "RecordMeasurement.InvalidPoint" &&
+            view.Measurement.CurrentPair is null, "invalid second endpoint publishes no first endpoint");
+        CapturedRecordCursorPair pair = input.PlacePair(true, layout, screen,
+            actual.ForwardAt(new(0, 1), ox), actual.ForwardAt(new(60, 1), oy),
+            actual.ForwardAt(new(50, 1), ox), actual.ForwardAt(new(40, 1), oy), ox, oy);
+        Check.That(pair.Second.Value == new EcgManualCursor(150_000_000, 1000, 1), "nonmutating failure leaves empty picture available for valid retry");
+    }
+
+    private static void SvgPairPlacementRechecksSafetyAndPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        try
+        {
+            input.PlacePair(false, layout, screen, actual.ForwardAt(new(0, 1), ox), actual.ForwardAt(new(60, 1), oy),
+                actual.ForwardAt(new(50, 1), ox), actual.ForwardAt(new(40, 1), oy), ox, oy);
+            throw new InvalidOperationException("missing safety overlay accepted");
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable", "creation rechecks current overlay admission"); }
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(MeasurementReason(() => input.PlacePair(true, layout, screen,
+            actual.ForwardAt(new(0, 1), ox), actual.ForwardAt(new(60, 1), oy),
+            actual.ForwardAt(new(50, 1), ox), actual.ForwardAt(new(40, 1), oy), ox, oy)) == "RecordMeasurement.Disabled" &&
+            view.Measurement.CurrentPair is null, "stale enabled picture cannot authorize creation after policy disable");
+    }
 
     private static void SvgInputRejectsReplacedAndRestoredPairIdentity()
     {

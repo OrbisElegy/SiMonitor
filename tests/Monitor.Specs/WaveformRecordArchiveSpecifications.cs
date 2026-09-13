@@ -33,6 +33,10 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(WaveformHorizontalUsesFractionalSourceClock), WaveformHorizontalUsesFractionalSourceClock),
+        new(nameof(WaveformHorizontalResizePreservesRawEvidence), WaveformHorizontalResizePreservesRawEvidence),
+        new(nameof(WaveformHorizontalDenialAndFailurePublishNoGeometry), WaveformHorizontalDenialAndFailurePublishNoGeometry),
+        new(nameof(WaveformHorizontalRestoresOwnedCoordinates), WaveformHorizontalRestoresOwnedCoordinates),
         new(nameof(WaveformPageFollowsCurrentPageAndMappedSlot), WaveformPageFollowsCurrentPageAndMappedSlot),
         new(nameof(WaveformPageRechecksSafetyIndependentlyOfCommands), WaveformPageRechecksSafetyIndependentlyOfCommands),
         new(nameof(WaveformPageFailurePreservesStudyEvidence), WaveformPageFailurePreservesStudyEvidence),

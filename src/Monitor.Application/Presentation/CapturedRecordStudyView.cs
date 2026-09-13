@@ -40,6 +40,17 @@ public sealed class CapturedRecordStudyView
 
     public CapturedRecordMeasurement Measurement { get; private set; }
 
+    public CapturedRecordWaveformHorizontalPageDisplay CaptureWaveformHorizontalPageDisplay(
+        CapturedRecordNavigation navigation, bool canPreserveGlobalSafetyOverlay,
+        int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        bool allowAuxiliaryRate, int maximumSamples, CancellationToken cancellationToken = default)
+    {
+        CapturedRecordWaveformPageDisplay content = CaptureWaveformPageDisplay(navigation,
+            canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale,
+            allowAuxiliaryRate, maximumSamples, cancellationToken);
+        return CapturedRecordWaveformHorizontalProjection.Build(content, cancellationToken);
+    }
+
     // Serialized capture from current navigation and slot selection, not a saved
     // display supplied by the caller. Raw samples still need trusted unit/quality resolution.
     public CapturedRecordWaveformPageDisplay CaptureWaveformPageDisplay(CapturedRecordNavigation navigation,

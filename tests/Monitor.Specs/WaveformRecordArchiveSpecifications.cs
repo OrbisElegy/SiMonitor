@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgDragKeepsActualScaleOffsetThroughRelease), SvgDragKeepsActualScaleOffsetThroughRelease),
+        new(nameof(SvgDragRejectsLayoutChangeAndAllowsRollback), SvgDragRejectsLayoutChangeAndAllowsRollback),
+        new(nameof(SvgDragRejectsReplacementAndRetriesInvalidRelease), SvgDragRejectsReplacementAndRetriesInvalidRelease),
+
         new(nameof(SvgHitUsesActualScaleWithoutTranslatingRadius), SvgHitUsesActualScaleWithoutTranslatingRadius),
         new(nameof(SvgHitPreservesAmbiguityAndRejectsStaleEvidence), SvgHitPreservesAmbiguityAndRejectsStaleEvidence),
         new(nameof(SvgHitChecksCurrentPolicyAndInvalidRadius), SvgHitChecksCurrentPolicyAndInvalidRadius),
@@ -237,6 +241,74 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgDragKeepsActualScaleOffsetThroughRelease()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, actual.ForwardAt(new(52, 1), ox),
+            actual.ForwardAt(new(42, 1), oy), ox, oy, actual.Forward(new(3, 1)));
+        Check.That(drag.PreviewPointer(false, layout, screen, actual.ForwardAt(new(52, 1), ox), actual.ForwardAt(new(42, 1), oy), ox, oy).Second.Value == pair.Second.Value,
+            "actual SVG edge press preserves grab offset without jumping");
+        drag.PreviewPointer(false, layout, screen, actual.ForwardAt(new(62, 1), ox), actual.ForwardAt(new(42, 1), oy), ox, oy);
+        CapturedRecordCursorPair released = drag.CommitPointer(false, layout, screen, actual.ForwardAt(new(77, 1), ox), actual.ForwardAt(new(32, 1), oy), ox, oy);
+        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) && MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished",
+            "successive preview and final release use actual mapping and close gesture");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == released.Second.Value, "SVG release retains restorable data evidence");
+    }
+
+    private static void SvgDragRejectsLayoutChangeAndAllowsRollback()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, actual.ForwardAt(new(52, 1), ox),
+            actual.ForwardAt(new(42, 1), oy), ox, oy, actual.Forward(new(3, 1)));
+        drag.PreviewPointer(false, layout, screen, actual.ForwardAt(new(62, 1), ox), actual.ForwardAt(new(42, 1), oy), ox, oy);
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, layout, screen with { AvailableWidth = 99 }, new(0, 1), new(0, 1), ox, oy)) == "RecordMeasurement.StaleRenderedView" &&
+            MeasurementReason(() => drag.PreviewPointer(false, layout, screen, new(0, 1), new(0, 1), ox, oy)) == "RecordMeasurement.StaleRenderedView",
+            "observed rendered layout mismatch remains latched");
+        Check.That(drag.Cancel().Second.Value == pair.Second.Value, "stale geometry does not prevent policy-checked rollback");
+    }
+
+    private static void SvgDragRejectsReplacementAndRetriesInvalidRelease()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, actual.ForwardAt(new(52, 1), ox),
+            actual.ForwardAt(new(42, 1), oy), ox, oy, actual.Forward(new(3, 1)));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, layout, screen, actual.ForwardAt(new(62, 1), ox), actual.ForwardAt(new(42, 1), oy), ox, oy);
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, layout, screen, actual.ForwardAt(new(102, 1), ox), actual.ForwardAt(new(32, 1), oy), ox, oy)) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "invalid adjusted release target preserves prior preview");
+        drag.PreviewPointer(false, layout, screen, actual.ForwardAt(new(72, 1), ox), actual.ForwardAt(new(42, 1), oy), ox, oy);
+        CapturedRecordCursorPair replacement = view.Measurement.ReplacePair(pair.First.Value, pair.Second.Value);
+        Check.That(MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragSuperseded" && ReferenceEquals(view.Measurement.CurrentPair, replacement),
+            "external replacement cannot be overwritten by old SVG gesture");
+    }
 
     private static void SvgHitUsesActualScaleWithoutTranslatingRadius()
     {

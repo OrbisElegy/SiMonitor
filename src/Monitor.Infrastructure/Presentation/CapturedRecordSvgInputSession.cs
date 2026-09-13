@@ -40,6 +40,21 @@ public sealed class CapturedRecordSvgInputSession
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
 
+    public CapturedRecordSvgDrag BeginDrag(bool canPreserveGlobalSafetyOverlay,
+        CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
+        ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX,
+        ExactPlotCoordinate originY, ExactPlotCoordinate radius)
+    {
+        ValidateCurrent(layout, screen);
+        if (radius is null || radius.Numerator <= 0 || radius.Denominator <= 0)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidHitRadius", nameof(radius)); }
+        Ecg12ScreenTransform transform = Display.RenderedTransform!;
+        CapturedRecordStudyDrag drag = _view.BeginCursorDragAtPoint(_navigation, canPreserveGlobalSafetyOverlay,
+            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale,
+            transform.InverseAt(windowX, originX), transform.InverseAt(windowY, originY), transform.Inverse(radius));
+        return new(this, drag);
+    }
+
     public RecordCursorHits HitTest(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
         ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX,
@@ -82,8 +97,14 @@ public sealed class CapturedRecordSvgInputSession
 
     private void ValidateCurrent(CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
     {
+        ValidateGeometry(layout, screen);
+        if (!ReferenceEquals(_measurement.CurrentPair, _renderedPair))
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(layout)); }
+    }
+
+    internal void ValidateGeometry(CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen)
+    {
         if (_stale || !ReferenceEquals(_view.Measurement, _measurement) || !ReferenceEquals(_navigation.CurrentPage, _page) ||
-            !ReferenceEquals(_measurement.CurrentPair, _renderedPair) ||
             !ReferenceEquals(_zoom.Selection, _selection) || layout != _layout || screen != _screen)
         {
             _stale = true;

@@ -27,6 +27,7 @@ internal static class Program
             .. AuthorityOrderingSpecifications.All,
             .. DeterminismKernelSpecifications.All,
             .. SignalSampleClockSpecifications.All,
+            .. PeriodicSignalGeneratorSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,
             .. SensorFaultSpecifications.All,
             .. WaveformEnvelopeCodecSpecifications.All,

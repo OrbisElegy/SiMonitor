@@ -11,7 +11,8 @@ public sealed record CapturedRecordSvgLayout(int PlotLeftPixels, int PlotWidthPi
 public sealed record CapturedRecordSvgLayersResult(GridCapturedRecordPageDisplay Display, string? GridSvg);
 public sealed record CapturedRecordSvgScreenLayers(CapturedRecordSvgLayersResult Content, string? CursorOverlaySvg);
 public sealed record ZoomedCapturedRecordSvgScreenLayers(CapturedRecordSvgScreenLayers Content,
-    Ecg12ZoomDisplay? Zoom, Ecg12ScreenTransform? Transform, string? GridSvg, string? CursorOverlaySvg);
+    Ecg12ZoomDisplay? Zoom, Ecg12ScreenTransform? Transform, string? GridSvg, string? CursorOverlaySvg,
+    Ecg12ScreenTransform? RenderedTransform);
 
 // Serialized screen-layer composition, not a waveform renderer or print/export document.
 public static class CapturedRecordSvgLayers
@@ -27,10 +28,10 @@ public static class CapturedRecordSvgLayers
         CapturedRecordSvgScreenLayers content = RenderScreen(view, navigation, theme, canPreserveGlobalSafetyOverlay,
             layout, gridStyle, cursorStyle, allowAuxiliaryRate, cancellationToken);
         if (!content.Content.Display.Content.Content.Study.Admission.MayEnter)
-        { return new(content, null, null, null, null); }
+        { return new(content, null, null, null, null, null); }
         ArgumentNullException.ThrowIfNull(screen);
         Ecg12ZoomDisplay selection = zoom.CaptureDisplay();
-        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(selection.Selection,
+        var transform = Ecg12ScreenTransform.Resolve(selection.Selection,
             screen.PageWidth, screen.PageHeight, screen.AvailableWidth, screen.AvailableHeight);
         if (layout.PlotLeftPixels < 0 || layout.VerticalScale.PlotTopPixels < 0 ||
             (long)layout.PlotLeftPixels + layout.PlotWidthPixels > screen.PageWidth ||
@@ -41,8 +42,11 @@ public static class CapturedRecordSvgLayers
         { throw new Ecg12ZoomSelectionException("Ecg12Zoom.UnrepresentableSvgSize", nameof(screen)); }
         string? grid = WrapScreenLayer(content.Content.GridSvg, screen, transform);
         string? cursors = WrapScreenLayer(content.CursorOverlaySvg, screen, transform);
+        var renderedTransform = Ecg12ScreenTransform.ResolveViewport(screen.PageWidth, screen.PageHeight,
+            new(SvgLogicalNumber.RoundMillionths(transform.Width.Numerator, transform.Width.Denominator), 1_000_000),
+            new(SvgLogicalNumber.RoundMillionths(transform.Height.Numerator, transform.Height.Denominator), 1_000_000));
         cancellationToken.ThrowIfCancellationRequested();
-        return new(content, selection, transform, grid, cursors);
+        return new(content, selection, transform, grid, cursors, renderedTransform);
     }
 
     // Only internally generated layers enter this wrapper; it is screen-only.

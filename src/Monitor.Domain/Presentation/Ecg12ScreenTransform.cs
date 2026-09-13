@@ -18,6 +18,21 @@ public sealed class Ecg12ScreenTransform
     public ExactPlotCoordinate Width { get; }
     public ExactPlotCoordinate Height { get; }
 
+    // Uniform xMinYMin meet mapping for an explicitly serialized viewport.
+    public static Ecg12ScreenTransform ResolveViewport(int pageWidth, int pageHeight,
+        ExactPlotCoordinate viewportWidth, ExactPlotCoordinate viewportHeight)
+    {
+        Validate(viewportWidth);
+        Validate(viewportHeight);
+        if (pageWidth <= 0 || pageHeight <= 0 || viewportWidth.Numerator <= 0 || viewportHeight.Numerator <= 0)
+        { throw new Ecg12ZoomSelectionException("Ecg12Zoom.InvalidGeometry", nameof(pageWidth)); }
+        ExactPlotCoordinate horizontal = Reduce(viewportWidth.Numerator, viewportWidth.Denominator * pageWidth);
+        ExactPlotCoordinate vertical = Reduce(viewportHeight.Numerator, viewportHeight.Denominator * pageHeight);
+        ExactPlotCoordinate factor = horizontal.Numerator * vertical.Denominator <= vertical.Numerator * horizontal.Denominator
+            ? horizontal : vertical;
+        return new(factor, pageWidth, pageHeight);
+    }
+
     public static Ecg12ScreenTransform Resolve(Ecg12ZoomState selection, int pageWidth, int pageHeight,
         int availableWidth, int availableHeight)
     {
@@ -72,7 +87,7 @@ public sealed class Ecg12ScreenTransform
 
     private static ExactPlotCoordinate Reduce(BigInteger numerator, BigInteger denominator)
     {
-        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
         return new(numerator / divisor, denominator / divisor);
     }
 }

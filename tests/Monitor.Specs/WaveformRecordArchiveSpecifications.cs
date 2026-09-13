@@ -33,6 +33,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedSvgReportsActualSerializedMapping), ZoomedSvgReportsActualSerializedMapping),
         new(nameof(ZoomedSvgRejectsClippedPageGeometry), ZoomedSvgRejectsClippedPageGeometry),
         new(nameof(ZoomedSvgRejectsRoundedZeroDimensions), ZoomedSvgRejectsRoundedZeroDimensions),
 
@@ -216,6 +217,22 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedSvgReportsActualSerializedMapping()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        ZoomedCapturedRecordSvgScreenLayers rendered = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
+            SvgStudyLayout(), new(101, 100, 100, 100), SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(rendered.Transform!.Factor == new ExactPlotCoordinate(1, 3) &&
+            rendered.RenderedTransform!.Factor == new ExactPlotCoordinate(33_333_333, 100_000_000),
+            "actual meet mapping uses smaller serialized height ratio rather than original exact intent");
+        ExactPlotCoordinate screenX = rendered.RenderedTransform!.Forward(new(15, 1));
+        Check.That(rendered.RenderedTransform.Inverse(screenX) == new ExactPlotCoordinate(15, 1), "input inverse matches serialized SVG mapping");
+    }
 
     private static void ZoomedSvgRejectsClippedPageGeometry()
     {

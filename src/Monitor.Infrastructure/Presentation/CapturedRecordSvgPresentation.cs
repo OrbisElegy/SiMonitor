@@ -4,6 +4,10 @@ using Monitor.Domain.Presentation;
 
 namespace Monitor.Infrastructure.Presentation;
 
+public enum CapturedRecordSvgStatus { NotRendered, Refreshing, Ready, Denied, Cancelled, Failed }
+public sealed record CapturedRecordSvgPublication(CapturedRecordSvgStatus Status, string ReasonCode,
+    CapturedRecordSvgInputSession? Input);
+
 // Serialized publication boundary. The shell reads Current for both image and new input.
 // Retained immutable snapshots are not revoked; native controls must bind this current slot.
 public sealed class CapturedRecordSvgPresentation
@@ -26,18 +30,39 @@ public sealed class CapturedRecordSvgPresentation
         _zoom = zoom;
     }
 
-    public CapturedRecordSvgInputSession? Current { get; private set; }
+    public CapturedRecordSvgPublication Publication { get; private set; } =
+        new(CapturedRecordSvgStatus.NotRendered, "SvgPresentation.NotRendered", null);
+    public CapturedRecordSvgInputSession? Current => Publication.Input;
 
     public CapturedRecordSvgInputSession Refresh(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen, EcgPaperGridSvgStyle gridStyle,
         EcgManualCursorSvgStyle cursorStyle, bool allowAuxiliaryRate, CancellationToken cancellationToken = default)
     {
         // Clear before validation/cancellation so any failure cannot retain obsolete output.
-        Current = null;
-        CapturedRecordSvgInputSession candidate = new(_view, _navigation, _theme, _zoom,
-            canPreserveGlobalSafetyOverlay, layout, screen, gridStyle, cursorStyle, allowAuxiliaryRate, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        Current = candidate;
-        return candidate;
+        Publication = new(CapturedRecordSvgStatus.Refreshing, "SvgPresentation.Refreshing", null);
+        try
+        {
+            CapturedRecordSvgInputSession candidate = new(_view, _navigation, _theme, _zoom,
+                canPreserveGlobalSafetyOverlay, layout, screen, gridStyle, cursorStyle, allowAuxiliaryRate, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            Publication = new(CapturedRecordSvgStatus.Ready, "SvgPresentation.Ready", candidate);
+            return candidate;
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        {
+            Publication = new(CapturedRecordSvgStatus.Denied, exception.ReasonCode, null);
+            throw;
+        }
+        catch (OperationCanceledException exception) when
+            (cancellationToken.IsCancellationRequested && exception.CancellationToken == cancellationToken)
+        {
+            Publication = new(CapturedRecordSvgStatus.Cancelled, "SvgPresentation.Cancelled", null);
+            throw;
+        }
+        finally
+        {
+            if (Publication.Status == CapturedRecordSvgStatus.Refreshing)
+            { Publication = new(CapturedRecordSvgStatus.Failed, "SvgPresentation.RenderFailed", null); }
+        }
     }
 }

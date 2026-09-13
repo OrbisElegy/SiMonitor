@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgPublicationReportsCoherentAdmissionStatus), SvgPublicationReportsCoherentAdmissionStatus),
+        new(nameof(SvgPublicationDistinguishesCancellationFromFailure), SvgPublicationDistinguishesCancellationFromFailure),
+
         new(nameof(SvgPublicationClearsOnAdmissionLossAndRecovers), SvgPublicationClearsOnAdmissionLossAndRecovers),
         new(nameof(SvgPublicationFailureAndCancellationWithdrawCurrent), SvgPublicationFailureAndCancellationWithdrawCurrent),
         new(nameof(SvgPublicationRefreshKeepsActiveGestureEvidence), SvgPublicationRefreshKeepsActiveGestureEvidence),
@@ -256,6 +259,51 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgPublicationReportsCoherentAdmissionStatus()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgPresentation presentation = new(view, navigation, theme, zoom);
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.NotRendered && presentation.Current is null, "initial state explains absent picture");
+        CapturedRecordSvgInputSession ready = presentation.Refresh(true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        CapturedRecordSvgPublication snapshot = presentation.Publication;
+        Check.That(snapshot.Status == CapturedRecordSvgStatus.Ready && ReferenceEquals(snapshot.Input, ready), "status and input publish in one snapshot");
+        try { presentation.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false); }
+        catch (Ecg12ViewAdmissionException) { }
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Denied && presentation.Publication.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable" &&
+            presentation.Current is null && snapshot.Status == CapturedRecordSvgStatus.Ready && ReferenceEquals(snapshot.Input, ready), "denial preserves its reason without mutating retained status snapshot");
+        presentation.Refresh(true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Ready && presentation.Publication.ReasonCode == "SvgPresentation.Ready", "recovery clears old denial reason");
+    }
+
+    private static void SvgPublicationDistinguishesCancellationFromFailure()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgPresentation presentation = new(view, navigation, theme, zoom);
+        try { presentation.Refresh(true, layout, screen with { PageWidth = 99 }, SvgStudyStyle(), SvgCursorStyle(), false); }
+        catch (Ecg12ZoomSelectionException) { }
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Failed && presentation.Publication.ReasonCode == "SvgPresentation.RenderFailed" &&
+            presentation.Current is null, "render exception publishes failure with no input");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try { presentation.Refresh(true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false, cancellation.Token); }
+        catch (OperationCanceledException) { }
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Cancelled && presentation.Publication.ReasonCode == "SvgPresentation.Cancelled" &&
+            presentation.Current is null, "requested cancellation is distinct from render failure");
+        presentation.Refresh(true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(presentation.Publication.Status == CapturedRecordSvgStatus.Ready && presentation.Current is not null && view.Measurement.CurrentPair is null,
+            "retry replaces failure state without inventing measurements");
+    }
 
     private static void SvgPublicationClearsOnAdmissionLossAndRecovers()
     {

@@ -33,6 +33,10 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(QualityPageResolvesExactFlagsAndSparseGaps), QualityPageResolvesExactFlagsAndSparseGaps),
+        new(nameof(QualityRulesRejectAmbiguityAndOwnCallerData), QualityRulesRejectAmbiguityAndOwnCallerData),
+        new(nameof(QualityPageFailureAndDenialPreserveEvidence), QualityPageFailureAndDenialPreserveEvidence),
+        new(nameof(QualityPageRestoreRequiresCurrentBoundRules), QualityPageRestoreRequiresCurrentBoundRules),
         new(nameof(RawVoltageConvertsExactUnitsAndSignedCalibration), RawVoltageConvertsExactUnitsAndSignedCalibration),
         new(nameof(RawVoltageRejectsInvalidAndUnrepresentableValues), RawVoltageRejectsInvalidAndUnrepresentableValues),
         new(nameof(VoltagePageCombinesRawEvidenceAndUnclampedGeometry), VoltagePageCombinesRawEvidenceAndUnclampedGeometry),

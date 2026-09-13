@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedPlacementUsesCurrentExactScale), ZoomedPlacementUsesCurrentExactScale),
+        new(nameof(ZoomedPlacementFailurePreservesPair), ZoomedPlacementFailurePreservesPair),
+        new(nameof(ZoomedPlacementRestoresAndChecksMeasurementPolicy), ZoomedPlacementRestoresAndChecksMeasurementPolicy),
+
         new(nameof(ZoomedPoliciesUpdateIndependentGates), ZoomedPoliciesUpdateIndependentGates),
         new(nameof(ZoomedPoliciesRejectPartialUpdates), ZoomedPoliciesRejectPartialUpdates),
         new(nameof(ZoomedPoliciesEnableRestoredSession), ZoomedPoliciesEnableRestoredSession),
@@ -197,6 +201,67 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedPlacementUsesCurrentExactScale()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordCursorPair pair = view.PlacePairOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(0, 1), new(90, 1), new(75, 1), new(60, 1));
+        Check.That(pair.First.Value == new EcgManualCursor(100_000_000, 0, 1) && pair.Second.Value == new EcgManualCursor(150_000_000, 1000, 1),
+            "locked zoom selection does not block independently enabled measurement at current exact scale");
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        zoom.Select(new(Ecg12ZoomMode.FitPage, 1, 1));
+        CapturedRecordCursorPair fit = view.PlacePairOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(0, 1), new(30, 1), new(25, 1), new(20, 1));
+        Check.That(fit.Second.Value == pair.Second.Value, "placement resolves current fit geometry rather than stale explicit zoom");
+    }
+
+    private static void ZoomedPlacementFailurePreservesPair()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair original = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        Check.That(MeasurementReason(() => view.PlacePairOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(15, 1), new(90, 1), new(150, 1), new(60, 1))) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, original), "invalid second endpoint at exclusive right edge does not publish first endpoint");
+        Check.That(MeasurementReason(() => view.PlacePairOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(0, 1), new(90, 1), new(1, 1), new(60, 1))) == "RecordMeasurement.UnrepresentableTime" &&
+            ReferenceEquals(view.Measurement.CurrentPair, original), "inverse scale never rounds fractional nanoseconds");
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.PlacePairOnZoomedPage(foreign, zoom, false, 0, 100, scale, layout,
+            new(0, 1), new(90, 1), new(75, 1), new(60, 1)), "RecordPagination.ForeignNavigation");
+    }
+
+    private static void ZoomedPlacementRestoresAndChecksMeasurementPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.PlacePairOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(0, 1), new(90, 1), new(75, 1), new(60, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Disabled);
+        CapturedRecordCursorPair next = restored.Content.Study.View.PlacePairOnZoomedPage(restored.Content.Study.Navigation, restored.Zoom,
+            false, 0, 100, scale, layout, new(0, 1), new(90, 1), new(225, 2), new(45, 1));
+        Check.That(next.Second.Value == new EcgManualCursor(175_000_000, 1500, 1) && pair.Second.Value.DataTimeNs == 150_000_000,
+            "restored zoom maps fractional screen coordinates independently of pagination and zoom locks");
+        restored.Content.Study.View.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(MeasurementReason(() => restored.Content.Study.View.PlacePairOnZoomedPage(restored.Content.Study.Navigation, restored.Zoom,
+            false, 0, 100, scale, layout, new(0, 1), new(90, 1), new(75, 1), new(60, 1))) == "RecordMeasurement.Disabled" &&
+            ReferenceEquals(restored.Content.Study.View.Measurement.CurrentPair, next), "current measurement policy rejects stale placement without mutation");
+    }
 
     private static void ZoomedPoliciesUpdateIndependentGates()
     {

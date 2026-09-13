@@ -167,6 +167,21 @@ public sealed class CapturedRecordStudyView
         return Measurement.ReplacePairFromPoints(firstX, firstY, secondX, secondY, viewport, scale);
     }
 
+    // Inputs are scaled page-local coordinates; shell origin/scroll translation precedes this call.
+    public CapturedRecordCursorPair PlacePairOnZoomedPage(CapturedRecordNavigation navigation,
+        Ecg12ZoomSelection zoom, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, RecordScreenZoomLayout layout, ExactPlotCoordinate firstX,
+        ExactPlotCoordinate firstY, ExactPlotCoordinate secondX, ExactPlotCoordinate secondY)
+    {
+        RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        ArgumentNullException.ThrowIfNull(zoom);
+        ArgumentNullException.ThrowIfNull(layout);
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
+            layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
+        return Measurement.ReplacePairFromPoints(transform.Inverse(firstX), transform.Inverse(firstY),
+            transform.Inverse(secondX), transform.Inverse(secondY), viewport, scale);
+    }
+
     public CapturedRecordCursorPair MoveCursorOnCurrentPage(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
         RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y)

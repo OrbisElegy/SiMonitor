@@ -160,7 +160,7 @@ public sealed class CapturedRecordStudyView
             RecordCursorHits.None => throw new CapturedRecordMeasurementException("RecordMeasurement.NoCursorHit", nameof(x)),
             _ => throw new CapturedRecordMeasurementException("RecordMeasurement.AmbiguousCursorHit", nameof(x)),
         };
-        return BeginCursorDrag(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, end);
+        return new(this, navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, end, x, y);
     }
 
     internal RecordCursorViewport RequireCurrentViewport(CapturedRecordNavigation navigation,

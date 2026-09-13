@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(PointerDragPreservesGrabOffsetWithoutInitialJump), PointerDragPreservesGrabOffsetWithoutInitialJump),
+        new(nameof(PointerDragKeepsFractionalAnchorExact), PointerDragKeepsFractionalAnchorExact),
+        new(nameof(PointerDragRejectsInvalidTargetsWithoutLosingPreview), PointerDragRejectsInvalidTargetsWithoutLosingPreview),
         new(nameof(CurrentPageHitBeginsOnlySelectedEndpointDrag), CurrentPageHitBeginsOnlySelectedEndpointDrag),
         new(nameof(CurrentPageHitRejectsMissingAndAmbiguousTargets), CurrentPageHitRejectsMissingAndAmbiguousTargets),
         new(nameof(CurrentPageHitChecksAdmissionBindingAndPolicy), CurrentPageHitChecksAdmissionBindingAndPolicy),
@@ -178,6 +181,51 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void PointerDragPreservesGrabOffsetWithoutInitialJump()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(52, 1), new(42, 1), new(3, 1));
+        Check.That(drag.PreviewPointer(false, 0, 100, scale, new(52, 1), new(42, 1)).Second.Value == pair.Second.Value,
+            "stationary pointer at marker edge does not jump cursor center");
+        CapturedRecordCursorPair moved = drag.PreviewPointer(false, 0, 100, scale, new(77, 1), new(32, 1));
+        Check.That(moved.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) && ReferenceEquals(drag.Commit(false, 0, 100, scale), moved),
+            "pointer displacement translates endpoint by the same exact displacement");
+    }
+
+    private static void PointerDragKeepsFractionalAnchorExact()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(151, 3), new(161, 4), new(1, 1));
+        CapturedRecordCursorPair moved = drag.PreviewPointer(false, 0, 100, scale, new(226, 3), new(121, 4));
+        Check.That(moved.Second.Value == new EcgManualCursor(75_000_000, 1500, 1), "fractional grab offset cancels exactly before time/amplitude conversion");
+        drag.Commit(false, 0, 100, scale);
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == moved.Second.Value, "only resulting data values are checkpointed, not pointer anchors");
+    }
+
+    private static void PointerDragRejectsInvalidTargetsWithoutLosingPreview()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair original = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag direct = view.BeginCursorDrag(navigation, false, 0, 100, scale, RecordCursorEnd.Second);
+        Check.That(MeasurementReason(() => direct.PreviewPointer(false, 0, 100, scale, new(50, 1), new(40, 1))) == "RecordMeasurement.NoPointerAnchor",
+            "target-coordinate gestures cannot infer a missing pointer anchor");
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(52, 1), new(42, 1), new(3, 1));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, 0, 100, scale, new(77, 1), new(32, 1));
+        Check.That(MeasurementReason(() => drag.PreviewPointer(false, 0, 100, scale, new(102, 1), new(32, 1))) == "RecordMeasurement.InvalidPoint" &&
+            MeasurementReason(() => drag.PreviewPointer(false, 0, 100, scale, new(1, 0), new(32, 1))) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "invalid adjusted target and pointer fraction preserve prior preview");
+        Check.That(drag.Cancel().Second.Value == original.Second.Value, "failed pointer move still permits exact rollback");
+    }
 
     private static void CurrentPageHitBeginsOnlySelectedEndpointDrag()
     {

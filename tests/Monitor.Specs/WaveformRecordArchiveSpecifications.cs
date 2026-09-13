@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(CurrentPageHitBeginsOnlySelectedEndpointDrag), CurrentPageHitBeginsOnlySelectedEndpointDrag),
+        new(nameof(CurrentPageHitRejectsMissingAndAmbiguousTargets), CurrentPageHitRejectsMissingAndAmbiguousTargets),
+        new(nameof(CurrentPageHitChecksAdmissionBindingAndPolicy), CurrentPageHitChecksAdmissionBindingAndPolicy),
+        new(nameof(CurrentPageHitDragRetainsNavigationFence), CurrentPageHitDragRetainsNavigationFence),
         new(nameof(CursorHitTestUsesExactCircularDistance), CursorHitTestUsesExactCircularDistance),
         new(nameof(CursorHitTestReportsAmbiguityAndHiddenEndpoints), CursorHitTestReportsAmbiguityAndHiddenEndpoints),
         new(nameof(CursorHitTestGatesInvalidInputsAndRestores), CursorHitTestGatesInvalidInputsAndRestores),
@@ -174,6 +178,70 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void CurrentPageHitBeginsOnlySelectedEndpointDrag()
+    {
+        CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordNavigation navigation = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        Check.That(view.HitTestOnCurrentPage(navigation, false, 0, 100, scale, new(50, 1), new(40, 1), new(2, 1)) == RecordCursorHits.Second,
+            "hit query uses the restored current page independently of pagination lock");
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(50, 1), new(40, 1), new(2, 1));
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "pointer-down does not move cursor evidence");
+        drag.Preview(false, 0, 100, scale, new(75, 1), new(30, 1));
+        CapturedRecordCursorPair committed = drag.Commit(false, 0, 100, scale);
+        Check.That(ReferenceEquals(committed.First, pair.First) && committed.Second.Value == new EcgManualCursor(175_000_000, 1500, 1),
+            "unique hit selects the second endpoint for the existing drag lifecycle");
+    }
+
+    private static void CurrentPageHitRejectsMissingAndAmbiguousTargets()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        Check.That(MeasurementReason(() => view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(2, 1))) == "RecordMeasurement.NoCursorHit",
+            "empty pair starts no gesture");
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(0, 0, 1));
+        Check.That(MeasurementReason(() => view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(2, 1))) == "RecordMeasurement.AmbiguousCursorHit" &&
+            MeasurementReason(() => view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(50, 1), new(60, 1), new(2, 1))) == "RecordMeasurement.NoCursorHit" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "ambiguous and missed targets preserve selection without tie breaking");
+    }
+
+    private static void CurrentPageHitChecksAdmissionBindingAndPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 0, 1));
+        try
+        {
+            view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(2, 1));
+            throw new InvalidOperationException("denied hit gesture accepted");
+        }
+        catch (Ecg12ViewAdmissionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Admission.SafetyOverlayUnavailable", "pointer-down requires current safety admission"); }
+        CapturedRecordNavigation foreign = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        ExpectPaginationReason(() => view.HitTestOnCurrentPage(foreign, true, 0, 100, scale, new(0, 1), new(60, 1), new(2, 1)), "RecordPagination.ForeignNavigation");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => view.BeginCursorDragAtPoint(navigation, true, 0, 100, scale, new(0, 1), new(60, 1), new(2, 1))) == "RecordMeasurement.CourseLocked" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "course-locked input cannot disclose/select targets or change values");
+    }
+
+    private static void CurrentPageHitDragRetainsNavigationFence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
+        CapturedRecordStudyDrag drag = view.BeginCursorDragAtPoint(navigation, false, 0, 100, scale, new(50, 1), new(40, 1), new(2, 1));
+        drag.Preview(false, 0, 100, scale, new(75, 1), new(30, 1));
+        navigation.NextPage();
+        navigation.PreviousPage();
+        Check.That(MeasurementReason(() => drag.Commit(false, 0, 100, scale)) == "RecordMeasurement.DragLayoutChanged" && drag.Cancel().Second.Value == pair.Second.Value,
+            "pointer-selected gesture retains page round-trip rejection and exact rollback");
+    }
 
     private static void CursorHitTestUsesExactCircularDistance()
     {

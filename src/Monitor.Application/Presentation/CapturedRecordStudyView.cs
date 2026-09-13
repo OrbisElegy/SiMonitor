@@ -140,6 +140,29 @@ public sealed class CapturedRecordStudyView
         EcgVerticalScale scale, RecordCursorEnd end) =>
         new(this, navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, end);
 
+    public RecordCursorHits HitTestOnCurrentPage(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        ExactPlotCoordinate x, ExactPlotCoordinate y, ExactPlotCoordinate radius)
+    {
+        RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
+        return Measurement.HitTestCursors(x, y, radius, viewport, scale);
+    }
+
+    public CapturedRecordStudyDrag BeginCursorDragAtPoint(CapturedRecordNavigation navigation,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        ExactPlotCoordinate x, ExactPlotCoordinate y, ExactPlotCoordinate radius)
+    {
+        RecordCursorHits hits = HitTestOnCurrentPage(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, x, y, radius);
+        RecordCursorEnd end = hits switch
+        {
+            RecordCursorHits.First => RecordCursorEnd.First,
+            RecordCursorHits.Second => RecordCursorEnd.Second,
+            RecordCursorHits.None => throw new CapturedRecordMeasurementException("RecordMeasurement.NoCursorHit", nameof(x)),
+            _ => throw new CapturedRecordMeasurementException("RecordMeasurement.AmbiguousCursorHit", nameof(x)),
+        };
+        return BeginCursorDrag(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, end);
+    }
+
     internal RecordCursorViewport RequireCurrentViewport(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale)
     {

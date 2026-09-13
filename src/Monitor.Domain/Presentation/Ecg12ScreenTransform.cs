@@ -46,6 +46,24 @@ public sealed class Ecg12ScreenTransform
         return Reduce(coordinate.Numerator * Factor.Denominator, coordinate.Denominator * Factor.Numerator);
     }
 
+    // Origin is the current page origin in window logical pixels, after scrolling.
+    // Apply separately to x and y; no rounding, clipping or device-DPI inference.
+    public ExactPlotCoordinate ForwardAt(ExactPlotCoordinate coordinate, ExactPlotCoordinate origin)
+    {
+        Validate(origin);
+        ExactPlotCoordinate scaled = Forward(coordinate);
+        return Reduce(scaled.Numerator * origin.Denominator + origin.Numerator * scaled.Denominator,
+            scaled.Denominator * origin.Denominator);
+    }
+
+    public ExactPlotCoordinate InverseAt(ExactPlotCoordinate coordinate, ExactPlotCoordinate origin)
+    {
+        Validate(coordinate);
+        Validate(origin);
+        return Inverse(Reduce(coordinate.Numerator * origin.Denominator - origin.Numerator * coordinate.Denominator,
+            coordinate.Denominator * origin.Denominator));
+    }
+
     private static void Validate(ExactPlotCoordinate coordinate)
     {
         if (coordinate is null || coordinate.Denominator <= 0)

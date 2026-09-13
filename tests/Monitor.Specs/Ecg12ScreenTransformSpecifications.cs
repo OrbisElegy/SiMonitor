@@ -7,11 +7,50 @@ internal static class Ecg12ScreenTransformSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(WindowCoordinatesTranslateBeforeInverseZoom), WindowCoordinatesTranslateBeforeInverseZoom),
+        new(nameof(WindowCoordinatesKeepNegativeScrolledOriginsExact), WindowCoordinatesKeepNegativeScrolledOriginsExact),
+        new(nameof(WindowCoordinateFailurePreservesTransform), WindowCoordinateFailurePreservesTransform),
+
         new(nameof(FitTransformUsesLimitingAxis), FitTransformUsesLimitingAxis),
         new(nameof(ExplicitTransformRoundTripsExactCoordinates), ExplicitTransformRoundTripsExactCoordinates),
         new(nameof(TransformRejectsMalformedInputs), TransformRejectsMalformedInputs),
         new(nameof(RestoredZoomRecomputesForCurrentArea), RestoredZoomRecomputesForCurrentArea),
     ];
+
+    private static void WindowCoordinatesTranslateBeforeInverseZoom()
+    {
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ExplicitScale, 3, 2), 100, 100, 200, 200);
+        Check.That(transform.ForwardAt(new(50, 1), new(10, 1)) == new ExactPlotCoordinate(85, 1) &&
+            transform.InverseAt(new(85, 1), new(10, 1)) == new ExactPlotCoordinate(50, 1),
+            "window origin is translated after forward scale and before inverse scale");
+        Check.That(transform.InverseAt(new(10, 1), new(10, 1)) == new ExactPlotCoordinate(0, 1), "page origin maps to exact logical zero");
+    }
+
+    private static void WindowCoordinatesKeepNegativeScrolledOriginsExact()
+    {
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 5, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection restored = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(restored.Selection, 100, 100, 50, 50);
+        ExactPlotCoordinate origin = new(-17, 7);
+        ExactPlotCoordinate logical = new(123, 11);
+        Check.That(transform.InverseAt(transform.ForwardAt(logical, origin), origin) == logical,
+            "fractional negative scrolled origin preserves exact recovered coordinates");
+        Check.That(transform.InverseAt(new(-24, 7), origin) == new ExactPlotCoordinate(-3, 5),
+            "outside-page coordinates remain outside for downstream hit bounds checks");
+        Check.That(transform.InverseAt(transform.ForwardAt(logical, new(19, 7)), new(19, 7)) == logical && !restored.CaptureDisplay().CanSelect,
+            "current window origin is independent of saved zoom and selection permission");
+    }
+
+    private static void WindowCoordinateFailurePreservesTransform()
+    {
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ActualSize, 1, 1), 100, 100, 50, 50);
+        Check.That(Reason(() => transform.ForwardAt(new(1, 1), new(1, 0))) == "Ecg12Zoom.InvalidCoordinate" &&
+            Reason(() => transform.InverseAt(null!, new(1, 1))) == "Ecg12Zoom.InvalidCoordinate" &&
+            Reason(() => transform.InverseAt(new(1, 1), null!)) == "Ecg12Zoom.InvalidCoordinate",
+            "malformed window points and origins reject consistently");
+        Check.That(transform.ForwardAt(new(int.MaxValue, 1), new(int.MaxValue, 1)) == new ExactPlotCoordinate(2L * int.MaxValue, 1) &&
+            transform.Width == new ExactPlotCoordinate(100, 1), "wide translated coordinates do not overflow or mutate the transform");
+    }
 
     private static void FitTransformUsesLimitingAxis()
     {

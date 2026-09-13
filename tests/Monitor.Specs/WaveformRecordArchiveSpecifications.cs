@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedHitPreservesScreenRadius), ZoomedHitPreservesScreenRadius),
+        new(nameof(ZoomedHitReportsAmbiguityAndRejectsInvalidInputs), ZoomedHitReportsAmbiguityAndRejectsInvalidInputs),
+        new(nameof(ZoomedHitUsesRestoredCurrentPolicy), ZoomedHitUsesRestoredCurrentPolicy),
+
         new(nameof(ZoomedPlacementUsesCurrentExactScale), ZoomedPlacementUsesCurrentExactScale),
         new(nameof(ZoomedPlacementFailurePreservesPair), ZoomedPlacementFailurePreservesPair),
         new(nameof(ZoomedPlacementRestoresAndChecksMeasurementPolicy), ZoomedPlacementRestoresAndChecksMeasurementPolicy),
@@ -201,6 +205,63 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedHitPreservesScreenRadius()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        Check.That(view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(103, 1), new(84, 1), new(5, 1)) == RecordCursorHits.Second,
+            "screen-space 3-4-5 radius boundary is inclusive after zoom inversion");
+        Check.That(view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(103, 1), new(84, 1), new(49, 10)) == RecordCursorHits.None,
+            "radius is transformed with coordinates rather than growing with zoom");
+        zoom.Select(new(Ecg12ZoomMode.FitPage, 1, 1));
+        Check.That(view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(28, 1), new(24, 1), new(5, 1)) == RecordCursorHits.Second &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "current fit scale preserves screen tolerance and never changes evidence");
+    }
+
+    private static void ZoomedHitReportsAmbiguityAndRejectsInvalidInputs()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordCursorPair overlap = view.Measurement.ReplacePair(new(50_000_000, 1000, 1), new(50_000_000, 1000, 1));
+        Check.That(view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(100, 1), new(80, 1), new(1, 1)) ==
+            (RecordCursorHits.First | RecordCursorHits.Second), "overlapping scaled markers retain ambiguity");
+        Check.That(MeasurementReason(() => view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(100, 1), new(80, 1), new(0, 1))) == "RecordMeasurement.InvalidHitRadius" &&
+            MeasurementReason(() => view.HitTestOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(200, 1), new(80, 1), new(1, 1))) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, overlap), "invalid radius and exclusive scaled right edge preserve pair");
+        Check.That(pair.Second.Value.DataTimeNs == 50_000_000, "old immutable cursor evidence remains unchanged");
+    }
+
+    private static void ZoomedHitUsesRestoredCurrentPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 50, 50);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked,
+            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(restored.Content.Study.View.HitTestOnZoomedPage(restored.Content.Study.Navigation, restored.Zoom, false, 0, 100, scale, layout,
+            new(100, 1), new(80, 1), new(1, 1)) == RecordCursorHits.Second, "zoom and pagination locks do not block enabled hit testing");
+        restored.Content.Study.View.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => restored.Content.Study.View.HitTestOnZoomedPage(restored.Content.Study.Navigation, restored.Zoom,
+            false, 0, 100, scale, layout, new(100, 1), new(80, 1), new(1, 1))) == "RecordMeasurement.CourseLocked" &&
+            restored.Content.Study.View.Measurement.CurrentPair!.Second.Value == pair.Second.Value,
+            "current measurement lock suppresses hit results without changing restored evidence");
+    }
 
     private static void ZoomedPlacementUsesCurrentExactScale()
     {

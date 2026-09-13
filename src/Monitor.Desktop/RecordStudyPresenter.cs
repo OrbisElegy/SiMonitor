@@ -104,6 +104,38 @@ public sealed class RecordStudyPresenter
         _window.SetClearCommand(null);
     }
 
+    public void BindPointerQueries(Func<RecordStudyCommandContext> currentContext, double radius)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(currentContext);
+        _ = NativeLogicalCoordinate.FromDouble(radius);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
+        _window.SetPointerQuery((input, localPoint) =>
+        {
+            try
+            {
+                RecordStudyCommandContext context = currentContext();
+                ArgumentNullException.ThrowIfNull(context);
+                return HitTest(input, context.CanPreserveGlobalSafetyOverlay, context.Layout,
+                    context.Screen, localPoint, default, radius);
+            }
+            catch (CapturedRecordMeasurementException exception) when
+                (exception.ReasonCode is "RecordMeasurement.InvalidPoint" or "RecordMeasurement.StaleRenderedView")
+            { return RecordCursorHits.None; }
+            catch (Exception exception)
+            {
+                if (ReferenceEquals(input, _window.CurrentPublication?.Input)) { WithdrawCommandFailure(exception); }
+                return RecordCursorHits.None;
+            }
+        });
+    }
+
+    public void UnbindPointerQueries()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _window.SetPointerQuery(null);
+    }
+
     // The caller captures the input shown when the command is issued. A queued
     // command from an older picture must not be redirected to the latest one.
     public void ClearPair(CapturedRecordSvgInputSession expectedInput,

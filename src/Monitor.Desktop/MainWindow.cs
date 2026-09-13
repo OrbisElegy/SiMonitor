@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Desktop;
@@ -21,6 +22,7 @@ public sealed class MainWindow : Window
         HorizontalAlignment = HorizontalAlignment.Center,
     };
     private Action<CapturedRecordSvgInputSession>? _clearCommand;
+    private Func<CapturedRecordSvgInputSession, Point, RecordCursorHits>? _pointerQuery;
 
     public MainWindow()
     {
@@ -71,6 +73,7 @@ public sealed class MainWindow : Window
     {
         Dispatcher.UIThread.VerifyAccess();
         // Withdraw first: malformed or unavailable updates cannot retain old visual input.
+        if (_recordContent.Content is RecordStudyControl previous) { previous.BindPointerQuery(null); }
         _recordContent.Content = null;
         CurrentPublication = null;
         UpdateClearButton();
@@ -92,7 +95,26 @@ public sealed class MainWindow : Window
         _recordStatus.Text = message;
         CurrentPublication = publication;
         UpdateClearButton();
+        UpdatePointerQuery();
     }
+
+    internal void SetPointerQuery(Func<CapturedRecordSvgInputSession, Point, RecordCursorHits>? query)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _pointerQuery = query;
+        UpdatePointerQuery();
+    }
+
+    private void UpdatePointerQuery()
+    {
+        if (_recordContent.Content is not RecordStudyControl control) { return; }
+        var query = _pointerQuery;
+        if (control.InputSession.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode != "RecordMeasurement.Ready")
+        { query = null; }
+        control.BindPointerQuery(query is null ? null : point => query(control.InputSession, point));
+    }
+
+    internal RecordStudyControl? RecordControl => _recordContent.Content as RecordStudyControl;
 
     internal void SetClearCommand(Action<CapturedRecordSvgInputSession>? command)
     {

@@ -2,6 +2,7 @@
 using System.Numerics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Presentation;
@@ -24,6 +25,7 @@ public sealed class RecordStudyControl : Control
     private readonly Pen _first;
     private readonly Pen _second;
     private readonly double _radius;
+    private Func<Point, RecordCursorHits>? _pointerQuery;
 
     public RecordStudyControl(CapturedRecordSvgPublication publication, EcgPaperGridSvgStyle gridStyle,
         EcgManualCursorSvgStyle cursorStyle)
@@ -63,10 +65,48 @@ public sealed class RecordStudyControl : Control
             AddMarker(markers, measurement.Second, false);
         }
         _markers = markers.ToArray();
-        IsHitTestVisible = false; // Native event routing is not implemented by this layer.
+        IsHitTestVisible = false;
     }
 
     public CapturedRecordSvgInputSession InputSession { get; }
+    public RecordCursorHits HoveredCursors { get; private set; }
+
+    internal void BindPointerQuery(Func<Point, RecordCursorHits>? query)
+    {
+        _pointerQuery = query;
+        IsHitTestVisible = query is not null;
+        SetHover(RecordCursorHits.None);
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        Func<Point, RecordCursorHits>? query = _pointerQuery;
+        if (query is null) { return; }
+        // GetPosition returns rendered control-local logical pixels, including
+        // current native scroll translation. Only the paint-scale inverse remains.
+        RecordCursorHits hits = query(e.GetPosition(this));
+        if (ReferenceEquals(query, _pointerQuery)) { SetHover(hits); }
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        SetHover(RecordCursorHits.None);
+    }
+
+    private void SetHover(RecordCursorHits hits)
+    {
+        HoveredCursors = hits;
+        if (hits == RecordCursorHits.None) { ToolTip.SetIsOpen(this, false); }
+        ToolTip.SetTip(this, hits switch
+        {
+            RecordCursorHits.First => "卡尺起点",
+            RecordCursorHits.Second => "卡尺终点",
+            RecordCursorHits.First | RecordCursorHits.Second => "两条卡尺同时命中",
+            _ => null,
+        });
+    }
 
     public override void Render(DrawingContext context)
     {

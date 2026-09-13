@@ -38,7 +38,7 @@ public sealed class NativeStudyDrag
             if (commit)
             {
                 _drag.CommitPointer(context.CanPreserveGlobalSafetyOverlay, context.Layout, context.Screen, x, y, ox, oy);
-                IsFinished = true;
+                Finish();
             }
             else { _drag.PreviewPointer(context.CanPreserveGlobalSafetyOverlay, context.Layout, context.Screen, x, y, ox, oy); }
         }
@@ -64,7 +64,7 @@ public sealed class NativeStudyDrag
             _presenter.WithdrawCommandFailure(exception);
             throw;
         }
-        IsFinished = true;
+        Finish();
         // Cancellation after withdrawal must not reopen an unavailable view.
         if (_presenter.IsPresented) { _presenter.Refresh(context); }
     }
@@ -74,5 +74,19 @@ public sealed class NativeStudyDrag
         Dispatcher.UIThread.VerifyAccess();
         ArgumentNullException.ThrowIfNull(context);
         if (IsFinished) { throw new CapturedRecordMeasurementException("RecordMeasurement.DragFinished", nameof(context)); }
+    }
+
+    // Explicit lifecycle release when rollback is unavailable or not requested.
+    // Retain the last accepted measurement values; never infer a commit/cancel.
+    public void ReleaseWithoutRollback()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        if (!IsFinished) { Finish(); }
+    }
+
+    private void Finish()
+    {
+        IsFinished = true;
+        _presenter.ReleaseDrag(this);
     }
 }

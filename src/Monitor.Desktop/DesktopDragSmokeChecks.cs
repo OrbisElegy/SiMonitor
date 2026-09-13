@@ -24,6 +24,14 @@ internal static class DesktopDragSmokeChecks
         catch (CapturedRecordMeasurementException exception) when (exception.ReasonCode == "RecordMeasurement.AmbiguousCursorHit") { }
         if (!ReferenceEquals(before, window.CurrentPublication)) { throw new InvalidOperationException("Ambiguous entry changed the picture."); }
         NativeStudyDrag drag = presenter.BeginDrag(source.Current!, context, new(52, 50), default, 4);
+        try
+        {
+            presenter.BeginDrag(source.Current!, context, new(150, 70), default, 4);
+            throw new InvalidOperationException("Concurrent native drag replaced the active gesture.");
+        }
+        catch (CapturedRecordMeasurementException exception) when (exception.ReasonCode == "DesktopStudy.DragAlreadyActive") { }
+        if (!ReferenceEquals(presenter.ActiveDrag, drag) || !ReferenceEquals(before, source.Publication))
+        { throw new InvalidOperationException("Rejected drag entry changed the owner or publication."); }
         drag.Preview(context, new(62, 50), default);
         RequireX(source, 30);
         before = source.Publication;
@@ -44,7 +52,7 @@ internal static class DesktopDragSmokeChecks
         // Release carries a new position even without a preceding move event.
         drag.Commit(context, new(72, 50), default);
         RequireX(source, 35);
-        if (!drag.IsFinished) { throw new InvalidOperationException("Release left the native gesture open."); }
+        if (!drag.IsFinished || presenter.ActiveDrag is not null) { throw new InvalidOperationException("Release left the native gesture open."); }
         try
         {
             drag.Cancel(context);
@@ -70,7 +78,7 @@ internal static class DesktopDragSmokeChecks
         }
         if (!rejected) { throw new InvalidOperationException("Withdrawn gesture preview accepted."); }
         drag.Cancel(context);
-        if (!drag.IsFinished || !window.HasNoRecordContent || source.Current is not null)
+        if (!drag.IsFinished || presenter.ActiveDrag is not null || !window.HasNoRecordContent || source.Current is not null)
         { throw new InvalidOperationException("Cancel after withdrawal reopened content."); }
         presenter.Refresh(context);
         RequireX(source, 35);
@@ -97,7 +105,8 @@ internal static class DesktopDragSmokeChecks
         }
         catch (EcgPaperGridException)
         {
-            if (source.Current is not null || drag.IsFinished) { throw new InvalidOperationException("Paint failure lost retained gesture state."); }
+            if (source.Current is not null || drag.IsFinished || !ReferenceEquals(presenter.ActiveDrag, drag))
+            { throw new InvalidOperationException("Paint failure lost retained gesture state."); }
         }
         drag.Cancel(context);
         presenter.Refresh(context);
@@ -110,11 +119,36 @@ internal static class DesktopDragSmokeChecks
         }
         catch (EcgPaperGridException)
         {
-            if (source.Current is not null || !drag.IsFinished)
+            if (source.Current is not null || !drag.IsFinished || presenter.ActiveDrag is not null)
             { throw new InvalidOperationException("Release paint failure reopened the committed gesture."); }
         }
         presenter.Refresh(context);
         RequireX(source, 40);
+        drag = presenter.BeginDrag(source.Current!, context, new(80, 50), default, 4);
+        drag.Preview(context, new(90, 50), default);
+        before = source.Publication;
+        drag.ReleaseWithoutRollback();
+        drag.ReleaseWithoutRollback();
+        if (!drag.IsFinished || presenter.ActiveDrag is not null || !ReferenceEquals(before, source.Publication))
+        { throw new InvalidOperationException("Explicit release mutated evidence or retained gesture ownership."); }
+        RequireX(source, 45);
+        NativeStudyDrag next = presenter.BeginDrag(source.Current!, context, new(90, 50), default, 4);
+        drag.ReleaseWithoutRollback();
+        if (!ReferenceEquals(presenter.ActiveDrag, next))
+        { throw new InvalidOperationException("Old release cleared the new gesture owner."); }
+        presenter.ClearPair(source.Current!, true, context.Layout, context.Screen, context.GridStyle, context.CursorStyle, false);
+        try
+        {
+            next.Cancel(context);
+            throw new InvalidOperationException("Superseded gesture rolled back an external clear.");
+        }
+        catch (CapturedRecordMeasurementException exception) when (exception.ReasonCode == "RecordMeasurement.DragSuperseded") { }
+        if (!ReferenceEquals(presenter.ActiveDrag, next))
+        { throw new InvalidOperationException("Failed rollback implicitly released gesture ownership."); }
+        next.ReleaseWithoutRollback();
+        presenter.Refresh(context);
+        if (presenter.ActiveDrag is not null || source.Current!.Display.CursorOverlaySvg is not null)
+        { throw new InvalidOperationException("Superseded release resurrected cleared evidence."); }
         presenter.Withdraw();
         window.ApplyPublication(new(CapturedRecordSvgStatus.NotRendered, "SvgPresentation.NotRendered", null));
         Console.WriteLine("ok: native drag offset, retained redraw, final release, rollback and safety recovery");

@@ -17,6 +17,7 @@ public sealed class RecordStudyPresenter
 {
     private readonly MainWindow _window;
     private readonly CapturedRecordSvgPresentation _presentation;
+    public NativeStudyDrag? ActiveDrag { get; private set; }
 
     public RecordStudyPresenter(MainWindow window, CapturedRecordSvgPresentation presentation)
     {
@@ -199,6 +200,8 @@ public sealed class RecordStudyPresenter
         RecordStudyCommandContext context, Point windowPoint, Point currentPageOrigin, double radius)
     {
         RequireCurrentInput(expectedInput);
+        if (ActiveDrag is not null)
+        { throw new CapturedRecordMeasurementException("DesktopStudy.DragAlreadyActive", nameof(expectedInput)); }
         ArgumentNullException.ThrowIfNull(context);
         ExactPlotCoordinate x = NativeLogicalCoordinate.FromDouble(windowPoint.X);
         ExactPlotCoordinate y = NativeLogicalCoordinate.FromDouble(windowPoint.Y);
@@ -208,8 +211,10 @@ public sealed class RecordStudyPresenter
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
         try
         {
-            return new(this, expectedInput.BeginDrag(context.CanPreserveGlobalSafetyOverlay,
+            NativeStudyDrag candidate = new(this, expectedInput.BeginDrag(context.CanPreserveGlobalSafetyOverlay,
                 context.Layout, context.Screen, x, y, ox, oy, r));
+            ActiveDrag = candidate;
+            return candidate;
         }
         catch (CapturedRecordMeasurementException exception) when
             (exception.ReasonCode is "RecordMeasurement.InvalidPoint" or "RecordMeasurement.NoCursorHit" or "RecordMeasurement.AmbiguousCursorHit")
@@ -222,6 +227,11 @@ public sealed class RecordStudyPresenter
     }
 
     internal bool IsPresented => _presentation.Current is { } input && ReferenceEquals(input, _window.CurrentPublication?.Input);
+
+    internal void ReleaseDrag(NativeStudyDrag drag)
+    {
+        if (ReferenceEquals(ActiveDrag, drag)) { ActiveDrag = null; }
+    }
 
     internal void Refresh(RecordStudyCommandContext context) => Refresh(context.CanPreserveGlobalSafetyOverlay,
         context.Layout, context.Screen, context.GridStyle, context.CursorStyle, context.AllowAuxiliaryRate);

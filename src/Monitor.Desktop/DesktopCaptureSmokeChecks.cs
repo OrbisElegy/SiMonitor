@@ -60,6 +60,32 @@ internal static class DesktopCaptureSmokeChecks
         route.Dispose();
         if (pointer.Captured is not null || presenter.ActiveDrag is not null || window.RecordControl!.IsHitTestVisible || interruptions != 4)
         { throw new InvalidOperationException("Route disposal did not remove capture and handlers."); }
+        int missingReleases = 0;
+        int moveContexts = 0;
+        using (NativeDragInput recovery = new(presenter, () => { moveContexts++; return context; },
+            4, gesture => { missingReleases++; gesture.Cancel(context); }))
+        {
+            Press(window, pointer, new(70, 50));
+            Move(window, pointer, new(80, 50));
+            RequireX(source, 40);
+            int resolvedBeforeLoss = moveContexts;
+            MoveWithoutButton(window, new Pointer(93, PointerType.Mouse, false), new(90, 50));
+            if (!ReferenceEquals(pointer.Captured, window) || missingReleases != 0 || moveContexts != resolvedBeforeLoss)
+            { throw new InvalidOperationException("Foreign button state interrupted the captured mouse."); }
+            MoveWithoutButton(window, pointer, new(90, 50));
+            RequireX(source, 35);
+            if (pointer.Captured is not null || presenter.ActiveDrag is not null || missingReleases != 1 || moveContexts != resolvedBeforeLoss)
+            { throw new InvalidOperationException("Missing release previewed data or retained capture."); }
+            CapturedRecordSvgPublication recovered = source.Publication;
+            MoveWithoutButton(window, pointer, new(100, 50));
+            Release(window, pointer, new(100, 50));
+            if (!ReferenceEquals(recovered, source.Publication) || missingReleases != 1)
+            { throw new InvalidOperationException("Late release changed the recovered measurement."); }
+            Press(window, pointer, new(70, 50));
+            Release(window, pointer, new(70, 50));
+            if (presenter.ActiveDrag is not null || pointer.Captured is not null)
+            { throw new InvalidOperationException("Missing-release recovery blocked the next gesture."); }
+        }
         NativeDragInput? disposedDuringContext = null;
         disposedDuringContext = new(presenter, () => { disposedDuringContext!.Dispose(); return context; },
             4, gesture => gesture.Cancel(context));
@@ -114,6 +140,10 @@ internal static class DesktopCaptureSmokeChecks
     private static void Release(MainWindow window, Pointer pointer, Point local) =>
         window.RaiseEvent(new PointerReleasedEventArgs(window, pointer, window, Position(window, local), 0,
             new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
+
+    private static void MoveWithoutButton(MainWindow window, Pointer pointer, Point local) =>
+        window.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, window, pointer, window,
+            Position(window, local), 0, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
 
     private static void RequireX(CapturedRecordSvgPresentation source, int x)
     {

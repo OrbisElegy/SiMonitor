@@ -72,6 +72,13 @@ public sealed class NativeDragInput : IDisposable
         if (_processing || !ReferenceEquals(_pointer, e.Pointer) || _gesture is null) { return; }
         if (_gesture.IsFinished || !ReferenceEquals(_gesture, _presenter.ActiveDrag)) { ReleasePointer(); return; }
         e.Handled = true;
+        // A platform may omit the release event while focus/capture changes.
+        // A later move with no left button must not publish another preview.
+        if (!e.GetCurrentPoint(_window).Properties.IsLeftButtonPressed)
+        {
+            Interrupt();
+            return;
+        }
         _processing = true;
         try
         {

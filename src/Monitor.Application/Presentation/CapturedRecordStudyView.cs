@@ -13,6 +13,9 @@ public sealed record CapturedRecordPageDisplay(CapturedRecordStudyDisplay Study,
 }
 
 public sealed record ThemedCapturedRecordPageDisplay(CapturedRecordPageDisplay Content, Ecg12ThemeDisplay? Theme);
+public sealed record RecordScreenZoomLayout(int PageWidth, int PageHeight, int AvailableWidth, int AvailableHeight);
+public sealed record ZoomedCapturedRecordPageDisplay(ThemedCapturedRecordPageDisplay Content,
+    Ecg12ZoomDisplay? Zoom, Ecg12ScreenTransform? Transform);
 public sealed record GridCapturedRecordPageDisplay(ThemedCapturedRecordPageDisplay Content,
     EcgPaperGridPlan? GridPlan, IReadOnlyList<EcgPaperGridLine> GridLines);
 
@@ -33,6 +36,23 @@ public sealed class CapturedRecordStudyView
     }
 
     public CapturedRecordMeasurement Measurement { get; private set; }
+
+    // Coordinates in Content remain unscaled. Apply Transform to the whole page once.
+    public ZoomedCapturedRecordPageDisplay CaptureZoomedPageDisplay(CapturedRecordNavigation navigation,
+        Ecg12ThemeSelection theme, Ecg12ZoomSelection zoom, bool canPreserveGlobalSafetyOverlay,
+        int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale, RecordScreenZoomLayout layout,
+        bool allowAuxiliaryRate)
+    {
+        ArgumentNullException.ThrowIfNull(zoom);
+        ThemedCapturedRecordPageDisplay content = CaptureThemedPageDisplay(navigation, theme,
+            canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale, allowAuxiliaryRate);
+        if (!content.Content.Study.Admission.MayEnter) { return new(content, null, null); }
+        ArgumentNullException.ThrowIfNull(layout);
+        Ecg12ZoomDisplay selection = zoom.CaptureDisplay();
+        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(selection.Selection,
+            layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
+        return new(content, selection, transform);
+    }
 
     public GridCapturedRecordPageDisplay CaptureGridPageDisplay(CapturedRecordNavigation navigation,
         Ecg12ThemeSelection theme, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels,

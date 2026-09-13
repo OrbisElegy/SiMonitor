@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence), ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence),
+        new(nameof(ZoomedDisplaySuppressesDeniedContent), ZoomedDisplaySuppressesDeniedContent),
+        new(nameof(ZoomedDisplayRestoresAndRejectsInvalidLayout), ZoomedDisplayRestoresAndRejectsInvalidLayout),
+
         new(nameof(ZoomedSessionRestoresDataAndCurrentPermissions), ZoomedSessionRestoresDataAndCurrentPermissions),
         new(nameof(ZoomedSessionRejectsInvalidComponentsAtomically), ZoomedSessionRejectsInvalidComponentsAtomically),
         new(nameof(ZoomedSessionPreservesFitIntentAndBindingChecks), ZoomedSessionPreservesFitIntentAndBindingChecks),
@@ -189,6 +193,66 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedDisplayCombinesCurrentSelectionWithoutChangingEvidence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        ZoomedCapturedRecordPageDisplay first = view.CaptureZoomedPageDisplay(navigation, theme, zoom, true, 0, 100, scale, new(100, 100, 200, 200), false);
+        zoom.Select(new(Ecg12ZoomMode.FitPage, 1, 1));
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        ZoomedCapturedRecordPageDisplay current = view.CaptureZoomedPageDisplay(navigation, theme, zoom, true, 0, 100, scale, new(100, 100, 50, 75), false);
+        Check.That(first.Transform!.Factor == new ExactPlotCoordinate(3, 2) && current.Transform!.Factor == new ExactPlotCoordinate(1, 2) &&
+            current.Zoom!.Policy == SystemViewCommandAssessmentPolicy.CourseLocked && !current.Zoom.CanSelect,
+            "display snapshots retain their exact transform and current selection gate");
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair) && current.Content.Content.Study.Measurement!.Second!.X.WholePixels == 50 &&
+            current.Transform!.Forward(new(50, 1)) == new ExactPlotCoordinate(25, 1), "content remains logical and is transformed exactly once by renderer");
+    }
+
+    private static void ZoomedDisplaySuppressesDeniedContent()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        ZoomedCapturedRecordPageDisplay denied = view.CaptureZoomedPageDisplay(navigation, theme, zoom, false, 0, 100, scale, new(0, 0, 0, 0), false);
+        Check.That(!denied.Content.Content.Study.Admission.MayEnter && denied.Zoom is null && denied.Transform is null &&
+            denied.Content.Theme is null && denied.Content.Content.Study.Record is null && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "lost safety admission suppresses all display content before unused zoom geometry is evaluated");
+        ZoomedCapturedRecordPageDisplay resumed = view.CaptureZoomedPageDisplay(navigation, theme, zoom, true, 0, 100, scale, new(100, 100, 100, 100), false);
+        Check.That(resumed.Transform is not null && resumed.Content.Content.Study.Measurement!.Second is not null, "fresh admission restores current display without losing evidence");
+    }
+
+    private static void ZoomedDisplayRestoresAndRejectsInvalidLayout()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        try
+        {
+            view.CaptureZoomedPageDisplay(navigation, theme, zoom, true, 0, 100, scale, new(100, 100, 0, 100), false);
+            throw new InvalidOperationException("invalid display geometry accepted");
+        }
+        catch (Ecg12ZoomSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Zoom.InvalidGeometry", "admitted invalid geometry rejects whole display"); }
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "failed capture does not mutate measurement");
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.ActiveInstance, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled,
+            SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Disabled);
+        ZoomedCapturedRecordPageDisplay display = restored.Content.Study.View.CaptureZoomedPageDisplay(restored.Content.Study.Navigation,
+            restored.Content.Theme, restored.Zoom, true, 0, 100, scale, new(100, 100, 75, 75), false);
+        Check.That(display.Transform!.Factor == new ExactPlotCoordinate(3, 2) && !display.Zoom!.CanSelect &&
+            restored.Content.Study.View.Measurement.CurrentPair!.Second.Value == pair.Second.Value, "restore displays saved explicit scale under current disabled selection policy");
+    }
 
     private static void ZoomedSessionRestoresDataAndCurrentPermissions()
     {

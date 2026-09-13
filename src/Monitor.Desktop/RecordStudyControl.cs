@@ -13,6 +13,7 @@ namespace Monitor.Desktop;
 // Screen-only grid/calipers. Patient waveform drawing is a separate pending layer.
 public sealed class RecordStudyControl : Control
 {
+    private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
     private sealed record GridStroke(Point Start, Point End, bool Major);
     private sealed record Marker(Point Position, bool First);
     private readonly GridStroke[] _grid;
@@ -98,6 +99,7 @@ public sealed class RecordStudyControl : Control
     private void SetHover(RecordCursorHits hits)
     {
         HoveredCursors = hits;
+        Cursor = hits is RecordCursorHits.First or RecordCursorHits.Second ? MoveCursor : null;
         if (hits == RecordCursorHits.None) { ToolTip.SetIsOpen(this, false); }
         ToolTip.SetTip(this, hits switch
         {

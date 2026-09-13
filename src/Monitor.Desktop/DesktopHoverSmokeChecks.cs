@@ -99,7 +99,9 @@ internal static class DesktopHoverSmokeChecks
 
     private static void RequireHover(RecordStudyControl control, RecordCursorHits expected, string? tip)
     {
-        if (control.HoveredCursors != expected || !Equals(ToolTip.GetTip(control), tip))
+        bool movable = expected is RecordCursorHits.First or RecordCursorHits.Second;
+        if (control.HoveredCursors != expected || !Equals(ToolTip.GetTip(control), tip) ||
+            (control.Cursor is not null) != movable)
         { throw new InvalidOperationException("Native hover result or tooltip did not match current input."); }
     }
 

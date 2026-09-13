@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgHitUsesActualScaleWithoutTranslatingRadius), SvgHitUsesActualScaleWithoutTranslatingRadius),
+        new(nameof(SvgHitPreservesAmbiguityAndRejectsStaleEvidence), SvgHitPreservesAmbiguityAndRejectsStaleEvidence),
+        new(nameof(SvgHitChecksCurrentPolicyAndInvalidRadius), SvgHitChecksCurrentPolicyAndInvalidRadius),
+
         new(nameof(SvgPairPlacementCreatesExactRestorableEvidence), SvgPairPlacementCreatesExactRestorableEvidence),
         new(nameof(SvgPairPlacementFailureAllowsRetry), SvgPairPlacementFailureAllowsRetry),
         new(nameof(SvgPairPlacementRechecksSafetyAndPolicy), SvgPairPlacementRechecksSafetyAndPolicy),
@@ -233,6 +237,66 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgHitUsesActualScaleWithoutTranslatingRadius()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        ExactPlotCoordinate ox = new(-7, 3), oy = new(11, 7);
+        Check.That(input.HitTest(false, layout, screen, actual.ForwardAt(new(53, 1), ox), actual.ForwardAt(new(44, 1), oy),
+            ox, oy, actual.Forward(new(5, 1))) == RecordCursorHits.Second, "translated screen point and scaled radius preserve exact inclusive circle boundary");
+        Check.That(input.HitTest(false, layout, screen, actual.ForwardAt(new(53, 1), ox), actual.ForwardAt(new(44, 1), oy),
+            ox, oy, actual.Forward(new(49, 10))) == RecordCursorHits.None && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "radius is scaled but never translated and query does not consume current picture");
+    }
+
+    private static void SvgHitPreservesAmbiguityAndRejectsStaleEvidence()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        view.Measurement.ReplacePair(pair.Second.Value, pair.Second.Value);
+        Check.That(MeasurementReason(() => input.HitTest(false, layout, screen, actual.Forward(new(50, 1)), actual.Forward(new(40, 1)),
+            new(0, 1), new(0, 1), new(1, 1))) == "RecordMeasurement.StaleRenderedView", "hit testing rejects obsolete cursor picture after replacement");
+        CapturedRecordSvgInputSession fresh = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(fresh.HitTest(false, layout, screen, actual.Forward(new(50, 1)), actual.Forward(new(40, 1)),
+            new(0, 1), new(0, 1), new(1, 1)) == (RecordCursorHits.First | RecordCursorHits.Second), "fresh overlapping endpoints retain ambiguity without tie breaking");
+    }
+
+    private static void SvgHitChecksCurrentPolicyAndInvalidRadius()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 1, 3), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(101, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Ecg12ScreenTransform actual = input.Display.RenderedTransform!;
+        Check.That(MeasurementReason(() => input.HitTest(false, layout, screen, actual.Forward(new(50, 1)), actual.Forward(new(40, 1)),
+            new(0, 1), new(0, 1), new(1, 0))) == "RecordMeasurement.InvalidHitRadius", "malformed screen radius rejects before inverse conversion");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => input.HitTest(false, layout, screen, actual.Forward(new(50, 1)), actual.Forward(new(40, 1)),
+            new(0, 1), new(0, 1), new(1, 1))) == "RecordMeasurement.CourseLocked" && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "current measurement policy suppresses hit results from formerly enabled picture");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(input.HitTest(false, layout, screen, actual.Forward(new(50, 1)), actual.Forward(new(40, 1)),
+            new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second, "nonmutating rejection keeps current evidence queryable after policy recovery");
+    }
 
     private static void SvgPairPlacementCreatesExactRestorableEvidence()
     {

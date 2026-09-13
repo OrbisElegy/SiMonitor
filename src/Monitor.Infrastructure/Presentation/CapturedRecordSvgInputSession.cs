@@ -40,6 +40,20 @@ public sealed class CapturedRecordSvgInputSession
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
 
+    public RecordCursorHits HitTest(bool canPreserveGlobalSafetyOverlay,
+        CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
+        ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX,
+        ExactPlotCoordinate originY, ExactPlotCoordinate radius)
+    {
+        ValidateCurrent(layout, screen);
+        if (radius is null || radius.Numerator <= 0 || radius.Denominator <= 0)
+        { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidHitRadius", nameof(radius)); }
+        Ecg12ScreenTransform transform = Display.RenderedTransform!;
+        return _view.HitTestOnCurrentPage(_navigation, canPreserveGlobalSafetyOverlay,
+            layout.PlotLeftPixels, layout.PlotWidthPixels, layout.VerticalScale,
+            transform.InverseAt(windowX, originX), transform.InverseAt(windowY, originY), transform.Inverse(radius));
+    }
+
     public CapturedRecordCursorPair PlacePair(bool canPreserveGlobalSafetyOverlay,
         CapturedRecordSvgLayout layout, RecordScreenZoomLayout screen,
         ExactPlotCoordinate firstWindowX, ExactPlotCoordinate firstWindowY,

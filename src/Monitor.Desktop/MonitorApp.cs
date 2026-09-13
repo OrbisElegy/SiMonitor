@@ -29,6 +29,7 @@ public sealed class MonitorApp : Avalonia.Application
                     if (valid) { DesktopButtonSmokeChecks.Verify(window); }
                     if (valid) { DesktopPointerSmokeChecks.Verify(window); }
                     if (valid) { DesktopHoverSmokeChecks.Verify(window); }
+                    if (valid) { DesktopDragSmokeChecks.Verify(window); }
                     if (valid)
                     {
                         Directory.CreateDirectory("artifacts");

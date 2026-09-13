@@ -195,7 +195,38 @@ public sealed class RecordStudyPresenter
         { throw new CapturedRecordMeasurementException("RecordMeasurement.StaleRenderedView", nameof(expectedInput)); }
     }
 
-    private void WithdrawCommandFailure(Exception exception)
+    public NativeStudyDrag BeginDrag(CapturedRecordSvgInputSession expectedInput,
+        RecordStudyCommandContext context, Point windowPoint, Point currentPageOrigin, double radius)
+    {
+        RequireCurrentInput(expectedInput);
+        ArgumentNullException.ThrowIfNull(context);
+        ExactPlotCoordinate x = NativeLogicalCoordinate.FromDouble(windowPoint.X);
+        ExactPlotCoordinate y = NativeLogicalCoordinate.FromDouble(windowPoint.Y);
+        ExactPlotCoordinate ox = NativeLogicalCoordinate.FromDouble(currentPageOrigin.X);
+        ExactPlotCoordinate oy = NativeLogicalCoordinate.FromDouble(currentPageOrigin.Y);
+        ExactPlotCoordinate r = NativeLogicalCoordinate.FromDouble(radius);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(radius);
+        try
+        {
+            return new(this, expectedInput.BeginDrag(context.CanPreserveGlobalSafetyOverlay,
+                context.Layout, context.Screen, x, y, ox, oy, r));
+        }
+        catch (CapturedRecordMeasurementException exception) when
+            (exception.ReasonCode is "RecordMeasurement.InvalidPoint" or "RecordMeasurement.NoCursorHit" or "RecordMeasurement.AmbiguousCursorHit")
+        { throw; }
+        catch (Exception exception)
+        {
+            WithdrawCommandFailure(exception);
+            throw;
+        }
+    }
+
+    internal bool IsPresented => _presentation.Current is { } input && ReferenceEquals(input, _window.CurrentPublication?.Input);
+
+    internal void Refresh(RecordStudyCommandContext context) => Refresh(context.CanPreserveGlobalSafetyOverlay,
+        context.Layout, context.Screen, context.GridStyle, context.CursorStyle, context.AllowAuxiliaryRate);
+
+    internal void WithdrawCommandFailure(Exception exception)
     {
         _presentation.Withdraw();
         CapturedRecordSvgPublication failed = exception switch

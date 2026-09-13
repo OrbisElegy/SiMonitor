@@ -6,6 +6,10 @@ using Monitor.Infrastructure.Presentation;
 
 namespace Monitor.Desktop;
 
+public sealed record RecordStudyCommandContext(bool CanPreserveGlobalSafetyOverlay,
+    CapturedRecordSvgLayout Layout, RecordScreenZoomLayout Screen,
+    EcgPaperGridSvgStyle GridStyle, EcgManualCursorSvgStyle CursorStyle, bool AllowAuxiliaryRate);
+
 // One serialized presenter owns a window's study updates. It does not own data
 // or authorize navigation, and retained gestures still require explicit resolution.
 public sealed class RecordStudyPresenter
@@ -60,6 +64,43 @@ public sealed class RecordStudyPresenter
         Dispatcher.UIThread.VerifyAccess();
         _presentation.Withdraw();
         _window.ApplyPublication(_presentation.Publication);
+    }
+
+    // Resolve trusted current inputs at activation, not when the button is bound.
+    public void BindClearButton(Func<RecordStudyCommandContext> currentContext)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(currentContext);
+        _window.SetClearCommand(input =>
+        {
+            try
+            {
+                RecordStudyCommandContext context = currentContext();
+                ArgumentNullException.ThrowIfNull(context);
+                ClearPair(input, context.CanPreserveGlobalSafetyOverlay, context.Layout,
+                    context.Screen, context.GridStyle, context.CursorStyle, context.AllowAuxiliaryRate);
+            }
+            catch (CapturedRecordMeasurementException exception) when (exception.ReasonCode == "RecordMeasurement.StaleRenderedView")
+            {
+                // A superseded activation must not remove a newer picture.
+            }
+            catch (Exception)
+            {
+                // Clear/Refresh already publish their failures. A context-provider
+                // failure occurs earlier and must also withdraw both boundaries.
+                if (_window.CurrentPublication?.Input is not null)
+                {
+                    _presentation.Withdraw();
+                    _window.ApplyPublication(new(CapturedRecordSvgStatus.Failed, "DesktopStudy.CommandContextFailed", null));
+                }
+            }
+        });
+    }
+
+    public void UnbindClearButton()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _window.SetClearCommand(null);
     }
 
     // The caller captures the input shown when the command is issued. A queued

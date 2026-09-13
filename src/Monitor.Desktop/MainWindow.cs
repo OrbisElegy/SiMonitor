@@ -13,6 +13,14 @@ public sealed class MainWindow : Window
 {
     private readonly TextBlock _recordStatus;
     private readonly ContentControl _recordContent = new();
+    private readonly Button _clearCursors = new()
+    {
+        Content = "清除卡尺",
+        IsVisible = false,
+        IsEnabled = false,
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
+    private Action<CapturedRecordSvgInputSession>? _clearCommand;
 
     public MainWindow()
     {
@@ -22,6 +30,11 @@ public sealed class MainWindow : Window
         MinWidth = 640;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        _clearCursors.Click += (_, _) =>
+        {
+            if (_clearCursors.IsEnabled && CurrentPublication?.Input is { } input)
+            { _clearCommand?.Invoke(input); }
+        };
         _recordStatus = new TextBlock
         {
             Text = "尚未载入已验证记录",
@@ -42,6 +55,7 @@ public sealed class MainWindow : Window
                         HorizontalAlignment = HorizontalAlignment.Center },
                     _recordStatus,
                     _recordContent,
+                    _clearCursors,
                     new TextBlock { Text = "仅用于教学模拟", TextWrapping = TextWrapping.Wrap,
                         HorizontalAlignment = HorizontalAlignment.Center },
                 },
@@ -59,6 +73,7 @@ public sealed class MainWindow : Window
         // Withdraw first: malformed or unavailable updates cannot retain old visual input.
         _recordContent.Content = null;
         CurrentPublication = null;
+        UpdateClearButton();
         _recordStatus.Text = "暂时无法显示记录";
         if (publication is null || !Enum.IsDefined(publication.Status) || string.IsNullOrWhiteSpace(publication.ReasonCode) ||
             (publication.Status == CapturedRecordSvgStatus.Ready ? publication.Input is null || readyContent is null || !ReferenceEquals(readyContent.InputSession, publication.Input) : publication.Input is not null))
@@ -76,7 +91,24 @@ public sealed class MainWindow : Window
         if (publication.Status == CapturedRecordSvgStatus.Ready) { _recordContent.Content = readyContent; }
         _recordStatus.Text = message;
         CurrentPublication = publication;
+        UpdateClearButton();
     }
+
+    internal void SetClearCommand(Action<CapturedRecordSvgInputSession>? command)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _clearCommand = command;
+        UpdateClearButton();
+    }
+
+    private void UpdateClearButton()
+    {
+        _clearCursors.IsVisible = _clearCommand is not null && CurrentPublication?.Input is not null;
+        _clearCursors.IsEnabled = _clearCursors.IsVisible &&
+            CurrentPublication!.Input!.Display.Content.Content.Display.Content.Content.Study.Measurement?.ReasonCode == "RecordMeasurement.Ready";
+    }
+
+    internal Button ClearCursorButton => _clearCursors;
 
     internal bool HasUnloadedRecordState => _recordStatus.Text == "尚未载入已验证记录" && _recordContent.Content is null;
     internal bool HasNoRecordContent => _recordContent.Content is null;

@@ -11,6 +11,7 @@ public sealed class CapturedRecordSvgInputSession
     private readonly CapturedRecordNavigation _navigation;
     private readonly Ecg12ZoomSelection _zoom;
     private readonly CapturedRecordMeasurement _measurement;
+    private readonly CapturedRecordCursorPair? _renderedPair;
     private readonly CapturedRecordPage _page;
     private readonly Ecg12ZoomState _selection;
     private readonly CapturedRecordSvgLayout _layout;
@@ -30,6 +31,7 @@ public sealed class CapturedRecordSvgInputSession
         _navigation = navigation;
         _zoom = zoom;
         _measurement = view.Measurement;
+        _renderedPair = _measurement.CurrentPair;
         _page = navigation.CurrentPage;
         _selection = zoom.Selection;
         _layout = layout;
@@ -44,6 +46,7 @@ public sealed class CapturedRecordSvgInputSession
         ExactPlotCoordinate windowX, ExactPlotCoordinate windowY, ExactPlotCoordinate originX, ExactPlotCoordinate originY)
     {
         if (_stale || !ReferenceEquals(_view.Measurement, _measurement) || !ReferenceEquals(_navigation.CurrentPage, _page) ||
+            !ReferenceEquals(_measurement.CurrentPair, _renderedPair) ||
             !ReferenceEquals(_zoom.Selection, _selection) || layout != _layout || screen != _screen)
         {
             _stale = true;

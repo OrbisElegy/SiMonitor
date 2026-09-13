@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(SvgInputRejectsReplacedAndRestoredPairIdentity), SvgInputRejectsReplacedAndRestoredPairIdentity),
+        new(nameof(SvgInputRequiresRefreshAfterSuccessButAllowsFailedRetry), SvgInputRequiresRefreshAfterSuccessButAllowsFailedRetry),
+
         new(nameof(SvgInputUsesRenderedScaleAndCurrentOrigin), SvgInputUsesRenderedScaleAndCurrentOrigin),
         new(nameof(SvgInputRejectsStalePageAndZoom), SvgInputRejectsStalePageAndZoom),
         new(nameof(SvgInputChecksCurrentMeasurementPolicy), SvgInputChecksCurrentMeasurementPolicy),
@@ -226,6 +229,48 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void SvgInputRejectsReplacedAndRestoredPairIdentity()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        view.Measurement.ClearPair();
+        CapturedRecordCursorPair replacement = view.Measurement.ReplacePair(pair.First.Value, pair.Second.Value);
+        Check.That(MeasurementReason(() => input.MoveCursor(false, layout, screen, RecordCursorEnd.Second,
+            new(75, 1), new(30, 1), new(0, 1), new(0, 1))) == "RecordMeasurement.StaleRenderedView" &&
+            ReferenceEquals(view.Measurement.CurrentPair, replacement), "clear and equal-value replacement cannot make an old picture current again");
+        CapturedRecordSvgInputSession refreshed = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        CapturedRecordCursorPair moved = refreshed.MoveCursor(false, layout, screen, RecordCursorEnd.Second,
+            new(75, 1), new(30, 1), new(0, 1), new(0, 1));
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == moved.Second.Value && moved.Second.Value.DataTimeNs == 75_000_000, "fresh render accepts replacement and publishes restorable evidence");
+    }
+
+    private static void SvgInputRequiresRefreshAfterSuccessButAllowsFailedRetry()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
+        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
+        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(MeasurementReason(() => input.MoveCursor(false, layout, screen, RecordCursorEnd.Second,
+            new(100, 1), new(30, 1), new(0, 1), new(0, 1))) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "failed input preserves rendered pair and does not consume session");
+        CapturedRecordCursorPair accepted = input.MoveCursor(false, layout, screen, RecordCursorEnd.Second,
+            new(75, 1), new(30, 1), new(0, 1), new(0, 1));
+        Check.That(MeasurementReason(() => input.MoveCursor(false, layout, screen, RecordCursorEnd.Second,
+            new(80, 1), new(30, 1), new(0, 1), new(0, 1))) == "RecordMeasurement.StaleRenderedView" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "successful edit requires a new displayed snapshot before another command");
+    }
 
     private static void SvgInputUsesRenderedScaleAndCurrentOrigin()
     {

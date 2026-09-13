@@ -21,6 +21,13 @@ public sealed class MainWindow : Window
         HorizontalAlignment = HorizontalAlignment.Center,
     };
     private readonly ContentControl _recordContent = new();
+    private readonly Button _resetDemo = new()
+    {
+        Content = "重置测试卡尺",
+        IsVisible = false,
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
+    private Action? _resetDemoAction;
     private readonly Button _clearCursors = new()
     {
         Content = "清除卡尺",
@@ -39,6 +46,7 @@ public sealed class MainWindow : Window
         MinWidth = 640;
         MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        _resetDemo.Click += (_, _) => _resetDemoAction?.Invoke();
         _clearCursors.Click += (_, _) =>
         {
             if (_clearCursors.IsEnabled && CurrentPublication?.Input is { } input)
@@ -66,6 +74,7 @@ public sealed class MainWindow : Window
                     _demoNotice,
                     _recordContent,
                     _clearCursors,
+                    _resetDemo,
                     new TextBlock { Text = "仅用于教学模拟", TextWrapping = TextWrapping.Wrap,
                         HorizontalAlignment = HorizontalAlignment.Center },
                 },
@@ -75,6 +84,15 @@ public sealed class MainWindow : Window
 
     public CapturedRecordSvgPublication? CurrentPublication { get; private set; }
     internal bool HasDemoNotice => _demoNotice.IsVisible;
+    internal Button ResetDemoButton => _resetDemo;
+
+    internal void SetDemoReset(Action reset)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        _resetDemoAction = reset;
+        _resetDemo.IsVisible = true;
+        _demoNotice.Text = "合成测试记录 · 蓝色为时间起点，红色为终点，起点不能晚于终点；清除后可重置";
+    }
 
     internal void ShowDemoNotice()
     {

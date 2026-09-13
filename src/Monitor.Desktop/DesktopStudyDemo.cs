@@ -7,13 +7,24 @@ internal static class DesktopStudyDemo
     public static void Start(MainWindow window)
     {
         window.ShowDemoNotice();
-        RecordStudyPresenter presenter = new(window, DesktopStudySmokeFixture.CreatePresentation(zoomNumerator: 4));
-        presenter.BindClearButton(Context);
-        presenter.BindPointerQueries(Context, 8);
-        // The demo explicitly chooses current-policy rollback on interruption.
-        // NativeDragInput owns its subscriptions until the window closes.
-        _ = new NativeDragInput(presenter, Context, 8, gesture => gesture.Cancel(Context()));
-        presenter.Refresh(Context());
+        RecordStudyPresenter? presenter = null;
+        NativeDragInput? input = null;
+        void Reset()
+        {
+            input?.Dispose();
+            presenter?.ActiveDrag?.ReleaseWithoutRollback();
+            presenter?.UnbindClearButton();
+            presenter?.UnbindPointerQueries();
+            presenter?.Withdraw();
+            presenter = new(window, DesktopStudySmokeFixture.CreatePresentation(zoomNumerator: 4));
+            presenter.BindClearButton(Context);
+            presenter.BindPointerQueries(Context, 8);
+            // Reset replaces synthetic test data only; never a production record.
+            input = new NativeDragInput(presenter, Context, 8, gesture => gesture.Cancel(Context()));
+            presenter.Refresh(Context());
+        }
+        window.SetDemoReset(Reset);
+        Reset();
     }
 
     private static RecordStudyCommandContext Context() => new(false,

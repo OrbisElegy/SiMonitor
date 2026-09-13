@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedDragPreservesOffsetAndFinalRelease), ZoomedDragPreservesOffsetAndFinalRelease),
+        new(nameof(ZoomedDragRejectsZoomRoundTripAndResize), ZoomedDragRejectsZoomRoundTripAndResize),
+        new(nameof(ZoomedDragFailureKeepsPreviewAndCurrentPolicy), ZoomedDragFailureKeepsPreviewAndCurrentPolicy),
+
         new(nameof(ZoomedHitPreservesScreenRadius), ZoomedHitPreservesScreenRadius),
         new(nameof(ZoomedHitReportsAmbiguityAndRejectsInvalidInputs), ZoomedHitReportsAmbiguityAndRejectsInvalidInputs),
         new(nameof(ZoomedHitUsesRestoredCurrentPolicy), ZoomedHitUsesRestoredCurrentPolicy),
@@ -205,6 +209,67 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedDragPreservesOffsetAndFinalRelease()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 100, 100);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordZoomedDrag drag = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(104, 1), new(84, 1), new(6, 1));
+        Check.That(drag.PreviewPointer(false, 0, 100, scale, layout, new(104, 1), new(84, 1)).Second.Value == pair.Second.Value, "scaled edge press does not jump cursor");
+        CapturedRecordCursorPair released = drag.CommitPointer(false, 0, 100, scale, layout, new(154, 1), new(64, 1));
+        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) &&
+            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished", "final screen position uses grab offset and closes gesture");
+        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
+        Check.That(restored.Second.Value == released.Second.Value, "only final data evidence survives restore");
+    }
+
+    private static void ZoomedDragRejectsZoomRoundTripAndResize()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 100, 100);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordZoomedDrag drag = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(104, 1), new(84, 1), new(6, 1));
+        zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1));
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 2, 1));
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, layout, new(154, 1), new(64, 1))) == "RecordMeasurement.DragLayoutChanged" &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "zoom round trip between events invalidates original selection identity");
+        drag.Cancel();
+        CapturedRecordZoomedDrag resized = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout, new(104, 1), new(84, 1), new(6, 1));
+        Check.That(MeasurementReason(() => resized.PreviewPointer(false, 0, 100, scale, layout with { AvailableWidth = 99 }, new(104, 1), new(84, 1))) == "RecordMeasurement.DragLayoutChanged" &&
+            MeasurementReason(() => resized.PreviewPointer(false, 0, 100, scale, layout, new(104, 1), new(84, 1))) == "RecordMeasurement.DragLayoutChanged",
+            "observed size mismatch stays latched after returning to original layout");
+        Check.That(resized.Cancel().Second.Value == pair.Second.Value, "layout rejection allows original-value rollback");
+    }
+
+    private static void ZoomedDragFailureKeepsPreviewAndCurrentPolicy()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 100, 100);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordZoomedDrag drag = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(104, 1), new(84, 1), new(6, 1));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, 0, 100, scale, layout, new(124, 1), new(84, 1));
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, layout, new(204, 1), new(64, 1))) == "RecordMeasurement.InvalidPoint" &&
+            ReferenceEquals(view.Measurement.CurrentPair, accepted), "invalid final adjusted target preserves accepted preview");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(MeasurementReason(() => drag.CommitPointer(false, 0, 100, scale, layout, new(154, 1), new(64, 1))) == "RecordMeasurement.CourseLocked",
+            "current measurement lock rejects release");
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        Check.That(drag.Cancel().Second.Value == pair.Second.Value, "zoom permission update alone does not invalidate measurement rollback");
+    }
 
     private static void ZoomedHitPreservesScreenRadius()
     {

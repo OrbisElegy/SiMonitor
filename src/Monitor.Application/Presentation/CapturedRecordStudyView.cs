@@ -196,6 +196,12 @@ public sealed class CapturedRecordStudyView
         return Measurement.HitTestCursors(transform.Inverse(x), transform.Inverse(y), transform.Inverse(radius), viewport, scale);
     }
 
+    public CapturedRecordZoomedDrag BeginCursorDragOnZoomedPage(CapturedRecordNavigation navigation,
+        Ecg12ZoomSelection zoom, bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels,
+        EcgVerticalScale scale, RecordScreenZoomLayout layout, ExactPlotCoordinate x, ExactPlotCoordinate y,
+        ExactPlotCoordinate radius) => new(this, navigation, zoom, canPreserveGlobalSafetyOverlay,
+            plotLeftPixels, plotWidthPixels, scale, layout, x, y, radius);
+
     public CapturedRecordCursorPair MoveCursorOnCurrentPage(CapturedRecordNavigation navigation,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
         RecordCursorEnd end, ExactPlotCoordinate x, ExactPlotCoordinate y)

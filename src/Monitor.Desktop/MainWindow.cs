@@ -13,6 +13,13 @@ namespace Monitor.Desktop;
 public sealed class MainWindow : Window
 {
     private readonly TextBlock _recordStatus;
+    private readonly TextBlock _demoNotice = new()
+    {
+        Text = "合成测试记录 · 仅用于界面交互验证",
+        IsVisible = false,
+        TextWrapping = TextWrapping.Wrap,
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
     private readonly ContentControl _recordContent = new();
     private readonly Button _clearCursors = new()
     {
@@ -56,6 +63,7 @@ public sealed class MainWindow : Window
                     new TextBlock { Text = "心电监护教学模拟", FontSize = 32, TextWrapping = TextWrapping.Wrap,
                         HorizontalAlignment = HorizontalAlignment.Center },
                     _recordStatus,
+                    _demoNotice,
                     _recordContent,
                     _clearCursors,
                     new TextBlock { Text = "仅用于教学模拟", TextWrapping = TextWrapping.Wrap,
@@ -66,6 +74,14 @@ public sealed class MainWindow : Window
     }
 
     public CapturedRecordSvgPublication? CurrentPublication { get; private set; }
+    internal bool HasDemoNotice => _demoNotice.IsVisible;
+
+    internal void ShowDemoNotice()
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        Title = "心电监护教学模拟 — 合成记录交互验证";
+        _demoNotice.IsVisible = true;
+    }
     internal event EventHandler? PublicationChanging;
 
     // Caller supplies a native record control built for this same publication.

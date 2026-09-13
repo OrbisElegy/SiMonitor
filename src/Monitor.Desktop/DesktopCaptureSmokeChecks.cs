@@ -163,7 +163,7 @@ internal static class DesktopCaptureSmokeChecks
         return window.RecordControl!.TranslatePoint(local, window)!.Value;
     }
 
-    private static void Press(MainWindow window, Pointer pointer, Point local)
+    internal static void Press(MainWindow window, Pointer pointer, Point local)
     {
         Point point = Position(window, local);
         RecordStudyControl control = window.RecordControl!;
@@ -171,11 +171,11 @@ internal static class DesktopCaptureSmokeChecks
             new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed), KeyModifiers.None, 1));
     }
 
-    private static void Move(MainWindow window, Pointer pointer, Point local) =>
+    internal static void Move(MainWindow window, Pointer pointer, Point local) =>
         window.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, window, pointer, window,
             Position(window, local), 0, new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other), KeyModifiers.None));
 
-    private static void Release(MainWindow window, Pointer pointer, Point local) =>
+    internal static void Release(MainWindow window, Pointer pointer, Point local) =>
         window.RaiseEvent(new PointerReleasedEventArgs(window, pointer, window, Position(window, local), 0,
             new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
 

@@ -17,6 +17,7 @@ public sealed class MonitorApp : Avalonia.Application
         {
             MainWindow window = new();
             desktop.MainWindow = window;
+            if (desktop.Args is ["--study-demo"]) { DesktopStudyDemo.Start(window); }
             if (desktop.Args is ["--smoke-test"])
             {
                 window.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -31,6 +32,7 @@ public sealed class MonitorApp : Avalonia.Application
                     if (valid) { DesktopHoverSmokeChecks.Verify(window); }
                     if (valid) { DesktopDragSmokeChecks.Verify(window); }
                     if (valid) { DesktopCaptureSmokeChecks.Verify(window); }
+                    if (valid) { DesktopDemoSmokeChecks.Verify(); }
                     if (valid)
                     {
                         Directory.CreateDirectory("artifacts");

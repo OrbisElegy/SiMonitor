@@ -7,7 +7,7 @@ using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Desktop;
 
-// Test-only data: constructed exclusively by --smoke-test, never normal startup.
+// Synthetic data for --smoke-test and explicit --study-demo; never normal startup.
 internal static class DesktopStudySmokeFixture
 {
     public static EcgPaperGridSvgStyle GridStyle => new("#f0cccc", "#cc9999", 500, 1000);
@@ -23,7 +23,7 @@ internal static class DesktopStudySmokeFixture
     }
 
     public static CapturedRecordSvgPresentation CreatePresentation(bool hideMeasurement = false,
-        bool firstOutsidePlot = false, bool activeInstance = false)
+        bool firstOutsidePlot = false, bool activeInstance = false, uint zoomNumerator = 2)
     {
         Guid session = Guid.Parse("11111111-1111-4111-8111-111111111111");
         Guid instance = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -52,6 +52,6 @@ internal static class DesktopStudySmokeFixture
         if (hideMeasurement) { view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled); }
         return new(view, navigation,
             new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true),
-            new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled));
+            new(new(Ecg12ZoomMode.ExplicitScale, zoomNumerator, 1), SystemViewCommandAssessmentPolicy.Enabled));
     }
 }

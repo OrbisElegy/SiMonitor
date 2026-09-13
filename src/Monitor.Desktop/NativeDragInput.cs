@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
 
@@ -42,6 +43,7 @@ public sealed class NativeDragInput : IDisposable
         _window.PointerCaptureLost += CaptureLost;
         _window.Closed += Closed;
         _window.Deactivated += Deactivated;
+        _window.AddHandler(InputElement.KeyDownEvent, KeyDown, RoutingStrategies.Tunnel);
         _window.PublicationChanging += PublicationChanging;
     }
 
@@ -134,6 +136,17 @@ public sealed class NativeDragInput : IDisposable
         if (ReferenceEquals(_pointer, e.Pointer)) { Interrupt(); }
     }
 
+    private void KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_processing || e.Handled || e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None ||
+            _pointer is null || _gesture is null || _gesture.IsFinished ||
+            !ReferenceEquals(_gesture, _presenter.ActiveDrag)) { return; }
+        e.Handled = true;
+        _processing = true;
+        try { Interrupt(); }
+        finally { _processing = false; }
+    }
+
     private void Fail(Exception exception)
     {
         if (_presenter.IsPresented) { _presenter.WithdrawCommandFailure(exception); }
@@ -185,6 +198,7 @@ public sealed class NativeDragInput : IDisposable
         _window.PointerCaptureLost -= CaptureLost;
         _window.Closed -= Closed;
         _window.Deactivated -= Deactivated;
+        _window.RemoveHandler(InputElement.KeyDownEvent, KeyDown);
         _window.PublicationChanging -= PublicationChanging;
         _window.SetDragInput(null);
         Interrupt();

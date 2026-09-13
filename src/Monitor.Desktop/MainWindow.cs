@@ -98,7 +98,7 @@ public sealed class MainWindow : Window
         Dispatcher.UIThread.VerifyAccess();
         _resetDemoAction = reset;
         _resetDemo.IsVisible = true;
-        _demoNotice.Text = "合成测试记录 · 蓝色为时间起点，红色为终点，起点不能晚于终点；清除后可重置";
+        _demoNotice.Text = "合成测试记录 · 蓝色为时间起点，红色为终点，起点不能晚于终点；拖动中按 Esc 取消，清除后可重置";
     }
 
     internal void ShowDemoNotice()

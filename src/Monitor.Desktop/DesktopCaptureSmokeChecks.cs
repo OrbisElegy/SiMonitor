@@ -61,6 +61,7 @@ internal static class DesktopCaptureSmokeChecks
         if (pointer.Captured is not null || presenter.ActiveDrag is not null || window.RecordControl!.IsHitTestVisible || interruptions != 4)
         { throw new InvalidOperationException("Route disposal did not remove capture and handlers."); }
         VerifyRejectedRelease(window, source, presenter, context, pointer);
+        VerifyEscape(window, source, presenter, context, pointer);
         int missingReleases = 0;
         int moveContexts = 0;
         using (NativeDragInput recovery = new(presenter, () => { moveContexts++; return context; },
@@ -146,6 +147,57 @@ internal static class DesktopCaptureSmokeChecks
         if (pointer.Captured is not null || closingPresenter.ActiveDrag is not null || closingSource.Current is not null || closing.DragInput is not null)
         { throw new InvalidOperationException("Window close retained drag capture or native input."); }
         Console.WriteLine("ok: native press/move/release capture, redraw continuity, interruption and cleanup");
+    }
+
+    private static void VerifyEscape(MainWindow window, CapturedRecordSvgPresentation source,
+        RecordStudyPresenter presenter, RecordStudyCommandContext context, Pointer pointer)
+    {
+        int cancelled = 0;
+        using (NativeDragInput route = new(presenter, () => context, 4,
+            gesture => { cancelled++; gesture.Cancel(context); }))
+        {
+            if (SendKey(window, Key.Escape).Handled || cancelled != 0)
+            { throw new InvalidOperationException("Idle Escape activated a measurement command."); }
+            Press(window, pointer, new(70, 50));
+            Move(window, pointer, new(80, 50));
+            RequireX(source, 40);
+            if (SendKey(window, Key.Enter).Handled || SendKey(window, Key.Escape, KeyModifiers.Control).Handled || cancelled != 0)
+            { throw new InvalidOperationException("Unrelated key interrupted a drag."); }
+            if (!SendKey(window, Key.Escape).Handled || cancelled != 1 || pointer.Captured is not null || presenter.ActiveDrag is not null)
+            { throw new InvalidOperationException("Escape did not end native drag capture."); }
+            RequireX(source, 35);
+            if (window.MeasurementReadoutText != "Δt：80 ms    ΔV（终点−起点）：-0.05 mV")
+            { throw new InvalidOperationException("Escape did not restore the measurement readout."); }
+            CapturedRecordSvgPublication restored = source.Publication;
+            if (SendKey(window, Key.Escape).Handled) { throw new InvalidOperationException("Repeated Escape was consumed."); }
+            Release(window, pointer, new(100, 50));
+            if (!ReferenceEquals(restored, source.Publication) || cancelled != 1)
+            { throw new InvalidOperationException("Late release changed Escape recovery."); }
+            Press(window, pointer, new(70, 50));
+            Release(window, pointer, new(70, 50));
+            RequireX(source, 35);
+        }
+        if (SendKey(window, Key.Escape).Handled || cancelled != 1)
+        { throw new InvalidOperationException("Disposed route retained its Escape handler."); }
+        using (NativeDragInput failing = new(presenter, () => context, 4,
+            _ => throw new InvalidOperationException("Synthetic Escape policy failure")))
+        {
+            Press(window, pointer, new(70, 50));
+            SendKey(window, Key.Escape);
+            if (pointer.Captured is not null || presenter.ActiveDrag is null || source.Current is not null || window.MeasurementReadoutText is not null)
+            { throw new InvalidOperationException("Failed Escape policy retained output or lost gesture ownership."); }
+            presenter.ActiveDrag.ReleaseWithoutRollback();
+        }
+        presenter.Refresh(context);
+        RequireX(source, 35);
+        Console.WriteLine("ok: drag Escape rollback, key isolation, late release and route disposal");
+    }
+
+    private static KeyEventArgs SendKey(MainWindow window, Key key, KeyModifiers modifiers = KeyModifiers.None)
+    {
+        KeyEventArgs e = new() { RoutedEvent = InputElement.KeyDownEvent, Key = key, KeyModifiers = modifiers };
+        window.RaiseEvent(e);
+        return e;
     }
 
     private static void VerifyRejectedRelease(MainWindow window, CapturedRecordSvgPresentation source,

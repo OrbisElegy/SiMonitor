@@ -52,8 +52,8 @@ public sealed class MainWindow : Window
     public CapturedRecordSvgPublication? CurrentPublication { get; private set; }
 
     // Caller supplies a native record control built for this same publication.
-    // Invoke on the UI thread; native record drawing/input integration remains separate.
-    public void ApplyPublication(CapturedRecordSvgPublication publication, Control? readyContent = null)
+    // Invoke on the UI thread; native waveform/input integration remains separate.
+    public void ApplyPublication(CapturedRecordSvgPublication publication, RecordStudyControl? readyContent = null)
     {
         Dispatcher.UIThread.VerifyAccess();
         // Withdraw first: malformed or unavailable updates cannot retain old visual input.
@@ -61,7 +61,7 @@ public sealed class MainWindow : Window
         CurrentPublication = null;
         _recordStatus.Text = "暂时无法显示记录";
         if (publication is null || !Enum.IsDefined(publication.Status) || string.IsNullOrWhiteSpace(publication.ReasonCode) ||
-            (publication.Status == CapturedRecordSvgStatus.Ready ? publication.Input is null || readyContent is null : publication.Input is not null))
+            (publication.Status == CapturedRecordSvgStatus.Ready ? publication.Input is null || readyContent is null || !ReferenceEquals(readyContent.InputSession, publication.Input) : publication.Input is not null))
         { throw new ArgumentException("Incomplete desktop publication", nameof(publication)); }
         string message = publication.Status switch
         {

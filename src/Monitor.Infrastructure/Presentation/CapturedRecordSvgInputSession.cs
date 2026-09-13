@@ -43,6 +43,7 @@ public sealed class CapturedRecordSvgInputSession
     }
 
     public ZoomedCapturedRecordSvgScreenLayers Display { get; }
+    public CapturedRecordSvgLayout Layout => _layout;
 
     // Build a replacement from current shared state. Do not replace a retained active drag.
     public CapturedRecordSvgInputSession Refresh(bool canPreserveGlobalSafetyOverlay,

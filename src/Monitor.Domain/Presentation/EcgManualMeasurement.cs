@@ -10,7 +10,7 @@ public sealed class EcgManualMeasurementException(string reasonCode, string para
 }
 
 // Caller-resolved cursors from one authorized record, never detected wave boundaries.
-public sealed record EcgManualCursor(long DataTimeNs, long MicrovoltsNumerator, uint MicrovoltsDenominator);
+public sealed record EcgManualCursor(long DataTimeNs, long NumeratorMicrovolts, uint Denominator);
 public sealed record EcgMeasurementRatio(BigInteger Numerator, BigInteger Denominator);
 public sealed record EcgManualMeasurementResult(EcgMeasurementRatio ElapsedMilliseconds,
     EcgMeasurementRatio AmplitudeChangeMillivolts, EcgMeasurementRatio? AuxiliaryRatePerMinute);
@@ -27,22 +27,22 @@ public static class EcgManualMeasurement
         if (second.DataTimeNs < first.DataTimeNs)
         { throw new EcgManualMeasurementException("ManualMeasurement.TimeReversed", nameof(second)); }
         BigInteger elapsed = (BigInteger)second.DataTimeNs - first.DataTimeNs;
-        BigInteger amplitude = (BigInteger)second.MicrovoltsNumerator * first.MicrovoltsDenominator -
-            (BigInteger)first.MicrovoltsNumerator * second.MicrovoltsDenominator;
-        BigInteger amplitudeDenominator = (BigInteger)first.MicrovoltsDenominator * second.MicrovoltsDenominator * 1000;
+        BigInteger amplitude = (BigInteger)second.NumeratorMicrovolts * first.Denominator -
+            (BigInteger)first.NumeratorMicrovolts * second.Denominator;
+        BigInteger amplitudeDenominator = (BigInteger)first.Denominator * second.Denominator * 1000;
         return new(Ratio(elapsed, 1_000_000), Ratio(amplitude, amplitudeDenominator),
             allowAuxiliaryRate && elapsed > 0 ? Ratio(60_000_000_000, elapsed) : null);
     }
 
     private static void Validate(EcgManualCursor cursor, string parameterName)
     {
-        if (cursor is null || cursor.DataTimeNs < 0 || cursor.MicrovoltsDenominator == 0)
+        if (cursor is null || cursor.DataTimeNs < 0 || cursor.Denominator == 0)
         { throw new EcgManualMeasurementException("ManualMeasurement.InvalidCursor", parameterName); }
     }
 
     private static EcgMeasurementRatio Ratio(BigInteger numerator, BigInteger denominator)
     {
-        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
         return new(numerator / divisor, denominator / divisor);
     }
 }

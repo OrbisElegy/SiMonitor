@@ -40,6 +40,17 @@ public sealed class CapturedRecordStudyView
 
     public CapturedRecordMeasurement Measurement { get; private set; }
 
+    public CapturedRecordPathPageDisplay CapturePathPageDisplay(CapturedRecordNavigation navigation,
+        CapturedRecordVoltageBinding voltageBinding, CapturedRecordQualityBinding qualityBinding,
+        bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
+        bool allowAuxiliaryRate, int maximumSamples, int maximumSegments, CancellationToken cancellationToken = default)
+    {
+        CapturedRecordQualityPageDisplay content = CaptureQualityPageDisplay(navigation, voltageBinding,
+            qualityBinding, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale,
+            allowAuxiliaryRate, maximumSamples, cancellationToken);
+        return CapturedRecordPathProjection.Build(content, maximumSegments, cancellationToken);
+    }
+
     public CapturedRecordQualityPageDisplay CaptureQualityPageDisplay(CapturedRecordNavigation navigation,
         CapturedRecordVoltageBinding voltageBinding, CapturedRecordQualityBinding qualityBinding,
         bool canPreserveGlobalSafetyOverlay, int plotLeftPixels, int plotWidthPixels, EcgVerticalScale scale,
@@ -115,7 +126,7 @@ public sealed class CapturedRecordStudyView
         if (!content.Content.Study.Admission.MayEnter) { return new(content, null, null); }
         ArgumentNullException.ThrowIfNull(layout);
         Ecg12ZoomDisplay selection = zoom.CaptureDisplay();
-        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(selection.Selection,
+        var transform = Ecg12ScreenTransform.Resolve(selection.Selection,
             layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
         return new(content, selection, transform);
     }
@@ -249,7 +260,7 @@ public sealed class CapturedRecordStudyView
         RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
         ArgumentNullException.ThrowIfNull(zoom);
         ArgumentNullException.ThrowIfNull(layout);
-        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
+        var transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
             layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
         return Measurement.ReplacePairFromPoints(transform.Inverse(firstX), transform.Inverse(firstY),
             transform.Inverse(secondX), transform.Inverse(secondY), viewport, scale);
@@ -262,7 +273,7 @@ public sealed class CapturedRecordStudyView
         RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
         ArgumentNullException.ThrowIfNull(zoom);
         ArgumentNullException.ThrowIfNull(layout);
-        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
+        var transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
             layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
         if (radius is null || radius.Numerator <= 0 || radius.Denominator <= 0)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidHitRadius", nameof(radius)); }
@@ -283,7 +294,7 @@ public sealed class CapturedRecordStudyView
         RecordCursorViewport viewport = RequireCurrentViewport(navigation, canPreserveGlobalSafetyOverlay, plotLeftPixels, plotWidthPixels, scale);
         ArgumentNullException.ThrowIfNull(zoom);
         ArgumentNullException.ThrowIfNull(layout);
-        Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
+        var transform = Ecg12ScreenTransform.Resolve(zoom.Selection,
             layout.PageWidth, layout.PageHeight, layout.AvailableWidth, layout.AvailableHeight);
         return Measurement.MoveCursor(end, transform.Inverse(x), transform.Inverse(y), viewport, scale);
     }

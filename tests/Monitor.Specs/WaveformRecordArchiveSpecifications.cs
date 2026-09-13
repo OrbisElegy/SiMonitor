@@ -33,6 +33,10 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(RecordPathBreaksAtEveryDeniedSample), RecordPathBreaksAtEveryDeniedSample),
+        new(nameof(RecordPathConnectsVerifiedBlocksWithoutPageCarryover), RecordPathConnectsVerifiedBlocksWithoutPageCarryover),
+        new(nameof(RecordPathBudgetAndSafetyFailuresPreserveEvidence), RecordPathBudgetAndSafetyFailuresPreserveEvidence),
+        new(nameof(RecordPathRestoreRebuildsExactOwnedSegments), RecordPathRestoreRebuildsExactOwnedSegments),
         new(nameof(QualityPageResolvesExactFlagsAndSparseGaps), QualityPageResolvesExactFlagsAndSparseGaps),
         new(nameof(QualityRulesRejectAmbiguityAndOwnCallerData), QualityRulesRejectAmbiguityAndOwnCallerData),
         new(nameof(QualityPageFailureAndDenialPreserveEvidence), QualityPageFailureAndDenialPreserveEvidence),
@@ -1077,8 +1081,8 @@ internal static partial class WaveformRecordArchiveSpecifications
         { Check.That(exception.ReasonCode == "Ecg12Zoom.UnrepresentableSvgSize", "positive exact size cannot serialize to invisible zero viewport"); }
         Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "failed render does not alter exact measurement evidence");
         zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 1, 100_000_000));
-        Ecg12ThemeSelection restoredTheme = Ecg12ThemeSelection.Restore(theme.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled, true);
-        Ecg12ZoomSelection restoredZoom = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
+        var restoredTheme = Ecg12ThemeSelection.Restore(theme.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled, true);
+        var restoredZoom = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
         ZoomedCapturedRecordSvgScreenLayers smallest = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, restoredTheme, restoredZoom, true,
             SvgStudyLayout(), new(100, 100, 100, 100), SvgStudyStyle(), SvgCursorStyle(), false);
         Check.That((string?)XElement.Parse(smallest.GridSvg!).Attribute("width") == "0.000001", "representable tiny viewport remains accepted after zoom restore");
@@ -1094,8 +1098,8 @@ internal static partial class WaveformRecordArchiveSpecifications
         RecordScreenZoomLayout screen = new(100, 100, 50, 50);
         ZoomedCapturedRecordSvgScreenLayers rendered = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
             SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
-        XElement grid = XElement.Parse(rendered.GridSvg!);
-        XElement cursors = XElement.Parse(rendered.CursorOverlaySvg!);
+        var grid = XElement.Parse(rendered.GridSvg!);
+        var cursors = XElement.Parse(rendered.CursorOverlaySvg!);
         Check.That((string?)grid.Attribute("width") == "150" && (string?)grid.Attribute("height") == "150" &&
             (string?)grid.Attribute("viewBox") == "0 0 100 100" && (string?)cursors.Attribute("width") == "150",
             "grid and cursor layers share a single outer page viewport scale");
@@ -1627,7 +1631,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void CurrentPageHitBeginsOnlySelectedEndpointDrag()
     {
         CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordNavigation navigation = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        var navigation = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
         CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         EcgVerticalScale scale = new(0, 100, 60, 20, 1);
         CapturedRecordCursorPair pair = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
@@ -1741,7 +1745,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(50_000_000, 0, 1), new(100_000_000, 1000, 1));
         Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
         CapturedRecordSvgScreenLayers result = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true);
-        XElement root = XElement.Parse(result.CursorOverlaySvg!);
+        var root = XElement.Parse(result.CursorOverlaySvg!);
         XElement[] groups = root.Elements().ToArray();
         Check.That(groups.Length == 2 && (string?)groups[0].Attribute("data-cursor") == "first" &&
             (string?)groups[0].Elements().Last().Attribute("cx") == "12.5" && (string?)groups[1].Elements().Last().Attribute("cy") == "40" &&
@@ -1991,7 +1995,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
         Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, false);
         Ecg12ThemeDisplay before = theme.CaptureDisplay();
-        SystemViewCommandAssessmentPolicy invalid = (SystemViewCommandAssessmentPolicy)99;
+        var invalid = (SystemViewCommandAssessmentPolicy)99;
         ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, invalid, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true),
             "RecordStudy.InvalidPolicy");
         ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Enabled, invalid, SystemViewCommandAssessmentPolicy.Enabled, true),
@@ -2117,7 +2121,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     {
         CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = Ecg12ThemeSelection.Restore(new(Ecg12Theme.PaperGridBlack), SystemViewCommandAssessmentPolicy.Enabled, false);
+        var theme = Ecg12ThemeSelection.Restore(new(Ecg12Theme.PaperGridBlack), SystemViewCommandAssessmentPolicy.Enabled, false);
         ThemedCapturedRecordPageDisplay denied = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 0, new(0, 100, 60, 20, 1), true);
         Check.That(denied.Theme is null && denied.Content.Page is null && denied.Content.Study.Record is null, "denied admission suppresses theme chrome and record content");
         try
@@ -2291,7 +2295,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void StudyDragCanRestartAfterPageRoundTripRollback()
     {
         CapturedRecordNavigation originalNavigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordNavigation navigation = CapturedRecordNavigation.Restore(originalNavigation.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled);
+        var navigation = CapturedRecordNavigation.Restore(originalNavigation.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         EcgVerticalScale scale = new(0, 100, 60, 20, 1);
         CapturedRecordCursorPair initial = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
@@ -2398,7 +2402,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordDrag bottom = new(measurement, RecordCursorEnd.Second, page, scale);
         bottom.Preview(new(50, 1), new(100, 1), page, scale);
         CapturedRecordCursorPair committed = bottom.Commit(page, scale);
-        Check.That(committed.First.Value.MicrovoltsNumerator == 3000 && committed.Second.Value.MicrovoltsNumerator == -2000,
+        Check.That(committed.First.Value.NumeratorMicrovolts == 3000 && committed.Second.Value.NumeratorMicrovolts == -2000,
             "both closed vertical edges accept drag start and exact pointer round trips");
     }
 
@@ -2428,7 +2432,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         Check.That(first.Second.Value.DataTimeNs == 50_000_000 && moved.Second.Value.DataTimeNs == 150_000_000 &&
             ReferenceEquals(first.First, moved.First), "identical pixels on a new page resolve through current navigation and preserve other endpoint");
         CapturedRecordCursorPair replaced = view.PlacePairOnCurrentPage(navigation, false, 0, 100, scale, new(0, 1), new(60, 1), new(50, 1), new(40, 1));
-        Check.That(replaced.First.Value.DataTimeNs == 100_000_000 && replaced.Second.Value.MicrovoltsNumerator == 1000,
+        Check.That(replaced.First.Value.DataTimeNs == 100_000_000 && replaced.Second.Value.NumeratorMicrovolts == 1000,
             "new pair uses current page time and calibrated manual voltage");
     }
 
@@ -2516,7 +2520,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void NavigationCommandDisplayRestoresCurrentPolicy()
     {
         CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        var restored = CapturedRecordNavigation.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(restored.CaptureDisplay().Previous.ReasonCode == "RecordPagination.CourseLocked", "restored current policy takes precedence over page boundary reason");
         CapturedRecordNavigationDisplay locked = restored.CaptureDisplay();
         ExpectPaginationReason(() => restored.UpdatePolicy((SystemViewCommandAssessmentPolicy)99), "RecordPagination.InvalidPolicy");
@@ -2585,7 +2589,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void NavigatedDisplayRebindsRestoredNavigation()
     {
         CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 2, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(navigation.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        var restored = CapturedRecordNavigation.Restore(navigation.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
         CapturedRecordStudyView view = restored.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordPageDisplay display = view.CapturePageDisplay(restored, false, 10, 100, new(0, 100, 60, 20, 1), false);
         Check.That(display.Page == navigation.CurrentPage && display.Viewport == new RecordCursorViewport(150_000_000, 200_000_000, 10, 100) &&
@@ -2641,7 +2645,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordNavigation navigation = new(MeasurementRecord(), 75_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
         navigation.SelectPage(2);
         CapturedRecordNavigationState checkpoint = navigation.CaptureState();
-        CapturedRecordNavigation restored = CapturedRecordNavigation.Restore(checkpoint, SystemViewCommandAssessmentPolicy.CourseLocked);
+        var restored = CapturedRecordNavigation.Restore(checkpoint, SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(restored.CurrentPage == navigation.CurrentPage, "restore retains the validated selected page");
         ExpectPaginationReason(() => restored.PreviousPage(), "RecordPagination.CourseLocked");
         ExpectPaginationReason(() => CapturedRecordNavigation.Restore(checkpoint with { PageIndex = 3 }, SystemViewCommandAssessmentPolicy.Enabled),
@@ -2692,7 +2696,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void RecordPagesRestoreAndHandleExtremeDurations()
     {
         CapturedRecordBinding original = MeasurementRecord();
-        CapturedRecordBinding restored = CapturedRecordBinding.Restore(original.CaptureState());
+        var restored = CapturedRecordBinding.Restore(original.CaptureState());
         Check.That(CapturedRecordPagination.Resolve(restored, 75_000_000, 2) == CapturedRecordPagination.Resolve(original, 75_000_000, 2),
             "restored verified record produces the same page ranges");
         Check.That(CapturedRecordPagination.Resolve(restored, long.MaxValue, 0) == new CapturedRecordPage(0, 1, 0, 200_000_000) &&
@@ -2815,7 +2819,7 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     private static void StudyViewRestoredRecordRequiresCurrentAdmission()
     {
-        CapturedRecordBinding restored = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
+        var restored = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
         CapturedRecordStudyView view = new(restored, Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
         CapturedRecordStudyDisplay denied = view.CaptureDisplay(false, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1), false);
         Check.That(!denied.Admission.MayEnter && denied.Record is null, "restored record bytes grant no persisted overlay capability");
@@ -2928,7 +2932,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second, page, new(0, 100, 60, 20, 1));
         EcgVerticalScale equivalent = new(0, 100, 60, 40, 2);
         CapturedRecordCursorPair preview = drag.Preview(new(75, 1), new(40, 1), page, equivalent);
-        Check.That(ReferenceEquals(drag.Commit(page, equivalent), preview) && preview.Second.Value.MicrovoltsNumerator == 1000,
+        Check.That(ReferenceEquals(drag.Commit(page, equivalent), preview) && preview.Second.Value.NumeratorMicrovolts == 1000,
             "exactly equivalent gain fractions do not falsely invalidate a gesture");
     }
 
@@ -3413,7 +3417,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void MeasurementSlotSurvivesInputMutationAndRecordRestore()
     {
         RecordSlotBinding[] slots = BindingSlots();
-        CapturedRecordBinding record = CapturedRecordBinding.Create(BindingPresentation().CaptureState(), BindingArchive(), slots);
+        var record = CapturedRecordBinding.Create(BindingPresentation().CaptureState(), BindingArchive(), slots);
         CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
         slots[0] = new("ecg.slot0", Guid.Empty);
         CapturedRecordMeasurement restored = new(CapturedRecordBinding.Restore(record.CaptureState()), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
@@ -3465,7 +3469,7 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     private static void RestoredMeasurementUsesExplicitCurrentPolicy()
     {
-        CapturedRecordBinding record = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
+        var record = CapturedRecordBinding.Restore(MeasurementRecord().CaptureState());
         CapturedRecordMeasurement measurement = new(record, "ecg.slot0", SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(MeasurementReason(() => measurement.CreateCursor(new(0, 0, 1))) == "RecordMeasurement.CourseLocked",
             "restoring a record does not restore an old enabled policy implicitly");
@@ -3532,7 +3536,7 @@ internal static partial class WaveformRecordArchiveSpecifications
 
     private static FillOnceThenHoldStateMachine BindingPresentation(long playhead = 200_000_000)
     {
-        FillOnceThenHoldStateMachine machine = FillOnceThenHoldStateMachine.Start(
+        var machine = FillOnceThenHoldStateMachine.Start(
             new FillOnceThenHoldPlan("ecg12.standard", "record.ecg12-7", 7, 11,
                 0, 200_000_000, 200_000_000,
                 Enumerable.Range(0, 12).Select(index => $"ecg.slot{index}").ToArray()),
@@ -3554,7 +3558,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         foreach (long playhead in new long[] { 200_000_000, 900_000_000 })
         {
             FillOnceThenHoldStateMachine machine = BindingPresentation(playhead);
-            CapturedRecordBinding binding = CapturedRecordBinding.Create(
+            var binding = CapturedRecordBinding.Create(
                 machine.CaptureState(), BindingArchive(), BindingSlots());
             machine.Advance(2, 1_000_000_000);
             Check.That(binding.Slots[0].ChannelId == ChannelIds[11] &&
@@ -3605,11 +3609,11 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void RecordBindingCheckpointIsDefensive()
     {
         RecordSlotBinding[] slots = BindingSlots();
-        CapturedRecordBinding binding = CapturedRecordBinding.Create(
+        var binding = CapturedRecordBinding.Create(
             BindingPresentation().CaptureState(), BindingArchive(), slots);
         slots[0] = slots[0] with { ChannelId = Guid.Empty };
         CapturedRecordBindingState state = binding.CaptureState();
-        CapturedRecordBinding restored = CapturedRecordBinding.Restore(state);
+        var restored = CapturedRecordBinding.Restore(state);
         state.Archive.RawEnvelopes[0][0] ^= 1;
         Check.That(binding.Slots[0].ChannelId == ChannelIds[11] &&
             Equivalent(binding.ReadBlocks(), restored.ReadBlocks()) &&
@@ -3628,7 +3632,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void StandardRecordArchivesFiftySharedBlocks()
     {
         byte[][] wires = StandardWires();
-        WaveformRecordArchive archive = WaveformRecordArchive.Create(
+        var archive = WaveformRecordArchive.Create(
             Plan(),
             wires);
 
@@ -3652,7 +3656,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void ArchivedRecordSurvivesLiveRingEviction()
     {
         byte[][] wires = StandardWires();
-        WaveformBlockRing live = WaveformBlockRing.Start(
+        var live = WaveformBlockRing.Start(
             SessionId,
             InstanceId,
             timebaseEpoch: 3,
@@ -3665,7 +3669,7 @@ internal static partial class WaveformRecordArchiveSpecifications
             _ = live.Append(wire);
         }
 
-        WaveformRecordArchive archive = WaveformRecordArchive.Create(
+        var archive = WaveformRecordArchive.Create(
             Plan(),
             live.CaptureState().RetainedRawBlocks);
         byte[] archivedFirst = archive.ReadBlocks()[0].RawEnvelope;
@@ -3696,7 +3700,7 @@ internal static partial class WaveformRecordArchiveSpecifications
             Wire(102, 400_000_000),
         ];
 
-        WaveformRecordArchive archive = WaveformRecordArchive.Create(
+        var archive = WaveformRecordArchive.Create(
             plan,
             exact);
         Check.That(
@@ -3813,7 +3817,7 @@ internal static partial class WaveformRecordArchiveSpecifications
     private static void ArchiveCheckpointAndReadsAreDefensive()
     {
         byte[][] source = StandardWires();
-        WaveformRecordArchive archive = WaveformRecordArchive.Create(
+        var archive = WaveformRecordArchive.Create(
             Plan(),
             source);
         byte expected = archive.ReadBlocks()[0].RawEnvelope[0];
@@ -3822,7 +3826,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         firstRead[0].RawEnvelope[0] ^= 0xff;
 
         WaveformRecordArchiveState checkpoint = archive.CaptureState();
-        WaveformRecordArchive restored = WaveformRecordArchive.Restore(checkpoint);
+        var restored = WaveformRecordArchive.Restore(checkpoint);
         byte[][] corrupt = checkpoint.RawEnvelopes
             .Select(static wire => wire.ToArray())
             .ToArray();

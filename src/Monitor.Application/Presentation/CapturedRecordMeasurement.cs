@@ -209,7 +209,7 @@ public sealed class CapturedRecordMeasurement
             y.Numerator < (BigInteger)verticalScale.PlotTopPixels * y.Denominator ||
             y.Numerator > ((BigInteger)verticalScale.PlotTopPixels + verticalScale.PlotHeightPixels) * y.Denominator)
         { throw new CapturedRecordMeasurementException("RecordMeasurement.InvalidPoint", nameof(x)); }
-        BigInteger elapsed = BigInteger.DivRem(
+        var elapsed = BigInteger.DivRem(
             (x.Numerator - (BigInteger)viewport.PlotLeftPixels * x.Denominator) *
                 (viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs),
             x.Denominator * viewport.PlotWidthPixels, out BigInteger remainder);
@@ -218,7 +218,7 @@ public sealed class CapturedRecordMeasurement
         BigInteger numerator = ((BigInteger)verticalScale.ZeroBaselinePixels * y.Denominator - y.Numerator) *
             1000 * verticalScale.PixelsPerMillivoltDenominator;
         BigInteger denominator = y.Denominator * verticalScale.PixelsPerMillivoltNumerator;
-        BigInteger divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
+        var divisor = BigInteger.GreatestCommonDivisor(numerator, denominator);
         numerator /= divisor;
         denominator /= divisor;
         if (numerator < long.MinValue || numerator > long.MaxValue || denominator > uint.MaxValue)
@@ -240,7 +240,7 @@ public sealed class CapturedRecordMeasurement
         ValidateViewport(viewport);
         ulong duration = (ulong)(viewport.EndExclusiveDataTimeNs - viewport.StartDataTimeNs);
         EcgVerticalPosition y = EcgVerticalGeometry.MapMicrovolts(verticalScale,
-            cursor.Value.MicrovoltsNumerator, cursor.Value.MicrovoltsDenominator);
+            cursor.Value.NumeratorMicrovolts, cursor.Value.Denominator);
         if (cursor.Value.DataTimeNs < viewport.StartDataTimeNs || cursor.Value.DataTimeNs >= viewport.EndExclusiveDataTimeNs) { return null; }
         ulong offset = (ulong)(cursor.Value.DataTimeNs - viewport.StartDataTimeNs);
         SweepPixelPosition x = SweepPlotGeometry.MapSampleOffset(offset, duration, viewport.PlotLeftPixels, viewport.PlotWidthPixels);

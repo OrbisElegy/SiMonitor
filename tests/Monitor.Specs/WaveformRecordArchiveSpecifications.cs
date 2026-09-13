@@ -33,6 +33,9 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedSvgRejectsClippedPageGeometry), ZoomedSvgRejectsClippedPageGeometry),
+        new(nameof(ZoomedSvgRejectsRoundedZeroDimensions), ZoomedSvgRejectsRoundedZeroDimensions),
+
         new(nameof(ZoomedSvgScalesSeparateScreenLayers), ZoomedSvgScalesSeparateScreenLayers),
         new(nameof(ZoomedSvgSuppressesDeniedAndMissingLayers), ZoomedSvgSuppressesDeniedAndMissingLayers),
         new(nameof(ZoomedSvgRestoresAndCancelsWithoutMutation), ZoomedSvgRestoresAndCancelsWithoutMutation),
@@ -213,6 +216,54 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedSvgRejectsClippedPageGeometry()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        foreach (RecordScreenZoomLayout screen in new RecordScreenZoomLayout[] { new(19, 100, 100, 100), new(20, 99, 100, 100) })
+        {
+            try
+            {
+                CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true, SvgStudyLayout(), screen,
+                    SvgStudyStyle(), SvgCursorStyle(), false);
+                throw new InvalidOperationException("clipped page accepted");
+            }
+            catch (Ecg12ZoomSelectionException exception)
+            { Check.That(exception.ReasonCode == "Ecg12Zoom.PlotOutsidePage", "page must contain full logical plot on both axes"); }
+        }
+        ZoomedCapturedRecordSvgScreenLayers exact = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
+            SvgStudyLayout(), new(20, 100, 100, 100), SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(exact.GridSvg is not null && ReferenceEquals(view.Measurement.CurrentPair, pair), "exact page edge fits and rejected rendering preserves session");
+    }
+
+    private static void ZoomedSvgRejectsRoundedZeroDimensions()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 1, uint.MaxValue));
+        try
+        {
+            CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true, SvgStudyLayout(), new(100, 100, 100, 100),
+                SvgStudyStyle(), SvgCursorStyle(), false);
+            throw new InvalidOperationException("zero rounded SVG size accepted");
+        }
+        catch (Ecg12ZoomSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Zoom.UnrepresentableSvgSize", "positive exact size cannot serialize to invisible zero viewport"); }
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "failed render does not alter exact measurement evidence");
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 1, 100_000_000));
+        Ecg12ThemeSelection restoredTheme = Ecg12ThemeSelection.Restore(theme.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection restoredZoom = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
+        ZoomedCapturedRecordSvgScreenLayers smallest = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, restoredTheme, restoredZoom, true,
+            SvgStudyLayout(), new(100, 100, 100, 100), SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That((string?)XElement.Parse(smallest.GridSvg!).Attribute("width") == "0.000001", "representable tiny viewport remains accepted after zoom restore");
+    }
 
     private static void ZoomedSvgScalesSeparateScreenLayers()
     {

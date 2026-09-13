@@ -32,6 +32,13 @@ public static class CapturedRecordSvgLayers
         Ecg12ZoomDisplay selection = zoom.CaptureDisplay();
         Ecg12ScreenTransform transform = Ecg12ScreenTransform.Resolve(selection.Selection,
             screen.PageWidth, screen.PageHeight, screen.AvailableWidth, screen.AvailableHeight);
+        if (layout.PlotLeftPixels < 0 || layout.VerticalScale.PlotTopPixels < 0 ||
+            (long)layout.PlotLeftPixels + layout.PlotWidthPixels > screen.PageWidth ||
+            (long)layout.VerticalScale.PlotTopPixels + layout.VerticalScale.PlotHeightPixels > screen.PageHeight)
+        { throw new Ecg12ZoomSelectionException("Ecg12Zoom.PlotOutsidePage", nameof(screen)); }
+        if (SvgLogicalNumber.Format(transform.Width.Numerator, transform.Width.Denominator) == "0" ||
+            SvgLogicalNumber.Format(transform.Height.Numerator, transform.Height.Denominator) == "0")
+        { throw new Ecg12ZoomSelectionException("Ecg12Zoom.UnrepresentableSvgSize", nameof(screen)); }
         string? grid = WrapScreenLayer(content.Content.GridSvg, screen, transform);
         string? cursors = WrapScreenLayer(content.CursorOverlaySvg, screen, transform);
         cancellationToken.ThrowIfCancellationRequested();

@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedSvgScalesSeparateScreenLayers), ZoomedSvgScalesSeparateScreenLayers),
+        new(nameof(ZoomedSvgSuppressesDeniedAndMissingLayers), ZoomedSvgSuppressesDeniedAndMissingLayers),
+        new(nameof(ZoomedSvgRestoresAndCancelsWithoutMutation), ZoomedSvgRestoresAndCancelsWithoutMutation),
+
         new(nameof(ZoomedDragPreservesOffsetAndFinalRelease), ZoomedDragPreservesOffsetAndFinalRelease),
         new(nameof(ZoomedDragRejectsZoomRoundTripAndResize), ZoomedDragRejectsZoomRoundTripAndResize),
         new(nameof(ZoomedDragFailureKeepsPreviewAndCurrentPolicy), ZoomedDragFailureKeepsPreviewAndCurrentPolicy),
@@ -209,6 +213,77 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedSvgScalesSeparateScreenLayers()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        RecordScreenZoomLayout screen = new(100, 100, 50, 50);
+        ZoomedCapturedRecordSvgScreenLayers rendered = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
+            SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        XElement grid = XElement.Parse(rendered.GridSvg!);
+        XElement cursors = XElement.Parse(rendered.CursorOverlaySvg!);
+        Check.That((string?)grid.Attribute("width") == "150" && (string?)grid.Attribute("height") == "150" &&
+            (string?)grid.Attribute("viewBox") == "0 0 100 100" && (string?)cursors.Attribute("width") == "150",
+            "grid and cursor layers share a single outer page viewport scale");
+        Check.That(!rendered.GridSvg!.Contains("data-cursor", StringComparison.Ordinal) && rendered.CursorOverlaySvg!.Contains("data-cursor", StringComparison.Ordinal) &&
+            ReferenceEquals(view.Measurement.CurrentPair, pair), "manual overlay stays separate and rendering preserves exact evidence");
+        zoom.Select(new(Ecg12ZoomMode.FitPage, 1, 1));
+        ZoomedCapturedRecordSvgScreenLayers fit = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
+            SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That((string?)XElement.Parse(fit.GridSvg!).Attribute("width") == "50" && fit.Transform!.Factor == new ExactPlotCoordinate(1, 2),
+            "fresh fit selection drives actual SVG viewport dimensions");
+    }
+
+    private static void ZoomedSvgSuppressesDeniedAndMissingLayers()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        RecordScreenZoomLayout screen = new(100, 100, 50, 50);
+        ZoomedCapturedRecordSvgScreenLayers denied = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, false,
+            SvgStudyLayout(), new(0, 0, 0, 0), SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(denied.GridSvg is null && denied.CursorOverlaySvg is null && denied.Zoom is null && denied.Transform is null,
+            "admission denial suppresses scaled output before unused screen validation");
+        theme.Select(Ecg12Theme.MonitorDarkGreen);
+        view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
+        ZoomedCapturedRecordSvgScreenLayers hidden = CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true,
+            SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(hidden.GridSvg is null && hidden.CursorOverlaySvg is null && hidden.Transform is not null && ReferenceEquals(view.Measurement.CurrentPair, pair),
+            "missing dark grid and locked overlay do not produce empty SVG layers");
+    }
+
+    private static void ZoomedSvgRestoresAndCancelsWithoutMutation()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        RecordScreenZoomLayout screen = new(100, 100, 50, 50);
+        RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(view.CaptureZoomedSession(navigation, theme, zoom),
+            Ecg12RecordContext.ActiveInstance, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled,
+            SystemViewCommandAssessmentPolicy.Enabled, true, SystemViewCommandAssessmentPolicy.Disabled);
+        ZoomedCapturedRecordSvgScreenLayers rendered = CapturedRecordSvgLayers.RenderZoomedScreen(restored.Content.Study.View,
+            restored.Content.Study.Navigation, restored.Content.Theme, restored.Zoom, true, SvgStudyLayout(), screen,
+            SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(!rendered.Zoom!.CanSelect && rendered.Transform!.Factor == new ExactPlotCoordinate(3, 2), "restored selected zoom renders under current disabled selection permission");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            CapturedRecordSvgLayers.RenderZoomedScreen(view, navigation, theme, zoom, true, SvgStudyLayout(), screen,
+                SvgStudyStyle(), SvgCursorStyle(), false, cancellation.Token);
+            throw new InvalidOperationException("cancelled rendering succeeded");
+        }
+        catch (OperationCanceledException) { }
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "cancelled scaled render publishes no result and preserves session");
+    }
 
     private static void ZoomedDragPreservesOffsetAndFinalRelease()
     {

@@ -12,8 +12,18 @@ internal static class DesktopStudySmokeFixture
 {
     public static EcgPaperGridSvgStyle GridStyle => new("#f0cccc", "#cc9999", 500, 1000);
     public static EcgManualCursorSvgStyle CursorStyle => new("#0055ff", "#ff5500", 1000, 2000);
+    public static CapturedRecordSvgLayout Layout => new(0, 100, new(0, 60, 50, 200, 1), new(25, 1, 10, 1), 0, 0, 100);
+    public static RecordScreenZoomLayout Screen => new(100, 60, 200, 120);
 
     public static CapturedRecordSvgPublication Create(bool hideMeasurement = false, bool firstOutsidePlot = false)
+    {
+        CapturedRecordSvgPresentation presentation = CreatePresentation(hideMeasurement, firstOutsidePlot);
+        presentation.Refresh(false, Layout, Screen, GridStyle, CursorStyle, false);
+        return presentation.Publication;
+    }
+
+    public static CapturedRecordSvgPresentation CreatePresentation(bool hideMeasurement = false,
+        bool firstOutsidePlot = false, bool activeInstance = false)
     {
         Guid session = Guid.Parse("11111111-1111-4111-8111-111111111111");
         Guid instance = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -36,15 +46,12 @@ internal static class DesktopStudySmokeFixture
         CapturedRecordBinding binding = CapturedRecordBinding.Create(acquisition.CaptureState(), archive,
             slots.Select((slot, i) => new RecordSlotBinding(slot, channels[i])).ToArray());
         CapturedRecordNavigation navigation = new(binding, 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord,
+        CapturedRecordStudyView view = navigation.CreateStudyView(activeInstance ? Ecg12RecordContext.ActiveInstance : Ecg12RecordContext.IndependentCapturedRecord,
             slots[0], SystemViewCommandAssessmentPolicy.Enabled);
         view.Measurement.ReplacePair(new(50_000_000, firstOutsidePlot ? 10000 : 125, 1), new(150_000_000, 75, 1));
         if (hideMeasurement) { view.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled); }
-        CapturedRecordSvgPresentation presentation = new(view, navigation,
+        return new(view, navigation,
             new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true),
             new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled));
-        presentation.Refresh(false, new(0, 100, new(0, 60, 50, 200, 1), new(25, 1, 10, 1), 0, 0, 100),
-            new(100, 60, 200, 120), GridStyle, CursorStyle, false);
-        return presentation.Publication;
     }
 }

@@ -112,6 +112,13 @@ public sealed class CapturedRecordStudyView
         return new(CaptureSession(navigation), theme.CaptureState());
     }
 
+    public ZoomedCapturedRecordStudySessionState CaptureZoomedSession(CapturedRecordNavigation navigation,
+        Ecg12ThemeSelection theme, Ecg12ZoomSelection zoom)
+    {
+        ArgumentNullException.ThrowIfNull(zoom);
+        return new(CaptureThemedSession(navigation, theme), zoom.CaptureState());
+    }
+
     public void SelectMeasurementSlot(string slotId)
     {
         if (string.Equals(Measurement.Slot.SlotId, slotId, StringComparison.Ordinal)) { return; }

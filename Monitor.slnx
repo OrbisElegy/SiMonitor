@@ -2,6 +2,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Monitor.Domain/Monitor.Domain.csproj" />
+    <Project Path="src/Monitor.Desktop/Monitor.Desktop.csproj" />
     <Project Path="src/Monitor.Application/Monitor.Application.csproj" />
     <Project Path="src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
     <Project Path="src/Monitor.Simulation/Monitor.Simulation.csproj" />

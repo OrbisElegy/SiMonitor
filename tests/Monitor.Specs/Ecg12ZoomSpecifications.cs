@@ -7,11 +7,31 @@ internal static class Ecg12ZoomSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(EquivalentZoomSetPreservesIdentityAfterPolicyCheck), EquivalentZoomSetPreservesIdentityAfterPolicyCheck),
         new(nameof(ZoomSelectsModesAndCanonicalExactScale), ZoomSelectsModesAndCanonicalExactScale),
         new(nameof(ZoomRejectsInvalidSelectionAtomically), ZoomRejectsInvalidSelectionAtomically),
         new(nameof(ZoomRechecksPolicyAfterDisplay), ZoomRechecksPolicyAfterDisplay),
         new(nameof(ZoomRestoreUsesCurrentPolicy), ZoomRestoreUsesCurrentPolicy),
     ];
+
+    private static void EquivalentZoomSetPreservesIdentityAfterPolicyCheck()
+    {
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 3, 2), SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomState initial = zoom.Selection;
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 6, 4));
+        Check.That(ReferenceEquals(zoom.Selection, initial), "equivalent normalized set preserves selection identity");
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.CourseLocked);
+        Check.That(Reason(() => zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 3, 2))) == "Ecg12Zoom.CourseLocked" &&
+            ReferenceEquals(zoom.Selection, initial), "identical set cannot bypass current policy");
+        zoom.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
+        zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1));
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 3, 2));
+        Check.That(!ReferenceEquals(zoom.Selection, initial), "real mode round trip creates fresh identity");
+        var restored = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomState recovered = restored.Selection;
+        restored.Select(new(Ecg12ZoomMode.ExplicitScale, 9, 6));
+        Check.That(ReferenceEquals(restored.Selection, recovered) && !ReferenceEquals(recovered, zoom.Selection), "restored selection supports idempotent sets with its own identity");
+    }
 
     private static void ZoomSelectsModesAndCanonicalExactScale()
     {
@@ -60,7 +80,7 @@ internal static class Ecg12ZoomSpecifications
     private static void ZoomRestoreUsesCurrentPolicy()
     {
         Ecg12ZoomSelection original = new(new(Ecg12ZoomMode.ExplicitScale, 10, 4), SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ZoomSelection restored = Ecg12ZoomSelection.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
+        var restored = Ecg12ZoomSelection.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(restored.Selection == new Ecg12ZoomState(Ecg12ZoomMode.ExplicitScale, 5, 2) && !restored.CaptureDisplay().CanSelect &&
             Reason(() => restored.Select(new(Ecg12ZoomMode.FitPage, 1, 1))) == "Ecg12Zoom.CourseLocked", "restore retains exact intent but not old permission");
         Check.That(Reason(() => Ecg12ZoomSelection.Restore(new(Ecg12ZoomMode.ExplicitScale, 1, 0), SystemViewCommandAssessmentPolicy.Enabled)) == "Ecg12Zoom.InvalidSelection",

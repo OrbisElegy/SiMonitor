@@ -46,7 +46,9 @@ public sealed class Ecg12ZoomSelection
         Ecg12ZoomDisplay current = CaptureDisplay();
         if (!current.CanSelect)
         { throw new Ecg12ZoomSelectionException(current.ReasonCode, nameof(selection)); }
-        Selection = Normalize(selection);
+        Ecg12ZoomState candidate = Normalize(selection);
+        if (candidate == Selection) { return; }
+        Selection = candidate;
     }
 
     public Ecg12ZoomState CaptureState() => Selection;

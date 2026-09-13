@@ -33,6 +33,7 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ZoomedDragSurvivesEquivalentZoomSet), ZoomedDragSurvivesEquivalentZoomSet),
         new(nameof(ZoomedSvgReportsActualSerializedMapping), ZoomedSvgReportsActualSerializedMapping),
         new(nameof(ZoomedSvgRejectsClippedPageGeometry), ZoomedSvgRejectsClippedPageGeometry),
         new(nameof(ZoomedSvgRejectsRoundedZeroDimensions), ZoomedSvgRejectsRoundedZeroDimensions),
@@ -217,6 +218,23 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static void ZoomedDragSurvivesEquivalentZoomSet()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 2, 1), SystemViewCommandAssessmentPolicy.Enabled);
+        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
+        RecordScreenZoomLayout layout = new(100, 100, 100, 100);
+        view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
+        CapturedRecordZoomedDrag drag = view.BeginCursorDragOnZoomedPage(navigation, zoom, false, 0, 100, scale, layout,
+            new(104, 1), new(84, 1), new(6, 1));
+        CapturedRecordCursorPair accepted = drag.PreviewPointer(false, 0, 100, scale, layout, new(124, 1), new(84, 1));
+        zoom.Select(new(Ecg12ZoomMode.ExplicitScale, 4, 2));
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, accepted), "repeated zoom set does not change preview evidence");
+        CapturedRecordCursorPair released = drag.CommitPointer(false, 0, 100, scale, layout, new(154, 1), new(64, 1));
+        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1), "equivalent scale set preserves anchored drag through release");
+    }
 
     private static void ZoomedSvgReportsActualSerializedMapping()
     {

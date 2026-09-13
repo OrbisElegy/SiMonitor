@@ -32,7 +32,7 @@ public sealed record WaveformRecordArchiveState(
     WaveformRecordArchivePlan Plan,
     IReadOnlyList<byte[]> RawEnvelopes);
 
-public sealed class WaveformRecordArchive
+public sealed partial class WaveformRecordArchive
 {
     public const int StandardEcgChannelCount = 12;
     public const int MaximumRecordBlockCount =
@@ -106,7 +106,7 @@ public sealed class WaveformRecordArchive
 
     public IReadOnlyList<ArchivedWaveformBlock> ReadBlocks()
     {
-        ArchivedWaveformBlock[] blocks = new ArchivedWaveformBlock[
+        var blocks = new ArchivedWaveformBlock[
             _blocks.Length];
         for (int index = 0; index < blocks.Length; index++)
         {
@@ -146,7 +146,7 @@ public sealed class WaveformRecordArchive
                 parameterName);
         }
 
-        StoredBlock[] blocks = new StoredBlock[rawEnvelopes.Count];
+        var blocks = new StoredBlock[rawEnvelopes.Count];
         ChannelCursor[]? channelCursors = null;
         ulong previousSequence = 0;
         long previousStart = 0;
@@ -240,9 +240,9 @@ public sealed class WaveformRecordArchive
         ChannelCursor[]? previous,
         string parameterName)
     {
-        Dictionary<Guid, WaveformPlane> planes = envelope.Planes.ToDictionary(
+        var planes = envelope.Planes.ToDictionary(
             static plane => plane.ChannelId);
-        WaveformPlane[] required = new WaveformPlane[
+        var required = new WaveformPlane[
             StandardEcgChannelCount];
         for (int index = 0; index < required.Length; index++)
         {
@@ -257,7 +257,7 @@ public sealed class WaveformRecordArchive
         }
 
         WaveformPlane reference = required[0];
-        ChannelCursor[] next = new ChannelCursor[required.Length];
+        var next = new ChannelCursor[required.Length];
         for (int index = 0; index < required.Length; index++)
         {
             WaveformPlane plane = required[index];

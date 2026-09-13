@@ -9,7 +9,7 @@ using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Specs;
 
-internal static class WaveformRecordArchiveSpecifications
+internal static partial class WaveformRecordArchiveSpecifications
 {
     private static readonly Guid SessionId =
         Guid.Parse("11111111-1111-4111-8111-111111111111");
@@ -33,6 +33,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(ChannelReadClipsSamplesAndQualityAcrossBlocks), ChannelReadClipsSamplesAndQualityAcrossBlocks),
+        new(nameof(ChannelReadUsesExactHalfOpenSampleTimes), ChannelReadUsesExactHalfOpenSampleTimes),
+        new(nameof(ChannelReadRejectsWithoutChangingArchive), ChannelReadRejectsWithoutChangingArchive),
+        new(nameof(ChannelReadRestoresAndOwnsOutput), ChannelReadRestoresAndOwnsOutput),
         new(nameof(SvgWithdrawRemovesPublicationWithoutChangingEvidence), SvgWithdrawRemovesPublicationWithoutChangingEvidence),
         new(nameof(SvgWithdrawRetainsExplicitGestureRollbackAndRecovery), SvgWithdrawRetainsExplicitGestureRollbackAndRecovery),
 

@@ -3,6 +3,7 @@ using System.Numerics;
 using Monitor.Application.Presentation;
 using Monitor.Domain.Continuity;
 using Monitor.Domain.Presentation;
+using Monitor.Infrastructure.Presentation;
 using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Specs;
@@ -31,6 +32,10 @@ internal static class WaveformRecordArchiveSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(StudySvgLayersRenderCurrentAdmittedGrid), StudySvgLayersRenderCurrentAdmittedGrid),
+        new(nameof(StudySvgLayersSuppressUnavailableGrid), StudySvgLayersSuppressUnavailableGrid),
+        new(nameof(StudySvgLayersRejectStylesWithoutChangingSession), StudySvgLayersRejectStylesWithoutChangingSession),
+        new(nameof(StudySvgLayersRestoreAndCancel), StudySvgLayersRestoreAndCancel),
         new(nameof(StudyGridCancellationPreservesSessionAndAllowsRetry), StudyGridCancellationPreservesSessionAndAllowsRetry),
         new(nameof(StudyPaperGridUsesCurrentCalibratedViewport), StudyPaperGridUsesCurrentCalibratedViewport),
         new(nameof(StudyPaperGridSuppressesDarkAndDeniedOutput), StudyPaperGridSuppressesDarkAndDeniedOutput),
@@ -161,6 +166,69 @@ internal static class WaveformRecordArchiveSpecifications
 
     private static CapturedRecordBinding MeasurementRecord() => CapturedRecordBinding.Create(
         BindingPresentation().CaptureState(), BindingArchive(), BindingSlots());
+
+    private static CapturedRecordSvgLayout SvgStudyLayout() => new(10, 10, new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55);
+    private static EcgPaperGridSvgStyle SvgStudyStyle() => new("#f0cccc", "#cc9999", 500, 1000);
+
+    private static void StudySvgLayersRenderCurrentAdmittedGrid()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordSvgLayersResult result = CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), true);
+        Check.That(result.GridSvg == EcgPaperGridSvg.Render(result.Display.GridPlan!, 55, SvgStudyStyle()) && result.Display.GridLines.Count == 55 &&
+            result.Display.Content.Content.Page == navigation.CurrentPage, "fresh current page geometry and rendered grid are published together without rebuilding the grid");
+    }
+
+    private static void StudySvgLayersSuppressUnavailableGrid()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
+        CapturedRecordSvgLayersResult denied = CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), false);
+        Check.That(denied.GridSvg is null && denied.Display.Content.Content.Study.Record is null, "denied current admission emits no SVG");
+        theme.Select(Ecg12Theme.MonitorDarkGreen);
+        CapturedRecordSvgLayersResult dark = CapturedRecordSvgLayers.Render(view, navigation, theme, true, SvgStudyLayout(), SvgStudyStyle() with { MinorColor = "invalid" }, false);
+        Check.That(dark.GridSvg is null && dark.Display.Content.Content.Study.Record is not null, "dark display omits grid and unused grid style");
+    }
+
+    private static void StudySvgLayersRejectStylesWithoutChangingSession()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        try
+        {
+            CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle() with { MajorStrokeMilliPixels = 0 }, true);
+            throw new InvalidOperationException("invalid current grid style accepted");
+        }
+        catch (EcgPaperGridException exception)
+        { Check.That(exception.ReasonCode == "PaperGrid.InvalidSvgStyle", "fresh layer rendering validates styles"); }
+        Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair) && CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), true).GridSvg is not null,
+            "render failure changes no selection and permits fresh retry");
+    }
+
+    private static void StudySvgLayersRestoreAndCancel()
+    {
+        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
+        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
+        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
+            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked, false);
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        try
+        {
+            CapturedRecordSvgLayers.Render(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), false, cancellation.Token);
+            throw new InvalidOperationException("cancelled layers accepted");
+        }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == cancellation.Token, "layer rendering forwards caller cancellation"); }
+        Check.That(CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), false).GridSvg ==
+            CapturedRecordSvgLayers.Render(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), false).GridSvg,
+            "restored current state produces equivalent SVG after cancellation");
+    }
 
     private static void StudyGridCancellationPreservesSessionAndAllowsRetry()
     {

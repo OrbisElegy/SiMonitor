@@ -22,6 +22,18 @@ public static class EcgPaperGridSvg
             style.MinorStrokeMilliPixels == 0 || style.MajorStrokeMilliPixels == 0)
         { throw new EcgPaperGridException("PaperGrid.InvalidSvgStyle", nameof(style)); }
         IReadOnlyList<EcgPaperGridLine> lines = EcgPaperGridGeometry.Build(plan, maximumLines, cancellationToken);
+        return RenderValidated(plan, lines, style, cancellationToken);
+    }
+
+    // Only fresh validated application/domain geometry enters this internal path.
+    internal static string RenderValidated(EcgPaperGridPlan plan, IReadOnlyList<EcgPaperGridLine> lines,
+        EcgPaperGridSvgStyle style, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(style);
+        if (!IsColor(style.MinorColor) || !IsColor(style.MajorColor) ||
+            style.MinorStrokeMilliPixels == 0 || style.MajorStrokeMilliPixels == 0)
+        { throw new EcgPaperGridException("PaperGrid.InvalidSvgStyle", nameof(style)); }
         StringBuilder minor = new(), major = new();
         string left = Integer(plan.LeftPixels), top = Integer(plan.TopPixels);
         string right = Integer((long)plan.LeftPixels + plan.WidthPixels), bottom = Integer((long)plan.TopPixels + plan.HeightPixels);

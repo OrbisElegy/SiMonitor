@@ -3,9 +3,10 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Full-cycle source illustration, not a measured EtCO2/RR or gas transport model.
+// Full-cycle signal illustration with optional pure transport lag.
+// Not a measured EtCO2/RR, gas-line dispersion or validated device model.
 public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long InspiratoryFallNs,
-    int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null)
+    int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0)
 {
     public const string EvidenceId = "InfirmaryCapnogramDraft@1";
 
@@ -20,6 +21,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
             (PlateauStartCentiMmHg is { } plateau && (plateau < BaselineMmHg * 100 || plateau > EndExpiratoryMmHg * 100)))
         { throw new EventWaveformException("Capnogram.InvalidPlan", "plan"); }
         long duration = expiration + InspiratoryFallNs;
+        if (TransportDelayNs < 0 || TransportDelayNs > long.MaxValue - duration)
+        { throw new EventWaveformException("Capnogram.InvalidPlan", "plan"); }
         EventWaveformPhasePoint[] phases = [new(0, 0), new(DeadSpaceNs, 32), new(DeadSpaceNs + RiseNs, 96),
             new(expiration, 480), new(duration, 512)];
         long peakCounts = (EndExpiratoryMmHg - BaselineMmHg) * 100L;
@@ -44,7 +47,7 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
         var table = Array.AsReadOnly(values);
         var bands = Array.AsReadOnly(new EventWaveformBand[]
         {
-            new(PhysiologyCycleEventKind.ExpirationStart, 0, duration, table, Array.AsReadOnly(phases)),
+            new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs, duration, table, Array.AsReadOnly(phases)),
         });
         return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, 200, qualityFlags);
     }

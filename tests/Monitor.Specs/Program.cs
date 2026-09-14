@@ -33,6 +33,7 @@ internal static class Program
             .. PhysiologySignalGeneratorSpecifications.All,
             .. PhysiologyWaveformGroupSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
+            .. EcgElectrodeProjectionSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

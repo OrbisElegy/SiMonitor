@@ -15,6 +15,12 @@ public sealed class MonitorApp : Avalonia.Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            if (desktop.Args is ["--waveform-demo"])
+            {
+                desktop.MainWindow = new WaveformDemoWindow();
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
             MainWindow window = new();
             desktop.MainWindow = window;
             if (desktop.Args is ["--study-demo"]) { DesktopStudyDemo.Start(window); }
@@ -34,6 +40,7 @@ public sealed class MonitorApp : Avalonia.Application
                     if (valid) { DesktopCaptureSmokeChecks.Verify(window); }
                     if (valid) { DesktopDemoSmokeChecks.Verify(); }
                     if (valid) { DesktopMeasurementSmokeChecks.Verify(); }
+                    if (valid) { WaveformDemoSmokeChecks.Verify(); }
                     if (valid)
                     {
                         Directory.CreateDirectory("artifacts");

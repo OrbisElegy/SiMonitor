@@ -41,7 +41,7 @@ internal static class ProjectedEcgDemoSmokeChecks
                 for (int lead = 0; lead < 12; lead++)
                 {
                     var plane = block.Planes.Single(item => item.ChannelId == ProjectedEcgDemoSource.ChannelId((EcgLead)lead));
-                    int y = (int)Math.Round(lead * 60 + 30 - plane.Samples[0] * 0.02);
+                    int y = (int)Math.Round(lead * 60 + 30 - plane.Samples[0] * 0.015);
                     // x=144 maps to 200ms in a 1000px two-second plot after label gutter.
                     if (!Enumerable.Range(y - 2, 5).Any(row => Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + 144 * 4 + 1) > 100))
                     { throw new InvalidOperationException("Rendered row does not match its decoded lead sample."); }

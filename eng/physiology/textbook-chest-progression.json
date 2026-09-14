@@ -1,0 +1,119 @@
+{
+  "id": "TextbookChestProgressionDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第一、二节",
+    "pages": "450,459-460"
+  },
+  "textbook_summary": [
+    "V1/V2 rS and no initial q at integer microvolt output.",
+    "R increases V1-V5, V6 lower than V5.",
+    "S deepest V2 and decreases V2-V6.",
+    "V3 R/S approximately one with substantial positive and negative waves.",
+    "V1/V2 R peak within 30 ms; V5/V6 within 50 ms.",
+    "Small initial q allowed V4-V6, duration/depth constrained."
+  ],
+  "scope": "Project-authored shared early/main/terminal depolarization components; not independently validated adult preset",
+  "phase_length": 128,
+  "phase_landmarks": {
+    "Early": [
+      [
+        0,
+        0
+      ],
+      [
+        8,
+        1
+      ],
+      [
+        16,
+        0
+      ],
+      [
+        128,
+        0
+      ]
+    ],
+    "Main": [
+      [
+        0,
+        0
+      ],
+      [
+        16,
+        0
+      ],
+      [
+        48,
+        1
+      ],
+      [
+        80,
+        0
+      ],
+      [
+        128,
+        0
+      ]
+    ],
+    "Terminal": [
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        0
+      ],
+      [
+        104,
+        1
+      ],
+      [
+        128,
+        0
+      ]
+    ]
+  },
+  "chest_component_microvolts": [
+    [
+      0,
+      250,
+      -1200
+    ],
+    [
+      0,
+      450,
+      -1500
+    ],
+    [
+      0,
+      900,
+      -900
+    ],
+    [
+      -60,
+      1300,
+      -600
+    ],
+    [
+      -100,
+      1700,
+      -300
+    ],
+    [
+      -100,
+      1500,
+      -180
+    ]
+  ],
+  "limb_qrs_weights_per_1000": [
+    -200,
+    400,
+    0,
+    800
+  ],
+  "construction": "RA/LA/RL/LL retain original QRS weights. Chest potential = shared limb mean + independent early/main/terminal components before standard projection. Offline exact fractions, one Q32 rounding per electrode. Residual chest projection quantization <= half Q32 unit.",
+  "authorship": "Numeric component amplitudes and node locations are project choices within textbook qualitative constraints, not traced textbook data"
+}

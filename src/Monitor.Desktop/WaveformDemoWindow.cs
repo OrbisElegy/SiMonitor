@@ -276,7 +276,7 @@ internal sealed class WaveformDemoWindow : Window
                             // Reduce integer time before terminal pixel conversion.
                             long sourceTime = block.StartSimTimeNs + index * 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
                             double time = sourceTime % 2_000_000_000;
-                            Point point = new(time / 2_000_000_000, projected ? channel * 60 + 30 - plane.Samples[index] * 0.02 : channel * 120 + 60 - plane.Samples[index] * 0.05);
+                            Point point = new(time / 2_000_000_000, projected ? channel * 60 + 30 - plane.Samples[index] * 0.015 : channel * 120 + 60 - plane.Samples[index] * 0.05);
                             if (previous is { } start && point.X > start.X &&
                                 sourceTime > frontier - 2_000_000_000 && previousTime < frontier)
                             {

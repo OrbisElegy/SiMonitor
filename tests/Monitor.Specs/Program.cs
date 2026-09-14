@@ -36,6 +36,7 @@ internal static class Program
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,
             .. ElectrodeWaveformGroupSpecifications.All,
+            .. ChestProgressionSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

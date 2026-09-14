@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-// Project-authored electrode illustration, not validated body-surface morphology.
-// Independent P/QRS/T electrode weights reuse the authored textbook band shapes.
-// This does not derive twelve leads by scaling one II waveform; within-band
-// vector evolution and independent physiological validation remain future work.
+// Desktop binding for the shared textbook-constrained electrode reference.
 internal static class ProjectedEcgDemoSource
 {
     internal static string[] LeadNames => ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"];
@@ -15,17 +11,7 @@ internal static class ProjectedEcgDemoSource
 
     internal static ElectrodeWaveformGroup Create()
     {
-        // Rows: RA, LA, RL, LL, C1-C6. Columns: P, QRS, T; denominator 1000.
-        int[,] weights = { { -200, -200, -100 }, { 300, 400, 250 }, { 0, 0, 0 }, { 600, 800, 550 },
-            { 150, -500, 0 }, { 250, -250, 100 }, { 350, 100, 350 },
-            { 450, 700, 650 }, { 500, 1100, 800 }, { 450, 1000, 750 } };
-        var bands = TextbookEcgReference.CreateBands();
-        var electrodes = Enum.GetValues<EcgElectrode>().Select(electrode => new ElectrodeWaveformPlan(electrode,
-            bands.Select((band, index) => band with
-            {
-                TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value =>
-                checked((long)FixedPointMath.RoundDivideTiesToEven((Int128)value * weights[(int)electrode, index], 1000))).ToArray())
-            }).ToArray())).ToArray();
+        var electrodes = TextbookElectrodeReference.CreateElectrodes();
         var timing = TextbookEcgReference.Timing;
         RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs, timing.PrIntervalNs,
             80_000_000, timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000);

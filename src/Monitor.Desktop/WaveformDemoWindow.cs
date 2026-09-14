@@ -70,7 +70,7 @@ internal sealed class WaveformDemoWindow : Window
     {
         _projected = projected;
         _physiology = physiology && !projected;
-        Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth / ABP 开发演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
+        Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth / ABP / CO₂ 演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
         ShapeButton.IsVisible = !physiology && !projected;
         Width = 1040;
         Height = projected ? 900 : physiology ? 700 : 520;
@@ -80,7 +80,8 @@ internal sealed class WaveformDemoWindow : Window
         if (_physiology)
         {
             panel.Children.Add(new TextBlock { Text = "第四行 ABP（红）：125 Hz / 80 ms；固定压力尺度 0–160 mmHg。按实际样本的比例与偏移换算压力，未计算 SYS/DIA/MAP。" });
-            panel.Children.Add(new TextBlock { Text = "Pleth、ABP 由机械搏动触发；示意电机械延迟 80 ms、传播延迟 80 ms，处理延迟另计。四通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
+            panel.Children.Add(new TextBlock { Text = "第五行 CO₂（白）：100 Hz / 2 s；固定尺度 0–80 mmHg。由呼气事件驱动，下降段对齐下一吸气；未计算 EtCO₂ 或 RR-CO₂。" });
+            panel.Children.Add(new TextBlock { Text = "Pleth、ABP 由机械搏动触发；示意电机械延迟 80 ms、传播延迟 80 ms，处理延迟另计。五通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
         }
         panel.Children.Add(new TextBlock { Text = $"共享块等待全部通道齐备；{(projected ? 8 : 2)} s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = $"演示擦除间隙 200 ms，仅遮盖绘图；保留 {(projected ? "8.2" : "2.2")} s 源历史。" });
@@ -319,12 +320,12 @@ internal sealed class WaveformDemoWindow : Window
         {
             _resp = resp;
             _projected = projected;
-            Height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : resp ? 480 : 240;
+            Height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : resp ? 600 : 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
                 _gapStart = (frontier % DurationNs) / (double)DurationNs;
-                for (int channel = 0; channel < (projected ? 12 : resp ? 4 : 2); channel++)
+                for (int channel = 0; channel < (projected ? 12 : resp ? 5 : 2); channel++)
                 {
                     Point? previous = null;
                     long previousTime = 0;
@@ -345,13 +346,13 @@ internal sealed class WaveformDemoWindow : Window
                                 var position = EcgVerticalGeometry.MapMicrovolts(ProjectedEcgPlotLayout.VerticalScale(channel), plane.Samples[index], 1);
                                 y = (double)position.PixelNumerator / (double)position.PixelDenominator;
                             }
-                            else if (resp && channel == 3)
+                            else if (resp && channel >= 3)
                             {
                                 // Terminal display conversion; raw counts are hundredths
                                 // above the wire baseline, not absolute pressure in mmHg.
                                 double pressureMmHg = (double)plane.Samples[index] * plane.ScaleNumerator / plane.ScaleDenominator +
                                     (double)plane.OffsetNumerator / plane.OffsetDenominator;
-                                y = channel * 120 + 110 - pressureMmHg * (100.0 / 160);
+                                y = channel * 120 + 110 - pressureMmHg * (100.0 / (channel == 3 ? 160 : 80));
                             }
                             else { y = channel * 120 + 60 - plane.Samples[index] * 0.05; }
                             Point point = new(time / DurationNs, y);
@@ -388,9 +389,10 @@ internal sealed class WaveformDemoWindow : Window
                 Pen second = new(_resp ? Brushes.Yellow : Brushes.Cyan, 1);
                 Pen third = new(Brushes.Cyan, 1);
                 Pen fourth = new(Brushes.Red, 1);
+                Pen fifth = new(Brushes.White, 1);
                 foreach (var segment in _segments)
                 {
-                    context.DrawLine(_projected || segment.Channel == 0 ? first : segment.Channel == 1 ? second : segment.Channel == 2 ? third : fourth,
+                    context.DrawLine(_projected || segment.Channel == 0 ? first : segment.Channel == 1 ? second : segment.Channel == 2 ? third : segment.Channel == 3 ? fourth : fifth,
                         new(left + segment.Start.X * width, segment.Start.Y),
                         new(left + segment.End.X * width, segment.End.Y));
                 }

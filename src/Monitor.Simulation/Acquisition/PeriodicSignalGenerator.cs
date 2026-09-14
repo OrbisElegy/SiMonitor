@@ -64,6 +64,27 @@ public sealed class PeriodicSignalGenerator
         return new(new(_plan.ProfileId, _plan.StreamEpoch, sampleIndex, (long)time), phase, value, normalized);
     }
 
+    public IReadOnlyList<GeneratedSignalSample> EvaluateRange(ulong firstSampleIndex, int sampleCount,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (sampleCount is < 0 or > MaximumBatchSampleCount)
+        { throw new PeriodicSignalGeneratorException("PeriodicSignal.InvalidSampleLimit", nameof(sampleCount)); }
+        if (sampleCount == 0) { return Array.Empty<GeneratedSignalSample>(); }
+        if ((ulong)(sampleCount - 1) > ulong.MaxValue - firstSampleIndex)
+        { throw new PeriodicSignalGeneratorException("PeriodicSignal.SampleIndexOverflow", nameof(firstSampleIndex)); }
+        // Reject the entire interval before allocating its result.
+        _ = EvaluateAt(firstSampleIndex + (ulong)(sampleCount - 1));
+        var output = new GeneratedSignalSample[sampleCount];
+        for (int index = 0; index < output.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            output[index] = EvaluateAt(firstSampleIndex + (ulong)index);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return Array.AsReadOnly(output);
+    }
+
     public static PeriodicSignalGenerator Restore(PeriodicSignalState state)
     {
         try
@@ -81,7 +102,7 @@ public sealed class PeriodicSignalGenerator
         cancellationToken.ThrowIfCancellationRequested();
         if (maximumSamples <= 0 || maximumSamples > MaximumBatchSampleCount)
         { throw new PeriodicSignalGeneratorException("PeriodicSignal.InvalidSampleLimit", nameof(maximumSamples)); }
-        SignalSampleClock trial = SignalSampleClock.Restore(_clock.CaptureState());
+        var trial = SignalSampleClock.Restore(_clock.CaptureState());
         if (exclusiveSimTimeNs > trial.NextSampleSimTimeNs)
         {
             Int128 count = ((Int128)exclusiveSimTimeNs - 1 - trial.NextSampleSimTimeNs) / trial.SamplePeriodNs + 1;
@@ -89,7 +110,7 @@ public sealed class PeriodicSignalGenerator
             { throw new PeriodicSignalGeneratorException("PeriodicSignal.SampleLimitExceeded", nameof(maximumSamples)); }
         }
         IReadOnlyList<SignalSampleTick> ticks = trial.DrainBefore(exclusiveSimTimeNs);
-        GeneratedSignalSample[] output = new GeneratedSignalSample[ticks.Count];
+        var output = new GeneratedSignalSample[ticks.Count];
         for (int index = 0; index < output.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();

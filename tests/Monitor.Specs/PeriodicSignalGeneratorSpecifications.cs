@@ -15,27 +15,72 @@ internal static class PeriodicSignalGeneratorSpecifications
         new(nameof(PeriodicSamplesFeedAcquisitionWithoutClockSubstitution), PeriodicSamplesFeedAcquisitionWithoutClockSubstitution),
         new(nameof(IndexedEvaluationPreservesClockAndMatchesGeneration), IndexedEvaluationPreservesClockAndMatchesGeneration),
         new(nameof(IndexedEvaluationChecksTimestampBoundary), IndexedEvaluationChecksTimestampBoundary),
+        new(nameof(IndexedRangesPreserveSamplesAndOwnership), IndexedRangesPreserveSamplesAndOwnership),
+        new(nameof(IndexedRangesRejectBoundsAndCancellation), IndexedRangesRejectBoundsAndCancellation),
     ];
 
     private static PeriodicSignalPlan Plan() => new("AcqECGMonitor250@1", 7, 1_000_000_000, 0,
         0x2000000000000000, [0, 3 * FixedPointMath.Q32One, 0, -3 * FixedPointMath.Q32One]);
 
+    private static void IndexedRangesPreserveSamplesAndOwnership()
+    {
+        var generator = PeriodicSignalGenerator.Start(Plan());
+        SignalSampleClockState before = generator.CaptureState().Clock;
+        IReadOnlyList<GeneratedSignalSample> range = generator.EvaluateRange(7, 12);
+        Check.That(range.SequenceEqual(generator.EvaluateRange(7, 5).Concat(generator.EvaluateRange(12, 7))) &&
+            range[0] == generator.EvaluateAt(7) && range[^1] == generator.EvaluateAt(18) &&
+            generator.CaptureState().Clock == before, "partitioned indexed ranges preserve samples without cursor movement");
+        Check.That(generator.EvaluateRange(ulong.MaxValue, 0).Count == 0, "empty ranges have no sample timestamp to evaluate");
+        bool immutable = false;
+        try { ((IList<GeneratedSignalSample>)range)[0] = default; }
+        catch (NotSupportedException) { immutable = true; }
+        _ = generator.GenerateBefore(1_004_000_000, 1);
+        Check.That(immutable && range[0] == generator.EvaluateAt(7) &&
+            range.SequenceEqual(PeriodicSignalGenerator.Restore(generator.CaptureState()).EvaluateRange(7, 12)),
+            "range results are immutable and independent of later advancement and recovery");
+    }
+
+    private static void IndexedRangesRejectBoundsAndCancellation()
+    {
+        var generator = PeriodicSignalGenerator.Start(Plan());
+        SignalSampleClockState before = generator.CaptureState().Clock;
+        void Reject(ulong first, int count, string reason)
+        {
+            bool rejected = false;
+            try { generator.EvaluateRange(first, count); }
+            catch (PeriodicSignalGeneratorException exception) { rejected = exception.ReasonCode == reason; }
+            Check.That(rejected, reason);
+        }
+        Reject(0, -1, "PeriodicSignal.InvalidSampleLimit");
+        Reject(0, PeriodicSignalGenerator.MaximumBatchSampleCount + 1, "PeriodicSignal.InvalidSampleLimit");
+        Reject(ulong.MaxValue, 2, "PeriodicSignal.SampleIndexOverflow");
+        ulong last = (ulong)((long.MaxValue - Plan().EpochAnchorSimTimeNs) / 4_000_000);
+        Reject(last, 2, "PeriodicSignal.SampleTimeOverflow");
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        bool cancelled = false;
+        try { generator.EvaluateRange(0, 10, cancellation.Token); }
+        catch (OperationCanceledException) { cancelled = true; }
+        Check.That(cancelled && generator.CaptureState().Clock == before && generator.EvaluateRange(last, 1).Count == 1,
+            "range failure/cancellation leaves source usable at the exact timestamp boundary");
+    }
+
     private static void IndexedEvaluationPreservesClockAndMatchesGeneration()
     {
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        var generator = PeriodicSignalGenerator.Start(Plan());
         SignalSampleClockState before = generator.CaptureState().Clock;
         GeneratedSignalSample[] indexed = Enumerable.Range(0, 16).Select(index => generator.EvaluateAt((ulong)index)).ToArray();
         _ = generator.EvaluateAt(1_000_000);
         Check.That(generator.CaptureState().Clock == before, "indexed reads must not advance the source clock");
         Check.That(indexed.SequenceEqual(generator.GenerateBefore(1_064_000_000, 16)), "indexed and sequential sample evidence must agree");
-        PeriodicSignalGenerator restored = PeriodicSignalGenerator.Restore(generator.CaptureState());
+        var restored = PeriodicSignalGenerator.Restore(generator.CaptureState());
         Check.That(restored.EvaluateAt(0) == indexed[0] && restored.EvaluateAt(1_000_000) == generator.EvaluateAt(1_000_000),
             "restored random access must preserve past and future samples independently of cursor");
     }
 
     private static void IndexedEvaluationChecksTimestampBoundary()
     {
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        var generator = PeriodicSignalGenerator.Start(Plan());
         ulong last = (ulong)((long.MaxValue - Plan().EpochAnchorSimTimeNs) / 4_000_000);
         Check.That(generator.EvaluateAt(last).Tick.SimTimeNs == Plan().EpochAnchorSimTimeNs + (long)last * 4_000_000,
             "last representable source instant must use exact integer arithmetic");
@@ -51,7 +96,7 @@ internal static class PeriodicSignalGeneratorSpecifications
 
     private static void PeriodicSamplesUseFrozenInterpolationAndClock()
     {
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        var generator = PeriodicSignalGenerator.Start(Plan());
         IReadOnlyList<GeneratedSignalSample> samples = generator.GenerateBefore(1_032_000_000, 8);
         short[] expected = [0, 2, 3, 2, 0, -2, -3, -2];
         Check.That(samples.Select(sample => sample.NormalizedValue).SequenceEqual(expected) &&
@@ -63,10 +108,10 @@ internal static class PeriodicSignalGeneratorSpecifications
 
     private static void PeriodicBatchesAndRestoreKeepIdenticalPhase()
     {
-        PeriodicSignalGenerator whole = PeriodicSignalGenerator.Start(Plan());
-        PeriodicSignalGenerator split = PeriodicSignalGenerator.Start(Plan());
+        var whole = PeriodicSignalGenerator.Start(Plan());
+        var split = PeriodicSignalGenerator.Start(Plan());
         List<GeneratedSignalSample> collected = [.. split.GenerateBefore(1_005_000_000, 2)];
-        PeriodicSignalGenerator restored = PeriodicSignalGenerator.Restore(split.CaptureState());
+        var restored = PeriodicSignalGenerator.Restore(split.CaptureState());
         collected.AddRange(restored.GenerateBefore(1_032_000_000, 6));
         Check.That(collected.SequenceEqual(whole.GenerateBefore(1_032_000_000, 8)) &&
             restored.GenerateBefore(1_032_000_000, 1).Count == 0,
@@ -75,7 +120,7 @@ internal static class PeriodicSignalGeneratorSpecifications
 
     private static void PeriodicFailurePreservesGeneratorState()
     {
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        var generator = PeriodicSignalGenerator.Start(Plan());
         PeriodicSignalState before = generator.CaptureState();
         Reject(() => generator.GenerateBefore(1_032_000_000, 7), "PeriodicSignal.SampleLimitExceeded");
         Reject(() => generator.GenerateBefore(1_032_000_000, 0), "PeriodicSignal.InvalidSampleLimit");
@@ -94,7 +139,7 @@ internal static class PeriodicSignalGeneratorSpecifications
     private static void PeriodicPlansAndCheckpointsAreOwnedAndValidated()
     {
         long[] table = [0, FixedPointMath.Q32One, 0, -FixedPointMath.Q32One];
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan() with { TableQ32 = table });
+        var generator = PeriodicSignalGenerator.Start(Plan() with { TableQ32 = table });
         table[0] = long.MaxValue;
         PeriodicSignalState state = generator.CaptureState();
         bool immutable = false;
@@ -111,8 +156,8 @@ internal static class PeriodicSignalGeneratorSpecifications
     private static void PeriodicSamplesFeedAcquisitionWithoutClockSubstitution()
     {
         PeriodicSignalPlan plan = Plan();
-        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(plan);
-        SignalAcquisitionDelayLine delay = SignalAcquisitionDelayLine.Start(plan.ProfileId, plan.StreamEpoch, plan.EpochAnchorSimTimeNs, 50);
+        var generator = PeriodicSignalGenerator.Start(plan);
+        var delay = SignalAcquisitionDelayLine.Start(plan.ProfileId, plan.StreamEpoch, plan.EpochAnchorSimTimeNs, 50);
         IReadOnlyList<GeneratedSignalSample> samples = generator.GenerateBefore(1_200_000_000, 50);
         foreach (GeneratedSignalSample sample in samples) { delay.Enqueue(sample.Tick, sample.NormalizedValue, 0x80000000); }
         Check.That(delay.DrainAvailable(1_039_999_999).Count == 0, "ECG acquisition keeps its frozen 40ms latency");
@@ -121,8 +166,8 @@ internal static class PeriodicSignalGeneratorSpecifications
             available[^1].AvailableSimTimeNs == 1_236_000_000 && available.All(sample => sample.QualityFlags == 0x80000000) &&
             available.Select(sample => sample.NormalizedValue).SequenceEqual(samples.Select(sample => sample.NormalizedValue)),
             "generated samples integrate with acquisition while preserving raw values and caller-supplied quality flags");
-        Guid channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
-        WaveformBlockAssembler assembler = WaveformBlockAssembler.Start(channel,
+        var channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var assembler = WaveformBlockAssembler.Start(channel,
             Guid.Parse("22222222-2222-4222-8222-222222222222"), 3, plan.StreamEpoch, 11, 100,
             plan.EpochAnchorSimTimeNs, 1, [new(channel, plan.ProfileId, 1, 1, 0, 1)]);
         byte[] wire = WaveformEnvelopeCodec.EncodeRaw(assembler.Push(channel, available).Single());

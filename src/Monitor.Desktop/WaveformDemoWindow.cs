@@ -2,6 +2,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
 
@@ -17,6 +18,11 @@ internal sealed class WaveformDemoWindow : Window
     private WaveformEnvelope[]? _pinned;
     private readonly TextBlock _status = new();
     private readonly ContentControl _trace = new();
+    private DispatcherTimer? _timer;
+    private bool _closed;
+    private readonly TextBlock _runStatus = new();
+    internal Button RunButton { get; } = new() { Content = "自动步进" };
+    internal DispatcherTimer? ActiveTimer => _timer;
     internal Button StepButton { get; } = new() { Content = "步进 200 ms" };
     internal Button ResetButton { get; } = new() { Content = "重置" };
     internal Button HoldButton { get; } = new() { Content = "固定当前画面", IsEnabled = false };
@@ -41,14 +47,57 @@ internal sealed class WaveformDemoWindow : Window
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
         actions.Children.Add(HoldButton);
+        actions.Children.Add(RunButton);
         panel.Children.Add(actions);
+        panel.Children.Add(_runStatus);
         panel.Children.Add(_status);
         panel.Children.Add(_trace);
         Content = panel;
-        StepButton.Click += (_, _) => Advance(200_000_000);
-        ResetButton.Click += (_, _) => Reset();
-        HoldButton.Click += (_, _) => ToggleHold();
+        StepButton.Click += (_, _) => { if (!_closed && _timer is null) { Advance(200_000_000); } };
+        ResetButton.Click += (_, _) => { if (!_closed) { Reset(); } };
+        HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
+        RunButton.Click += (_, _) => ToggleRun();
+        Closed += (_, _) => { _closed = true; Pause(); };
         Reset();
+    }
+
+    private void ToggleRun()
+    {
+        if (_closed) { return; }
+        if (_timer is not null) { Pause(); return; }
+        // A fresh timer identity fences callbacks from previous runs.
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _timer.Tick += OnTick;
+        _timer.Start();
+        RunButton.Content = "暂停自动步进";
+        StepButton.IsEnabled = false;
+        _runStatus.Text = "自动步进：每次回调推进 200 ms；界面繁忙时不追赶，不保证实时速率。";
+    }
+
+    private void OnTick(object? sender, EventArgs args) => Pulse(sender);
+
+    internal void Pulse(object? timer)
+    {
+        if (_closed || _timer is null || !ReferenceEquals(timer, _timer)) { return; }
+        try { Advance(200_000_000); }
+        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        {
+            Pause();
+            _runStatus.Text = "生成失败，自动步进已暂停；可重置后重新开始。";
+        }
+    }
+
+    private void Pause()
+    {
+        DispatcherTimer? old = _timer;
+        _timer = null;
+        if (old is not null) { old.Stop(); old.Tick -= OnTick; }
+        RunButton.Content = "自动步进";
+        RunButton.IsEnabled = !_closed;
+        StepButton.IsEnabled = !_closed;
+        ResetButton.IsEnabled = !_closed;
+        HoldButton.IsEnabled = !_closed && _blocks.Length > 0;
+        _runStatus.Text = "自动步进已暂停；可手动步进。";
     }
 
     internal void Advance(long deltaNs)
@@ -85,6 +134,7 @@ internal sealed class WaveformDemoWindow : Window
 
     private void Reset()
     {
+        Pause();
         _source = CreateSource();
         _blocks = [];
         _pinned = null;

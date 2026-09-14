@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 
 namespace Monitor.Desktop;
 
@@ -69,10 +70,63 @@ internal static class WaveformDemoSmokeChecks
             Click(window.ResetButton);
             if (window.IsHeld || window.HoldButton.IsEnabled || window.DisplayStartNs is not null)
             { throw new InvalidOperationException("Reset retained pinned data or capability."); }
+            VerifyAutomaticSteps(window);
         }
         finally { window.Close(); }
         Console.WriteLine("ok: generated multi-rate native traces, delay, bounded retention, failure, resize and reset");
         Console.WriteLine("ok: pinned generated trace survives background eviction and returns directly to latest data");
+        Console.WriteLine("ok: automatic step timer, pause, stale callback fencing, held generation, reset and close");
+    }
+
+    private static void VerifyAutomaticSteps(WaveformDemoWindow window)
+    {
+        Click(window.RunButton);
+        var first = window.ActiveTimer;
+        if (first is null || !first.IsEnabled || window.StepButton.IsEnabled)
+        { throw new InvalidOperationException("Automatic run did not own an enabled timer."); }
+        Click(window.StepButton);
+        if (window.SimulationTimeNs != 0) { throw new InvalidOperationException("Manual step bypassed automatic ownership."); }
+        DispatcherFrame frame = new();
+        bool delivered = false;
+        void ObserveTick(object? sender, EventArgs args) { delivered = true; frame.Continue = false; }
+        DispatcherTimer timeout = new() { Interval = TimeSpan.FromSeconds(3) };
+        timeout.Tick += (_, _) => frame.Continue = false;
+        first.Tick += ObserveTick;
+        timeout.Start();
+        try { Dispatcher.UIThread.PushFrame(frame); }
+        finally { timeout.Stop(); first.Tick -= ObserveTick; }
+        if (!delivered || window.SimulationTimeNs != 200_000_000)
+        { throw new InvalidOperationException("Native timer did not deliver one simulation step."); }
+        for (int tick = 0; tick < 10; tick++) { window.Pulse(first); }
+        Click(window.HoldButton);
+        Control held = window.Trace;
+        window.Pulse(first);
+        if (window.SimulationTimeNs != 2_400_000_000 || !ReferenceEquals(held, window.Trace))
+        { throw new InvalidOperationException("Automatic generation altered held geometry."); }
+        Click(window.RunButton);
+        window.Pulse(first);
+        if (window.ActiveTimer is not null || first.IsEnabled || !window.StepButton.IsEnabled ||
+            window.SimulationTimeNs != 2_400_000_000)
+        { throw new InvalidOperationException("Pause did not fence its old timer."); }
+        Click(window.RunButton);
+        var second = window.ActiveTimer;
+        window.Pulse(first);
+        if (ReferenceEquals(first, second) || window.SimulationTimeNs != 2_400_000_000)
+        { throw new InvalidOperationException("Resume accepted a stale callback."); }
+        window.Pulse(second);
+        if (window.SimulationTimeNs != 2_600_000_000) { throw new InvalidOperationException("Resume did not take one fixed step."); }
+        Click(window.ResetButton);
+        window.Pulse(second);
+        if (window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.IsHeld)
+        { throw new InvalidOperationException("Reset retained automatic generation or held data."); }
+        Click(window.RunButton);
+        var final = window.ActiveTimer;
+        window.Close();
+        window.Pulse(final);
+        Click(window.RunButton);
+        Click(window.StepButton);
+        if (window.ActiveTimer is not null || final is null || final.IsEnabled || window.SimulationTimeNs != 0)
+        { throw new InvalidOperationException("Closed window restarted generation."); }
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

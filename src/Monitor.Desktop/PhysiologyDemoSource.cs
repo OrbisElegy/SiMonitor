@@ -10,6 +10,7 @@ internal static class PhysiologyDemoSource
         0 => Guid.Parse("11111111-1111-4111-8111-111111111111"),
         1 => Guid.Parse("33333333-3333-4333-8333-333333333333"),
         2 => Guid.Parse("22222222-2222-4222-8222-222222222222"),
+        3 => Guid.Parse("44444444-4444-4444-8444-444444444444"),
         _ => throw new ArgumentOutOfRangeException(nameof(row)),
     };
 
@@ -24,6 +25,7 @@ internal static class PhysiologyDemoSource
              new(plan, new(ChannelId(1), "AcqResp125@1", 1, 1, 0, 1),
                 [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, PhysiologyDemoTables.Resp)], 10, 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0)]);
+                new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
+             new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0)]);
     }
 }

@@ -32,4 +32,9 @@ Upstream random beat modifiers and timers are not imported.
 Its illustrative source is not a qualified arterial-site preset or a model of
 catheter dynamics. Baseline persistence without mechanical events is a caller
 configuration, not a simulated circulatory-arrest pressure decay. SYS/DIA/MAP,
-damping, flush, transducer faults and native client display remain unimplemented.
+damping, flush and transducer faults remain unimplemented.
+
+Source inspection uses the public links pinned to the commit above.
+Regeneration uses the committed manifests and license text; an upstream
+checkout is not a build dependency.
+The native physiology demo displays this pressure source.

@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using Monitor.Simulation.Determinism;
-
 namespace Monitor.Simulation.Acquisition;
 
 public sealed class PeriodicWaveformGroupException(string reasonCode, string parameterName)
@@ -41,8 +39,8 @@ public sealed class PeriodicWaveformGroup
             string key = item.ChannelId.ToString("N");
             if (previous is not null && StringComparer.Ordinal.Compare(previous, key) >= 0) { throw InvalidCheckpoint(); }
             previous = key;
-            PeriodicSignalGenerator generator = PeriodicSignalGenerator.Restore(item.Generator);
-            SignalAcquisitionDelayLine delay = SignalAcquisitionDelayLine.Restore(item.Delay);
+            var generator = PeriodicSignalGenerator.Restore(item.Generator);
+            var delay = SignalAcquisitionDelayLine.Restore(item.Delay);
             PeriodicSignalState source = generator.CaptureState();
             SignalAcquisitionDelayState waiting = delay.CaptureState();
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
@@ -56,12 +54,9 @@ public sealed class PeriodicWaveformGroup
                 cursor is { } common && common != source.Clock.CursorSimTimeNs)
             { throw InvalidCheckpoint(); }
             cursor = source.Clock.CursorSimTimeNs;
-            long[] table = source.Plan.TableQ32.ToArray();
             foreach (DelayedSignalSample sample in waiting.PendingSamples.Concat(plane.PendingSamples))
             {
-                ulong phase = unchecked(source.Plan.InitialPhaseU64 + sample.SampleIndex * source.Plan.PhaseIncrementU64);
-                long value = PeriodicLutLinear.Interpolate(table, phase).Value;
-                short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+                short expected = generator.EvaluateAt(sample.SampleIndex).NormalizedValue;
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
             _channels[index] = new(item.ChannelId, generator, delay, item.QualityFlags);
@@ -74,7 +69,7 @@ public sealed class PeriodicWaveformGroup
     {
         if (channels is null || channels.Count is < 1 or > WaveformEnvelopeCodec.MaximumPlaneCount)
         { throw new PeriodicWaveformGroupException("PeriodicGroup.InvalidChannels", nameof(channels)); }
-        PeriodicWaveformChannelPlan[] plans = new PeriodicWaveformChannelPlan[channels.Count];
+        var plans = new PeriodicWaveformChannelPlan[channels.Count];
         for (int index = 0; index < plans.Length; index++)
         {
             PeriodicWaveformChannelPlan plan = channels[index];
@@ -87,7 +82,7 @@ public sealed class PeriodicWaveformGroup
             PeriodicSignalGenerator.Start(plan.Source).CaptureState(),
             SignalAcquisitionDelayLine.Start(plan.Source.ProfileId, plan.Source.StreamEpoch,
                 plan.Source.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags)).ToArray();
-        WaveformBlockAssembler assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
+        var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
             plans[0].Source.StreamEpoch, configurationRevision, firstBlockSequence, plans[0].Source.EpochAnchorSimTimeNs,
             maximumBufferedBlocks, plans.Select(plan => plan.Plane).ToArray());
         return Restore(new(sources, assembler.CaptureState()));

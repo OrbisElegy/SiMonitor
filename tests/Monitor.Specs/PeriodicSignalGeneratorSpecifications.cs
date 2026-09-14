@@ -13,10 +13,41 @@ internal static class PeriodicSignalGeneratorSpecifications
         new(nameof(PeriodicFailurePreservesGeneratorState), PeriodicFailurePreservesGeneratorState),
         new(nameof(PeriodicPlansAndCheckpointsAreOwnedAndValidated), PeriodicPlansAndCheckpointsAreOwnedAndValidated),
         new(nameof(PeriodicSamplesFeedAcquisitionWithoutClockSubstitution), PeriodicSamplesFeedAcquisitionWithoutClockSubstitution),
+        new(nameof(IndexedEvaluationPreservesClockAndMatchesGeneration), IndexedEvaluationPreservesClockAndMatchesGeneration),
+        new(nameof(IndexedEvaluationChecksTimestampBoundary), IndexedEvaluationChecksTimestampBoundary),
     ];
 
     private static PeriodicSignalPlan Plan() => new("AcqECGMonitor250@1", 7, 1_000_000_000, 0,
         0x2000000000000000, [0, 3 * FixedPointMath.Q32One, 0, -3 * FixedPointMath.Q32One]);
+
+    private static void IndexedEvaluationPreservesClockAndMatchesGeneration()
+    {
+        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        SignalSampleClockState before = generator.CaptureState().Clock;
+        GeneratedSignalSample[] indexed = Enumerable.Range(0, 16).Select(index => generator.EvaluateAt((ulong)index)).ToArray();
+        _ = generator.EvaluateAt(1_000_000);
+        Check.That(generator.CaptureState().Clock == before, "indexed reads must not advance the source clock");
+        Check.That(indexed.SequenceEqual(generator.GenerateBefore(1_064_000_000, 16)), "indexed and sequential sample evidence must agree");
+        PeriodicSignalGenerator restored = PeriodicSignalGenerator.Restore(generator.CaptureState());
+        Check.That(restored.EvaluateAt(0) == indexed[0] && restored.EvaluateAt(1_000_000) == generator.EvaluateAt(1_000_000),
+            "restored random access must preserve past and future samples independently of cursor");
+    }
+
+    private static void IndexedEvaluationChecksTimestampBoundary()
+    {
+        PeriodicSignalGenerator generator = PeriodicSignalGenerator.Start(Plan());
+        ulong last = (ulong)((long.MaxValue - Plan().EpochAnchorSimTimeNs) / 4_000_000);
+        Check.That(generator.EvaluateAt(last).Tick.SimTimeNs == Plan().EpochAnchorSimTimeNs + (long)last * 4_000_000,
+            "last representable source instant must use exact integer arithmetic");
+        SignalSampleClockState before = generator.CaptureState().Clock;
+        foreach (ulong index in new[] { last + 1, ulong.MaxValue })
+        {
+            bool rejected = false;
+            try { generator.EvaluateAt(index); }
+            catch (PeriodicSignalGeneratorException exception) { rejected = exception.ReasonCode == "PeriodicSignal.SampleTimeOverflow"; }
+            Check.That(rejected && generator.CaptureState().Clock == before, "unrepresentable indexed time must reject without state changes");
+        }
+    }
 
     private static void PeriodicSamplesUseFrozenInterpolationAndClock()
     {

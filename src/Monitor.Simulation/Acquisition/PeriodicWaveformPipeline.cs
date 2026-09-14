@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using Monitor.Simulation.Determinism;
-
 namespace Monitor.Simulation.Acquisition;
 
 public sealed class PeriodicWaveformPipelineException(string reasonCode, string parameterName)
@@ -43,12 +41,9 @@ public sealed class PeriodicWaveformPipeline
             plane.NextInputSampleIndex != waiting.NextInputSampleIndex - (ulong)waiting.PendingSamples.Count)
         { throw InvalidCheckpoint(); }
         _channelId = plane.Configuration.ChannelId;
-        long[] table = source.Plan.TableQ32.ToArray();
         foreach (DelayedSignalSample sample in waiting.PendingSamples.Concat(plane.PendingSamples))
         {
-            ulong phase = unchecked(source.Plan.InitialPhaseU64 + sample.SampleIndex * source.Plan.PhaseIncrementU64);
-            long value = PeriodicLutLinear.Interpolate(table, phase).Value;
-            short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+            short expected = _generator.EvaluateAt(sample.SampleIndex).NormalizedValue;
             if (sample.NormalizedValue != expected || sample.QualityFlags != qualityFlags)
             { throw InvalidCheckpoint(); }
         }

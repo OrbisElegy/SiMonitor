@@ -52,6 +52,18 @@ public sealed class PeriodicSignalGenerator
 
     public PeriodicSignalState CaptureState() => new(_plan, _clock.CaptureState());
 
+    // Pure indexed evaluation; does not advance acquisition or the source cursor.
+    public GeneratedSignalSample EvaluateAt(ulong sampleIndex)
+    {
+        Int128 time = (Int128)_plan.EpochAnchorSimTimeNs + (Int128)sampleIndex * _clock.SamplePeriodNs;
+        if (time > long.MaxValue)
+        { throw new PeriodicSignalGeneratorException("PeriodicSignal.SampleTimeOverflow", nameof(sampleIndex)); }
+        ulong phase = unchecked(_plan.InitialPhaseU64 + sampleIndex * _plan.PhaseIncrementU64);
+        long value = PeriodicLutLinear.Interpolate(_table, phase).Value;
+        short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+        return new(new(_plan.ProfileId, _plan.StreamEpoch, sampleIndex, (long)time), phase, value, normalized);
+    }
+
     public static PeriodicSignalGenerator Restore(PeriodicSignalState state)
     {
         try
@@ -81,11 +93,7 @@ public sealed class PeriodicSignalGenerator
         for (int index = 0; index < output.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            SignalSampleTick tick = ticks[index];
-            ulong phase = unchecked(_plan.InitialPhaseU64 + tick.SampleIndex * _plan.PhaseIncrementU64);
-            long value = PeriodicLutLinear.Interpolate(_table, phase).Value;
-            short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
-            output[index] = new(tick, phase, value, normalized);
+            output[index] = EvaluateAt(ticks[index].SampleIndex);
         }
         cancellationToken.ThrowIfCancellationRequested();
         _clock = trial;

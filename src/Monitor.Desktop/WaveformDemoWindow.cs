@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Monitor.Domain.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
@@ -70,6 +71,7 @@ internal sealed class WaveformDemoWindow : Window
         panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz／40 ms 延迟；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "上：ECG 250 Hz / 40 ms；下：Resp 125 Hz / 80 ms；显式测试形态，未核验生理预设。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
+        if (projected) { panel.Children.Add(new TextBlock { Text = "每行左侧标定方波：1 mV × 200 ms；与波形使用相同尺度，不代表屏幕毫米已校准。" }); }
         WrapPanel actions = new();
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
@@ -276,7 +278,14 @@ internal sealed class WaveformDemoWindow : Window
                             // Reduce integer time before terminal pixel conversion.
                             long sourceTime = block.StartSimTimeNs + index * 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
                             double time = sourceTime % 2_000_000_000;
-                            Point point = new(time / 2_000_000_000, projected ? channel * 60 + 30 - plane.Samples[index] * 0.015 : channel * 120 + 60 - plane.Samples[index] * 0.05);
+                            double y;
+                            if (projected)
+                            {
+                                var position = EcgVerticalGeometry.MapMicrovolts(ProjectedEcgPlotLayout.VerticalScale(channel), plane.Samples[index], 1);
+                                y = (double)position.PixelNumerator / (double)position.PixelDenominator;
+                            }
+                            else { y = channel * 120 + 60 - plane.Samples[index] * 0.05; }
+                            Point point = new(time / 2_000_000_000, y);
                             if (previous is { } start && point.X > start.X &&
                                 sourceTime > frontier - 2_000_000_000 && previousTime < frontier)
                             {
@@ -302,8 +311,10 @@ internal sealed class WaveformDemoWindow : Window
             context.FillRectangle(Brushes.Black, Bounds.WithX(0).WithY(0));
             using (context.PushClip(new Rect(Bounds.Size)))
             {
-                double left = _projected ? 44 : 0;
-                double width = Math.Max(0, Bounds.Width - left);
+                var layout = _projected ? ProjectedEcgPlotLayout.Resolve(Bounds.Width) : null;
+                if (_projected && layout is null) { return; }
+                double left = layout?.PlotLeft ?? 0;
+                double width = layout?.PlotWidth ?? Math.Max(0, Bounds.Width - left);
                 Pen first = new(Brushes.Lime, 1);
                 Pen second = new(_resp ? Brushes.Yellow : Brushes.Cyan, 1);
                 foreach (var segment in _segments)
@@ -319,6 +330,12 @@ internal sealed class WaveformDemoWindow : Window
                         var label = new FormattedText(ProjectedEcgDemoSource.LeadNames[lead], CultureInfo.InvariantCulture,
                             FlowDirection.LeftToRight, new Typeface("sans-serif"), 12, Brushes.Lime);
                         context.DrawText(label, new Point(3, lead * 60 + 20));
+                        var points = layout!.Calibration(lead).Points;
+                        Point Pixel(EcgCalibrationPoint point) => new(point.X.WholePixels +
+                            (double)point.X.FractionNumerator / point.X.FractionDenominator,
+                            (double)point.Y.PixelNumerator / (double)point.Y.PixelDenominator);
+                        for (int index = 1; index < points.Count; index++)
+                        { context.DrawLine(first, Pixel(points[index - 1]), Pixel(points[index])); }
                     }
                 }
                 if (_gapStart is { } start)

@@ -78,6 +78,7 @@ internal static class WaveformDemoSmokeChecks
             Click(window.ResetButton);
             if (window.IsHeld || window.HoldButton.IsEnabled || window.DisplayStartNs is not null)
             { throw new InvalidOperationException("Reset retained pinned data or capability."); }
+            VerifyShapes(window);
             VerifyCompactLayout(window);
             VerifyAutomaticSteps(window);
         }
@@ -85,6 +86,37 @@ internal static class WaveformDemoSmokeChecks
         Console.WriteLine("ok: generated multi-rate native traces, delay, bounded retention, failure, resize and reset");
         Console.WriteLine("ok: pinned generated trace survives background eviction and returns directly to latest data");
         Console.WriteLine("ok: automatic step timer, pause, stale callback fencing, held generation, reset and close");
+    }
+
+    private static void VerifyShapes(WaveformDemoWindow window)
+    {
+        for (int step = 0; step < 11; step++) { Click(window.StepButton); }
+        window.UpdateLayout();
+        byte[] triangle = ReadColumn(window.Trace, 30);
+        Click(window.HoldButton);
+        Click(window.RunButton);
+        var oldTimer = window.ActiveTimer;
+        Click(window.ShapeButton);
+        window.Pulse(oldTimer);
+        if (!window.UsesPulse || window.IsHeld || window.ActiveTimer is not null ||
+            window.SimulationTimeNs != 0 || window.BlockCount != 0)
+        { throw new InvalidOperationException("Shape change retained old source, view or timer state."); }
+        for (int step = 0; step < 10; step++) { Click(window.StepButton); }
+        if (window.BlockCount != 0) { throw new InvalidOperationException("New shape bypassed acquisition latency."); }
+        Click(window.StepButton);
+        window.UpdateLayout();
+        byte[] pulse = ReadColumn(window.Trace, 30);
+        if (triangle.SequenceEqual(pulse)) { throw new InvalidOperationException("Different synthetic tables produced identical fixture pixels."); }
+        Click(window.ResetButton);
+        if (!window.UsesPulse) { throw new InvalidOperationException("Reset lost the selected shape."); }
+        for (int step = 0; step < 11; step++) { Click(window.StepButton); }
+        window.UpdateLayout();
+        if (!pulse.SequenceEqual(ReadColumn(window.Trace, 30)))
+        { throw new InvalidOperationException("Selected shape did not restart deterministically."); }
+        Click(window.ShapeButton);
+        if (window.UsesPulse || window.BlockCount != 0)
+        { throw new InvalidOperationException("Triangle selection did not restore an empty source."); }
+        Console.WriteLine("ok: synthetic shape change resets acquisition, held state and timers; reset preserves selected shape");
     }
 
     private static void VerifyCompactLayout(WaveformDemoWindow window)

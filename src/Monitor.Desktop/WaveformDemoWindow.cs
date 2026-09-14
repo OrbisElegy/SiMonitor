@@ -13,7 +13,9 @@ internal sealed class WaveformDemoWindow : Window
 {
     private static readonly Guid Ecg = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
-    private PeriodicWaveformGroup _source = CreateSource();
+    private PeriodicWaveformGroup _source = CreateSource(false);
+    internal bool UsesPulse { get; private set; }
+    internal Button ShapeButton { get; } = new() { Content = "形状：三角波（点击切换并重置）" };
     private WaveformEnvelope[] _blocks = [];
     private WaveformEnvelope[]? _pinned;
     private readonly TextBlock _status = new();
@@ -60,6 +62,7 @@ internal sealed class WaveformDemoWindow : Window
         actions.Children.Add(ResetButton);
         actions.Children.Add(HoldButton);
         actions.Children.Add(RunButton);
+        actions.Children.Add(ShapeButton);
         foreach (Control action in actions.Children) { action.Margin = new Thickness(0, 0, 12, 8); }
         panel.Children.Add(actions);
         panel.Children.Add(_runStatus);
@@ -75,6 +78,11 @@ internal sealed class WaveformDemoWindow : Window
         ResetButton.Click += (_, _) => { if (!_closed) { Reset(); } };
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
         RunButton.Click += (_, _) => ToggleRun();
+        ShapeButton.Click += (_, _) =>
+        {
+            if (_closed) { return; }
+            Reset(!UsesPulse);
+        };
         Closed += (_, _) => { _closed = true; Pause(); };
         Reset();
     }
@@ -114,6 +122,7 @@ internal sealed class WaveformDemoWindow : Window
         RunButton.IsEnabled = !_closed;
         StepButton.IsEnabled = !_closed;
         ResetButton.IsEnabled = !_closed;
+        ShapeButton.IsEnabled = !_closed;
         HoldButton.IsEnabled = !_closed && _blocks.Length > 0;
         _runStatus.Text = "自动步进已暂停；可手动步进。";
     }
@@ -150,14 +159,20 @@ internal sealed class WaveformDemoWindow : Window
         UpdateStatus();
     }
 
-    private void Reset()
+    private void Reset() => Reset(UsesPulse);
+
+    private void Reset(bool pulse)
     {
+        PeriodicWaveformGroup source = CreateSource(pulse);
+        RawTrace empty = new([]);
         Pause();
-        _source = CreateSource();
+        _source = source;
+        UsesPulse = pulse;
+        ShapeButton.Content = pulse ? "形状：双相脉冲（点击切换并重置）" : "形状：三角波（点击切换并重置）";
         _blocks = [];
         _pinned = null;
         SimulationTimeNs = 0;
-        _trace.Content = new RawTrace(_blocks);
+        _trace.Content = empty;
         UpdateStatus();
     }
 
@@ -170,11 +185,14 @@ internal sealed class WaveformDemoWindow : Window
             : $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；{(IsHeld ? "固定画面（步进仍生成后台数据）" : "最新数据")}；源区间 [{DisplayStartNs / 1_000_000}, {(DisplayBlocks[^1].StartSimTimeNs + 200_000_000) / 1_000_000}) ms";
     }
 
-    private static PeriodicWaveformGroup CreateSource()
+    private static PeriodicWaveformGroup CreateSource(bool pulse)
     {
+        // Explicit synthetic fixtures, not registered ECG/pleth morphology.
+        long[] table = pulse
+            ? [0, 0, 0, 1000 * FixedPointMath.Q32One, -500 * FixedPointMath.Q32One, 0, 0, 0]
+            : [0, 1000 * FixedPointMath.Q32One, 0, -1000 * FixedPointMath.Q32One];
         PeriodicWaveformChannelPlan Channel(Guid id, string profile, int capacity, ulong increment) => new(
-            new(profile, 1, 0, 0, increment,
-                [0, 1000 * FixedPointMath.Q32One, 0, -1000 * FixedPointMath.Q32One]),
+            new(profile, 1, 0, 0, increment, table),
             new(id, profile, 1, 1, 0, 1), capacity, 0);
         return PeriodicWaveformGroup.Start(Ecg, Pleth, 1, 1, 0, 16,
             [Channel(Ecg, "AcqECGMonitor250@1", 10, 0x0100000000000000),

@@ -72,3 +72,21 @@ system ringing will need a separate artifact model. Original 10 ms drawing spaci
 and 220 ms systole metadata are not imported as physiological timing constants.
 The manifest records all changes and the generator verifies hashes. Native PA
 pixels do not constitute a validated RV/PA model or measured PAP values.
+
+## CVP component adaptation
+
+`eng/physiology/infirmary-cvp-components.json` retains both 95-point upstream
+CVP_Atrioventricular and CVP_Ventricular seeds with canonical combined hash,
+pinned source-file hash and the existing Apache-2.0 license reference.
+The source-file hash identifies the same pinned upstream plots file.
+
+Local A extraction uses atrioventricular indices 0..43, removes the straight
+endpoint baseline, clamps negative detrending residue to zero, normalizes the
+remaining maximum and resamples 128 Q32 points. V extraction uses ventricular
+indices 36..86, normalizes its 0.81 peak and resamples 128 points. These are adapted
+shape portions, not a claim that the original arrays provided independently
+validated a/v mechanisms. C, X/Y descent and respiratory unit envelopes are new
+project-authored smoothstep shapes recorded separately in the manifest. Their
+phase, magnitude and event binding are explicit source parameters. Upstream
+whole-complex selection and intrathoracic amplitude multipliers are not copied.
+No mean-CVP estimator, full valve physiology or clinical preset is implied.

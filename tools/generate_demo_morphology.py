@@ -92,6 +92,27 @@ def capnogram_shape(manifest):
     return {'Cycle': {'values_q32': values}}
 
 
+def cvp_shapes(manifest):
+    seeds = manifest['upstream_seeds']
+    if hashlib.sha256(json.dumps(seeds, sort_keys=True, separators=(',', ':')).encode()).hexdigest() != manifest['upstream_seeds_sha256']:
+        raise ValueError('upstream CVP vertex evidence changed')
+    atrial = [Fraction(value) for value in seeds['CVP_Atrioventricular'][:44]]
+    first, last = atrial[0], atrial[-1]
+    atrial = [max(Fraction(0), value - first - (last - first) * Fraction(index, 43)) for index, value in enumerate(atrial)]
+    ventricular = [Fraction(value) for value in seeds['CVP_Ventricular'][36:87]]
+    shapes = dict(manifest['project_tables'])
+    for name, vertices in [('A', atrial), ('V', ventricular)]:
+        peak = max(vertices)
+        values = []
+        for sample in range(128):
+            position = Fraction(sample * (len(vertices) - 1), 128)
+            index = int(position)
+            value = vertices[index] + (vertices[index + 1] - vertices[index]) * (position - index)
+            values.append(round(value / peak * (1 << 32)))
+        shapes[name] = {'values_q32': values}
+    return shapes
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
@@ -103,6 +124,9 @@ def main():
     arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
     capnogram = json.loads((root / 'eng/physiology/infirmary-capnogram.json').read_text())
     pulmonary = json.loads((root / 'eng/physiology/infirmary-pulmonary-artery.json').read_text())
+    cvp = json.loads((root / 'eng/physiology/infirmary-cvp-components.json').read_text())
+    if hashlib.sha256((root / cvp['license_file']).read_bytes()).hexdigest() != cvp['license_sha256']:
+        raise ValueError('upstream CVP license evidence changed')
     if hashlib.sha256((root / pulmonary['license_file']).read_bytes()).hexdigest() != pulmonary['license_sha256']:
         raise ValueError('upstream PA license evidence changed')
     if hashlib.sha256((root / capnogram['license_file']).read_bytes()).hexdigest() != capnogram['license_sha256']:
@@ -110,6 +134,11 @@ def main():
     if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
         raise ValueError('upstream ABP license evidence changed')
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/CvpComponentTables.cs':
+            '// A/V adapted from Infirmary Integrated CVP seeds, Ibi Keller (Tanjera); C/X/Y/Resp are project-authored.\n'
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+                'Monitor.Simulation.Physiology', 'CvpComponentTables', cvp_shapes(cvp)).replace(
+                    'Project-authored reference illustration', 'Mixed adapted/project-authored reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PulmonaryArteryTables.cs':
             '// Adapted from Infirmary Integrated PA_Default, Ibi Keller (Tanjera).\n'
             '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
@@ -143,7 +172,7 @@ def main():
         else:
             target.write_text(expected)
     if args.check:
-        print('ok: ECG, Resp, Pleth, ABP, CO2 and PA Q32 tables match offline authoring')
+        print('ok: ECG, Resp, Pleth, ABP, CO2, PA and CVP Q32 tables match offline authoring')
 
 
 if __name__ == '__main__':

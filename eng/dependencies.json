@@ -273,6 +273,7 @@
       "manifests": [
         "eng/physiology/infirmary-arterial-pulse.json",
         "eng/physiology/infirmary-capnogram.json",
+        "eng/physiology/infirmary-cvp-components.json",
         "eng/physiology/infirmary-pulmonary-artery.json"
       ]
     }

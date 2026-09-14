@@ -43,6 +43,7 @@ internal static class Program
             .. ArterialPulseSpecifications.All,
             .. CapnogramSpecifications.All,
             .. PulmonaryArterySpecifications.All,
+            .. CentralVenousPressureSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

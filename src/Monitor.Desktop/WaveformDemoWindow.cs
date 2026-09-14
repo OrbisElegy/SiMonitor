@@ -32,6 +32,18 @@ internal sealed class WaveformDemoWindow : Window
     internal long SimulationTimeNs { get; private set; }
     internal int BlockCount => _blocks.Length;
     internal Control Trace => (Control)_trace.Content!;
+    internal Grid LayoutRoot { get; } = new() { RowDefinitions = new RowDefinitions("Auto,*") };
+    internal ScrollViewer ContentScroll { get; } = new()
+    {
+        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+    };
+    internal TextBlock TeachingNotice { get; } = new()
+    {
+        Text = "教学模拟／不得用于患者监护或临床决策",
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(16, 12),
+    };
 
     public WaveformDemoWindow()
     {
@@ -39,21 +51,26 @@ internal sealed class WaveformDemoWindow : Window
         Width = 1040;
         Height = 520;
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = "教学模拟／不得用于患者监护或临床决策" });
         panel.Children.Add(new TextBlock { Text = "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
         panel.Children.Add(new TextBlock { Text = "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
-        StackPanel actions = new() { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
+        WrapPanel actions = new();
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
         actions.Children.Add(HoldButton);
         actions.Children.Add(RunButton);
+        foreach (Control action in actions.Children) { action.Margin = new Thickness(0, 0, 12, 8); }
         panel.Children.Add(actions);
         panel.Children.Add(_runStatus);
         panel.Children.Add(_status);
         panel.Children.Add(_trace);
-        Content = panel;
+        foreach (TextBlock text in panel.Children.OfType<TextBlock>()) { text.TextWrapping = TextWrapping.Wrap; }
+        ContentScroll.Content = panel;
+        Grid.SetRow(ContentScroll, 1);
+        LayoutRoot.Children.Add(TeachingNotice);
+        LayoutRoot.Children.Add(ContentScroll);
+        Content = LayoutRoot;
         StepButton.Click += (_, _) => { if (!_closed && _timer is null) { Advance(200_000_000); } };
         ResetButton.Click += (_, _) => { if (!_closed) { Reset(); } };
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };

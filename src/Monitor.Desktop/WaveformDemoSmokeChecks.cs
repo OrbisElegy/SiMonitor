@@ -78,12 +78,32 @@ internal static class WaveformDemoSmokeChecks
             Click(window.ResetButton);
             if (window.IsHeld || window.HoldButton.IsEnabled || window.DisplayStartNs is not null)
             { throw new InvalidOperationException("Reset retained pinned data or capability."); }
+            VerifyCompactLayout(window);
             VerifyAutomaticSteps(window);
         }
         finally { window.Close(); }
         Console.WriteLine("ok: generated multi-rate native traces, delay, bounded retention, failure, resize and reset");
         Console.WriteLine("ok: pinned generated trace survives background eviction and returns directly to latest data");
         Console.WriteLine("ok: automatic step timer, pause, stale callback fencing, held generation, reset and close");
+    }
+
+    private static void VerifyCompactLayout(WaveformDemoWindow window)
+    {
+        window.LayoutRoot.Measure(new Size(440, 300));
+        window.LayoutRoot.Arrange(new Rect(0, 0, 440, 300));
+        if (window.ContentScroll.Extent.Height <= window.ContentScroll.Viewport.Height ||
+            window.TeachingNotice.Bounds.Bottom > window.ContentScroll.Bounds.Top ||
+            window.ContentScroll.Extent.Width > window.ContentScroll.Viewport.Width + 1)
+        { throw new InvalidOperationException("Compact layout hides the notice or requires horizontal scrolling."); }
+        Rect notice = window.TeachingNotice.Bounds;
+        window.ContentScroll.ScrollToEnd();
+        window.LayoutRoot.Measure(new Size(440, 300));
+        window.LayoutRoot.Arrange(new Rect(0, 0, 440, 300));
+        if (window.ContentScroll.Offset.Y <= 0 || window.TeachingNotice.Bounds != notice ||
+            window.Trace.Bounds.Width <= 0 || window.Trace.Bounds.Height != 240)
+        { throw new InvalidOperationException("Compact scroll did not preserve notice and full trace geometry."); }
+        window.ContentScroll.ScrollToHome();
+        Console.WriteLine("ok: compact waveform layout wraps content, scrolls vertically and pins teaching notice");
     }
 
     private static void VerifyAutomaticSteps(WaveformDemoWindow window)

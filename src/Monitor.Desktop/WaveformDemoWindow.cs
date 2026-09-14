@@ -33,7 +33,8 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox BreathPeriodInput { get; } = new() { Text = "3750", Width = 75 };
     internal TextBox InspirationInput { get; } = new() { Text = "1875", Width = 75 };
     internal TextBox RespAmplitudeInput { get; } = new() { Text = "1000", Width = 75 };
-    internal Button ApplyBreathButton { get; } = new() { Content = "应用呼吸参数并重新开始" };
+    internal TextBox Co2PlateauInput { get; } = new() { Text = "", Width = 75 };
+    internal Button ApplyBreathButton { get; } = new() { Content = "应用波形参数并重新开始" };
     internal TextBlock BreathConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _activeBreathConfiguration = new() { TextWrapping = TextWrapping.Wrap };
     internal bool UsesPulse { get; private set; }
@@ -127,10 +128,12 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(InspirationInput);
             settings.Children.Add(new TextBlock { Text = "Resp 相对幅度（可负）" });
             settings.Children.Add(RespAmplitudeInput);
+            settings.Children.Add(new TextBlock { Text = "CO₂ 平台起始（mmHg，留空参考）" });
+            settings.Children.Add(Co2PlateauInput);
             settings.Children.Add(ApplyBreathButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
-            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。周期 1000–10000 ms，吸气至少 200 ms、呼气须超过 375 ms；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。" });
+            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。周期 1000–10000 ms，吸气至少 200 ms、呼气须超过 375 ms；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。CO₂ 平台起始可填 0～40 mmHg（精确到 0.01），呼气末目标仍为 40 mmHg。" });
             panel.Children.Add(_activeBreathConfiguration);
             panel.Children.Add(BreathConfigurationStatus);
         }
@@ -289,11 +292,19 @@ internal sealed class WaveformDemoWindow : Window
                 !int.TryParse(InspirationInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int inspiration) ||
                 !int.TryParse(RespAmplitudeInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int amplitude))
             { throw new ArgumentException("Integer input required."); }
-            Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude));
+            int? plateau = null;
+            if (!string.IsNullOrWhiteSpace(Co2PlateauInput.Text))
+            {
+                if (!decimal.TryParse(Co2PlateauInput.Text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal mmHg) ||
+                    mmHg < 0 || mmHg > 40 || decimal.Truncate(mmHg * 100) != mmHg * 100)
+                { throw new ArgumentException("CO2 plateau must be representable in centi-mmHg."); }
+                plateau = (int)(mmHg * 100);
+            }
+            Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau));
         }
         catch (ArgumentException)
         {
-            BreathConfigurationStatus.Text = "未应用：请输入范围内的整数，吸气至少 200 ms，呼气须超过 375 ms。当前数据与扫屏状态保持。";
+            BreathConfigurationStatus.Text = "未应用：请输入范围内的整数，吸气至少 200 ms，呼气须超过 375 ms；CO₂ 平台起始须为 0～40 mmHg 且精确到 0.01，或留空。当前数据与扫屏状态保持。";
         }
     }
 
@@ -316,8 +327,10 @@ internal sealed class WaveformDemoWindow : Window
             BreathPeriodInput.Text = breathConfiguration.BreathPeriodMilliseconds.ToString(CultureInfo.InvariantCulture);
             InspirationInput.Text = breathConfiguration.InspirationMilliseconds.ToString(CultureInfo.InvariantCulture);
             RespAmplitudeInput.Text = breathConfiguration.RespAmplitudeCounts.ToString(CultureInfo.InvariantCulture);
+            Co2PlateauInput.Text = breathConfiguration.Co2PlateauStartCentiMmHg is { } plateau
+                ? (plateau / 100m).ToString("0.##", CultureInfo.InvariantCulture) : "";
             _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。");
+                $"已应用：周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，呼气末目标 40 mmHg。");
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)

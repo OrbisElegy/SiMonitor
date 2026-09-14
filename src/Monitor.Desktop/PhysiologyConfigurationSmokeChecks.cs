@@ -20,7 +20,7 @@ internal static class PhysiologyConfigurationSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
-            foreach (var config in new[] { new PhysiologyDemoConfiguration(3000, 1000, -800), new(4800, 3200, 600) })
+            foreach (var config in new[] { new PhysiologyDemoConfiguration(3000, 1000, -800, 1234), new(4800, 3200, 600, 4000) })
             {
                 for (int step = 0; step < 11; step++) { Click(window.StepButton); }
                 Click(window.HoldButton);
@@ -29,6 +29,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 Click(window.ApplyBreathButton);
                 window.Pulse(oldTimer);
                 if (window.BreathConfiguration != config || window.SimulationTimeNs != 0 || window.BlockCount != 0 ||
@@ -70,11 +71,28 @@ internal static class PhysiologyConfigurationSmokeChecks
                         string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
                     { throw new InvalidOperationException("Invalid breathing parameters changed accepted source, timer or frozen view."); }
                 }
+                window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                foreach (string invalid in new[] { "oops", "-1", "40.01", "1.001", "1,5", "999999999999999999999999999999999999" })
+                {
+                    window.Co2PlateauInput.Text = invalid;
+                    Click(window.ApplyBreathButton);
+                    if (window.BreathConfiguration != config || !ReferenceEquals(held, window.Trace) ||
+                        !ReferenceEquals(timer, window.ActiveTimer) || window.SimulationTimeNs != before)
+                    { throw new InvalidOperationException("Rejected CO2 plateau changed the active source or held view."); }
+                }
                 Click(window.ResetButton);
                 if (window.BreathConfiguration != config || window.ActiveTimer is not null || window.IsHeld || window.BlockCount != 0 ||
-                    window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
+                    window.Co2PlateauInput.Text != (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))
                 { throw new InvalidOperationException("Reset lost accepted breathing settings or retained draft state."); }
             }
+            window.Co2PlateauInput.Text = "";
+            Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration.Co2PlateauStartCentiMmHg is not null || window.SimulationTimeNs != 0 ||
+                window.Co2PlateauInput.Text != "")
+            { throw new InvalidOperationException("Clearing the CO2 plateau did not restore reference scaling."); }
         }
         finally { window.Close(); }
         Console.WriteLine("ok: breathing controls synchronize Resp/CO2/CVP, preserve native pixels and atomically restart or reject input");
@@ -91,13 +109,14 @@ internal static class PhysiologyConfigurationSmokeChecks
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         foreach (var (row, time) in new[] { (1, config.InspirationMilliseconds * 1_000_000L),
-            (4, config.BreathPeriodMilliseconds * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L) })
+            (4, config.BreathPeriodMilliseconds * 1_000_000L),
+            (4, (config.InspirationMilliseconds + 380) * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L) })
         {
             var plane = blocks.Single(block => time >= block.StartSimTimeNs && time < block.StartSimTimeNs + 200_000_000)
                 .Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int sample = (int)(time % 200_000_000 * plane.SampleRateNumerator / 1_000_000_000);
             int raw = plane.Samples[sample];
-            if ((row == 1 && raw != config.RespAmplitudeCounts) || (row == 4 && raw != 4000))
+            if ((row == 1 && raw != config.RespAmplitudeCounts) || (row == 4 && (time == config.BreathPeriodMilliseconds * 1_000_000L ? raw != 4000 : Math.Abs(raw - config.Co2PlateauStartCentiMmHg!.Value) > 10)))
             { throw new InvalidOperationException("Configured Resp turn or CO2 end-expiratory peak is absent from native data."); }
             int x = (int)Math.Round(time / 8_000_000.0);
             int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - raw * 0.0125 : 775 - raw * 0.05);

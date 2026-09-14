@@ -42,6 +42,7 @@ internal static class Program
             .. PlethPulseSpecifications.All,
             .. ArterialPulseSpecifications.All,
             .. CapnogramSpecifications.All,
+            .. CapnogramPlateauSpecifications.All,
             .. RespirationSpecifications.All,
             .. PulmonaryArterySpecifications.All,
             .. CentralVenousPressureSpecifications.All,

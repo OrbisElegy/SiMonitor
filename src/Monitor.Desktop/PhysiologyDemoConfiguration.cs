@@ -4,7 +4,7 @@ using Monitor.Simulation.Physiology;
 namespace Monitor.Desktop;
 
 internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
-    int InspirationMilliseconds, int RespAmplitudeCounts)
+    int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000);
 

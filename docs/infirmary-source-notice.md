@@ -90,3 +90,9 @@ project-authored smoothstep shapes recorded separately in the manifest. Their
 phase, magnitude and event binding are explicit source parameters. Upstream
 whole-complex selection and intrathoracic amplitude multipliers are not copied.
 No mean-CVP estimator, full valve physiology or clinical preset is implied.
+
+
+Optional plateau-start pressure in CapnogramPlan additionally remaps the adapted
+ETCO2_Default rise and C-to-D amplitudes at runtime using exact rational fixed-point
+rounding. The original generated seed, timing landmarks and inspiratory fall are
+retained; omitted plateau configuration reproduces the prior seed scaling.

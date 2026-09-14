@@ -28,7 +28,7 @@ internal static class PhysiologyDemoSource
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
              new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0),
-             new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40).CreateChannel(plan, ChannelId(4), 0),
+             new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40, configuration.Co2PlateauStartCentiMmHg).CreateChannel(plan, ChannelId(4), 0),
              new PulmonaryArteryPulsePlan(40_000_000, 640_000_000, 10, 15).CreateChannel(plan, ChannelId(5), 0),
              new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),

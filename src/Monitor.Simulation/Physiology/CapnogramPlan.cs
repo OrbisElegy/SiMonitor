@@ -47,7 +47,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
         }
         // Chest-effort events do not imply expired gas. Keep the affine baseline
         // and validated response settings, but generate no gas excursion.
-        if (physiology.RespiratoryActivity != RespiratoryActivity.Breathing) { Array.Clear(values); }
+        if (physiology.RespiratoryActivity != RespiratoryActivity.Breathing && physiology.ActivityAfterBreaths is null)
+        { Array.Clear(values); }
         IReadOnlyList<EventWaveformBand> bands;
         if (DispersionStepNs == 0)
         {
@@ -75,6 +76,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
                     Array.AsReadOnly(edge), Array.AsReadOnly(phases)),
             });
         }
+        if (physiology.ActivityAfterBreaths is { } limit)
+        { bands = Array.AsReadOnly(bands.Select(band => band with { TriggerCycleLimit = limit }).ToArray()); }
         return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, 200, qualityFlags);
     }
 }

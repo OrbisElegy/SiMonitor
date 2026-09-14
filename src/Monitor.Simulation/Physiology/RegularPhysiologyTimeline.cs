@@ -14,11 +14,13 @@ public enum PhysiologyCycleEventKind
 // Local source activity, not a detected apnea classification or device fault.
 public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 
+// Optional count starts with normal breathing and applies the target activity
+// after that many complete source cycles. Null applies the target from epoch.
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs,
     long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs,
     long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
     long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0,
-    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing);
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -46,6 +48,8 @@ public sealed class RegularPhysiologyTimeline
             plan.InspiratoryPauseNs < 0 || plan.InspiratoryPauseNs >= plan.InspirationDurationNs ||
             plan.ExpiratoryPauseNs < 0 || plan.ExpiratoryPauseNs >= plan.BreathPeriodNs - plan.InspirationDurationNs ||
             !Enum.IsDefined(plan.RespiratoryActivity) ||
+            (plan.ActivityAfterBreaths is { } breaths && (breaths == 0 || plan.RespiratoryActivity == RespiratoryActivity.Breathing ||
+                (Int128)plan.EpochAnchorSimTimeNs + (Int128)breaths * plan.BreathPeriodNs > long.MaxValue)) ||
             state.CursorSimTimeNs < plan.EpochAnchorSimTimeNs)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidState", nameof(state)); }
         _plan = plan;
@@ -73,10 +77,11 @@ public sealed class RegularPhysiologyTimeline
         Add(PhysiologyCycleEventKind.VentricularElectrical, _plan.HeartPeriodNs, _plan.VentricularElectricalOffsetNs);
         Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs);
         Add(PhysiologyCycleEventKind.VentricularMechanical, _plan.HeartPeriodNs, _plan.VentricularMechanicalOffsetNs);
-        if (_plan.RespiratoryActivity != RespiratoryActivity.Absent)
+        if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
         {
-            Add(PhysiologyCycleEventKind.InspirationStart, _plan.BreathPeriodNs, 0);
-            Add(PhysiologyCycleEventKind.ExpirationStart, _plan.BreathPeriodNs, _plan.InspirationDurationNs);
+            ulong? limit = _plan.RespiratoryActivity == RespiratoryActivity.Absent ? _plan.ActivityAfterBreaths : null;
+            Add(PhysiologyCycleEventKind.InspirationStart, _plan.BreathPeriodNs, 0, limit);
+            Add(PhysiologyCycleEventKind.ExpirationStart, _plan.BreathPeriodNs, _plan.InspirationDurationNs, limit);
         }
         events.Sort((left, right) => left.SimTimeNs != right.SimTimeNs
             ? left.SimTimeNs.CompareTo(right.SimTimeNs) : left.Kind.CompareTo(right.Kind));
@@ -84,12 +89,13 @@ public sealed class RegularPhysiologyTimeline
         _cursor = exclusiveSimTimeNs;
         return events.AsReadOnly();
 
-        void Add(PhysiologyCycleEventKind kind, long period, long offset)
+        void Add(PhysiologyCycleEventKind kind, long period, long offset, ulong? cycleLimit = null)
         {
             Int128 start = (Int128)_plan.EpochAnchorSimTimeNs + offset;
             Int128 first = _cursor <= start ? 0 : ((Int128)_cursor - start + period - 1) / period;
             Int128 time = start + first * period;
             Int128 count = time >= exclusiveSimTimeNs ? 0 : ((Int128)exclusiveSimTimeNs - 1 - time) / period + 1;
+            if (cycleLimit is { } limit) { count = Int128.Min(count, Int128.Max(0, (Int128)limit - first)); }
             if (count > maximumEvents - events.Count)
             { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
             for (Int128 index = 0; index < count; index++)

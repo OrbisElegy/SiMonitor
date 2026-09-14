@@ -211,15 +211,14 @@ internal sealed class WaveformDemoWindow : Window
 
     private static PhysiologyWaveformGroup CreatePhysiologySource()
     {
-        const long q = FixedPointMath.Q32One;
         RegularPhysiologyPlan plan = new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000);
         return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 16,
             [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1),
-                [new(PhysiologyCycleEventKind.AtrialElectrical, 0, 80_000_000, [0, 50*q, 100*q, 50*q]),
-                 new(PhysiologyCycleEventKind.VentricularElectrical, 0, 80_000_000, [0, -200*q, 1000*q, -100*q]),
-                 new(PhysiologyCycleEventKind.VentricularElectrical, 160_000_000, 160_000_000, [0, 150*q, 300*q, 150*q])], 10, 0),
+                [new(PhysiologyCycleEventKind.AtrialElectrical, 0, 80_000_000, PhysiologyDemoTables.P),
+                 new(PhysiologyCycleEventKind.VentricularElectrical, 0, 80_000_000, PhysiologyDemoTables.Qrs),
+                 new(PhysiologyCycleEventKind.VentricularElectrical, 160_000_000, 160_000_000, PhysiologyDemoTables.T)], 10, 0),
              new(plan, new(Pleth, "AcqResp125@1", 1, 1, 0, 1),
-                [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, [0, 500*q, 1000*q, 500*q])], 10, 0)]);
+                [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, PhysiologyDemoTables.Resp)], 10, 0)]);
     }
 
     private sealed class RawTrace : Control

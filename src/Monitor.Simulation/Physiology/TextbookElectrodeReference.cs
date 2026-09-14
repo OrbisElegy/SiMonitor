@@ -8,14 +8,17 @@ namespace Monitor.Simulation.Physiology;
 public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
+        EcgCycleTiming? timing = null)
     {
-        uWave?.Validate(TextbookEcgReference.Timing);
+        timing ??= TextbookEcgReference.Timing;
+        timing.Validate();
+        uWave?.Validate(timing);
         IReadOnlyList<long>[] qrs = [TextbookElectrodeQrsTables.RA, TextbookElectrodeQrsTables.LA,
             TextbookElectrodeQrsTables.RL, TextbookElectrodeQrsTables.LL, TextbookElectrodeQrsTables.C1,
             TextbookElectrodeQrsTables.C2, TextbookElectrodeQrsTables.C3, TextbookElectrodeQrsTables.C4,
             TextbookElectrodeQrsTables.C5, TextbookElectrodeQrsTables.C6];
-        var bands = TextbookEcgReference.CreateBands();
+        var bands = TextbookEcgReference.CreateBands(timing);
         var electrodes = Array.AsReadOnly(Enum.GetValues<EcgElectrode>().Select(electrode => new ElectrodeWaveformPlan(electrode,
             Array.AsReadOnly(bands.Select((band, index) => band with
             {
@@ -27,7 +30,7 @@ public static class TextbookElectrodeReference
         {
             Bands = Array.AsReadOnly(item.Bands.Append(
             new EventWaveformBand(PhysiologyCycleEventKind.VentricularElectrical,
-                TextbookEcgReference.Timing.QtIntervalNs + uWave.DelayAfterTNs, uWave.DurationNs,
+                timing.QtIntervalNs + uWave.DelayAfterTNs, uWave.DurationNs,
                 Array.AsReadOnly(TextbookEcgTables.U.Select(value => checked(value *
                     uWave.ElectrodeAmplitudesMicrovolts[(int)item.Electrode])).ToArray()))).ToArray())
         }).ToArray();

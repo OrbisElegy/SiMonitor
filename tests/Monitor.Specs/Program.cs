@@ -38,6 +38,7 @@ internal static class Program
             .. ElectrodeWaveformGroupSpecifications.All,
             .. ChestProgressionSpecifications.All,
             .. PtAndUWaveSpecifications.All,
+            .. EcgQtCorrectionSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

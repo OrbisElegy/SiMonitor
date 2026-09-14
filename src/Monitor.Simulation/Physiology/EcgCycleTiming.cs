@@ -24,14 +24,15 @@ public static class TextbookEcgReference
     public const string SourceValueUnit = "microvolt";
     public static EcgCycleTiming Timing { get; } = TextbookEcgTables.Timing;
 
-    public static IReadOnlyList<EventWaveformBand> CreateBands()
+    public static IReadOnlyList<EventWaveformBand> CreateBands(EcgCycleTiming? timing = null)
     {
-        Timing.Validate();
+        timing ??= Timing;
+        timing.Validate();
         return Array.AsReadOnly(new EventWaveformBand[]
         {
-            new(PhysiologyCycleEventKind.AtrialElectrical, 0, Timing.PDurationNs, TextbookEcgTables.P),
-            new(PhysiologyCycleEventKind.VentricularElectrical, 0, Timing.QrsDurationNs, TextbookEcgTables.Qrs),
-            new(PhysiologyCycleEventKind.VentricularElectrical, Timing.TOffsetFromQrsNs, Timing.TDurationNs, TextbookEcgTables.T),
+            new(PhysiologyCycleEventKind.AtrialElectrical, 0, timing.PDurationNs, TextbookEcgTables.P),
+            new(PhysiologyCycleEventKind.VentricularElectrical, 0, timing.QrsDurationNs, TextbookEcgTables.Qrs),
+            new(PhysiologyCycleEventKind.VentricularElectrical, timing.TOffsetFromQrsNs, timing.TDurationNs, TextbookEcgTables.T),
         });
     }
 }

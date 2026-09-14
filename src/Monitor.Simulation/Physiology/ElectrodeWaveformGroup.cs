@@ -36,6 +36,7 @@ public sealed class ElectrodeWaveformGroup
         if (assembly.Planes.Count != state.Channels.Count) { throw InvalidCheckpoint(); }
         _channels = new Channel[state.Channels.Count];
         HashSet<EcgLead> leads = [];
+        Dictionary<long, EcgLeadProjection> projections = [];
         string? previous = null;
         for (int index = 0; index < _channels.Length; index++)
         {
@@ -58,7 +59,7 @@ public sealed class ElectrodeWaveformGroup
             { throw InvalidCheckpoint(); }
             DelayedSignalSample[] pending = waiting.PendingSamples.Concat(plane.PendingSamples).ToArray();
             ElectrodeWaveformComposition? composition = null;
-            if (pending.Length > 0)
+            if (pending.Any(sample => !projections.ContainsKey(sample.SourceSimTimeNs)))
             {
                 long lookback = source.Electrodes.SelectMany(electrode => electrode.Bands).Max(band => checked(band.DelayNs + band.DurationNs));
                 long start = Math.Max(source.Clock.EpochAnchorSimTimeNs, pending.Min(sample => sample.SourceSimTimeNs) - lookback);
@@ -67,7 +68,12 @@ public sealed class ElectrodeWaveformGroup
             }
             foreach (DelayedSignalSample sample in pending)
             {
-                short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(composition!.EvaluateAt(sample.SourceSimTimeNs).Leads[item.Lead].Numerator, 6 * (Int128)FixedPointMath.Q32One));
+                if (!projections.TryGetValue(sample.SourceSimTimeNs, out var projection))
+                {
+                    projection = composition!.EvaluateAt(sample.SourceSimTimeNs).Leads;
+                    projections.Add(sample.SourceSimTimeNs, projection);
+                }
+                short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(projection[item.Lead].Numerator, 6 * (Int128)FixedPointMath.Q32One));
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
             _channels[index] = new(item.Lead, item.ChannelId, delay, item.QualityFlags);

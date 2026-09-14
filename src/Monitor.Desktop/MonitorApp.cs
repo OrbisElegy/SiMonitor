@@ -15,9 +15,9 @@ public sealed class MonitorApp : Avalonia.Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            if (desktop.Args is ["--waveform-demo" or "--physiology-demo"])
+            if (desktop.Args is ["--waveform-demo" or "--physiology-demo" or "--electrode-demo"])
             {
-                desktop.MainWindow = new WaveformDemoWindow(desktop.Args[0] == "--physiology-demo");
+                desktop.MainWindow = new WaveformDemoWindow(desktop.Args[0] == "--physiology-demo", desktop.Args[0] == "--electrode-demo");
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
@@ -41,6 +41,7 @@ public sealed class MonitorApp : Avalonia.Application
                     if (valid) { DesktopDemoSmokeChecks.Verify(); }
                     if (valid) { DesktopMeasurementSmokeChecks.Verify(); }
                     if (valid) { WaveformDemoSmokeChecks.Verify(); }
+                    if (valid) { ProjectedEcgDemoSmokeChecks.Verify(); }
                     if (valid)
                     {
                         Directory.CreateDirectory("artifacts");

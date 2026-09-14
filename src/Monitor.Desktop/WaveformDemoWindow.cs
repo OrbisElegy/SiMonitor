@@ -39,7 +39,7 @@ internal sealed class WaveformDemoWindow : Window
     private bool _closed;
     private long _lastTick;
     internal long LiveFrontierNs { get; private set; }
-    private long PresentationLatencyNs => _projected ? 240_000_000 : _physiology ? 280_000_000 : 2_200_000_000;
+    private long PresentationLatencyNs => _projected ? 240_000_000 : 2_200_000_000;
     private readonly TextBlock _runStatus = new();
     internal Button RunButton { get; } = new() { Content = "连续扫屏" };
     internal DispatcherTimer? ActiveTimer => _timer;
@@ -70,13 +70,14 @@ internal sealed class WaveformDemoWindow : Window
     {
         _projected = projected;
         _physiology = physiology && !projected;
-        Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp 开发演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
+        Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth 开发演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
         ShapeButton.IsVisible = !physiology && !projected;
         Width = 1040;
-        Height = projected ? 900 : 520;
+        Height = projected ? 900 : physiology ? 700 : 520;
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = projected ? "电极模型示意：12 导联均由电极电位投影；非已验证正常成人预设，无屏幕毫米标定。" : physiology ? "教材约束的单导联参考：ECG 每计数 1 μV；Resp 为相对量。非验证预设，无屏幕毫米标定。" : "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
-        panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz／40 ms 延迟；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "上：ECG 250 Hz / 40 ms；下：Resp 125 Hz / 80 ms；显式测试形态，未核验生理预设。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
+        panel.Children.Add(new TextBlock { Text = projected ? "电极模型示意：12 导联均由电极电位投影；非已验证正常成人预设，无屏幕毫米标定。" : physiology ? "教材约束的单导联参考：ECG 每计数 1 μV；Resp、Pleth 为相对量。非验证预设，无屏幕毫米标定。" : "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
+        panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz／40 ms 延迟；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "上 ECG（绿）250 Hz / 40 ms；中 Resp（黄）125 Hz / 80 ms；下 Pleth（青）125 Hz / 2 s。延迟为采集处理延迟。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
+        if (_physiology) { panel.Children.Add(new TextBlock { Text = "Pleth 由机械搏动触发；示意电机械延迟 80 ms、传播延迟 80 ms，另经 2 s 处理延迟。三通道共用源时间；不显示估计的 SpO₂ 或脉率。" }); }
         panel.Children.Add(new TextBlock { Text = $"共享块等待全部通道齐备；{(projected ? 8 : 2)} s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = $"演示擦除间隙 200 ms，仅遮盖绘图；保留 {(projected ? "8.2" : "2.2")} s 源历史。" });
         if (projected) { panel.Children.Add(new TextBlock { Text = "每行左侧标定方波：1 mV × 200 ms；与波形使用相同尺度，不代表屏幕毫米已校准。" }); }
@@ -251,7 +252,7 @@ internal sealed class WaveformDemoWindow : Window
     {
         configuration ??= EcgConfiguration;
         PeriodicWaveformGroup source = CreateSource(pulse);
-        PhysiologyWaveformGroup? eventSource = _physiology ? CreatePhysiologySource() : null;
+        PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create() : null;
         ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create(configuration) : null;
         RawTrace empty = new([], _physiology, projected: _projected);
         Pause();
@@ -303,18 +304,6 @@ internal sealed class WaveformDemoWindow : Window
              Channel(Pleth, "AcqPleth125@1", 250, 0x0200000000000000)]);
     }
 
-    private static PhysiologyWaveformGroup CreatePhysiologySource()
-    {
-        EcgCycleTiming timing = TextbookEcgReference.Timing;
-        RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,
-            timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000);
-        return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 16,
-            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1),
-                TextbookEcgReference.CreateBands(), 10, 0),
-             new(plan, new(Pleth, "AcqResp125@1", 1, 1, 0, 1),
-                [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, PhysiologyDemoTables.Resp)], 10, 0)]);
-    }
-
     private sealed class RawTrace : Control
     {
         private readonly (Point Start, Point End, int Channel)[] _segments;
@@ -326,18 +315,19 @@ internal sealed class WaveformDemoWindow : Window
         {
             _resp = resp;
             _projected = projected;
-            Height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : 240;
+            Height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : resp ? 360 : 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
                 _gapStart = (frontier % DurationNs) / (double)DurationNs;
-                for (int channel = 0; channel < (projected ? 12 : 2); channel++)
+                for (int channel = 0; channel < (projected ? 12 : resp ? 3 : 2); channel++)
                 {
                     Point? previous = null;
                     long previousTime = 0;
                     foreach (WaveformEnvelope block in blocks)
                     {
-                        WaveformPlane plane = projected ? block.Planes.Single(item => item.ChannelId == ProjectedEcgDemoSource.ChannelId((EcgLead)channel)) : block.Planes[channel];
+                        WaveformPlane plane = projected ? block.Planes.Single(item => item.ChannelId == ProjectedEcgDemoSource.ChannelId((EcgLead)channel)) : resp
+                            ? block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(channel)) : block.Planes[channel];
                         for (int index = 0; index < plane.Samples.Count; index++)
                         {
                             // Floating point is confined to terminal screen coordinates.
@@ -384,9 +374,10 @@ internal sealed class WaveformDemoWindow : Window
                 double width = layout?.PlotWidth ?? Math.Max(0, Bounds.Width - left);
                 Pen first = new(Brushes.Lime, 1);
                 Pen second = new(_resp ? Brushes.Yellow : Brushes.Cyan, 1);
+                Pen third = new(Brushes.Cyan, 1);
                 foreach (var segment in _segments)
                 {
-                    context.DrawLine(_projected || segment.Channel == 0 ? first : second,
+                    context.DrawLine(_projected || segment.Channel == 0 ? first : segment.Channel == 1 ? second : third,
                         new(left + segment.Start.X * width, segment.Start.Y),
                         new(left + segment.End.X * width, segment.End.Y));
                 }

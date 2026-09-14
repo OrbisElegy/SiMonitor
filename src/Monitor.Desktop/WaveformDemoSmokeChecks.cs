@@ -14,6 +14,7 @@ internal static class WaveformDemoSmokeChecks
 {
     public static void Verify()
     {
+        RespCo2CouplingSmokeChecks.Verify();
         VerifyPhysiology();
         VerifyProgressiveSweep();
         DemoSweepResizeSmokeChecks.VerifyWrapAndRetention();
@@ -275,8 +276,6 @@ internal static class WaveformDemoSmokeChecks
 
     private static void VerifyPhysiology()
     {
-        if (PhysiologyDemoTables.Resp.Count != 64 || PhysiologyDemoTables.Resp[0] != 0)
-        { throw new InvalidOperationException("Continuous Resp reference table is missing."); }
         WaveformDemoWindow window = new(physiology: true);
         window.Show();
         try

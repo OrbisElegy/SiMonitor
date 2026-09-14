@@ -160,9 +160,9 @@ def main():
             'Monitor.Simulation.Physiology', 'TextbookElectrodeQrsTables', electrode_shapes(chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/TextbookEcgTables.cs': render(
             'Monitor.Simulation.Physiology', 'TextbookEcgTables', manifest['tables'], manifest['timing_ms']),
-        root / 'src/Monitor.Desktop/PhysiologyDemoTables.cs': render(
-            'Monitor.Desktop', 'PhysiologyDemoTables',
-            {'Resp': {'length': 64, 'landmarks': [[0, 0], [32, 1000], [64, 0]]}}),
+        root / 'src/Monitor.Simulation/Physiology/RespirationTables.cs': render(
+            'Monitor.Simulation.Physiology', 'RespirationTables',
+            {'Cycle': {'length': 64, 'landmarks': [[0, 0], [32, 1], [64, 0]]}}),
     }
     for target, expected in outputs.items():
         expected = with_header(target.name, expected.encode()).decode()

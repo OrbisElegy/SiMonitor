@@ -18,7 +18,7 @@ public sealed record RespirationPlan(int AmplitudeCounts)
         var phases = RespiratoryPhaseMap.Create(physiology, table.Count);
         var bands = Array.AsReadOnly(new EventWaveformBand[]
         {
-            new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs, table, phases),
+            new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs, table, phases),
         });
         return new(physiology, new(channelId, "AcqResp125@1", 1, 1, 0, 1), bands, 10, qualityFlags);
     }

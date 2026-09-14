@@ -47,6 +47,7 @@ internal static class Program
             .. CapnogramDispersionSpecifications.All,
             .. RespirationSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
+            .. ExpiratoryPauseSpecifications.All,
             .. PulmonaryArterySpecifications.All,
             .. CentralVenousPressureSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,

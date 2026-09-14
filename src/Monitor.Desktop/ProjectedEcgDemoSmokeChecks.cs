@@ -47,7 +47,7 @@ internal static class ProjectedEcgDemoSmokeChecks
                     var plane = block.Planes.Single(item => item.ChannelId == ProjectedEcgDemoSource.ChannelId((EcgLead)lead));
                     int y = (int)Math.Round(lead * Row + Row / 2 - plane.Samples[0] * 0.04);
                     var layout = ProjectedEcgPlotLayout.Resolve(1044)!;
-                    int x = (int)Math.Round(layout.PlotLeft + layout.PlotWidth * (200_000_000.0 / ProjectedEcgPlotLayout.VisibleDurationNs));
+                    int x = layout.PlotLeft + 25;
                     if (!Enumerable.Range(y - 2, 5).Any(row => Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + x * 4 + 1) > 100))
                     { throw new InvalidOperationException("Rendered row does not match its decoded lead sample."); }
                     if (!Enumerable.Range(lead * Row, Row).Any(row => Enumerable.Range(2, 36).Any(x =>
@@ -67,10 +67,11 @@ internal static class ProjectedEcgDemoSmokeChecks
             Click(window.StepButton);
             Layout();
             VerifyPtPixels(window.Trace);
+            DemoSweepResizeSmokeChecks.VerifyFixedSpeed(window, projected: true);
             Click(window.HoldButton);
             Control held = window.Trace;
             for (int step = 0; step < 45; step++) { Click(window.StepButton); }
-            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 41)
+            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 48)
             { throw new InvalidOperationException("Projected background retention changed the held view."); }
             Click(window.HoldButton);
             Layout();
@@ -119,7 +120,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             var points = layout.Calibration(lead).Points;
             double end = points[2].X.WholePixels + (double)points[2].X.FractionNumerator / points[2].X.FractionDenominator;
             int top = lead * Row + Row / 2 - (int)ProjectedEcgPlotLayout.PixelsPerMillivolt, baseline = lead * Row + Row / 2;
-            if (Math.Abs(end - 48 - layout.PlotWidth * (200_000_000.0 / ProjectedEcgPlotLayout.VisibleDurationNs)) > 0.000001 || end >= layout.PlotLeft ||
+            if (Math.Abs(end - 48 - 25) > 0.000001 || end >= layout.PlotLeft ||
                 !Green(48, top + 7) || !Green((int)Math.Floor(end), top + 7) ||
                 !Green(55, top) || Green(55, baseline + 3))
             { throw new InvalidOperationException("Calibration width/height or rectangular native pixels lost the shared scale."); }
@@ -169,7 +170,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             using ILockedFramebuffer buffer = pixels.Lock();
             image.CopyPixels(buffer);
             var layout = ProjectedEcgPlotLayout.Resolve(1044)!;
-            int x = (int)Math.Round(layout.PlotLeft + layout.PlotWidth * (double)time / ProjectedEcgPlotLayout.VisibleDurationNs);
+            int x = (int)Math.Round(layout.PlotLeft + (double)time / DemoSweepLayout.NanosecondsPerPixel);
             int y = (int)Math.Round((int)EcgLead.V5 * Row + Row / 2 - plane.Samples[peak] * 0.04);
             if (plane.Samples[peak] < 1500 || !Enumerable.Range(y - 2, 5).Any(row =>
                 Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + x * 4 + 1) > 100))
@@ -221,7 +222,7 @@ internal static class ProjectedEcgDemoSmokeChecks
                 int value = plane.Samples[(int)((time - block.StartSimTimeNs) / 4_000_000)];
                 double height = value * ProjectedEcgPlotLayout.PixelsPerMillivolt / 1000.0;
                 int y = (int)Math.Round((int)lead * Row + Row / 2 - height);
-                int x = (int)Math.Round(layout.PlotLeft + layout.PlotWidth * (time / (double)ProjectedEcgPlotLayout.VisibleDurationNs));
+                int x = (int)Math.Round(layout.PlotLeft + (double)time / DemoSweepLayout.NanosecondsPerPixel);
                 if (height < 3 || !Enumerable.Range(y - 2, 5).Any(row =>
                     Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + x * 4 + 1) > 100))
                 { throw new InvalidOperationException("P/T reference is not visibly separated from baseline at the declared gain."); }

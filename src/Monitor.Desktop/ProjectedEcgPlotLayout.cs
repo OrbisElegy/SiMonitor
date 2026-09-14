@@ -7,7 +7,7 @@ namespace Monitor.Desktop;
 // Logical display coordinates. No monitor-DPI or physical-mm claim.
 internal sealed record ProjectedEcgPlotLayout(int PlotLeft, int PlotWidth)
 {
-    internal const long VisibleDurationNs = 8_000_000_000;
+    internal const long VisibleDurationNs = DemoSweepLayout.ReferenceDurationNs;
     internal const int RowHeight = 160;
     internal const uint PixelsPerMillivolt = 40;
     private static readonly SweepStateProjectionState ScaleState = SweepStateProjectionStateMachine.Start(
@@ -19,13 +19,12 @@ internal sealed record ProjectedEcgPlotLayout(int PlotLeft, int PlotWidth)
     {
         if (!double.IsFinite(width) || width < 100 || width > int.MaxValue) { return null; }
         int available = (int)Math.Floor(width);
-        int plot = (int)((available - 60L) * 40 / 41);
-        return new(available - plot, plot);
+        return new(85, Math.Min(available - 85, DemoSweepLayout.MaximumPlotWidth));
     }
 
     internal static EcgVerticalScale VerticalScale(int lead) =>
         new(lead * RowHeight, RowHeight, lead * RowHeight + RowHeight / 2, PixelsPerMillivolt, 1);
 
     internal EcgCalibrationGeometrySnapshot Calibration(int lead) => EcgCalibrationGeometry.Compose(
-        ScaleState, PlotLeft, PlotWidth, VerticalScale(lead), 44, 48);
+        ScaleState, PlotLeft, DemoSweepLayout.ReferencePlotWidth, VerticalScale(lead), 44, 48);
 }

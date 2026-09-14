@@ -16,6 +16,7 @@ internal static class WaveformDemoSmokeChecks
     {
         VerifyPhysiology();
         VerifyProgressiveSweep();
+        DemoSweepResizeSmokeChecks.VerifyWrapAndRetention();
         WaveformDemoWindow window = new();
         window.Show();
         try
@@ -37,16 +38,16 @@ internal static class WaveformDemoSmokeChecks
             if (!rejected || window.SimulationTimeNs != 2_200_000_000 || !ReferenceEquals(previous, window.Trace))
             { throw new InvalidOperationException("Rejected generation changed the displayed fixture."); }
             for (int step = 0; step < 15; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 11) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
+            if (window.BlockCount != 16) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
             window.UpdateLayout();
             VerifyPixels(window, true);
-            byte[] retainedColumn = ReadColumn(window.Trace, 350);
-            VerifyGap(window.Trace, 650);
+            byte[] retainedColumn = ReadColumn(window.Trace, 80);
+            VerifyGap(window.Trace, 410);
             Click(window.StepButton);
             window.UpdateLayout();
-            _ = ReadColumn(window.Trace, 650);
-            VerifyGap(window.Trace, 750);
-            if (!retainedColumn.SequenceEqual(ReadColumn(window.Trace, 350)))
+            _ = ReadColumn(window.Trace, 410);
+            VerifyGap(window.Trace, 435);
+            if (!retainedColumn.SequenceEqual(ReadColumn(window.Trace, 80)))
             { throw new InvalidOperationException("Unmodified sweep samples moved horizontally after history eviction."); }
             window.Width = 800;
             window.UpdateLayout();
@@ -57,6 +58,7 @@ internal static class WaveformDemoSmokeChecks
             if (window.Trace.Bounds.Width != 700)
             { throw new InvalidOperationException("Trace resize did not update its drawing bounds."); }
             VerifyPixels(window, true);
+            DemoSweepResizeSmokeChecks.VerifyFixedSpeed(window);
             Click(window.ResetButton);
             window.UpdateLayout();
             if (window.BlockCount != 0 || window.SimulationTimeNs != 0)
@@ -69,10 +71,10 @@ internal static class WaveformDemoSmokeChecks
             long? pinnedStart = window.DisplayStartNs;
             for (int step = 0; step < 20; step++) { Click(window.StepButton); }
             if (!window.IsHeld || !ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != pinnedStart ||
-                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 11)
+                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 21)
             { throw new InvalidOperationException("Background generation or eviction altered the pinned view."); }
             Click(window.HoldButton);
-            if (window.IsHeld || ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != 2_200_000_000 ||
+            if (window.IsHeld || ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != 0 ||
                 window.SimulationTimeNs != 6_200_000_000)
             { throw new InvalidOperationException("Return did not join latest data without advancing simulation."); }
             window.UpdateLayout();
@@ -109,28 +111,28 @@ internal static class WaveformDemoSmokeChecks
                     window.Trace.Arrange(new Rect(0, 0, 1000, window.Trace.Height));
                 }
                 Layout();
-                VerifyGap(window.Trace, 110);
-                byte[] retained = ReadColumn(window.Trace, 30);
+                VerifyGap(window.Trace, 27);
+                byte[] retained = ReadColumn(window.Trace, 8);
                 window.Advance(16_000_000, progressive: true);
                 if (window.LiveFrontierNs != 216_000_000 || window.BlockCount != 2)
                 { throw new InvalidOperationException("Sweep frontier waited for a new block."); }
                 Layout();
-                VerifyGap(window.Trace, 110);
+                VerifyGap(window.Trace, 27);
                 window.Advance(16_000_000, progressive: true);
                 Layout();
-                _ = ReadColumn(window.Trace, 110);
-                if (!retained.SequenceEqual(ReadColumn(window.Trace, 30)))
+                _ = ReadColumn(window.Trace, 27);
+                if (!retained.SequenceEqual(ReadColumn(window.Trace, 8)))
                 { throw new InvalidOperationException("Progressive reveal shifted existing source pixels."); }
                 Click(window.HoldButton);
                 Control held = window.Trace;
                 for (int frame = 0; frame < 150; frame++) { window.Advance(16_000_000, progressive: true); }
-                if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 11)
+                if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 14)
                 { throw new InvalidOperationException("Progressive wrap or eviction changed held geometry."); }
                 Click(window.HoldButton);
                 if (window.LiveFrontierNs != 2_632_000_000 || ReferenceEquals(held, window.Trace))
                 { throw new InvalidOperationException("Return failed to join the progressive frontier."); }
                 Layout();
-                VerifyGap(window.Trace, 350);
+                VerifyGap(window.Trace, 340);
                 _ = ReadColumn(window.Trace, 250);
             }
             finally { window.Close(); }
@@ -142,7 +144,7 @@ internal static class WaveformDemoSmokeChecks
     {
         for (int step = 0; step < 11; step++) { Click(window.StepButton); }
         window.UpdateLayout();
-        byte[] triangle = ReadColumn(window.Trace, 30);
+        byte[] triangle = ReadColumn(window.Trace, 8);
         Click(window.HoldButton);
         Click(window.RunButton);
         var oldTimer = window.ActiveTimer;
@@ -155,13 +157,13 @@ internal static class WaveformDemoSmokeChecks
         if (window.BlockCount != 0) { throw new InvalidOperationException("New shape bypassed acquisition latency."); }
         Click(window.StepButton);
         window.UpdateLayout();
-        byte[] pulse = ReadColumn(window.Trace, 30);
+        byte[] pulse = ReadColumn(window.Trace, 8);
         if (triangle.SequenceEqual(pulse)) { throw new InvalidOperationException("Different synthetic tables produced identical fixture pixels."); }
         Click(window.ResetButton);
         if (!window.UsesPulse) { throw new InvalidOperationException("Reset lost the selected shape."); }
         for (int step = 0; step < 11; step++) { Click(window.StepButton); }
         window.UpdateLayout();
-        if (!pulse.SequenceEqual(ReadColumn(window.Trace, 30)))
+        if (!pulse.SequenceEqual(ReadColumn(window.Trace, 8)))
         { throw new InvalidOperationException("Selected shape did not restart deterministically."); }
         Click(window.ShapeButton);
         if (window.UsesPulse || window.BlockCount != 0)
@@ -291,7 +293,7 @@ internal static class WaveformDemoSmokeChecks
             Click(window.HoldButton);
             Control held = window.Trace;
             for (int step = 0; step < 20; step++) { Click(window.StepButton); }
-            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 11)
+            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 23)
             { throw new InvalidOperationException("Continuous event output lost held view or bounded retention."); }
             Click(window.HoldButton);
             window.UpdateLayout();
@@ -299,6 +301,7 @@ internal static class WaveformDemoSmokeChecks
             VerifyCapnogramPixels(window, 700);
             VerifyCvpPixels(window);
             VerifyCvpPixels(window, 700);
+            DemoSweepResizeSmokeChecks.VerifyFixedSpeed(window);
             window.UpdateLayout();
             VerifyPixels(window, true, resp: true);
             Click(window.ResetButton);
@@ -333,7 +336,7 @@ internal static class WaveformDemoSmokeChecks
             var plane = block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int sample = (int)((time - block.StartSimTimeNs) * plane.SampleRateNumerator / 1_000_000_000 / plane.SampleRateDenominator);
             int value = plane.Samples[sample];
-            int x = (int)Math.Round(time * (double)width / 2_000_000_000);
+            int x = (int)Math.Round(time / (double)DemoSweepLayout.NanosecondsPerPixel);
             int y = row == 5 ? (time == 272_000_000 ? 685 : 648) : row == 4 ? 590 : row == 3 ? (time == 312_000_000 ? 420 : 395) : (int)Math.Round(row * 120 + 60 - value * 0.05);
             if (row == 3 && (value != (time == 312_000_000 ? 0 : 4000) || plane.ScaleNumerator != 1 ||
                 plane.ScaleDenominator != 100 || plane.OffsetNumerator != 80 || plane.OffsetDenominator != 1))
@@ -385,7 +388,7 @@ internal static class WaveformDemoSmokeChecks
         foreach (long time in new[] { 3_000_000_000L, 3_750_000_000, 3_800_000_000, 3_950_000_000, 4_250_000_000 })
         {
             int raw = Sample(4, time);
-            int x = (int)Math.Round((time % 2_000_000_000) * (double)width / 2_000_000_000);
+            int x = (int)Math.Round(time / (double)DemoSweepLayout.NanosecondsPerPixel);
             int y = (int)Math.Round(590 - raw / 100.0 * 1.25);
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
             {
@@ -423,7 +426,7 @@ internal static class WaveformDemoSmokeChecks
             int raw = plane.Samples[(int)((time - block.StartSimTimeNs) / 8_000_000)];
             if (positive ? raw <= 0 : raw >= 0)
             { throw new InvalidOperationException("CVP cardiac waves or signed descents disappeared under respiratory pressure."); }
-            int x = (int)Math.Round(time % 2_000_000_000 * (double)width / 2_000_000_000);
+            int x = (int)Math.Round(time / (double)DemoSweepLayout.NanosecondsPerPixel);
             // Six mmHg baseline is y=775 on the declared -5..15 mmHg axis;
             // each acquired centi-mmHg moves five hundredths of a logical pixel.
             int y = (int)Math.Round(775 - raw * 0.05);

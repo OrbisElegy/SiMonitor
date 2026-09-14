@@ -58,7 +58,7 @@ internal sealed class WaveformDemoWindow : Window
         Width = 1040;
         Height = 520;
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
+        panel.Children.Add(new TextBlock { Text = physiology ? "教材约束的单导联参考：ECG 每计数 1 μV；Resp 为相对量。非验证预设，无屏幕毫米标定。" : "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
         panel.Children.Add(new TextBlock { Text = physiology ? "上：ECG 250 Hz / 40 ms；下：Resp 125 Hz / 80 ms；显式测试形态，未核验生理预设。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
@@ -211,12 +211,12 @@ internal sealed class WaveformDemoWindow : Window
 
     private static PhysiologyWaveformGroup CreatePhysiologySource()
     {
-        RegularPhysiologyPlan plan = new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000);
+        EcgCycleTiming timing = TextbookEcgReference.Timing;
+        RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,
+            timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000);
         return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 16,
             [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1),
-                [new(PhysiologyCycleEventKind.AtrialElectrical, 0, 80_000_000, PhysiologyDemoTables.P),
-                 new(PhysiologyCycleEventKind.VentricularElectrical, 0, 80_000_000, PhysiologyDemoTables.Qrs),
-                 new(PhysiologyCycleEventKind.VentricularElectrical, 160_000_000, 160_000_000, PhysiologyDemoTables.T)], 10, 0),
+                TextbookEcgReference.CreateBands(), 10, 0),
              new(plan, new(Pleth, "AcqResp125@1", 1, 1, 0, 1),
                 [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, PhysiologyDemoTables.Resp)], 10, 0)]);
     }

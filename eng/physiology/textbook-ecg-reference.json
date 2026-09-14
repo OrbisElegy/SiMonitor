@@ -1,0 +1,29 @@
+{
+  "id": "TextbookEcgReferenceDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第一、二节",
+    "pages": "450-454,457,459-462"
+  },
+  "textbook_summary": [
+    "P rounded, duration < 120 ms and limb-lead amplitude < 250 uV.",
+    "PR measured P onset to QRS onset; normal-rate reference 120-200 ms.",
+    "QRS majority 60-100 ms, generally <=110 ms.",
+    "Q duration <=30 ms and depth <=one quarter R for applicable leads.",
+    "J is QRS end; ST extends to T onset; baseline chosen zero.",
+    "T slower rising limb and steeper falling limb; same dominant polarity as R.",
+    "QT measured QRS onset to T end; 320-440 ms at 60-100/min is a population reference, not a fixed-rate law."
+  ],
+  "status": "TextbookConstrainedIllustrationNotValidatedPreset",
+  "authorship": "Project-authored landmarks within cited qualitative/interval constraints; no traced textbook image or upstream table",
+  "sample_value_unit": "microvolt",
+  "scope": "Positive-dominant single-lead illustration; not an electrode projection or twelve-lead preset",
+  "timing_ms": {"rr": 800, "p": 100, "pr": 160, "qrs": 80, "qt": 360, "t": 180},
+  "offline_interpolation": "Exact-rational monotone cubic smoothstep per landmark interval, nearest ties to even Q32; runtime PeriodicLutLinear@1",
+  "tables": {
+    "P": {"length": 128, "landmarks": [[0, 0], [64, 150], [128, 0]]},
+    "Qrs": {"length": 128, "landmarks": [[0, 0], [16, -120], [32, 0], [56, 1000], [72, 0], [88, -200], [128, 0]]},
+    "T": {"length": 128, "landmarks": [[0, 0], [80, 300], [128, 0]]}
+  }
+}

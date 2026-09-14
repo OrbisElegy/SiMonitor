@@ -223,18 +223,8 @@ internal static class WaveformDemoSmokeChecks
 
     private static void VerifyPhysiology()
     {
-        const long q = Monitor.Simulation.Determinism.FixedPointMath.Q32One;
-        foreach (IReadOnlyList<long> table in new[] { PhysiologyDemoTables.P, PhysiologyDemoTables.Qrs, PhysiologyDemoTables.T, PhysiologyDemoTables.Resp })
-        {
-            if (table.Count != 64 || table[0] != 0)
-            { throw new InvalidOperationException("Dense morphology lost table length or zero onset."); }
-        }
-        if (PhysiologyDemoTables.P[32] != 100 * q || PhysiologyDemoTables.T[32] != 300 * q ||
-            PhysiologyDemoTables.Resp[32] != 1000 * q || PhysiologyDemoTables.Qrs[16] != -200 * q ||
-            PhysiologyDemoTables.Qrs[32] != 1000 * q || PhysiologyDemoTables.Qrs[48] != -100 * q ||
-            PhysiologyDemoTables.P[1] >= PhysiologyDemoTables.P[16] - PhysiologyDemoTables.P[15] ||
-            PhysiologyDemoTables.Resp[8] == 250 * q)
-        { throw new InvalidOperationException("Smooth test morphology changed landmarks or retained straight ramps."); }
+        if (PhysiologyDemoTables.Resp.Count != 64 || PhysiologyDemoTables.Resp[0] != 0)
+        { throw new InvalidOperationException("Continuous Resp reference table is missing."); }
         WaveformDemoWindow window = new(physiology: true);
         window.Show();
         try

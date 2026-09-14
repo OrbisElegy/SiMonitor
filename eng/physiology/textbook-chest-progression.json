@@ -1,5 +1,5 @@
 {
-  "id": "TextbookChestProgressionDraft@1",
+  "id": "TextbookChestProgressionDraft@2",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -49,7 +49,7 @@
         1
       ],
       [
-        80,
+        104,
         0
       ],
       [
@@ -63,7 +63,7 @@
         0
       ],
       [
-        80,
+        48,
         0
       ],
       [
@@ -114,6 +114,9 @@
     0,
     800
   ],
-  "construction": "RA/LA/RL/LL retain original QRS weights. Chest potential = shared limb mean + independent early/main/terminal components before standard projection. Offline exact fractions, one Q32 rounding per electrode. Residual chest projection quantization <= half Q32 unit.",
+  "construction": "RA/LA/RL/LL retain original QRS weights. Chest potential = shared limb mean + independent early/main/terminal components before standard projection. Offline exact fractions, one Q32 rounding per electrode. Residual chest projection quantization <= half Q32 unit. Main decay and terminal rise are complementary on one shared R-peak-to-S-trough interval (indices 48-104), producing one monotone cubic descent without a forced zero-slope baseline knot.",
+  "constraints": [
+    "Continuous monotone R-to-S descent with nonzero slope through baseline; preserve R/S peak values and times"
+  ],
   "authorship": "Numeric component amplitudes and node locations are project choices within textbook qualitative constraints, not traced textbook data"
 }

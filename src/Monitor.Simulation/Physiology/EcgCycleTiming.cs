@@ -20,7 +20,7 @@ public sealed record EcgCycleTiming(long RrIntervalNs, long PDurationNs, long Pr
 
 public static class TextbookEcgReference
 {
-    public const string EvidenceId = "TextbookEcgReferenceDraft@1";
+    public const string EvidenceId = "TextbookEcgReferenceDraft@2";
     public const string SourceValueUnit = "microvolt";
     public static EcgCycleTiming Timing { get; } = TextbookEcgTables.Timing;
 

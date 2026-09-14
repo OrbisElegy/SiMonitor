@@ -7,7 +7,7 @@ namespace Monitor.Simulation.Physiology;
 // components with independent electrode coefficients, not one QRS scale.
 public static class TextbookElectrodeReference
 {
-    public const string EvidenceId = "TextbookChestProgressionDraft@1";
+    public const string EvidenceId = "TextbookChestProgressionDraft@2";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
     {
         int[,] weights = { { -200, -100 }, { 300, 250 }, { 0, 0 }, { 600, 550 },

@@ -16,7 +16,54 @@ internal static class ChestProgressionSpecifications
         new(nameof(ChestWaveOrderAndPeakTimesMatchReference), ChestWaveOrderAndPeakTimesMatchReference),
         new(nameof(ChestReferenceRetainsExactTopologyAndRestore), ChestReferenceRetainsExactTopologyAndRestore),
         new(nameof(ChestProgressionSurvivesAcquisitionAndWire), ChestProgressionSurvivesAcquisitionAndWire),
+        new(nameof(ChestRToSDescendsThroughBaselineWithoutAStall), ChestRToSDescendsThroughBaselineWithoutAStall),
+        new(nameof(ChestNativeSamplesPreserveContinuousRToSDescent), ChestNativeSamplesPreserveContinuousRToSDescent),
+        new(nameof(SharedReferenceRToSHasNoArtificialBaselineKnot), SharedReferenceRToSHasNoArtificialBaselineKnot),
     ];
+
+    private static void SharedReferenceRToSHasNoArtificialBaselineKnot()
+    {
+        var source = EventWaveformComposition.Restore(new(TextbookEcgReference.CreateBands(),
+            RegularPhysiologyTimeline.Start(Plan).AdvanceBefore(800_000_000, 100)));
+        long[] values = Enumerable.Range(35, 21).Select(ms => source.EvaluateAt(160_000_000 + ms * 1_000_000L)).ToArray();
+        int crossing = Array.FindIndex(values, value => value < 0);
+        Check.That(crossing > 1 && crossing + 1 < values.Length &&
+            Enumerable.Range(1, values.Length - 1).All(index => values[index] < values[index - 1]) &&
+            Enumerable.Range(crossing - 1, 3).All(index => (values[index - 1] - values[index]) * 100 > values[0] - values[^1]),
+            "the shared single-lead and limb QRS reference must also retain slope through the R/S crossing");
+    }
+
+    private static void ChestRToSDescendsThroughBaselineWithoutAStall()
+    {
+        var source = ElectrodeWaveformComposition.Restore(new(TextbookElectrodeReference.CreateElectrodes(),
+            RegularPhysiologyTimeline.Start(Plan).AdvanceBefore(800_000_000, 100)));
+        foreach (EcgLead lead in new[] { EcgLead.V1, EcgLead.V2, EcgLead.V3, EcgLead.V4, EcgLead.V5, EcgLead.V6 })
+        {
+            var values = Enumerable.Range(30, 36).Select(ms => source.EvaluateAt(160_000_000 + ms * 1_000_000L)
+                .Leads[lead].Numerator).ToArray();
+            Check.That(values[0] > 0 && values[^1] < 0 && Enumerable.Range(1, values.Length - 1)
+                .All(index => values[index] < values[index - 1]), "every R-to-S interval must descend without a notch or plateau");
+            int crossing = Array.FindIndex(values, value => value < 0);
+            Int128 excursion = values[0] - values[^1];
+            Check.That(crossing > 1 && crossing + 1 < values.Length &&
+                Enumerable.Range(crossing - 1, 3).All(index => (values[index - 1] - values[index]) * 100 > excursion),
+                "baseline crossing must retain slope, not restart S after flattening the R limb");
+        }
+    }
+
+    private static void ChestNativeSamplesPreserveContinuousRToSDescent()
+    {
+        var samples = Source().GenerateBefore(240_000_000, 60, 100)
+            .Where(frame => frame.Tick.SimTimeNs is >= 192_000_000 and <= 224_000_000).ToArray();
+        foreach (EcgLead lead in new[] { EcgLead.V1, EcgLead.V2, EcgLead.V3, EcgLead.V4, EcgLead.V5, EcgLead.V6 })
+        {
+            int[] values = samples.Select(frame => (int)frame.MicrovoltValues[(int)lead]).ToArray();
+            int crossing = Array.FindIndex(values, value => value < 0);
+            Check.That(crossing > 0 && Enumerable.Range(1, values.Length - 1).All(index => values[index] < values[index - 1]) &&
+                (values[crossing - 1] - values[crossing]) * 20 > values[0] - values[^1],
+                "native 250Hz display samples must preserve the uninterrupted downward crossing");
+        }
+    }
 
     private static void ChestRAndSProgressThroughASubstantialTransition()
     {

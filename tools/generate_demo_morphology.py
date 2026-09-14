@@ -32,8 +32,12 @@ def electrode_shapes(manifest, reference):
         values.append([round(Fraction(limbs[0][i] + limbs[1][i] + limbs[3][i], 3) +
                              sum(weight * phase[i] for weight, phase in zip(weights, phases)))
                        for i in range(manifest['phase_length'])])
-    return {name: {'values_q32': value} for name, value in zip(
+    shapes = {name: {'values_q32': value} for name, value in zip(
         ['RA', 'LA', 'RL', 'LL', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'], values)}
+    for column, name in enumerate(['PWeightsQ32', 'TWeightsQ32']):
+        shapes[name] = {'values_q32': [row[column] * (1 << 32)
+                                     for row in manifest['p_t_electrode_weights_per_1000']]}
+    return shapes
 
 
 def render(namespace, class_name, shapes, timing=None):

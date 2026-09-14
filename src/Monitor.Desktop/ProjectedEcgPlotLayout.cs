@@ -7,10 +7,11 @@ namespace Monitor.Desktop;
 // Logical display coordinates. No monitor-DPI or physical-mm claim.
 internal sealed record ProjectedEcgPlotLayout(int PlotLeft, int PlotWidth)
 {
-    internal const int RowHeight = 60;
-    internal const uint PixelsPerMillivolt = 15;
+    internal const long VisibleDurationNs = 8_000_000_000;
+    internal const int RowHeight = 160;
+    internal const uint PixelsPerMillivolt = 40;
     private static readonly SweepStateProjectionState ScaleState = SweepStateProjectionStateMachine.Start(
-        new("electrode-demo", 1, 1, 0, 2_000_000_000, 200_000_000, 2_200_000_000), 1, 1,
+        new("electrode-demo", 1, 1, 0, VisibleDurationNs, 200_000_000, VisibleDurationNs + 200_000_000), 1, 1,
         SessionRunState.Running, DataContinuityStateMachine.Start(LocalContinuationPolicy.Disabled, 0).CaptureState(),
         0, 0).CaptureState();
 
@@ -18,7 +19,7 @@ internal sealed record ProjectedEcgPlotLayout(int PlotLeft, int PlotWidth)
     {
         if (!double.IsFinite(width) || width < 100 || width > int.MaxValue) { return null; }
         int available = (int)Math.Floor(width);
-        int plot = (int)((available - 60L) * 10 / 11);
+        int plot = (int)((available - 60L) * 40 / 41);
         return new(available - plot, plot);
     }
 

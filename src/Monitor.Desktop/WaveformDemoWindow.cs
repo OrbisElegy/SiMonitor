@@ -40,7 +40,8 @@ internal sealed class WaveformDemoWindow : Window
     internal Button ResetButton { get; } = new() { Content = "重置" };
     internal Button HoldButton { get; } = new() { Content = "固定当前画面", IsEnabled = false };
     internal bool IsHeld => _pinned is not null;
-    internal long? DisplayStartNs => DisplayBlocks.Length == 0 ? null : DisplayBlocks[Math.Max(0, DisplayBlocks.Length - 10)].StartSimTimeNs;
+    internal long? DisplayStartNs => DisplayBlocks.Length == 0 ? null : DisplayBlocks[Math.Max(0, DisplayBlocks.Length - VisibleBlockCount)].StartSimTimeNs;
+    private int VisibleBlockCount => _projected ? 40 : 10;
     private WaveformEnvelope[] DisplayBlocks => _pinned ?? _blocks;
     internal long SimulationTimeNs { get; private set; }
     internal int BlockCount => _blocks.Length;
@@ -69,8 +70,8 @@ internal sealed class WaveformDemoWindow : Window
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = projected ? "电极模型示意：12 导联均由电极电位投影；非已验证正常成人预设，无屏幕毫米标定。" : physiology ? "教材约束的单导联参考：ECG 每计数 1 μV；Resp 为相对量。非验证预设，无屏幕毫米标定。" : "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
         panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz／40 ms 延迟；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "上：ECG 250 Hz / 40 ms；下：Resp 125 Hz / 80 ms；显式测试形态，未核验生理预设。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
-        panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
-        panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
+        panel.Children.Add(new TextBlock { Text = $"共享块等待全部通道齐备；{(projected ? 8 : 2)} s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
+        panel.Children.Add(new TextBlock { Text = $"演示擦除间隙 200 ms，仅遮盖绘图；保留 {(projected ? "8.2" : "2.2")} s 源历史。" });
         if (projected) { panel.Children.Add(new TextBlock { Text = "每行左侧标定方波：1 mV × 200 ms；与波形使用相同尺度，不代表屏幕毫米已校准。" }); }
         WrapPanel actions = new();
         actions.Children.Add(StepButton);
@@ -159,7 +160,7 @@ internal sealed class WaveformDemoWindow : Window
         ElectrodeWaveformGroup? electrodeTrial = _projected ? ElectrodeWaveformGroup.Restore(_electrodeSource!.CaptureState()) : null;
         IReadOnlyList<byte[]> wires = electrodeTrial is not null ? electrodeTrial.AdvanceTo(next, 50, 1, 100) : eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
         WaveformEnvelope[] blocks = _blocks.Concat(wires
-            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(11).ToArray();
+            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(VisibleBlockCount + 1).ToArray();
         long frontier = blocks.Length == 0 ? 0 : progressive
             ? Math.Max(LiveFrontierNs, Math.Min(blocks[^1].StartSimTimeNs + 200_000_000,
                 Math.Max(0, next - PresentationLatencyNs)))
@@ -254,16 +255,17 @@ internal sealed class WaveformDemoWindow : Window
         private readonly (Point Start, Point End, int Channel)[] _segments;
         private readonly double? _gapStart;
         private readonly bool _resp;
+        private long DurationNs => _projected ? ProjectedEcgPlotLayout.VisibleDurationNs : 2_000_000_000;
         private readonly bool _projected;
         public RawTrace(WaveformEnvelope[] blocks, bool resp, long frontier = 0, bool projected = false)
         {
             _resp = resp;
             _projected = projected;
-            Height = projected ? 720 : 240;
+            Height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
-                _gapStart = (frontier % 2_000_000_000) / 2_000_000_000.0;
+                _gapStart = (frontier % DurationNs) / (double)DurationNs;
                 for (int channel = 0; channel < (projected ? 12 : 2); channel++)
                 {
                     Point? previous = null;
@@ -277,7 +279,7 @@ internal sealed class WaveformDemoWindow : Window
                             // Fixture blocks are 200ms aligned from epoch zero.
                             // Reduce integer time before terminal pixel conversion.
                             long sourceTime = block.StartSimTimeNs + index * 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
-                            double time = sourceTime % 2_000_000_000;
+                            double time = sourceTime % DurationNs;
                             double y;
                             if (projected)
                             {
@@ -285,12 +287,12 @@ internal sealed class WaveformDemoWindow : Window
                                 y = (double)position.PixelNumerator / (double)position.PixelDenominator;
                             }
                             else { y = channel * 120 + 60 - plane.Samples[index] * 0.05; }
-                            Point point = new(time / 2_000_000_000, y);
+                            Point point = new(time / DurationNs, y);
                             if (previous is { } start && point.X > start.X &&
-                                sourceTime > frontier - 2_000_000_000 && previousTime < frontier)
+                                sourceTime > frontier - DurationNs && previousTime < frontier)
                             {
                                 // Clip only a segment between two acquired samples; never extrapolate.
-                                long from = Math.Max(previousTime, frontier - 2_000_000_000);
+                                long from = Math.Max(previousTime, frontier - DurationNs);
                                 long to = Math.Min(sourceTime, frontier);
                                 Point At(long value) => start + (point - start) *
                                     ((double)(value - previousTime) / (sourceTime - previousTime));
@@ -329,7 +331,7 @@ internal sealed class WaveformDemoWindow : Window
                     {
                         var label = new FormattedText(ProjectedEcgDemoSource.LeadNames[lead], CultureInfo.InvariantCulture,
                             FlowDirection.LeftToRight, new Typeface("sans-serif"), 12, Brushes.Lime);
-                        context.DrawText(label, new Point(3, lead * 60 + 20));
+                        context.DrawText(label, new Point(3, lead * ProjectedEcgPlotLayout.RowHeight + ProjectedEcgPlotLayout.RowHeight / 2 - 10));
                         var points = layout!.Calibration(lead).Points;
                         Point Pixel(EcgCalibrationPoint point) => new(point.X.WholePixels +
                             (double)point.X.FractionNumerator / point.X.FractionDenominator,
@@ -340,7 +342,7 @@ internal sealed class WaveformDemoWindow : Window
                 }
                 if (_gapStart is { } start)
                 {
-                    double end = start + 0.1;
+                    double end = start + 200_000_000.0 / DurationNs;
                     context.FillRectangle(Brushes.Black, new Rect(left + start * width, 0,
                         (Math.Min(1, end) - start) * width, Bounds.Height));
                     if (end > 1)

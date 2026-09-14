@@ -365,4 +365,18 @@ internal static class TextbookElectrodeQrsTables
         -230210247119, -182173722161, -138190572749, -98985574393,
         -65283502966, -37809133977, -17287243300, -4442606803,
     });
+    // Q32 little-endian table SHA-256: 883dbb6c08423550086155d621b5a1d4d958901de18f5a5fe4402116b2335f1a
+    internal static IReadOnlyList<long> PWeightsQ32 { get; } = Array.AsReadOnly(new long[]
+    {
+        -1717986918400, 1717986918400, 0, 2576980377600,
+        429496729600, 2576980377600, 3435973836800, 4294967296000,
+        5153960755200, 4724464025600,
+    });
+    // Q32 little-endian table SHA-256: 60b90d2a51e131cddb28bbc529a40621ffe54594425aa3a78d2bae1e5fd47274
+    internal static IReadOnlyList<long> TWeightsQ32 { get; } = Array.AsReadOnly(new long[]
+    {
+        -429496729600, 1073741824000, 0, 2362232012800,
+        0, 1717986918400, 3006477107200, 3435973836800,
+        4724464025600, 4294967296000,
+    });
 }

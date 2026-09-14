@@ -1,5 +1,5 @@
 {
-  "id": "TextbookChestProgressionDraft@2",
+  "id": "TextbookChestProgressionDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -118,5 +118,48 @@
   "constraints": [
     "Continuous monotone R-to-S descent with nonzero slope through baseline; preserve R/S peak values and times"
   ],
-  "authorship": "Numeric component amplitudes and node locations are project choices within textbook qualitative constraints, not traced textbook data"
+  "authorship": "Numeric component amplitudes and node locations are project choices within textbook qualitative constraints, not traced textbook data",
+  "p_t_electrode_weights_per_1000": [
+    [
+      -400,
+      -100
+    ],
+    [
+      400,
+      250
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      600,
+      550
+    ],
+    [
+      100,
+      0
+    ],
+    [
+      600,
+      400
+    ],
+    [
+      800,
+      700
+    ],
+    [
+      1000,
+      800
+    ],
+    [
+      1200,
+      1100
+    ],
+    [
+      1100,
+      1000
+    ]
+  ],
+  "p_t_note": "Project-selected P/T coefficients to avoid incidental chest cancellation and meet applicable polarity/amplitude relationships; QT/QRS unchanged. Optional U basis is in textbook-ecg-reference.json, disabled by default."
 }

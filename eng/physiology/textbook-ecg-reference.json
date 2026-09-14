@@ -1,5 +1,5 @@
 {
-  "id": "TextbookEcgReferenceDraft@2",
+  "id": "TextbookEcgReferenceDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -19,14 +19,99 @@
   "authorship": "Project-authored landmarks within cited qualitative/interval constraints; no traced textbook image or upstream table",
   "sample_value_unit": "microvolt",
   "scope": "Positive-dominant single-lead illustration; not an electrode projection or twelve-lead preset",
-  "timing_ms": {"rr": 800, "p": 100, "pr": 160, "qrs": 80, "qt": 360, "t": 180},
+  "timing_ms": {
+    "rr": 800,
+    "p": 100,
+    "pr": 160,
+    "qrs": 80,
+    "qt": 360,
+    "t": 180
+  },
   "offline_interpolation": "Exact-rational monotone cubic smoothstep per landmark interval, nearest ties to even Q32; runtime PeriodicLutLinear@1",
   "tables": {
-    "P": {"length": 128, "landmarks": [[0, 0], [64, 150], [128, 0]]},
-    "Qrs": {"length": 128, "landmarks": [[0, 0], [16, -120], [32, 0], [56, 1000], [88, -200], [128, 0]]},
-    "T": {"length": 128, "landmarks": [[0, 0], [80, 300], [128, 0]]}
+    "P": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          64,
+          150
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "Qrs": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          16,
+          -120
+        ],
+        [
+          32,
+          0
+        ],
+        [
+          56,
+          1000
+        ],
+        [
+          88,
+          -200
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "T": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          300
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "U": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          48,
+          1
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    }
   },
   "constraints": [
     "R-to-S descent connects peak landmarks without an intermediate zero-slope baseline knot"
-  ]
+  ],
+  "u_basis_note": "Optional unit-amplitude U basis, faster rise and slower fall; no default enabled amplitude or rate/pathology coupling."
 }

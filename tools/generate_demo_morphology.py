@@ -61,6 +61,22 @@ def render(namespace, class_name, shapes, timing=None):
     return '\n'.join(lines)
 
 
+def arterial_shape(manifest):
+    digest = hashlib.sha256(json.dumps(manifest['upstream_vertices'], separators=(',', ':')).encode()).hexdigest()
+    if digest != manifest['upstream_vertices_sha256']:
+        raise ValueError('upstream ABP vertex evidence changed')
+    vertices = [Fraction(value) for value in manifest['upstream_vertices']]
+    for index, value in manifest['modified_vertices'].items():
+        vertices[int(index)] = Fraction(value)
+    values = []
+    for sample in range(manifest['length']):
+        position = Fraction(sample * (len(vertices) - 1), manifest['length'])
+        index = int(position)
+        value = vertices[index] + (vertices[index + 1] - vertices[index]) * (position - index)
+        values.append(round(value / Fraction(manifest['normalization_peak']) * (1 << 32)))
+    return {'Pulse': {'values_q32': values}}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
@@ -69,7 +85,15 @@ def main():
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
     pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(), parse_float=Fraction)
+    arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
+    if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
+        raise ValueError('upstream ABP license evidence changed')
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/ArterialPulseTables.cs':
+            '// Adapted from Infirmary Integrated ABP_Default, Ibi Keller (Tanjera).\n'
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+                'Monitor.Simulation.Physiology', 'ArterialPulseTables', arterial_shape(arterial)).replace(
+                    'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PlethPulseTables.cs': render(
             'Monitor.Simulation.Physiology', 'PlethPulseTables', pleth['tables']),
         root / 'src/Monitor.Simulation/Physiology/TextbookElectrodeQrsTables.cs': render(
@@ -88,7 +112,7 @@ def main():
         else:
             target.write_text(expected)
     if args.check:
-        print('ok: ECG, Resp and Pleth Q32 tables match offline authoring')
+        print('ok: ECG, Resp, Pleth and arterial Q32 tables match offline authoring')
 
 
 if __name__ == '__main__':

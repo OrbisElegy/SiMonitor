@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.InteropServices;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Monitor.Simulation.Acquisition;
+using Monitor.Simulation.Determinism;
+using Monitor.Simulation.Physiology;
+
+namespace Monitor.Desktop;
+
+internal static class PhysiologyConfigurationSmokeChecks
+{
+    internal static void Verify()
+    {
+        WaveformDemoWindow window = new(physiology: true);
+        window.Show();
+        void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        try
+        {
+            foreach (var config in new[] { new PhysiologyDemoConfiguration(3000, 1000, -800), new(4800, 3200, 600) })
+            {
+                for (int step = 0; step < 11; step++) { Click(window.StepButton); }
+                Click(window.HoldButton);
+                Click(window.RunButton);
+                var oldTimer = window.ActiveTimer;
+                window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                Click(window.ApplyBreathButton);
+                window.Pulse(oldTimer);
+                if (window.BreathConfiguration != config || window.SimulationTimeNs != 0 || window.BlockCount != 0 ||
+                    window.IsHeld || window.ActiveTimer is not null || window.LiveFrontierNs != 0)
+                { throw new InvalidOperationException("Applying breathing parameters did not restart all channels and fence prior work."); }
+                var source = PhysiologyDemoSource.Create(config);
+                var state = source.CaptureState();
+                if (state.Channels.Any(channel => channel.Generator.Timeline.Plan != config.ResolvePlan()))
+                { throw new InvalidOperationException("Breathing channels do not share the accepted source plan."); }
+                var cvpBreath = state.Channels.Single(channel => channel.ChannelId == PhysiologyDemoSource.ChannelId(6))
+                    .Generator.Bands.Single(band => band.Trigger == PhysiologyCycleEventKind.InspirationStart);
+                var cvp = EventWaveformComposition.Restore(new([cvpBreath], [new(0, PhysiologyCycleEventKind.InspirationStart, 0)]));
+                if (cvp.EvaluateAt(config.InspirationMilliseconds * 1_000_000L) != -100 * FixedPointMath.Q32One ||
+                    cvp.EvaluateAt(config.BreathPeriodMilliseconds * 1_000_000L) != 0)
+                { throw new InvalidOperationException("CVP respiratory pressure did not follow configured inspiration independently of Resp polarity."); }
+                List<WaveformEnvelope> blocks = [];
+                for (int step = 1; step <= (config.BreathPeriodMilliseconds + 2400) / 200; step++)
+                {
+                    Click(window.StepButton);
+                    blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
+                }
+                VerifyPixels(window, config, blocks);
+                Click(window.HoldButton);
+                Click(window.RunButton);
+                var held = window.Trace;
+                var timer = window.ActiveTimer;
+                long before = window.SimulationTimeNs;
+                int count = window.BlockCount;
+                foreach (var (period, inspiration, amplitude) in new[] { ("bad", "1000", "800"), ("2147483648", "1000", "800"),
+                    ("999", "200", "800"), ("10001", "1000", "800"), ("3000", "199", "800"),
+                    ("1000", "625", "800"), ("3000", "3000", "800"), ("3000", "1000", "1001") })
+                {
+                    window.BreathPeriodInput.Text = period;
+                    window.InspirationInput.Text = inspiration;
+                    window.RespAmplitudeInput.Text = amplitude;
+                    Click(window.ApplyBreathButton);
+                    if (window.BreathConfiguration != config || !window.IsHeld || !ReferenceEquals(held, window.Trace) ||
+                        !ReferenceEquals(timer, window.ActiveTimer) || window.SimulationTimeNs != before || window.BlockCount != count ||
+                        string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
+                    { throw new InvalidOperationException("Invalid breathing parameters changed accepted source, timer or frozen view."); }
+                }
+                Click(window.ResetButton);
+                if (window.BreathConfiguration != config || window.ActiveTimer is not null || window.IsHeld || window.BlockCount != 0 ||
+                    window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                { throw new InvalidOperationException("Reset lost accepted breathing settings or retained draft state."); }
+            }
+        }
+        finally { window.Close(); }
+        Console.WriteLine("ok: breathing controls synchronize Resp/CO2/CVP, preserve native pixels and atomically restart or reject input");
+    }
+
+    private static void VerifyPixels(WaveformDemoWindow window, PhysiologyDemoConfiguration config, List<WaveformEnvelope> blocks)
+    {
+        var trace = window.Trace;
+        trace.Measure(new Size(1000, 840));
+        trace.Arrange(new Rect(0, 0, 1000, 840));
+        using RenderTargetBitmap image = new(new PixelSize(1000, 840), new Vector(96, 96));
+        image.Render(trace);
+        using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using ILockedFramebuffer buffer = pixels.Lock();
+        image.CopyPixels(buffer);
+        foreach (var (row, time) in new[] { (1, config.InspirationMilliseconds * 1_000_000L),
+            (4, config.BreathPeriodMilliseconds * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L) })
+        {
+            var plane = blocks.Single(block => time >= block.StartSimTimeNs && time < block.StartSimTimeNs + 200_000_000)
+                .Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row));
+            int sample = (int)(time % 200_000_000 * plane.SampleRateNumerator / 1_000_000_000);
+            int raw = plane.Samples[sample];
+            if ((row == 1 && raw != config.RespAmplitudeCounts) || (row == 4 && raw != 4000))
+            { throw new InvalidOperationException("Configured Resp turn or CO2 end-expiratory peak is absent from native data."); }
+            int x = (int)Math.Round(time / 8_000_000.0);
+            int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - raw * 0.0125 : 775 - raw * 0.05);
+            if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
+            {
+                int offset = line * buffer.RowBytes + column * 4;
+                byte b = Marshal.ReadByte(buffer.Address, offset), g = Marshal.ReadByte(buffer.Address, offset + 1), r = Marshal.ReadByte(buffer.Address, offset + 2);
+                return r > 100 && g > (row == 6 ? 50 : 100) && (row == 4 ? b > 100 : b == 0);
+            })))
+            { throw new InvalidOperationException("Breathing controls did not reach native Resp/CO2/CVP pixels."); }
+        }
+    }
+}

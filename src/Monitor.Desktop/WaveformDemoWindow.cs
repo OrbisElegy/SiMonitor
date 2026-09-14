@@ -29,6 +29,13 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _activeEcgConfiguration = new() { TextWrapping = TextWrapping.Wrap };
     private PhysiologyWaveformGroup? _physiologySource;
+    internal PhysiologyDemoConfiguration BreathConfiguration { get; private set; } = PhysiologyDemoConfiguration.Default;
+    internal TextBox BreathPeriodInput { get; } = new() { Text = "3750", Width = 75 };
+    internal TextBox InspirationInput { get; } = new() { Text = "1875", Width = 75 };
+    internal TextBox RespAmplitudeInput { get; } = new() { Text = "1000", Width = 75 };
+    internal Button ApplyBreathButton { get; } = new() { Content = "应用呼吸参数并重新开始" };
+    internal TextBlock BreathConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _activeBreathConfiguration = new() { TextWrapping = TextWrapping.Wrap };
     internal bool UsesPulse { get; private set; }
     internal Button ShapeButton { get; } = new() { Content = "形状：三角波（点击切换并重置）" };
     private WaveformEnvelope[] _blocks = [];
@@ -111,6 +118,22 @@ internal sealed class WaveformDemoWindow : Window
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
+        if (_physiology)
+        {
+            WrapPanel settings = new();
+            settings.Children.Add(new TextBlock { Text = "呼吸周期（ms）" });
+            settings.Children.Add(BreathPeriodInput);
+            settings.Children.Add(new TextBlock { Text = "吸气时长（ms）" });
+            settings.Children.Add(InspirationInput);
+            settings.Children.Add(new TextBlock { Text = "Resp 相对幅度（可负）" });
+            settings.Children.Add(RespAmplitudeInput);
+            settings.Children.Add(ApplyBreathButton);
+            foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
+            panel.Children.Add(settings);
+            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。周期 1000–10000 ms，吸气至少 200 ms、呼气须超过 375 ms；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。" });
+            panel.Children.Add(_activeBreathConfiguration);
+            panel.Children.Add(BreathConfigurationStatus);
+        }
         panel.Children.Add(_runStatus);
         panel.Children.Add(_status);
         panel.Children.Add(_trace);
@@ -126,6 +149,7 @@ internal sealed class WaveformDemoWindow : Window
         RunButton.Click += (_, _) => ToggleRun();
         QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
         ApplyEcgButton.Click += (_, _) => ApplyEcgConfiguration();
+        ApplyBreathButton.Click += (_, _) => ApplyBreathConfiguration();
         ShapeButton.Click += (_, _) =>
         {
             if (_closed || _physiology || _projected) { return; }
@@ -256,11 +280,29 @@ internal sealed class WaveformDemoWindow : Window
         }
     }
 
-    private void Reset(bool pulse, ProjectedEcgDemoConfiguration? configuration = null)
+    private void ApplyBreathConfiguration()
+    {
+        if (_closed || !_physiology) { return; }
+        try
+        {
+            if (!int.TryParse(BreathPeriodInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int period) ||
+                !int.TryParse(InspirationInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int inspiration) ||
+                !int.TryParse(RespAmplitudeInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int amplitude))
+            { throw new ArgumentException("Integer input required."); }
+            Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude));
+        }
+        catch (ArgumentException)
+        {
+            BreathConfigurationStatus.Text = "未应用：请输入范围内的整数，吸气至少 200 ms，呼气须超过 375 ms。当前数据与扫屏状态保持。";
+        }
+    }
+
+    private void Reset(bool pulse, ProjectedEcgDemoConfiguration? configuration = null, PhysiologyDemoConfiguration? breathConfiguration = null)
     {
         configuration ??= EcgConfiguration;
+        breathConfiguration ??= BreathConfiguration;
         PeriodicWaveformGroup source = CreateSource(pulse);
-        PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create() : null;
+        PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create(breathConfiguration) : null;
         ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create(configuration) : null;
         RawTrace empty = new([], _physiology, projected: _projected);
         Pause();
@@ -268,6 +310,16 @@ internal sealed class WaveformDemoWindow : Window
         _physiologySource = eventSource;
         _electrodeSource = electrodeSource;
         EcgConfiguration = configuration;
+        BreathConfiguration = breathConfiguration;
+        if (_physiology)
+        {
+            BreathPeriodInput.Text = breathConfiguration.BreathPeriodMilliseconds.ToString(CultureInfo.InvariantCulture);
+            InspirationInput.Text = breathConfiguration.InspirationMilliseconds.ToString(CultureInfo.InvariantCulture);
+            RespAmplitudeInput.Text = breathConfiguration.RespAmplitudeCounts.ToString(CultureInfo.InvariantCulture);
+            _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
+                $"已应用：周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。");
+            BreathConfigurationStatus.Text = "";
+        }
         if (_projected)
         {
             var timing = configuration.ResolveTiming();

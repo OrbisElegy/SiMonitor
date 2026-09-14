@@ -27,7 +27,7 @@ internal sealed class WaveformDemoWindow : Window
     internal Button ResetButton { get; } = new() { Content = "重置" };
     internal Button HoldButton { get; } = new() { Content = "固定当前画面", IsEnabled = false };
     internal bool IsHeld => _pinned is not null;
-    internal long? DisplayStartNs => DisplayBlocks.Length == 0 ? null : DisplayBlocks[0].StartSimTimeNs;
+    internal long? DisplayStartNs => DisplayBlocks.Length == 0 ? null : DisplayBlocks[Math.Max(0, DisplayBlocks.Length - 10)].StartSimTimeNs;
     private WaveformEnvelope[] DisplayBlocks => _pinned ?? _blocks;
     internal long SimulationTimeNs { get; private set; }
     internal int BlockCount => _blocks.Length;
@@ -43,6 +43,7 @@ internal sealed class WaveformDemoWindow : Window
         panel.Children.Add(new TextBlock { Text = "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
         panel.Children.Add(new TextBlock { Text = "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
+        panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
         StackPanel actions = new() { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
@@ -106,7 +107,7 @@ internal sealed class WaveformDemoWindow : Window
         long next = checked(SimulationTimeNs + deltaNs);
         PeriodicWaveformGroup trial = PeriodicWaveformGroup.Restore(_source.CaptureState());
         WaveformEnvelope[] blocks = _blocks.Concat(trial.AdvanceTo(next, 50, 1)
-            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(10).ToArray();
+            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(11).ToArray();
         RawTrace? control = IsHeld ? null : new(blocks);
         _source = trial;
         _blocks = blocks;
@@ -149,7 +150,7 @@ internal sealed class WaveformDemoWindow : Window
         HoldButton.Content = IsHeld ? "返回最新数据" : "固定当前画面";
         _status.Text = DisplayBlocks.Length == 0
             ? $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；等待完整通道块"
-            : $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；{(IsHeld ? "固定画面（步进仍生成后台数据）" : "最新数据")}；源区间 [{DisplayBlocks[0].StartSimTimeNs / 1_000_000}, {(DisplayBlocks[^1].StartSimTimeNs + 200_000_000) / 1_000_000}) ms";
+            : $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；{(IsHeld ? "固定画面（步进仍生成后台数据）" : "最新数据")}；源区间 [{DisplayStartNs / 1_000_000}, {(DisplayBlocks[^1].StartSimTimeNs + 200_000_000) / 1_000_000}) ms";
     }
 
     private static PeriodicWaveformGroup CreateSource()
@@ -166,16 +167,18 @@ internal sealed class WaveformDemoWindow : Window
     private sealed class RawTrace : Control
     {
         private readonly (Point Start, Point End, int Channel)[] _segments;
+        private readonly double? _gapStart;
         public RawTrace(WaveformEnvelope[] blocks)
         {
             Height = 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
+                _gapStart = ((blocks[^1].StartSimTimeNs + 200_000_000) % 2_000_000_000) / 2_000_000_000.0;
                 for (int channel = 0; channel < 2; channel++)
                 {
                     Point? previous = null;
-                    foreach (WaveformEnvelope block in blocks)
+                    foreach (WaveformEnvelope block in blocks.TakeLast(10))
                     {
                         WaveformPlane plane = block.Planes[channel];
                         for (int index = 0; index < plane.Samples.Count; index++)
@@ -207,6 +210,14 @@ internal sealed class WaveformDemoWindow : Window
                     context.DrawLine(segment.Channel == 0 ? first : second,
                         new(segment.Start.X * Bounds.Width, segment.Start.Y),
                         new(segment.End.X * Bounds.Width, segment.End.Y));
+                }
+                if (_gapStart is { } start)
+                {
+                    double end = start + 0.1;
+                    context.FillRectangle(Brushes.Black, new Rect(start * Bounds.Width, 0,
+                        (Math.Min(1, end) - start) * Bounds.Width, Bounds.Height));
+                    if (end > 1)
+                    { context.FillRectangle(Brushes.Black, new Rect(0, 0, (end - 1) * Bounds.Width, Bounds.Height)); }
                 }
             }
         }

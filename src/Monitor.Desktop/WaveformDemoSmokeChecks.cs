@@ -34,12 +34,15 @@ internal static class WaveformDemoSmokeChecks
             if (!rejected || window.SimulationTimeNs != 2_200_000_000 || !ReferenceEquals(previous, window.Trace))
             { throw new InvalidOperationException("Rejected generation changed the displayed fixture."); }
             for (int step = 0; step < 15; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 10) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
+            if (window.BlockCount != 11) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
             window.UpdateLayout();
             VerifyPixels(window, true);
             byte[] retainedColumn = ReadColumn(window.Trace, 350);
+            VerifyGap(window.Trace, 650);
             Click(window.StepButton);
             window.UpdateLayout();
+            _ = ReadColumn(window.Trace, 650);
+            VerifyGap(window.Trace, 750);
             if (!retainedColumn.SequenceEqual(ReadColumn(window.Trace, 350)))
             { throw new InvalidOperationException("Unmodified sweep samples moved horizontally after history eviction."); }
             window.Width = 800;
@@ -63,7 +66,7 @@ internal static class WaveformDemoSmokeChecks
             long? pinnedStart = window.DisplayStartNs;
             for (int step = 0; step < 20; step++) { Click(window.StepButton); }
             if (!window.IsHeld || !ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != pinnedStart ||
-                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 10)
+                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 11)
             { throw new InvalidOperationException("Background generation or eviction altered the pinned view."); }
             Click(window.HoldButton);
             if (window.IsHeld || ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != 2_200_000_000 ||
@@ -136,7 +139,14 @@ internal static class WaveformDemoSmokeChecks
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-    private static byte[] ReadColumn(Control trace, int x)
+    private static void VerifyGap(Control trace, int x)
+    {
+        byte[] column = ReadColumn(trace, x, requireTrace: false);
+        if (column.Where((_, index) => index % 4 != 3).Any(value => value != 0))
+        { throw new InvalidOperationException("Erase gap retained waveform pixels."); }
+    }
+
+    private static byte[] ReadColumn(Control trace, int x, bool requireTrace = true)
     {
         using RenderTargetBitmap image = new(new PixelSize((int)trace.Bounds.Width, 240), new Vector(96, 96));
         image.Render(trace);
@@ -146,6 +156,7 @@ internal static class WaveformDemoSmokeChecks
         byte[] column = new byte[240 * 4];
         for (int y = 0; y < 240; y++)
         { Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, column, y * 4, 4); }
+        if (!requireTrace) { return column; }
         if (!column.Where((_, index) => index % 4 == 1).Any(value => value > 100))
         { throw new InvalidOperationException("Sweep stability evidence column has no trace."); }
         for (int channel = 0; channel < 2; channel++)

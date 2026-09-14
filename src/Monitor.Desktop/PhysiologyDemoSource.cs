@@ -24,7 +24,7 @@ internal static class PhysiologyDemoSource
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 TextbookEcgReference.CreateBands(), 10, 0),
-             new RespirationPlan(configuration.RespAmplitudeCounts).CreateChannel(plan, ChannelId(1), 0),
+             new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
              new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0),

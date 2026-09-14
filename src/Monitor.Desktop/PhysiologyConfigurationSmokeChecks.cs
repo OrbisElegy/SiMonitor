@@ -24,7 +24,9 @@ internal static class PhysiologyConfigurationSmokeChecks
                 new(4000, 1000, 1000, 2500, 5, 50, 200, 400, 100, 600),
                 new(4000, 1000, 1000, 5000, 5, 50, 200, 400, 100, 600, 100),
                 new(4000, 2000, -800, 4000, InspiratoryPauseMilliseconds: 800),
-                new(4000, 2000, 800, 4000, InspiratoryPauseMilliseconds: 800, ExpiratoryPauseMilliseconds: 800) })
+                new(4000, 2000, 800, 4000, InspiratoryPauseMilliseconds: 800, ExpiratoryPauseMilliseconds: 800),
+                new(4000, 2000, 0, 4000, InspiratoryPauseMilliseconds: 800, ExpiratoryPauseMilliseconds: 800, RespCardiacArtifactCounts: 160),
+                new(4000, 2000, 0, 4000, InspiratoryPauseMilliseconds: 800, ExpiratoryPauseMilliseconds: 800, RespCardiacArtifactCounts: -160) })
             {
                 for (int step = 0; step < 11; step++) { Click(window.StepButton); }
                 Click(window.HoldButton);
@@ -34,6 +36,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.ExpiratoryPauseInput.Text = config.ExpiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.InspiratoryPauseInput.Text = config.InspiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.RespCardiacArtifactInput.Text = config.RespCardiacArtifactCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2BaselineInput.Text = config.Co2BaselineMmHg.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -91,6 +94,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 }
                 window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.RespCardiacArtifactInput.Text = config.RespCardiacArtifactCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 foreach (string invalid in new[] { "oops", "-1", (config.Co2EndExpiratoryMmHg + 0.01m).ToString(System.Globalization.CultureInfo.InvariantCulture), "1.001", "1,5", "999999999999999999999999999999999999" })
                 {
@@ -101,7 +105,8 @@ internal static class PhysiologyConfigurationSmokeChecks
                     { throw new InvalidOperationException("Rejected CO2 plateau changed the active source or held view."); }
                 }
                 window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                foreach (var (input, invalid) in new[] { (window.ExpiratoryPauseInput, "-1"), (window.ExpiratoryPauseInput, "0.5"),
+                foreach (var (input, invalid) in new[] { (window.RespCardiacArtifactInput, "-201"), (window.RespCardiacArtifactInput, "201"), (window.RespCardiacArtifactInput, "0.5"),
+                    (window.ExpiratoryPauseInput, "-1"), (window.ExpiratoryPauseInput, "0.5"),
                     (window.ExpiratoryPauseInput, (config.BreathPeriodMilliseconds - config.InspirationMilliseconds).ToString(System.Globalization.CultureInfo.InvariantCulture)),
                     (window.InspiratoryPauseInput, "-1"), (window.InspiratoryPauseInput, "0.5"),
                     (window.InspiratoryPauseInput, config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture)),
@@ -121,6 +126,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 Click(window.ResetButton);
                 if (window.BreathConfiguration != config || window.ActiveTimer is not null || window.IsHeld || window.BlockCount != 0 ||
                     window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
+                    window.RespCardiacArtifactInput.Text != config.RespCardiacArtifactCounts.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.ExpiratoryPauseInput.Text != config.ExpiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.InspiratoryPauseInput.Text != config.InspiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2DispersionInput.Text != config.Co2DispersionStepMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
@@ -180,6 +186,16 @@ internal static class PhysiologyConfigurationSmokeChecks
             { landmarks.Add((1, time)); }
             landmarks.Add((6, expirationEnd + config.ExpiratoryPauseMilliseconds * 500_000L));
         }
+        var timing = config.ResolvePlan();
+        if (config.RespCardiacArtifactCounts != 0)
+        {
+            landmarks.RemoveAll(point => point.Row == 1);
+            for (long beat = timing.VentricularMechanicalOffsetNs; beat < timing.BreathPeriodNs; beat += timing.HeartPeriodNs)
+            {
+                landmarks.Add((1, beat + timing.HeartPeriodNs / 4));
+                landmarks.Add((1, beat + 3 * timing.HeartPeriodNs / 4));
+            }
+        }
         foreach (var (row, time) in landmarks)
         {
             var plane = blocks.Single(block => time >= block.StartSimTimeNs && time < block.StartSimTimeNs + 200_000_000)
@@ -191,7 +207,11 @@ internal static class PhysiologyConfigurationSmokeChecks
                 : time == (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L
                     ? raw != (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100
                     : Math.Abs(raw + config.Co2BaselineMmHg * 100 - config.Co2PlateauStartCentiMmHg!.Value) > 10);
-            if ((row == 1 && raw != (time >= expirationEnd ? 0 : config.RespAmplitudeCounts)) || invalidCo2)
+            int expectedResp = config.RespCardiacArtifactCounts != 0
+                ? ((time - timing.VentricularMechanicalOffsetNs) % timing.HeartPeriodNs < timing.HeartPeriodNs / 2
+                    ? config.RespCardiacArtifactCounts : -config.RespCardiacArtifactCounts)
+                : time >= expirationEnd ? 0 : config.RespAmplitudeCounts;
+            if ((row == 1 && raw != expectedResp) || invalidCo2)
             { throw new InvalidOperationException("Configured Resp turn or CO2 plateau/peak/response tail is absent from native data."); }
             int x = (int)Math.Round(time / 8_000_000.0);
             int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - (raw / 100.0 + config.Co2BaselineMmHg) * 1.25 : 775 - raw * 0.05);

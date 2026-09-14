@@ -34,6 +34,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox InspirationInput { get; } = new() { Text = "1875", Width = 75 };
     internal TextBox ExpiratoryPauseInput { get; } = new() { Text = "0", Width = 75 };
     internal TextBox InspiratoryPauseInput { get; } = new() { Text = "0", Width = 75 };
+    internal TextBox RespCardiacArtifactInput { get; } = new() { Text = "0", Width = 75 };
     internal TextBox RespAmplitudeInput { get; } = new() { Text = "1000", Width = 75 };
     internal TextBox Co2PlateauInput { get; } = new() { Text = "", Width = 75 };
     internal TextBox Co2BaselineInput { get; } = new() { Text = "0", Width = 65 };
@@ -141,6 +142,8 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(ExpiratoryPauseInput);
             settings.Children.Add(new TextBlock { Text = "Resp 相对幅度（可负）" });
             settings.Children.Add(RespAmplitudeInput);
+            settings.Children.Add(new TextBlock { Text = "Resp 心源伪差幅度（可负）" });
+            settings.Children.Add(RespCardiacArtifactInput);
             settings.Children.Add(new TextBlock { Text = "CO₂ 平台起始（mmHg，留空参考）" });
             settings.Children.Add(Co2PlateauInput);
             foreach (var (label, input) in new[] { ("CO₂ 基线（整数 mmHg）", Co2BaselineInput),
@@ -153,7 +156,7 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(ApplyBreathButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
-            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。周期 1000–10000 ms；吸气末停顿包含在吸气总时长内，须 ≥0 且短于吸气总时长，0 关闭。呼气末停顿包含在呼气总时长内，须 ≥0 且短于呼气总时长，保持 Resp 和 CVP 呼吸分量的基线。两种停顿均不改变 CO₂ 时程。下降时长不超过吸气，死腔与上升时长之和须短于呼气；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。CO₂ 基线和呼气末目标为 0～80 mmHg，平台起始位于两者之间（精确到 0.01）。各时长须为正整数。CO₂ 管路滞后可填 0～5000 ms，独立于 2 秒采集处理延迟。展宽步长 0～500 ms，0 关闭；三路加权示意会额外产生一个步长的平均滞后。" });
+            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。周期 1000–10000 ms；吸气末停顿包含在吸气总时长内，须 ≥0 且短于吸气总时长，0 关闭。呼气末停顿包含在呼气总时长内，须 ≥0 且短于呼气总时长，保持 Resp 和 CVP 呼吸分量的基线。两种停顿均不改变 CO₂ 时程。下降时长不超过吸气，死腔与上升时长之和须短于呼气；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。Resp 心源伪差幅度 −200～200，0 关闭；随心搏叠加，不能据此计为有效呼吸。CO₂ 基线和呼气末目标为 0～80 mmHg，平台起始位于两者之间（精确到 0.01）。各时长须为正整数。CO₂ 管路滞后可填 0～5000 ms，独立于 2 秒采集处理延迟。展宽步长 0～500 ms，0 关闭；三路加权示意会额外产生一个步长的平均滞后。" });
             panel.Children.Add(_activeBreathConfiguration);
             panel.Children.Add(BreathConfigurationStatus);
         }
@@ -313,6 +316,7 @@ internal sealed class WaveformDemoWindow : Window
                 !int.TryParse(InspiratoryPauseInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int pause) ||
                 !int.TryParse(ExpiratoryPauseInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int expiratoryPause) ||
                 !int.TryParse(RespAmplitudeInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int amplitude) ||
+                !int.TryParse(RespCardiacArtifactInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int artifact) ||
                 !int.TryParse(Co2BaselineInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int baseline) ||
                 !int.TryParse(Co2EndInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int end) ||
                 !int.TryParse(Co2DeadSpaceInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int deadSpace) ||
@@ -329,11 +333,11 @@ internal sealed class WaveformDemoWindow : Window
                 { throw new ArgumentException("CO2 plateau must be representable in centi-mmHg."); }
                 plateau = (int)(mmHg * 100);
             }
-            Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause));
+            Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact));
         }
         catch (ArgumentException)
         {
-            BreathConfigurationStatus.Text = "未应用：请检查参数范围；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
+            BreathConfigurationStatus.Text = "未应用：请检查参数范围；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
         }
     }
 
@@ -357,6 +361,7 @@ internal sealed class WaveformDemoWindow : Window
             InspirationInput.Text = breathConfiguration.InspirationMilliseconds.ToString(CultureInfo.InvariantCulture);
             ExpiratoryPauseInput.Text = breathConfiguration.ExpiratoryPauseMilliseconds.ToString(CultureInfo.InvariantCulture);
             InspiratoryPauseInput.Text = breathConfiguration.InspiratoryPauseMilliseconds.ToString(CultureInfo.InvariantCulture);
+            RespCardiacArtifactInput.Text = breathConfiguration.RespCardiacArtifactCounts.ToString(CultureInfo.InvariantCulture);
             RespAmplitudeInput.Text = breathConfiguration.RespAmplitudeCounts.ToString(CultureInfo.InvariantCulture);
             Co2BaselineInput.Text = breathConfiguration.Co2BaselineMmHg.ToString(CultureInfo.InvariantCulture);
             Co2EndInput.Text = breathConfiguration.Co2EndExpiratoryMmHg.ToString(CultureInfo.InvariantCulture);
@@ -368,7 +373,7 @@ internal sealed class WaveformDemoWindow : Window
             Co2PlateauInput.Text = breathConfiguration.Co2PlateauStartCentiMmHg is { } plateau
                 ? (plateau / 100m).ToString("0.##", CultureInfo.InvariantCulture) : "";
             _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+                $"已应用：周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)

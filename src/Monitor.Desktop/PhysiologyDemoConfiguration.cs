@@ -7,7 +7,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null,
     int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125,
     int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0,
-    int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0)
+    int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000);
 
@@ -30,7 +30,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         if (BreathPeriodMilliseconds is < 1000 or > 10000 || InspirationMilliseconds <= 0 ||
             InspirationMilliseconds >= BreathPeriodMilliseconds || RespAmplitudeCounts is < -1000 or > 1000 ||
             InspiratoryPauseMilliseconds < 0 || InspiratoryPauseMilliseconds >= InspirationMilliseconds ||
-            ExpiratoryPauseMilliseconds < 0 || ExpiratoryPauseMilliseconds >= BreathPeriodMilliseconds - InspirationMilliseconds)
+            ExpiratoryPauseMilliseconds < 0 || ExpiratoryPauseMilliseconds >= BreathPeriodMilliseconds - InspirationMilliseconds ||
+            RespCardiacArtifactCounts is < -200 or > 200)
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
         var timing = TextbookEcgReference.Timing;
         return new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,

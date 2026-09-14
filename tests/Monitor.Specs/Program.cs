@@ -29,6 +29,7 @@ internal static class Program
             .. SignalSampleClockSpecifications.All,
             .. PeriodicSignalGeneratorSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
+            .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,
             .. SensorFaultSpecifications.All,
             .. WaveformEnvelopeCodecSpecifications.All,

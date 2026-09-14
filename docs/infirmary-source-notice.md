@@ -38,3 +38,20 @@ Source inspection uses the public links pinned to the commit above.
 Regeneration uses the committed manifests and license text; an upstream
 checkout is not a build dependency.
 The native physiology demo displays this pressure source.
+
+## CO2 adaptation
+
+The same pinned plots file also supplies 224 `ETCO2_Default` vertices, recorded
+in `eng/physiology/infirmary-capnogram.json` with source/vertex/license hashes.
+The same Apache-2.0 attribution applies.
+No additional upstream code or assets were copied. Regeneration requires only
+committed manifests and license text, not the local clone or network.
+
+Changes: prepend zero and a dead-space segment; split original indices 0..14 for
+rise (with zero prepended), 14..212 for plateau, 212..223 for fall; normalize by 0.7
+and exactly resample to 512 Q32 entries. Table phase anchors 0/32/96/480/512 are
+mapped to explicit event-relative timing. The final endpoint is zero. The original
+10 ms drawing interval is not treated as a source sample rate or physiological
+time constant. Peak aligns with next inspiration, and the fall continues into
+that inspiration. The plateau's shape still comes from the upstream seed; it is
+not a validated capnogram preset or an independently adjustable slope model.

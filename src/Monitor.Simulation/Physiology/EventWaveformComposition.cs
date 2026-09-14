@@ -4,8 +4,10 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
+public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex);
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
-    long DurationNs, IReadOnlyList<long> TableQ32);
+    long DurationNs, IReadOnlyList<long> TableQ32,
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -38,7 +40,25 @@ public sealed class EventWaveformComposition
             long[] table = band.TableQ32.ToArray();
             if (table[0] != 0 || table.Any(value => value < short.MinValue * FixedPointMath.Q32One ||
                 value > short.MaxValue * FixedPointMath.Q32One)) { throw Invalid(); }
-            _bands[index] = band with { TableQ32 = Array.AsReadOnly(table) };
+            EventWaveformPhasePoint[]? points = null;
+            if (band.PhasePoints is { } map)
+            {
+                if (map.Count is < 2 or > 32) { throw Invalid(); }
+                points = map.ToArray();
+                if (points[0] != new EventWaveformPhasePoint(0, 0) ||
+                    points[^1] != new EventWaveformPhasePoint(band.DurationNs, table.Length)) { throw Invalid(); }
+                for (int point = 1; point < points.Length; point++)
+                {
+                    if (points[point].OffsetNs <= points[point - 1].OffsetNs ||
+                        points[point].TableIndex <= points[point - 1].TableIndex)
+                    { throw Invalid(); }
+                }
+            }
+            _bands[index] = band with
+            {
+                TableQ32 = Array.AsReadOnly(table),
+                PhasePoints = points is null ? null : Array.AsReadOnly(points)
+            };
             _tables[index] = table;
         }
         _events = state.Events.ToArray();
@@ -75,7 +95,7 @@ public sealed class EventWaveformComposition
                 long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
                 if (elapsed < 0 || elapsed >= band.DurationNs) { continue; }
                 // Integer phase maps the finite support into one frozen LUT cycle.
-                ulong phase = (ulong)(((UInt128)elapsed << 64) / (ulong)band.DurationNs);
+                ulong phase = PhaseAt(band, elapsed);
                 sum += PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
             }
         }
@@ -86,4 +106,21 @@ public sealed class EventWaveformComposition
     }
 
     private static EventWaveformException Invalid() => new("EventWaveform.InvalidState", "state");
+
+    private static ulong PhaseAt(EventWaveformBand band, long elapsed)
+    {
+        if (band.PhasePoints is not { } points)
+        { return (ulong)(((UInt128)elapsed << 64) / (ulong)band.DurationNs); }
+        for (int index = 1; index < points.Count; index++)
+        {
+            var right = points[index];
+            if (elapsed >= right.OffsetNs) { continue; }
+            var left = points[index - 1];
+            UInt128 start = ((UInt128)(uint)left.TableIndex << 64) / (uint)band.TableQ32.Count;
+            UInt128 end = ((UInt128)(uint)right.TableIndex << 64) / (uint)band.TableQ32.Count;
+            return (ulong)(start + (end - start) * (ulong)(elapsed - left.OffsetNs) /
+                (ulong)(right.OffsetNs - left.OffsetNs));
+        }
+        throw Invalid(); // Caller admits only the band's half-open support.
+    }
 }

@@ -41,6 +41,7 @@ internal static class Program
             .. EcgQtCorrectionSpecifications.All,
             .. PlethPulseSpecifications.All,
             .. ArterialPulseSpecifications.All,
+            .. CapnogramSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

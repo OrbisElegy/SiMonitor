@@ -96,3 +96,10 @@ Optional plateau-start pressure in CapnogramPlan additionally remaps the adapted
 ETCO2_Default rise and C-to-D amplitudes at runtime using exact rational fixed-point
 rounding. The original generated seed, timing landmarks and inspiratory fall are
 retained; omitted plateau configuration reproduces the prior seed scaling.
+
+
+Optional CapnogramPlan dispersion splits the adapted CO2 table into symmetric
+quarter/half/quarter delayed paths, with fixed-point residue retained in the
+middle path. The project-authored response is a runtime modification; the
+imported seed and attribution are unchanged, and disabling it preserves prior
+output. It is not an upstream or manufacturer-specified response kernel.

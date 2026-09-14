@@ -21,7 +21,8 @@ internal static class PhysiologyConfigurationSmokeChecks
         try
         {
             foreach (var config in new[] { new PhysiologyDemoConfiguration(3000, 1000, -800, 1234), new(4800, 3200, 600, 4000),
-                new(4000, 1000, 1000, 2500, 5, 50, 200, 400, 100, 600) })
+                new(4000, 1000, 1000, 2500, 5, 50, 200, 400, 100, 600),
+                new(4000, 1000, 1000, 5000, 5, 50, 200, 400, 100, 600, 100) })
             {
                 for (int step = 0; step < 11; step++) { Click(window.StepButton); }
                 Click(window.HoldButton);
@@ -35,6 +36,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 window.Co2EndInput.Text = config.Co2EndExpiratoryMmHg.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2DeadSpaceInput.Text = config.Co2DeadSpaceMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2RiseInput.Text = config.Co2RiseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.Co2DispersionInput.Text = config.Co2DispersionStepMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2TransportInput.Text = config.Co2TransportDelayMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2FallInput.Text = config.Co2FallMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 Click(window.ApplyBreathButton);
@@ -53,7 +55,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                     cvp.EvaluateAt(config.BreathPeriodMilliseconds * 1_000_000L) != 0)
                 { throw new InvalidOperationException("CVP respiratory pressure did not follow configured inspiration independently of Resp polarity."); }
                 List<WaveformEnvelope> blocks = [];
-                for (int step = 1; step <= (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds + 2400) / 200; step++)
+                for (int step = 1; step <= (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds + 2 * config.Co2DispersionStepMilliseconds + 2400) / 200; step++)
                 {
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
@@ -90,7 +92,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                     { throw new InvalidOperationException("Rejected CO2 plateau changed the active source or held view."); }
                 }
                 window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                foreach (var (input, invalid) in new[] { (window.Co2TransportInput, "-1"), (window.Co2TransportInput, "5001"), (window.Co2TransportInput, "0.5"), (window.Co2BaselineInput, "81"), (window.Co2EndInput, "-1"),
+                foreach (var (input, invalid) in new[] { (window.Co2DispersionInput, "-1"), (window.Co2DispersionInput, "501"), (window.Co2DispersionInput, "0.5"), (window.Co2TransportInput, "-1"), (window.Co2TransportInput, "5001"), (window.Co2TransportInput, "0.5"), (window.Co2BaselineInput, "81"), (window.Co2EndInput, "-1"),
                     (window.Co2EndInput, "1"), (window.Co2BaselineInput, "1.5"), (window.Co2DeadSpaceInput, "0"),
                     (window.Co2RiseInput, "0"), (window.Co2RiseInput, "2147483648"),
                     (window.Co2FallInput, (config.InspirationMilliseconds + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)) })
@@ -106,6 +108,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 Click(window.ResetButton);
                 if (window.BreathConfiguration != config || window.ActiveTimer is not null || window.IsHeld || window.BlockCount != 0 ||
                     window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
+                    window.Co2DispersionInput.Text != config.Co2DispersionStepMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2TransportInput.Text != config.Co2TransportDelayMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2BaselineInput.Text != config.Co2BaselineMmHg.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2FallInput.Text != config.Co2FallMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
@@ -130,7 +133,7 @@ internal static class PhysiologyConfigurationSmokeChecks
             return block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(4)).Samples[(int)(time % 200_000_000 / 10_000_000)];
         }
         long deadEnd = (config.InspirationMilliseconds + config.Co2DeadSpaceMilliseconds + config.Co2TransportDelayMilliseconds) / 10 * 10_000_000L;
-        long fallEnd = (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds + config.Co2FallMilliseconds + 9) / 10 * 10_000_000L;
+        long fallEnd = (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds + config.Co2FallMilliseconds + 2 * config.Co2DispersionStepMilliseconds + 9) / 10 * 10_000_000L;
         if (Co2At(deadEnd) != 0 || Co2At(deadEnd + 20_000_000) <= 0 || Co2At(fallEnd) != 0 ||
             Co2At(fallEnd - 20_000_000) <= 0)
         { throw new InvalidOperationException("CO2 dead space or inspiratory fall did not use accepted phase durations."); }
@@ -142,16 +145,25 @@ internal static class PhysiologyConfigurationSmokeChecks
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
-        foreach (var (row, time) in new[] { (1, config.InspirationMilliseconds * 1_000_000L),
+        long tailTime = (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds +
+            config.Co2FallMilliseconds + config.Co2DispersionStepMilliseconds) * 1_000_000L;
+        List<(int Row, long Time)> landmarks = [(1, config.InspirationMilliseconds * 1_000_000L),
             (4, (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L),
-            (4, ((config.InspirationMilliseconds + config.Co2DeadSpaceMilliseconds + config.Co2RiseMilliseconds + config.Co2TransportDelayMilliseconds + 9) / 10 * 10) * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L) })
+            (4, ((config.InspirationMilliseconds + config.Co2DeadSpaceMilliseconds + config.Co2RiseMilliseconds + config.Co2TransportDelayMilliseconds + 2 * config.Co2DispersionStepMilliseconds + 9) / 10 * 10) * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L)];
+        if (config.Co2DispersionStepMilliseconds > 0) { landmarks.Add((4, tailTime)); }
+        foreach (var (row, time) in landmarks)
         {
             var plane = blocks.Single(block => time >= block.StartSimTimeNs && time < block.StartSimTimeNs + 200_000_000)
                 .Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int sample = (int)(time % 200_000_000 * plane.SampleRateNumerator / 1_000_000_000);
             int raw = plane.Samples[sample];
-            if ((row == 1 && raw != config.RespAmplitudeCounts) || (row == 4 && (time == (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L ? raw != (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100 : Math.Abs(raw + config.Co2BaselineMmHg * 100 - config.Co2PlateauStartCentiMmHg!.Value) > 10)))
-            { throw new InvalidOperationException("Configured Resp turn or CO2 end-expiratory peak is absent from native data."); }
+            bool invalidCo2 = row == 4 && (time == tailTime && config.Co2DispersionStepMilliseconds > 0
+                ? raw <= 0 || raw >= (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100
+                : time == (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L
+                    ? raw != (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100
+                    : Math.Abs(raw + config.Co2BaselineMmHg * 100 - config.Co2PlateauStartCentiMmHg!.Value) > 10);
+            if ((row == 1 && raw != config.RespAmplitudeCounts) || invalidCo2)
+            { throw new InvalidOperationException("Configured Resp turn or CO2 plateau/peak/response tail is absent from native data."); }
             int x = (int)Math.Round(time / 8_000_000.0);
             int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - (raw / 100.0 + config.Co2BaselineMmHg) * 1.25 : 775 - raw * 0.05);
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>

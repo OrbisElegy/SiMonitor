@@ -3,10 +3,10 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Full-cycle signal illustration with optional pure transport lag.
-// Not a measured EtCO2/RR, gas-line dispersion or validated device model.
+// Full-cycle signal illustration with optional transport lag and a bounded
+// three-path dispersion kernel. Not a measured EtCO2/RR or validated device model.
 public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long InspiratoryFallNs,
-    int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0)
+    int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0, long DispersionStepNs = 0)
 {
     public const string EvidenceId = "InfirmaryCapnogramDraft@1";
 
@@ -21,7 +21,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
             (PlateauStartCentiMmHg is { } plateau && (plateau < BaselineMmHg * 100 || plateau > EndExpiratoryMmHg * 100)))
         { throw new EventWaveformException("Capnogram.InvalidPlan", "plan"); }
         long duration = expiration + InspiratoryFallNs;
-        if (TransportDelayNs < 0 || TransportDelayNs > long.MaxValue - duration)
+        if (TransportDelayNs < 0 || TransportDelayNs > long.MaxValue - duration || DispersionStepNs < 0 ||
+            DispersionStepNs > (long.MaxValue - duration - TransportDelayNs) / 2)
         { throw new EventWaveformException("Capnogram.InvalidPlan", "plan"); }
         EventWaveformPhasePoint[] phases = [new(0, 0), new(DeadSpaceNs, 32), new(DeadSpaceNs + RiseNs, 96),
             new(expiration, 480), new(duration, 512)];
@@ -44,11 +45,33 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
                         FixedPointMath.Q32One - seedC));
             }
         }
-        var table = Array.AsReadOnly(values);
-        var bands = Array.AsReadOnly(new EventWaveformBand[]
+        IReadOnlyList<EventWaveformBand> bands;
+        if (DispersionStepNs == 0)
         {
-            new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs, duration, table, Array.AsReadOnly(phases)),
-        });
+            bands = Array.AsReadOnly(new EventWaveformBand[]
+            {
+                new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs, duration,
+                    Array.AsReadOnly(values), Array.AsReadOnly(phases)),
+            });
+        }
+        else
+        {
+            // Illustrative 1:2:1 paths at delays0/step/2*step. Preserve the
+            // original table sum exactly by assigning division residue to the
+            // middle path. All three remain nonnegative; constant input keeps
+            // its level. The added mean lag is one step, not clock compensation.
+            long[] edge = values.Select(value => (long)FixedPointMath.RoundDivideTiesToEven(value, 4)).ToArray();
+            long[] middle = values.Select((value, index) => value - 2 * edge[index]).ToArray();
+            bands = Array.AsReadOnly(new EventWaveformBand[]
+            {
+                new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs, duration,
+                    Array.AsReadOnly(edge), Array.AsReadOnly(phases)),
+                new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs + DispersionStepNs, duration,
+                    Array.AsReadOnly(middle), Array.AsReadOnly(phases)),
+                new(PhysiologyCycleEventKind.ExpirationStart, TransportDelayNs + 2 * DispersionStepNs, duration,
+                    Array.AsReadOnly(edge), Array.AsReadOnly(phases)),
+            });
+        }
         return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, 200, qualityFlags);
     }
 }

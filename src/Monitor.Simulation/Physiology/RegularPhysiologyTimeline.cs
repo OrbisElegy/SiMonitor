@@ -13,7 +13,8 @@ public enum PhysiologyCycleEventKind
 
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs,
     long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs,
-    long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs);
+    long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
+    long InspiratoryPauseNs = 0);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -38,6 +39,7 @@ public sealed class RegularPhysiologyTimeline
             plan.VentricularMechanicalOffsetNs < plan.VentricularElectricalOffsetNs ||
             plan.VentricularMechanicalOffsetNs >= plan.HeartPeriodNs ||
             plan.InspirationDurationNs <= 0 || plan.InspirationDurationNs >= plan.BreathPeriodNs ||
+            plan.InspiratoryPauseNs < 0 || plan.InspiratoryPauseNs >= plan.InspirationDurationNs ||
             state.CursorSimTimeNs < plan.EpochAnchorSimTimeNs)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidState", nameof(state)); }
         _plan = plan;

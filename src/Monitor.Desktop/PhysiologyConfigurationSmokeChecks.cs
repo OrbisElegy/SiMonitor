@@ -22,7 +22,8 @@ internal static class PhysiologyConfigurationSmokeChecks
         {
             foreach (var config in new[] { new PhysiologyDemoConfiguration(3000, 1000, -800, 1234), new(4800, 3200, 600, 4000),
                 new(4000, 1000, 1000, 2500, 5, 50, 200, 400, 100, 600),
-                new(4000, 1000, 1000, 5000, 5, 50, 200, 400, 100, 600, 100) })
+                new(4000, 1000, 1000, 5000, 5, 50, 200, 400, 100, 600, 100),
+                new(4000, 2000, -800, 4000, InspiratoryPauseMilliseconds: 800) })
             {
                 for (int step = 0; step < 11; step++) { Click(window.StepButton); }
                 Click(window.HoldButton);
@@ -30,6 +31,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 var oldTimer = window.ActiveTimer;
                 window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                window.InspiratoryPauseInput.Text = config.InspiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.RespAmplitudeInput.Text = config.RespAmplitudeCounts.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.Co2BaselineInput.Text = config.Co2BaselineMmHg.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -54,6 +56,9 @@ internal static class PhysiologyConfigurationSmokeChecks
                 if (cvp.EvaluateAt(config.InspirationMilliseconds * 1_000_000L) != -100 * FixedPointMath.Q32One ||
                     cvp.EvaluateAt(config.BreathPeriodMilliseconds * 1_000_000L) != 0)
                 { throw new InvalidOperationException("CVP respiratory pressure did not follow configured inspiration independently of Resp polarity."); }
+                if (config.InspiratoryPauseMilliseconds > 0 &&
+                    cvp.EvaluateAt((config.InspirationMilliseconds - config.InspiratoryPauseMilliseconds) * 1_000_000L) != -100 * FixedPointMath.Q32One)
+                { throw new InvalidOperationException("CVP respiratory pressure did not enter the shared inspiratory pause."); }
                 List<WaveformEnvelope> blocks = [];
                 for (int step = 1; step <= (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds + 2 * config.Co2DispersionStepMilliseconds + 2400) / 200; step++)
                 {
@@ -92,7 +97,9 @@ internal static class PhysiologyConfigurationSmokeChecks
                     { throw new InvalidOperationException("Rejected CO2 plateau changed the active source or held view."); }
                 }
                 window.Co2PlateauInput.Text = (config.Co2PlateauStartCentiMmHg!.Value / 100m).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                foreach (var (input, invalid) in new[] { (window.Co2DispersionInput, "-1"), (window.Co2DispersionInput, "501"), (window.Co2DispersionInput, "0.5"), (window.Co2TransportInput, "-1"), (window.Co2TransportInput, "5001"), (window.Co2TransportInput, "0.5"), (window.Co2BaselineInput, "81"), (window.Co2EndInput, "-1"),
+                foreach (var (input, invalid) in new[] { (window.InspiratoryPauseInput, "-1"), (window.InspiratoryPauseInput, "0.5"),
+                    (window.InspiratoryPauseInput, config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                    (window.Co2DispersionInput, "-1"), (window.Co2DispersionInput, "501"), (window.Co2DispersionInput, "0.5"), (window.Co2TransportInput, "-1"), (window.Co2TransportInput, "5001"), (window.Co2TransportInput, "0.5"), (window.Co2BaselineInput, "81"), (window.Co2EndInput, "-1"),
                     (window.Co2EndInput, "1"), (window.Co2BaselineInput, "1.5"), (window.Co2DeadSpaceInput, "0"),
                     (window.Co2RiseInput, "0"), (window.Co2RiseInput, "2147483648"),
                     (window.Co2FallInput, (config.InspirationMilliseconds + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)) })
@@ -108,6 +115,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 Click(window.ResetButton);
                 if (window.BreathConfiguration != config || window.ActiveTimer is not null || window.IsHeld || window.BlockCount != 0 ||
                     window.InspirationInput.Text != config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
+                    window.InspiratoryPauseInput.Text != config.InspiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2DispersionInput.Text != config.Co2DispersionStepMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2TransportInput.Text != config.Co2TransportDelayMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
                     window.Co2BaselineInput.Text != config.Co2BaselineMmHg.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
@@ -151,6 +159,13 @@ internal static class PhysiologyConfigurationSmokeChecks
             (4, (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L),
             (4, ((config.InspirationMilliseconds + config.Co2DeadSpaceMilliseconds + config.Co2RiseMilliseconds + config.Co2TransportDelayMilliseconds + 2 * config.Co2DispersionStepMilliseconds + 9) / 10 * 10) * 1_000_000L), (6, config.InspirationMilliseconds * 1_000_000L)];
         if (config.Co2DispersionStepMilliseconds > 0) { landmarks.Add((4, tailTime)); }
+        if (config.InspiratoryPauseMilliseconds > 0)
+        {
+            for (int time = config.InspirationMilliseconds - config.InspiratoryPauseMilliseconds;
+                time < config.InspirationMilliseconds; time += 8)
+            { landmarks.Add((1, time * 1_000_000L)); }
+            landmarks.Add((6, (config.InspirationMilliseconds - config.InspiratoryPauseMilliseconds / 2) * 1_000_000L));
+        }
         foreach (var (row, time) in landmarks)
         {
             var plane = blocks.Single(block => time >= block.StartSimTimeNs && time < block.StartSimTimeNs + 200_000_000)

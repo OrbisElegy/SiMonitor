@@ -40,7 +40,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         }
         bands.Add(new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs,
             Array.AsReadOnly(CvpComponentTables.Respiratory.Select(value => checked(value * RespiratoryDeltaCentiMmHg)).ToArray()),
-            Array.AsReadOnly(new EventWaveformPhasePoint[] { new(0, 0), new(physiology.InspirationDurationNs, 64), new(physiology.BreathPeriodNs, 128) })));
+            RespiratoryPhaseMap.Create(physiology, CvpComponentTables.Respiratory.Count)));
         return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, BaselineCentiMmHg, 100), bands.AsReadOnly(), 10, qualityFlags);
     }
 

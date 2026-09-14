@@ -50,7 +50,8 @@ public sealed class EventWaveformComposition
                 for (int point = 1; point < points.Length; point++)
                 {
                     if (points[point].OffsetNs <= points[point - 1].OffsetNs ||
-                        points[point].TableIndex <= points[point - 1].TableIndex)
+                        points[point].TableIndex < points[point - 1].TableIndex ||
+                        (point < points.Length - 1 && points[point].TableIndex >= table.Length))
                     { throw Invalid(); }
                 }
             }
@@ -94,6 +95,7 @@ public sealed class EventWaveformComposition
                 if (band.Trigger != item.Kind) { continue; }
                 long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
                 if (elapsed < 0 || elapsed >= band.DurationNs) { continue; }
+                // Equal adjacent table indices hold phase while time advances.
                 // Integer phase maps the finite support into one frozen LUT cycle.
                 ulong phase = PhaseAt(band, elapsed);
                 sum += PeriodicLutLinear.Interpolate(_tables[index], phase).Value;

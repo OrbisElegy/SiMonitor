@@ -15,11 +15,7 @@ public sealed record RespirationPlan(int AmplitudeCounts)
         if (AmplitudeCounts is < short.MinValue or > short.MaxValue)
         { throw new EventWaveformException("Respiration.InvalidPlan", "plan"); }
         var table = Array.AsReadOnly(RespirationTables.Cycle.Select(value => checked(value * AmplitudeCounts)).ToArray());
-        var phases = Array.AsReadOnly(new EventWaveformPhasePoint[]
-        {
-            new(0, 0), new(physiology.InspirationDurationNs, table.Count / 2),
-            new(physiology.BreathPeriodNs, table.Count),
-        });
+        var phases = RespiratoryPhaseMap.Create(physiology, table.Count);
         var bands = Array.AsReadOnly(new EventWaveformBand[]
         {
             new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs, table, phases),

@@ -14,10 +14,15 @@ internal sealed class WaveformDemoWindow : Window
     private static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
     private PeriodicWaveformGroup _source = CreateSource();
     private WaveformEnvelope[] _blocks = [];
+    private WaveformEnvelope[]? _pinned;
     private readonly TextBlock _status = new();
     private readonly ContentControl _trace = new();
     internal Button StepButton { get; } = new() { Content = "步进 200 ms" };
     internal Button ResetButton { get; } = new() { Content = "重置" };
+    internal Button HoldButton { get; } = new() { Content = "固定当前画面", IsEnabled = false };
+    internal bool IsHeld => _pinned is not null;
+    internal long? DisplayStartNs => DisplayBlocks.Length == 0 ? null : DisplayBlocks[0].StartSimTimeNs;
+    private WaveformEnvelope[] DisplayBlocks => _pinned ?? _blocks;
     internal long SimulationTimeNs { get; private set; }
     internal int BlockCount => _blocks.Length;
     internal Control Trace => (Control)_trace.Content!;
@@ -35,12 +40,14 @@ internal sealed class WaveformDemoWindow : Window
         StackPanel actions = new() { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
+        actions.Children.Add(HoldButton);
         panel.Children.Add(actions);
         panel.Children.Add(_status);
         panel.Children.Add(_trace);
         Content = panel;
         StepButton.Click += (_, _) => Advance(200_000_000);
         ResetButton.Click += (_, _) => Reset();
+        HoldButton.Click += (_, _) => ToggleHold();
         Reset();
     }
 
@@ -51,11 +58,28 @@ internal sealed class WaveformDemoWindow : Window
         PeriodicWaveformGroup trial = PeriodicWaveformGroup.Restore(_source.CaptureState());
         WaveformEnvelope[] blocks = _blocks.Concat(trial.AdvanceTo(next, 50, 1)
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(10).ToArray();
-        RawTrace control = new(blocks);
+        RawTrace? control = IsHeld ? null : new(blocks);
         _source = trial;
         _blocks = blocks;
         SimulationTimeNs = next;
-        _trace.Content = control;
+        if (control is not null) { _trace.Content = control; }
+        UpdateStatus();
+    }
+
+    private void ToggleHold()
+    {
+        if (_blocks.Length == 0) { return; }
+        if (_pinned is null)
+        {
+            // Decoded blocks are owned, never mutated and independent of retention.
+            _pinned = _blocks;
+        }
+        else
+        {
+            RawTrace control = new(_blocks);
+            _pinned = null;
+            _trace.Content = control;
+        }
         UpdateStatus();
     }
 
@@ -63,14 +87,20 @@ internal sealed class WaveformDemoWindow : Window
     {
         _source = CreateSource();
         _blocks = [];
+        _pinned = null;
         SimulationTimeNs = 0;
         _trace.Content = new RawTrace(_blocks);
         UpdateStatus();
     }
 
-    private void UpdateStatus() => _status.Text = _blocks.Length == 0
-        ? $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；等待完整通道块"
-        : $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；源区间 [{_blocks[0].StartSimTimeNs / 1_000_000}, {(_blocks[^1].StartSimTimeNs + 200_000_000) / 1_000_000}) ms";
+    private void UpdateStatus()
+    {
+        HoldButton.IsEnabled = _blocks.Length > 0;
+        HoldButton.Content = IsHeld ? "返回最新数据" : "固定当前画面";
+        _status.Text = DisplayBlocks.Length == 0
+            ? $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；等待完整通道块"
+            : $"数据模拟时间 {SimulationTimeNs / 1_000_000} ms；{(IsHeld ? "固定画面（步进仍生成后台数据）" : "最新数据")}；源区间 [{DisplayBlocks[0].StartSimTimeNs / 1_000_000}, {(DisplayBlocks[^1].StartSimTimeNs + 200_000_000) / 1_000_000}) ms";
+    }
 
     private static PeriodicWaveformGroup CreateSource()
     {

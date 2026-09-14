@@ -18,6 +18,9 @@ internal static class WaveformDemoSmokeChecks
         {
             window.UpdateLayout();
             VerifyPixels(window, false);
+            Click(window.HoldButton);
+            if (window.IsHeld || window.HoldButton.IsEnabled)
+            { throw new InvalidOperationException("Empty source allowed a pinned view."); }
             for (int step = 0; step < 10; step++) { Click(window.StepButton); }
             if (window.BlockCount != 0 || window.SimulationTimeNs != 2_000_000_000)
             { throw new InvalidOperationException("Slow channel did not hold back shared output."); }
@@ -49,9 +52,27 @@ internal static class WaveformDemoSmokeChecks
             VerifyPixels(window, false);
             for (int step = 0; step < 11; step++) { Click(window.StepButton); }
             if (window.BlockCount != 1) { throw new InvalidOperationException("Reset source did not restart."); }
+            Click(window.HoldButton);
+            Control pinned = window.Trace;
+            long? pinnedStart = window.DisplayStartNs;
+            for (int step = 0; step < 20; step++) { Click(window.StepButton); }
+            if (!window.IsHeld || !ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != pinnedStart ||
+                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 10)
+            { throw new InvalidOperationException("Background generation or eviction altered the pinned view."); }
+            Click(window.HoldButton);
+            if (window.IsHeld || ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != 2_200_000_000 ||
+                window.SimulationTimeNs != 6_200_000_000)
+            { throw new InvalidOperationException("Return did not join latest data without advancing simulation."); }
+            window.UpdateLayout();
+            VerifyPixels(window, true);
+            Click(window.HoldButton);
+            Click(window.ResetButton);
+            if (window.IsHeld || window.HoldButton.IsEnabled || window.DisplayStartNs is not null)
+            { throw new InvalidOperationException("Reset retained pinned data or capability."); }
         }
         finally { window.Close(); }
         Console.WriteLine("ok: generated multi-rate native traces, delay, bounded retention, failure, resize and reset");
+        Console.WriteLine("ok: pinned generated trace survives background eviction and returns directly to latest data");
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

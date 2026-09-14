@@ -13,6 +13,7 @@ internal static class WaveformDemoSmokeChecks
 {
     public static void Verify()
     {
+        VerifyPhysiology();
         WaveformDemoWindow window = new();
         window.Show();
         try
@@ -220,7 +221,35 @@ internal static class WaveformDemoSmokeChecks
         return column;
     }
 
-    private static void VerifyPixels(WaveformDemoWindow window, bool populated)
+    private static void VerifyPhysiology()
+    {
+        WaveformDemoWindow window = new(physiology: true);
+        window.Show();
+        try
+        {
+            Click(window.StepButton);
+            if (window.BlockCount != 0) { throw new InvalidOperationException("Resp delay was bypassed."); }
+            Click(window.StepButton);
+            if (window.BlockCount != 1 || window.ShapeButton.IsVisible)
+            { throw new InvalidOperationException("Event source did not produce its first shared block."); }
+            Click(window.HoldButton);
+            Control held = window.Trace;
+            for (int step = 0; step < 20; step++) { Click(window.StepButton); }
+            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 11)
+            { throw new InvalidOperationException("Continuous event output lost held view or bounded retention."); }
+            Click(window.HoldButton);
+            window.UpdateLayout();
+            VerifyPixels(window, true, resp: true);
+            Click(window.ResetButton);
+            Click(window.ShapeButton);
+            if (window.SimulationTimeNs != 0 || window.UsesPulse || window.BlockCount != 0)
+            { throw new InvalidOperationException("Event source reset or hidden shape command failed."); }
+        }
+        finally { window.Close(); }
+        Console.WriteLine("ok: event-driven ECG/Resp native pixels, shared delay, held generation and reset");
+    }
+
+    private static void VerifyPixels(WaveformDemoWindow window, bool populated, bool resp = false)
     {
         Control trace = window.Trace;
         using RenderTargetBitmap image = new(new PixelSize((int)trace.Bounds.Width, 240), new Vector(96, 96));
@@ -237,8 +266,9 @@ internal static class WaveformDemoSmokeChecks
                 int offset = y * buffer.RowBytes + x * 4;
                 byte blue = Marshal.ReadByte(buffer.Address, offset);
                 byte value = Marshal.ReadByte(buffer.Address, offset + 1);
+                byte red = Marshal.ReadByte(buffer.Address, offset + 2);
                 if (y < 120 && value > 100 && blue == 0) { green++; }
-                if (y >= 120 && value > 100 && blue > 100) { cyan++; }
+                if (y >= 120 && value > 100 && (resp ? red > 100 && blue == 0 : blue > 100)) { cyan++; }
             }
         }
         if (populated ? green < 100 || cyan < 100 : green != 0 || cyan != 0)
@@ -246,7 +276,7 @@ internal static class WaveformDemoSmokeChecks
         if (populated)
         {
             Directory.CreateDirectory("artifacts");
-            image.Save(Path.Combine("artifacts", "desktop-waveform-demo.png"), PngBitmapEncoderOptions.Default);
+            image.Save(Path.Combine("artifacts", resp ? "desktop-physiology-demo.png" : "desktop-waveform-demo.png"), PngBitmapEncoderOptions.Default);
         }
     }
 }

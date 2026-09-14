@@ -31,6 +31,7 @@ internal static class Program
             .. RegularPhysiologyTimelineSpecifications.All,
             .. EventWaveformSpecifications.All,
             .. PhysiologySignalGeneratorSpecifications.All,
+            .. PhysiologyWaveformGroupSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
             .. SignalAcquisitionDelaySpecifications.All,

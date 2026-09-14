@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
+using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
@@ -14,6 +15,8 @@ internal sealed class WaveformDemoWindow : Window
     private static readonly Guid Ecg = Guid.Parse("11111111-1111-4111-8111-111111111111");
     private static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
     private PeriodicWaveformGroup _source = CreateSource(false);
+    private readonly bool _physiology;
+    private PhysiologyWaveformGroup? _physiologySource;
     internal bool UsesPulse { get; private set; }
     internal Button ShapeButton { get; } = new() { Content = "形状：三角波（点击切换并重置）" };
     private WaveformEnvelope[] _blocks = [];
@@ -47,14 +50,16 @@ internal sealed class WaveformDemoWindow : Window
         Margin = new Thickness(16, 12),
     };
 
-    public WaveformDemoWindow()
+    public WaveformDemoWindow(bool physiology = false)
     {
-        Title = "合成波形开发演示 — 教学模拟";
+        _physiology = physiology;
+        Title = physiology ? "事件驱动 ECG / Resp 开发演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
+        ShapeButton.IsVisible = !physiology;
         Width = 1040;
         Height = 520;
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
-        panel.Children.Add(new TextBlock { Text = "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
+        panel.Children.Add(new TextBlock { Text = physiology ? "上：ECG 250 Hz / 40 ms；下：Resp 125 Hz / 80 ms；显式测试形态，未核验生理预设。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms，仅遮盖绘图；保留 2.2 s 源历史。" });
         WrapPanel actions = new();
@@ -80,7 +85,7 @@ internal sealed class WaveformDemoWindow : Window
         RunButton.Click += (_, _) => ToggleRun();
         ShapeButton.Click += (_, _) =>
         {
-            if (_closed) { return; }
+            if (_closed || _physiology) { return; }
             Reset(!UsesPulse);
         };
         Closed += (_, _) => { _closed = true; Pause(); };
@@ -131,11 +136,14 @@ internal sealed class WaveformDemoWindow : Window
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deltaNs);
         long next = checked(SimulationTimeNs + deltaNs);
-        PeriodicWaveformGroup trial = PeriodicWaveformGroup.Restore(_source.CaptureState());
-        WaveformEnvelope[] blocks = _blocks.Concat(trial.AdvanceTo(next, 50, 1)
+        PeriodicWaveformGroup? trial = _physiology ? null : PeriodicWaveformGroup.Restore(_source.CaptureState());
+        PhysiologyWaveformGroup? eventTrial = _physiology ? PhysiologyWaveformGroup.Restore(_physiologySource!.CaptureState()) : null;
+        IReadOnlyList<byte[]> wires = eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
+        WaveformEnvelope[] blocks = _blocks.Concat(wires
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(11).ToArray();
-        RawTrace? control = IsHeld ? null : new(blocks);
-        _source = trial;
+        RawTrace? control = IsHeld ? null : new(blocks, _physiology);
+        if (trial is not null) { _source = trial; }
+        if (eventTrial is not null) { _physiologySource = eventTrial; }
         _blocks = blocks;
         SimulationTimeNs = next;
         if (control is not null) { _trace.Content = control; }
@@ -152,7 +160,7 @@ internal sealed class WaveformDemoWindow : Window
         }
         else
         {
-            RawTrace control = new(_blocks);
+            RawTrace control = new(_blocks, _physiology);
             _pinned = null;
             _trace.Content = control;
         }
@@ -164,9 +172,11 @@ internal sealed class WaveformDemoWindow : Window
     private void Reset(bool pulse)
     {
         PeriodicWaveformGroup source = CreateSource(pulse);
-        RawTrace empty = new([]);
+        PhysiologyWaveformGroup? eventSource = _physiology ? CreatePhysiologySource() : null;
+        RawTrace empty = new([], _physiology);
         Pause();
         _source = source;
+        _physiologySource = eventSource;
         UsesPulse = pulse;
         ShapeButton.Content = pulse ? "形状：双相脉冲（点击切换并重置）" : "形状：三角波（点击切换并重置）";
         _blocks = [];
@@ -199,12 +209,27 @@ internal sealed class WaveformDemoWindow : Window
              Channel(Pleth, "AcqPleth125@1", 250, 0x0200000000000000)]);
     }
 
+    private static PhysiologyWaveformGroup CreatePhysiologySource()
+    {
+        const long q = FixedPointMath.Q32One;
+        RegularPhysiologyPlan plan = new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000);
+        return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 16,
+            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1),
+                [new(PhysiologyCycleEventKind.AtrialElectrical, 0, 80_000_000, [0, 50*q, 100*q, 50*q]),
+                 new(PhysiologyCycleEventKind.VentricularElectrical, 0, 80_000_000, [0, -200*q, 1000*q, -100*q]),
+                 new(PhysiologyCycleEventKind.VentricularElectrical, 160_000_000, 160_000_000, [0, 150*q, 300*q, 150*q])], 10, 0),
+             new(plan, new(Pleth, "AcqResp125@1", 1, 1, 0, 1),
+                [new(PhysiologyCycleEventKind.InspirationStart, 0, 3_750_000_000, [0, 500*q, 1000*q, 500*q])], 10, 0)]);
+    }
+
     private sealed class RawTrace : Control
     {
         private readonly (Point Start, Point End, int Channel)[] _segments;
         private readonly double? _gapStart;
-        public RawTrace(WaveformEnvelope[] blocks)
+        private readonly bool _resp;
+        public RawTrace(WaveformEnvelope[] blocks, bool resp)
         {
+            _resp = resp;
             Height = 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
@@ -239,7 +264,7 @@ internal sealed class WaveformDemoWindow : Window
             using (context.PushClip(new Rect(Bounds.Size)))
             {
                 Pen first = new(Brushes.Lime, 1);
-                Pen second = new(Brushes.Cyan, 1);
+                Pen second = new(_resp ? Brushes.Yellow : Brushes.Cyan, 1);
                 foreach (var segment in _segments)
                 {
                     context.DrawLine(segment.Channel == 0 ? first : second,

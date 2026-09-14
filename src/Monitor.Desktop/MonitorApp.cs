@@ -15,9 +15,9 @@ public sealed class MonitorApp : Avalonia.Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            if (desktop.Args is ["--waveform-demo"])
+            if (desktop.Args is ["--waveform-demo" or "--physiology-demo"])
             {
-                desktop.MainWindow = new WaveformDemoWindow();
+                desktop.MainWindow = new WaveformDemoWindow(desktop.Args[0] == "--physiology-demo");
                 base.OnFrameworkInitializationCompleted();
                 return;
             }

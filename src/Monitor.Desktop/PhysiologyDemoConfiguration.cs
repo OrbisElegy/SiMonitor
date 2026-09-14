@@ -7,7 +7,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null,
     int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125,
     int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0,
-    int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0)
+    int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0,
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000);
 
@@ -31,11 +32,11 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             InspirationMilliseconds >= BreathPeriodMilliseconds || RespAmplitudeCounts is < -1000 or > 1000 ||
             InspiratoryPauseMilliseconds < 0 || InspiratoryPauseMilliseconds >= InspirationMilliseconds ||
             ExpiratoryPauseMilliseconds < 0 || ExpiratoryPauseMilliseconds >= BreathPeriodMilliseconds - InspirationMilliseconds ||
-            RespCardiacArtifactCounts is < -200 or > 200)
+            RespCardiacArtifactCounts is < -200 or > 200 || !Enum.IsDefined(RespiratoryActivity))
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
         var timing = TextbookEcgReference.Timing;
         return new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,
             timing.PrIntervalNs + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
-            InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L);
+            InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity);
     }
 }

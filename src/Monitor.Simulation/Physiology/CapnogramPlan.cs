@@ -45,6 +45,9 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
                         FixedPointMath.Q32One - seedC));
             }
         }
+        // Chest-effort events do not imply expired gas. Keep the affine baseline
+        // and validated response settings, but generate no gas excursion.
+        if (physiology.RespiratoryActivity != RespiratoryActivity.Breathing) { Array.Clear(values); }
         IReadOnlyList<EventWaveformBand> bands;
         if (DispersionStepNs == 0)
         {

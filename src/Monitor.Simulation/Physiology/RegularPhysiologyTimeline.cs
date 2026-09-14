@@ -11,10 +11,14 @@ public enum PhysiologyCycleEventKind
     ExpirationStart,
 }
 
+// Local source activity, not a detected apnea classification or device fault.
+public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
+
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs,
     long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs,
     long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
-    long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0);
+    long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0,
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -41,6 +45,7 @@ public sealed class RegularPhysiologyTimeline
             plan.InspirationDurationNs <= 0 || plan.InspirationDurationNs >= plan.BreathPeriodNs ||
             plan.InspiratoryPauseNs < 0 || plan.InspiratoryPauseNs >= plan.InspirationDurationNs ||
             plan.ExpiratoryPauseNs < 0 || plan.ExpiratoryPauseNs >= plan.BreathPeriodNs - plan.InspirationDurationNs ||
+            !Enum.IsDefined(plan.RespiratoryActivity) ||
             state.CursorSimTimeNs < plan.EpochAnchorSimTimeNs)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidState", nameof(state)); }
         _plan = plan;
@@ -68,8 +73,11 @@ public sealed class RegularPhysiologyTimeline
         Add(PhysiologyCycleEventKind.VentricularElectrical, _plan.HeartPeriodNs, _plan.VentricularElectricalOffsetNs);
         Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs);
         Add(PhysiologyCycleEventKind.VentricularMechanical, _plan.HeartPeriodNs, _plan.VentricularMechanicalOffsetNs);
-        Add(PhysiologyCycleEventKind.InspirationStart, _plan.BreathPeriodNs, 0);
-        Add(PhysiologyCycleEventKind.ExpirationStart, _plan.BreathPeriodNs, _plan.InspirationDurationNs);
+        if (_plan.RespiratoryActivity != RespiratoryActivity.Absent)
+        {
+            Add(PhysiologyCycleEventKind.InspirationStart, _plan.BreathPeriodNs, 0);
+            Add(PhysiologyCycleEventKind.ExpirationStart, _plan.BreathPeriodNs, _plan.InspirationDurationNs);
+        }
         events.Sort((left, right) => left.SimTimeNs != right.SimTimeNs
             ? left.SimTimeNs.CompareTo(right.SimTimeNs) : left.Kind.CompareTo(right.Kind));
         cancellationToken.ThrowIfCancellationRequested();

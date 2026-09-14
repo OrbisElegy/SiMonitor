@@ -37,6 +37,11 @@ internal static class WaveformDemoSmokeChecks
             if (window.BlockCount != 10) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
             window.UpdateLayout();
             VerifyPixels(window, true);
+            byte[] retainedColumn = ReadColumn(window.Trace, 350);
+            Click(window.StepButton);
+            window.UpdateLayout();
+            if (!retainedColumn.SequenceEqual(ReadColumn(window.Trace, 350)))
+            { throw new InvalidOperationException("Unmodified sweep samples moved horizontally after history eviction."); }
             window.Width = 800;
             window.UpdateLayout();
             // Native window resize delivery is asynchronous; exercise the trace's
@@ -130,6 +135,27 @@ internal static class WaveformDemoSmokeChecks
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    private static byte[] ReadColumn(Control trace, int x)
+    {
+        using RenderTargetBitmap image = new(new PixelSize((int)trace.Bounds.Width, 240), new Vector(96, 96));
+        image.Render(trace);
+        using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using ILockedFramebuffer buffer = pixels.Lock();
+        image.CopyPixels(buffer);
+        byte[] column = new byte[240 * 4];
+        for (int y = 0; y < 240; y++)
+        { Marshal.Copy(buffer.Address + y * buffer.RowBytes + x * 4, column, y * 4, 4); }
+        if (!column.Where((_, index) => index % 4 == 1).Any(value => value > 100))
+        { throw new InvalidOperationException("Sweep stability evidence column has no trace."); }
+        for (int channel = 0; channel < 2; channel++)
+        {
+            int crossings = Enumerable.Range(channel * 120, 120).Count(y => column[y * 4 + 1] > 100);
+            if (crossings is < 1 or > 4)
+            { throw new InvalidOperationException("Sweep column contains a missing trace or a cross-wrap connector."); }
+        }
+        return column;
+    }
 
     private static void VerifyPixels(WaveformDemoWindow window, bool populated)
     {

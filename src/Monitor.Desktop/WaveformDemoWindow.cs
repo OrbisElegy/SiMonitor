@@ -42,7 +42,7 @@ internal sealed class WaveformDemoWindow : Window
         panel.Children.Add(new TextBlock { Text = "教学模拟／不得用于患者监护或临床决策" });
         panel.Children.Add(new TextBlock { Text = "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
         panel.Children.Add(new TextBlock { Text = "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
-        panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；显示最近 2 s 已完成数据，横轴为源数据时间。" });
+        panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；2 s 固定窗从左到右回绕，横轴为源时间在周期内的位置。" });
         StackPanel actions = new() { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
         actions.Children.Add(StepButton);
         actions.Children.Add(ResetButton);
@@ -172,7 +172,6 @@ internal sealed class WaveformDemoWindow : Window
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
-                long origin = blocks[0].StartSimTimeNs;
                 for (int channel = 0; channel < 2; channel++)
                 {
                     Point? previous = null;
@@ -182,9 +181,11 @@ internal sealed class WaveformDemoWindow : Window
                         for (int index = 0; index < plane.Samples.Count; index++)
                         {
                             // Floating point is confined to terminal screen coordinates.
-                            double time = block.StartSimTimeNs - origin + index * 1_000_000_000.0 * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                            // Fixture blocks are 200ms aligned from epoch zero.
+                            // Reduce integer time before terminal pixel conversion.
+                            double time = block.StartSimTimeNs % 2_000_000_000 + index * 1_000_000_000.0 * plane.SampleRateDenominator / plane.SampleRateNumerator;
                             Point point = new(time / 2_000_000_000, channel * 120 + 60 - plane.Samples[index] * 0.05);
-                            if (previous is { } start) { segments.Add((start, point, channel)); }
+                            if (previous is { } start && point.X > start.X) { segments.Add((start, point, channel)); }
                             previous = point;
                         }
                     }

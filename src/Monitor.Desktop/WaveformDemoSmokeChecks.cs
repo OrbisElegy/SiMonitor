@@ -14,6 +14,7 @@ internal static class WaveformDemoSmokeChecks
     public static void Verify()
     {
         VerifyPhysiology();
+        VerifyProgressiveSweep();
         WaveformDemoWindow window = new();
         window.Show();
         try
@@ -89,6 +90,53 @@ internal static class WaveformDemoSmokeChecks
         Console.WriteLine("ok: automatic step timer, pause, stale callback fencing, held generation, reset and close");
     }
 
+    private static void VerifyProgressiveSweep()
+    {
+        foreach (bool physiology in new[] { false, true })
+        {
+            WaveformDemoWindow window = new(physiology);
+            window.Show();
+            try
+            {
+                int frames = physiology ? 30 : 150;
+                for (int frame = 0; frame < frames; frame++) { window.Advance(16_000_000, progressive: true); }
+                if (window.LiveFrontierNs != 200_000_000 || window.BlockCount != 2)
+                { throw new InvalidOperationException("Progressive display did not buffer complete acquired blocks."); }
+                void Layout()
+                {
+                    window.Trace.Measure(new Size(1000, 240));
+                    window.Trace.Arrange(new Rect(0, 0, 1000, 240));
+                }
+                Layout();
+                VerifyGap(window.Trace, 110);
+                byte[] retained = ReadColumn(window.Trace, 30);
+                window.Advance(16_000_000, progressive: true);
+                if (window.LiveFrontierNs != 216_000_000 || window.BlockCount != 2)
+                { throw new InvalidOperationException("Sweep frontier waited for a new block."); }
+                Layout();
+                VerifyGap(window.Trace, 110);
+                window.Advance(16_000_000, progressive: true);
+                Layout();
+                _ = ReadColumn(window.Trace, 110);
+                if (!retained.SequenceEqual(ReadColumn(window.Trace, 30)))
+                { throw new InvalidOperationException("Progressive reveal shifted existing source pixels."); }
+                Click(window.HoldButton);
+                Control held = window.Trace;
+                for (int frame = 0; frame < 150; frame++) { window.Advance(16_000_000, progressive: true); }
+                if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 11)
+                { throw new InvalidOperationException("Progressive wrap or eviction changed held geometry."); }
+                Click(window.HoldButton);
+                if (window.LiveFrontierNs != 2_632_000_000 || ReferenceEquals(held, window.Trace))
+                { throw new InvalidOperationException("Return failed to join the progressive frontier."); }
+                Layout();
+                VerifyGap(window.Trace, 350);
+                _ = ReadColumn(window.Trace, 250);
+            }
+            finally { window.Close(); }
+        }
+        Console.WriteLine("ok: sub-block progressive pixels, buffered availability, fixed columns, wrap, hold and return");
+    }
+
     private static void VerifyShapes(WaveformDemoWindow window)
     {
         for (int step = 0; step < 11; step++) { Click(window.StepButton); }
@@ -156,26 +204,27 @@ internal static class WaveformDemoSmokeChecks
         timeout.Start();
         try { Dispatcher.UIThread.PushFrame(frame); }
         finally { timeout.Stop(); first.Tick -= ObserveTick; }
-        if (!delivered || window.SimulationTimeNs != 200_000_000)
+        if (!delivered || window.SimulationTimeNs <= 0 || window.SimulationTimeNs > 50_000_000)
         { throw new InvalidOperationException("Native timer did not deliver one simulation step."); }
-        for (int tick = 0; tick < 10; tick++) { window.Pulse(first); }
+        for (int tick = 0; tick < 150; tick++) { window.Pulse(first); }
+        long beforeHold = window.SimulationTimeNs;
         Click(window.HoldButton);
         Control held = window.Trace;
         window.Pulse(first);
-        if (window.SimulationTimeNs != 2_400_000_000 || !ReferenceEquals(held, window.Trace))
+        if (window.SimulationTimeNs != beforeHold + 16_000_000 || !ReferenceEquals(held, window.Trace))
         { throw new InvalidOperationException("Automatic generation altered held geometry."); }
         Click(window.RunButton);
         window.Pulse(first);
         if (window.ActiveTimer is not null || first.IsEnabled || !window.StepButton.IsEnabled ||
-            window.SimulationTimeNs != 2_400_000_000)
+            window.SimulationTimeNs != beforeHold + 16_000_000)
         { throw new InvalidOperationException("Pause did not fence its old timer."); }
         Click(window.RunButton);
         var second = window.ActiveTimer;
         window.Pulse(first);
-        if (ReferenceEquals(first, second) || window.SimulationTimeNs != 2_400_000_000)
+        if (ReferenceEquals(first, second) || window.SimulationTimeNs != beforeHold + 16_000_000)
         { throw new InvalidOperationException("Resume accepted a stale callback."); }
         window.Pulse(second);
-        if (window.SimulationTimeNs != 2_600_000_000) { throw new InvalidOperationException("Resume did not take one fixed step."); }
+        if (window.SimulationTimeNs != beforeHold + 32_000_000) { throw new InvalidOperationException("Resume did not take one fixed step."); }
         Click(window.ResetButton);
         window.Pulse(second);
         if (window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.IsHeld)

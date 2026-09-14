@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -25,8 +26,11 @@ internal sealed class WaveformDemoWindow : Window
     private readonly ContentControl _trace = new();
     private DispatcherTimer? _timer;
     private bool _closed;
+    private long _lastTick;
+    internal long LiveFrontierNs { get; private set; }
+    private long PresentationLatencyNs => _physiology ? 280_000_000 : 2_200_000_000;
     private readonly TextBlock _runStatus = new();
-    internal Button RunButton { get; } = new() { Content = "自动步进" };
+    internal Button RunButton { get; } = new() { Content = "连续扫屏" };
     internal DispatcherTimer? ActiveTimer => _timer;
     internal Button StepButton { get; } = new() { Content = "步进 200 ms" };
     internal Button ResetButton { get; } = new() { Content = "重置" };
@@ -97,24 +101,32 @@ internal sealed class WaveformDemoWindow : Window
         if (_closed) { return; }
         if (_timer is not null) { Pause(); return; }
         // A fresh timer identity fences callbacks from previous runs.
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _timer.Tick += OnTick;
+        _lastTick = Stopwatch.GetTimestamp();
         _timer.Start();
-        RunButton.Content = "暂停自动步进";
+        RunButton.Content = "暂停扫屏";
         StepButton.IsEnabled = false;
-        _runStatus.Text = "自动步进：每次回调推进 200 ms；界面繁忙时不追赶，不保证实时速率。";
+        _runStatus.Text = "连续扫屏：约 60 帧／秒；缓冲完整数据块后逐步显示，长时间卡顿不追赶。";
     }
 
-    private void OnTick(object? sender, EventArgs args) => Pulse(sender);
+    private void OnTick(object? sender, EventArgs args)
+    {
+        if (_closed || _timer is null || !ReferenceEquals(sender, _timer)) { return; }
+        long now = Stopwatch.GetTimestamp();
+        long delta = Math.Clamp(Stopwatch.GetElapsedTime(_lastTick, now).Ticks * 100, 1, 50_000_000);
+        _lastTick = now;
+        Pulse(sender, delta);
+    }
 
-    internal void Pulse(object? timer)
+    internal void Pulse(object? timer, long deltaNs = 16_000_000)
     {
         if (_closed || _timer is null || !ReferenceEquals(timer, _timer)) { return; }
-        try { Advance(200_000_000); }
+        try { Advance(deltaNs, progressive: true); }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         {
             Pause();
-            _runStatus.Text = "生成失败，自动步进已暂停；可重置后重新开始。";
+            _runStatus.Text = "生成失败，扫屏已暂停；可重置后重新开始。";
         }
     }
 
@@ -123,16 +135,16 @@ internal sealed class WaveformDemoWindow : Window
         DispatcherTimer? old = _timer;
         _timer = null;
         if (old is not null) { old.Stop(); old.Tick -= OnTick; }
-        RunButton.Content = "自动步进";
+        RunButton.Content = "连续扫屏";
         RunButton.IsEnabled = !_closed;
         StepButton.IsEnabled = !_closed;
         ResetButton.IsEnabled = !_closed;
         ShapeButton.IsEnabled = !_closed;
         HoldButton.IsEnabled = !_closed && _blocks.Length > 0;
-        _runStatus.Text = "自动步进已暂停；可手动步进。";
+        _runStatus.Text = "扫屏已暂停；可手动步进。";
     }
 
-    internal void Advance(long deltaNs)
+    internal void Advance(long deltaNs, bool progressive = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deltaNs);
         long next = checked(SimulationTimeNs + deltaNs);
@@ -141,11 +153,16 @@ internal sealed class WaveformDemoWindow : Window
         IReadOnlyList<byte[]> wires = eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
         WaveformEnvelope[] blocks = _blocks.Concat(wires
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(11).ToArray();
-        RawTrace? control = IsHeld ? null : new(blocks, _physiology);
+        long frontier = blocks.Length == 0 ? 0 : progressive
+            ? Math.Max(LiveFrontierNs, Math.Min(blocks[^1].StartSimTimeNs + 200_000_000,
+                Math.Max(0, next - PresentationLatencyNs)))
+            : blocks[^1].StartSimTimeNs + 200_000_000;
+        RawTrace? control = IsHeld ? null : new(blocks, _physiology, frontier);
         if (trial is not null) { _source = trial; }
         if (eventTrial is not null) { _physiologySource = eventTrial; }
         _blocks = blocks;
         SimulationTimeNs = next;
+        LiveFrontierNs = frontier;
         if (control is not null) { _trace.Content = control; }
         UpdateStatus();
     }
@@ -160,7 +177,7 @@ internal sealed class WaveformDemoWindow : Window
         }
         else
         {
-            RawTrace control = new(_blocks, _physiology);
+            RawTrace control = new(_blocks, _physiology, LiveFrontierNs);
             _pinned = null;
             _trace.Content = control;
         }
@@ -182,6 +199,7 @@ internal sealed class WaveformDemoWindow : Window
         _blocks = [];
         _pinned = null;
         SimulationTimeNs = 0;
+        LiveFrontierNs = 0;
         _trace.Content = empty;
         UpdateStatus();
     }
@@ -226,18 +244,19 @@ internal sealed class WaveformDemoWindow : Window
         private readonly (Point Start, Point End, int Channel)[] _segments;
         private readonly double? _gapStart;
         private readonly bool _resp;
-        public RawTrace(WaveformEnvelope[] blocks, bool resp)
+        public RawTrace(WaveformEnvelope[] blocks, bool resp, long frontier = 0)
         {
             _resp = resp;
             Height = 240;
             List<(Point, Point, int)> segments = [];
             if (blocks.Length > 0)
             {
-                _gapStart = ((blocks[^1].StartSimTimeNs + 200_000_000) % 2_000_000_000) / 2_000_000_000.0;
+                _gapStart = (frontier % 2_000_000_000) / 2_000_000_000.0;
                 for (int channel = 0; channel < 2; channel++)
                 {
                     Point? previous = null;
-                    foreach (WaveformEnvelope block in blocks.TakeLast(10))
+                    long previousTime = 0;
+                    foreach (WaveformEnvelope block in blocks)
                     {
                         WaveformPlane plane = block.Planes[channel];
                         for (int index = 0; index < plane.Samples.Count; index++)
@@ -245,10 +264,21 @@ internal sealed class WaveformDemoWindow : Window
                             // Floating point is confined to terminal screen coordinates.
                             // Fixture blocks are 200ms aligned from epoch zero.
                             // Reduce integer time before terminal pixel conversion.
-                            double time = block.StartSimTimeNs % 2_000_000_000 + index * 1_000_000_000.0 * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                            long sourceTime = block.StartSimTimeNs + index * 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                            double time = sourceTime % 2_000_000_000;
                             Point point = new(time / 2_000_000_000, channel * 120 + 60 - plane.Samples[index] * 0.05);
-                            if (previous is { } start && point.X > start.X) { segments.Add((start, point, channel)); }
+                            if (previous is { } start && point.X > start.X &&
+                                sourceTime > frontier - 2_000_000_000 && previousTime < frontier)
+                            {
+                                // Clip only a segment between two acquired samples; never extrapolate.
+                                long from = Math.Max(previousTime, frontier - 2_000_000_000);
+                                long to = Math.Min(sourceTime, frontier);
+                                Point At(long value) => start + (point - start) *
+                                    ((double)(value - previousTime) / (sourceTime - previousTime));
+                                segments.Add((At(from), At(to), channel));
+                            }
                             previous = point;
+                            previousTime = sourceTime;
                         }
                     }
                 }

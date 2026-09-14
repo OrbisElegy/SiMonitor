@@ -55,3 +55,20 @@ mapped to explicit event-relative timing. The final endpoint is zero. The origin
 time constant. Peak aligns with next inspiration, and the fall continues into
 that inspiration. The plateau's shape still comes from the upstream seed; it is
 not a validated capnogram preset or an independently adjustable slope model.
+
+## Pulmonary artery adaptation
+
+The same pinned source file supplies 76 PA_Default vertices, retained in
+`eng/physiology/infirmary-pulmonary-artery.json` with source/vertex/license hashes
+under the same Apache-2.0 attribution. The manifest records the pinned source-file hash.
+The independent PA seed is not an ABP-derived shape. No drawing timers, random
+modifiers or fixed intrathoracic amplitude multipliers were copied.
+
+Local changes: normalize by original peak 0.87, retain original indices 0..45
+(including notch/recovery), replace indices 46..75 with an exact linear decay
+from index 45 = 0.09 to zero, then resample 256 Q32 points. This removes unqualified
+oscillation and below-baseline ringing from the source illustration; measurement
+system ringing will need a separate artifact model. Original 10 ms drawing spacing
+and 220 ms systole metadata are not imported as physiological timing constants.
+The manifest records all changes and the generator verifies hashes. Native PA
+pixels do not constitute a validated RV/PA model or measured PAP values.

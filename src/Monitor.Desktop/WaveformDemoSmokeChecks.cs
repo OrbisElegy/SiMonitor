@@ -264,7 +264,7 @@ internal static class WaveformDemoSmokeChecks
         { throw new InvalidOperationException("Sweep stability evidence column has no trace."); }
         for (int channel = 0; channel < (int)trace.Height / 120; channel++)
         {
-            int crossings = Enumerable.Range(channel * 120, 120).Count(y => column[y * 4 + (channel == 3 ? 2 : 1)] > 100);
+            int crossings = Enumerable.Range(channel * 120, 120).Count(y => column[y * 4 + (channel is 3 or 5 ? 2 : 1)] > 100);
             if (crossings is < 1 or > 4)
             { throw new InvalidOperationException("Sweep column contains a missing trace or a cross-wrap connector."); }
         }
@@ -307,42 +307,45 @@ internal static class WaveformDemoSmokeChecks
             VerifyPixels(window, false, resp: true);
         }
         finally { window.Close(); }
-        Console.WriteLine("ok: event-driven ECG/Resp/Pleth/ABP/CO2 native pixels, shared delay, held generation and reset");
+        Console.WriteLine("ok: event-driven ECG/Resp/Pleth/ABP/CO2/PA native pixels, shared delay, held generation and reset");
     }
 
     private static void VerifyMechanicalPulsePixels(WaveformDemoWindow window, int width = 1000)
     {
         Control trace = window.Trace;
-        trace.Measure(new Size(width, 600));
-        trace.Arrange(new Rect(0, 0, width, 600));
-        if (window.SimulationTimeNs != 2_600_000_000 || window.LiveFrontierNs != 600_000_000 || trace.Height != 600)
-        { throw new InvalidOperationException("Five-channel display did not wait for the shared acquired frontier."); }
+        trace.Measure(new Size(width, 720));
+        trace.Arrange(new Rect(0, 0, width, 720));
+        if (window.SimulationTimeNs != 2_600_000_000 || window.LiveFrontierNs != 600_000_000 || trace.Height != 720)
+        { throw new InvalidOperationException("Six-channel display did not wait for the shared acquired frontier."); }
         var blocks = PhysiologyDemoSource.Create().AdvanceTo(2_600_000_000, 650, 13, 100)
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
-        using RenderTargetBitmap image = new(new PixelSize(width, 600), new Vector(96, 96));
+        using RenderTargetBitmap image = new(new PixelSize(width, 720), new Vector(96, 96));
         image.Render(trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
-        // Use explicit row bindings: wire UUID order is ECG, Pleth, Resp, ABP, CO2.
-        foreach (var (row, time) in new[] { (0, 196_000_000L), (1, 416_000_000L), (2, 312_000_000L), (2, 416_000_000L), (3, 312_000_000L), (3, 424_000_000L), (4, 310_000_000L) })
+        // Use explicit row bindings: wire UUID order is ECG, Pleth, Resp, ABP, CO2, PA.
+        foreach (var (row, time) in new[] { (0, 196_000_000L), (1, 416_000_000L), (2, 312_000_000L), (2, 416_000_000L), (3, 312_000_000L), (3, 424_000_000L), (4, 310_000_000L), (5, 272_000_000L), (5, 400_000_000L) })
         {
             var block = blocks.Single(item => time >= item.StartSimTimeNs && time < item.StartSimTimeNs + 200_000_000);
             var plane = block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int sample = (int)((time - block.StartSimTimeNs) * plane.SampleRateNumerator / 1_000_000_000 / plane.SampleRateDenominator);
             int value = plane.Samples[sample];
             int x = (int)Math.Round(time * (double)width / 2_000_000_000);
-            int y = row == 4 ? 590 : row == 3 ? (time == 312_000_000 ? 420 : 395) : (int)Math.Round(row * 120 + 60 - value * 0.05);
+            int y = row == 5 ? (time == 272_000_000 ? 685 : 648) : row == 4 ? 590 : row == 3 ? (time == 312_000_000 ? 420 : 395) : (int)Math.Round(row * 120 + 60 - value * 0.05);
             if (row == 3 && (value != (time == 312_000_000 ? 0 : 4000) || plane.ScaleNumerator != 1 ||
                 plane.ScaleDenominator != 100 || plane.OffsetNumerator != 80 || plane.OffsetDenominator != 1))
             { throw new InvalidOperationException("Arterial wire baseline, pressure resolution or peak changed unexpectedly."); }
+            if (row == 5 && (value != (time == 272_000_000 ? 0 : 1500) || plane.ScaleNumerator != 1 ||
+                plane.ScaleDenominator != 100 || plane.OffsetNumerator != 10 || plane.OffsetDenominator != 1))
+            { throw new InvalidOperationException("PA wire scale, baseline or independent arrival/peak changed."); }
             if (row == 2 && value != (time == 416_000_000 ? 1000 : 0))
             { throw new InvalidOperationException("Mechanical transit or pulse peak changed unexpectedly."); }
             bool Colored(int line)
             {
                 int offset = line * buffer.RowBytes + x * 4;
                 byte b = Marshal.ReadByte(buffer.Address, offset), g = Marshal.ReadByte(buffer.Address, offset + 1), r = Marshal.ReadByte(buffer.Address, offset + 2);
-                return row == 4 ? r > 100 && g > 100 && b > 100 : row == 3 ? r > 100 && g == 0 && b == 0 : g > 100 && (row == 0 ? b == 0 && r == 0 : row == 1 ? b == 0 && r > 100 : b > 100 && r == 0);
+                return row == 5 ? r > 100 && b > 100 && g == 0 : row == 4 ? r > 100 && g > 100 && b > 100 : row == 3 ? r > 100 && g == 0 && b == 0 : g > 100 && (row == 0 ? b == 0 && r == 0 : row == 1 ? b == 0 && r > 100 : b > 100 && r == 0);
             }
             if (!Enumerable.Range(y - 2, 5).Any(Colored))
             { throw new InvalidOperationException("Native row pixels do not match the configured decoded physiology channel."); }
@@ -370,9 +373,9 @@ internal static class WaveformDemoSmokeChecks
             Sample(4, 3_950_000_000) != 0 || Sample(1, 3_752_000_000) > 1 || Sample(1, 3_800_000_000) <= 0)
         { throw new InvalidOperationException("Capnogram fall does not align with the shared next inspiration."); }
         Control trace = window.Trace;
-        trace.Measure(new Size(width, 600));
-        trace.Arrange(new Rect(0, 0, width, 600));
-        using RenderTargetBitmap image = new(new PixelSize(width, 600), new Vector(96, 96));
+        trace.Measure(new Size(width, 720));
+        trace.Arrange(new Rect(0, 0, width, 720));
+        using RenderTargetBitmap image = new(new PixelSize(width, 720), new Vector(96, 96));
         image.Render(trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
@@ -405,6 +408,7 @@ internal static class WaveformDemoSmokeChecks
         int pleth = 0;
         int arterial = 0;
         int co2 = 0;
+        int pa = 0;
         for (int y = 0; y < (int)trace.Height; y++)
         {
             for (int x = 0; x < image.PixelSize.Width; x++)
@@ -417,10 +421,11 @@ internal static class WaveformDemoSmokeChecks
                 if (y >= 120 && y < 240 && value > 100 && (resp ? red > 100 && blue == 0 : blue > 100)) { cyan++; }
                 if (y >= 240 && y < 360 && value > 100 && blue > 100 && red == 0) { pleth++; }
                 if (y >= 360 && y < 480 && red > 100 && value == 0 && blue == 0) { arterial++; }
-                if (y >= 480 && red > 100 && value > 100 && blue > 100) { co2++; }
+                if (y >= 480 && y < 600 && red > 100 && value > 100 && blue > 100) { co2++; }
+                if (y >= 600 && red > 100 && blue > 100 && value == 0) { pa++; }
             }
         }
-        if (populated ? green < 100 || cyan < 100 || (resp && (pleth < 100 || arterial < 100 || co2 < 100)) : green != 0 || cyan != 0 || pleth != 0 || arterial != 0 || co2 != 0)
+        if (populated ? green < 100 || cyan < 100 || (resp && (pleth < 100 || arterial < 100 || co2 < 100 || pa < 100)) : green != 0 || cyan != 0 || pleth != 0 || arterial != 0 || co2 != 0 || pa != 0)
         { throw new InvalidOperationException("Generated native trace pixels do not match available source planes."); }
         if (populated)
         {

@@ -64,7 +64,7 @@ def render(namespace, class_name, shapes, timing=None):
 def arterial_shape(manifest):
     digest = hashlib.sha256(json.dumps(manifest['upstream_vertices'], separators=(',', ':')).encode()).hexdigest()
     if digest != manifest['upstream_vertices_sha256']:
-        raise ValueError('upstream ABP vertex evidence changed')
+        raise ValueError('upstream pressure vertex evidence changed')
     vertices = [Fraction(value) for value in manifest['upstream_vertices']]
     for index, value in manifest['modified_vertices'].items():
         vertices[int(index)] = Fraction(value)
@@ -102,11 +102,19 @@ def main():
     pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(), parse_float=Fraction)
     arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
     capnogram = json.loads((root / 'eng/physiology/infirmary-capnogram.json').read_text())
+    pulmonary = json.loads((root / 'eng/physiology/infirmary-pulmonary-artery.json').read_text())
+    if hashlib.sha256((root / pulmonary['license_file']).read_bytes()).hexdigest() != pulmonary['license_sha256']:
+        raise ValueError('upstream PA license evidence changed')
     if hashlib.sha256((root / capnogram['license_file']).read_bytes()).hexdigest() != capnogram['license_sha256']:
         raise ValueError('upstream CO2 license evidence changed')
     if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
         raise ValueError('upstream ABP license evidence changed')
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/PulmonaryArteryTables.cs':
+            '// Adapted from Infirmary Integrated PA_Default, Ibi Keller (Tanjera).\n'
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+                'Monitor.Simulation.Physiology', 'PulmonaryArteryTables', arterial_shape(pulmonary)).replace(
+                    'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/CapnogramTables.cs':
             '// Adapted from Infirmary Integrated ETCO2_Default, Ibi Keller (Tanjera).\n'
             '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
@@ -135,7 +143,7 @@ def main():
         else:
             target.write_text(expected)
     if args.check:
-        print('ok: ECG, Resp, Pleth, arterial and CO2 Q32 tables match offline authoring')
+        print('ok: ECG, Resp, Pleth, ABP, CO2 and PA Q32 tables match offline authoring')
 
 
 if __name__ == '__main__':

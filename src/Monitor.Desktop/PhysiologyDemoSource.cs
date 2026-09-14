@@ -12,6 +12,7 @@ internal static class PhysiologyDemoSource
         2 => Guid.Parse("22222222-2222-4222-8222-222222222222"),
         3 => Guid.Parse("44444444-4444-4444-8444-444444444444"),
         4 => Guid.Parse("55555555-5555-4555-8555-555555555555"),
+        5 => Guid.Parse("66666666-6666-4666-8666-666666666666"),
         _ => throw new ArgumentOutOfRangeException(nameof(row)),
     };
 
@@ -28,6 +29,7 @@ internal static class PhysiologyDemoSource
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
              new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0),
-             new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40).CreateChannel(plan, ChannelId(4), 0)]);
+             new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40).CreateChannel(plan, ChannelId(4), 0),
+             new PulmonaryArteryPulsePlan(40_000_000, 640_000_000, 10, 15).CreateChannel(plan, ChannelId(5), 0)]);
     }
 }

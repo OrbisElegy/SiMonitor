@@ -272,7 +272,8 @@
       "notice_file": "docs/infirmary-source-notice.md",
       "manifests": [
         "eng/physiology/infirmary-arterial-pulse.json",
-        "eng/physiology/infirmary-capnogram.json"
+        "eng/physiology/infirmary-capnogram.json",
+        "eng/physiology/infirmary-pulmonary-artery.json"
       ]
     }
   ]

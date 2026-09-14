@@ -1,0 +1,10 @@
+{
+  "id": "PlethPulseIllustrationDraft@1",
+  "source": "Project-authored relative Pleth pulse illustration; no upstream points copied",
+  "unit": "relative raw counts, not optical intensity or blood flow",
+  "qualification": "Not a validated physiological preset or PPG optical model; landmark positions and notch depth are project choices",
+  "tables": {
+    "Plain": {"length": 128, "landmarks": [[0, 0], [24, 1], [128, 0]]},
+    "Notched": {"length": 128, "landmarks": [[0, 0], [24, 1], [56, 0.35], [72, 0.5], [128, 0]]}
+  }
+}

@@ -21,6 +21,13 @@ internal sealed class WaveformDemoWindow : Window
     private readonly bool _physiology;
     private readonly bool _projected;
     private ElectrodeWaveformGroup? _electrodeSource;
+    internal ProjectedEcgDemoConfiguration EcgConfiguration { get; private set; } = ProjectedEcgDemoConfiguration.Default;
+    internal ComboBox QtMethod { get; } = new() { ItemsSource = new[] { "原始示意时序", "Bazett", "Fridericia" }, SelectedIndex = 0 };
+    internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
+    internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
+    internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
+    internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _activeEcgConfiguration = new() { TextWrapping = TextWrapping.Wrap };
     private PhysiologyWaveformGroup? _physiologySource;
     internal bool UsesPulse { get; private set; }
     internal Button ShapeButton { get; } = new() { Content = "形状：三角波（点击切换并重置）" };
@@ -81,6 +88,21 @@ internal sealed class WaveformDemoWindow : Window
         actions.Children.Add(ShapeButton);
         foreach (Control action in actions.Children) { action.Margin = new Thickness(0, 0, 12, 8); }
         panel.Children.Add(actions);
+        if (projected)
+        {
+            WrapPanel settings = new();
+            settings.Children.Add(QtMethod);
+            settings.Children.Add(new TextBlock { Text = "源心率（次/分）" });
+            settings.Children.Add(HeartRateInput);
+            settings.Children.Add(new TextBlock { Text = "QTc（ms）" });
+            settings.Children.Add(QtcInput);
+            settings.Children.Add(ApplyEcgButton);
+            foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
+            panel.Children.Add(settings);
+            panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心率不是检测心率；输入范围 30–200 次/分，QTc 1–1000 ms，仍须满足波段时序。" });
+            panel.Children.Add(_activeEcgConfiguration);
+            panel.Children.Add(EcgConfigurationStatus);
+        }
         panel.Children.Add(_runStatus);
         panel.Children.Add(_status);
         panel.Children.Add(_trace);
@@ -94,6 +116,8 @@ internal sealed class WaveformDemoWindow : Window
         ResetButton.Click += (_, _) => { if (!_closed) { Reset(); } };
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
         RunButton.Click += (_, _) => ToggleRun();
+        QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
+        ApplyEcgButton.Click += (_, _) => ApplyEcgConfiguration();
         ShapeButton.Click += (_, _) =>
         {
             if (_closed || _physiology || _projected) { return; }
@@ -195,16 +219,57 @@ internal sealed class WaveformDemoWindow : Window
 
     private void Reset() => Reset(UsesPulse);
 
-    private void Reset(bool pulse)
+    private void ApplyEcgConfiguration()
     {
+        if (_closed || !_projected) { return; }
+        try
+        {
+            ProjectedEcgDemoConfiguration configuration;
+            if (QtMethod.SelectedIndex == 0) { configuration = ProjectedEcgDemoConfiguration.Default; }
+            else
+            {
+                if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
+                    !int.TryParse(QtcInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int qtc))
+                { throw new ArgumentException("Integer input required."); }
+                string method = QtMethod.SelectedIndex switch
+                {
+                    1 => EcgQtCorrection.Bazett,
+                    2 => EcgQtCorrection.Fridericia,
+                    _ => throw new ArgumentException("Unknown method."),
+                };
+                configuration = new(hr, qtc, method);
+            }
+            Reset(UsesPulse, configuration);
+        }
+        catch (ArgumentException)
+        {
+            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，并确保 QT 容纳 QRS、T 且不进入下一 P 波。当前数据与扫屏状态保持。";
+        }
+    }
+
+    private void Reset(bool pulse, ProjectedEcgDemoConfiguration? configuration = null)
+    {
+        configuration ??= EcgConfiguration;
         PeriodicWaveformGroup source = CreateSource(pulse);
         PhysiologyWaveformGroup? eventSource = _physiology ? CreatePhysiologySource() : null;
-        ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create() : null;
+        ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create(configuration) : null;
         RawTrace empty = new([], _physiology, projected: _projected);
         Pause();
         _source = source;
         _physiologySource = eventSource;
         _electrodeSource = electrodeSource;
+        EcgConfiguration = configuration;
+        if (_projected)
+        {
+            var timing = configuration.ResolveTiming();
+            QtMethod.SelectedIndex = configuration.MethodId switch { EcgQtCorrection.Bazett => 1, EcgQtCorrection.Fridericia => 2, _ => 0 };
+            HeartRateInput.Text = configuration.HeartRateBpm.ToString(CultureInfo.InvariantCulture);
+            QtcInput.Text = configuration.QtcMilliseconds.ToString(CultureInfo.InvariantCulture);
+            _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
+                $"已应用：源心率 {configuration.HeartRateBpm} 次/分；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms");
+            EcgConfigurationStatus.Text = "";
+        }
         UsesPulse = pulse;
         ShapeButton.Content = pulse ? "形状：双相脉冲（点击切换并重置）" : "形状：三角波（点击切换并重置）";
         _blocks = [];

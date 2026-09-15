@@ -151,7 +151,7 @@ internal sealed class WaveformDemoWindow : Window
                 conduction.Children.Add(new TextBlock { Text = "机械停止持续周期数（可空）" });
                 conduction.Children.Add(MechanicalDurationCyclesInput);
                 conduction.Children.Add(VascularReservoirInput);
-                ToolTip.SetTip(VascularReservoirInput, "ABP／PA 使用独立 RC 储压源：无射血时压力衰减，恢复后逐搏充盈。有限时宽恒流射血；未建模完整切迹或反射波。取消后使用固定基线形态模板。应用后从源时间零重新开始。");
+                ToolTip.SetTip(VascularReservoirInput, "ABP／PA 保留各自的上升支、切迹与下降支，并加入血管储压：无射血时压力衰减，恢复后从残余压力逐搏充盈。取消后使用固定基线形态模板。应用后从源时间零重新开始。");
             }
             panel.Children.Add(conduction);
             if (physiology)
@@ -479,7 +479,7 @@ internal sealed class WaveformDemoWindow : Window
             VentricularMechanicalInput.IsChecked = breathConfiguration.VentricularMechanicalEnabled;
             VascularReservoirInput.IsChecked = breathConfiguration.UseVascularReservoir;
             VascularPressureModeStatus.Text = breathConfiguration.UseVascularReservoir
-                ? "已应用血管储压模型：ABP／PA 在无射血时分别衰减至 10／5 mmHg，恢复后从残余压力逐搏充盈；RC 恒流射血示意，未建模完整切迹与反射波。参数为教学选择，CVP 仍使用原有分量模型。"
+                ? "已应用血管储压模型：ABP／PA 保留各自的上升支、切迹与下降支；停搏波尾结束后分别衰减至 10／5 mmHg，恢复后从残余压力逐搏充盈。形态与储压组合为教学近似，CVP 仍使用原有分量模型。"
                 : "已应用固定基线形态模板：无新机械事件时 ABP／PA 波尾结束后保持 80／10 mmHg；启用血管储压模型可观察压力衰减与恢复。";
             MechanicalEveryCyclesInput.SelectedIndex = breathConfiguration.MechanicalEveryCycles - 1;
             MechanicalAfterCyclesInput.Text = breathConfiguration.MechanicalAfterCycles?.ToString(CultureInfo.InvariantCulture) ?? "";

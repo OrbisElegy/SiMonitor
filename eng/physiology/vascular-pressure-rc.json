@@ -3,6 +3,7 @@
   "source": "Project-authored finite-ejection RC illustration; no paper waveform points or source code copied",
   "research": "docs/vascular-pressure-runoff-research.md",
   "qualification": "Unqualified teaching source; no valve notch, reflections, CVP mean response, independent right-heart source or pressure numerics",
+  "optional_morphology": "eng/physiology/vascular-pressure-morphology.json; null preserves the raw RC source described here",
   "units": {
     "time": "integer nanoseconds",
     "pressure": "Q32.32 centi-mmHg, raw-int16 centi-mmHg on acquisition",
@@ -25,8 +26,8 @@
     "support": "transit + ejection duration + 64*tau <= Int64.MaxValue"
   },
   "demo": {
-    "arterial": {"transit_ns": 80000000, "ejection_ns": 240000000, "tau_ns": 2900000000, "initial_centi_mm_hg": 8000, "asymptote_centi_mm_hg": 1000, "ejection_equilibrium_centi_mm_hg": 30000},
-    "pulmonary_artery": {"transit_ns": 40000000, "ejection_ns": 200000000, "tau_ns": 700000000, "initial_centi_mm_hg": 1000, "asymptote_centi_mm_hg": 500, "ejection_equilibrium_centi_mm_hg": 5000}
+    "arterial": {"transit_ns": 80000000, "ejection_ns": 240000000, "tau_ns": 2900000000, "initial_centi_mm_hg": 8000, "asymptote_centi_mm_hg": 1000, "ejection_equilibrium_centi_mm_hg": 30000, "morphology": "Arterial", "morphology_duration_ns": 600000000, "morphology_pulse_height_centi_mm_hg": 4000},
+    "pulmonary_artery": {"transit_ns": 40000000, "ejection_ns": 200000000, "tau_ns": 700000000, "initial_centi_mm_hg": 1000, "asymptote_centi_mm_hg": 500, "ejection_equilibrium_centi_mm_hg": 5000, "morphology": "PulmonaryArtery", "morphology_duration_ns": 640000000, "morphology_pulse_height_centi_mm_hg": 1500}
   },
   "references": [
     {

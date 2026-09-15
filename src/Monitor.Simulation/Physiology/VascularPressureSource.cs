@@ -18,6 +18,9 @@ public sealed class VascularPressureSource
     private readonly long _decayHorizonNs;
     private readonly long _supportNs;
     private readonly long[] _powers;
+    private readonly long _morphologyPeriodNs;
+    private readonly long _referenceOnsetQ32;
+    private readonly long[]? _morphologyTable;
 
     private VascularPressureSource(RegularPhysiologyPlan physiology, VascularPressurePlan plan)
     {
@@ -49,6 +52,43 @@ public sealed class VascularPressureSource
         // The 64*tau truncation removes only values already zero in this Q62
         // kernel. Verify the actual rounded kernel, not a floating-point claim.
         if (WholeStepDecay(_decayHorizonNs / MeshStepNs) != 0) { throw Invalid(); }
+        if (plan.Morphology is { } morphology)
+        {
+            if (morphology.ModelId != VascularPressureMorphologyPlan.EvidenceId ||
+                !Enum.IsDefined(morphology.Kind) || morphology.DurationNs <= 0 ||
+                morphology.DurationNs > ventricularPeriod ||
+                morphology.PulseHeightCentiMmHg is < 0 or > short.MaxValue ||
+                plan.EjectionEquilibriumCentiMmHg == 0)
+            { throw Invalid(); }
+            // Nominal ventricular RR deliberately excludes the mechanical stride:
+            // dropping inputs must not increase the reference volume per beat.
+            _morphologyPeriodNs = (long)ventricularPeriod;
+            long endDecay = Decay(_morphologyPeriodNs);
+            long endInput = EjectionCoefficient(_morphologyPeriodNs);
+            _referenceOnsetQ32 = (long)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)plan.EjectionEquilibriumCentiMmHg * endInput * FixedPointMath.Q32One,
+                FixedPointMath.Q62One - endDecay);
+            // Reject effectively empty reference reservoirs instead of dividing
+            // by an arbitrarily small pressure and amplifying a startup residue.
+            if (_referenceOnsetQ32 < FixedPointMath.Q32One) { throw Invalid(); }
+            Int128 firstOnsetNumerator = (Int128)(plan.InitialPressureCentiMmHg - plan.AsymptoticPressureCentiMmHg) *
+                FixedPointMath.Q32One * Decay(physiology.VentricularMechanicalOffsetNs);
+            Int128 firstOnsetAbove = (firstOnsetNumerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
+            Int128 maximumAbove = Int128.Max(_referenceOnsetQ32, firstOnsetAbove);
+            Int128 maximumShape = _referenceOnsetQ32 +
+                (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One;
+            // A subset of periodic inputs cannot exceed the complete reference
+            // multiplied by max(1, first-onset excess/reference onset). The
+            // explicit initial pressure decays until the first possible event.
+            // Reserve one
+            // centi-mmHg for all fixed-point kernel/ratio rounding differences.
+            Int128 maximumOutput = (Int128)plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One +
+                (maximumAbove * maximumShape + _referenceOnsetQ32 - 1) / _referenceOnsetQ32 + FixedPointMath.Q32One;
+            if (maximumOutput > short.MaxValue * FixedPointMath.Q32One) { throw Invalid(); }
+            IReadOnlyList<long> seed = morphology.Kind == VascularPressureMorphologyKind.Arterial
+                ? ArterialPulseTables.Pulse : PulmonaryArteryTables.Pulse;
+            _morphologyTable = seed.Select(value => checked(value * morphology.PulseHeightCentiMmHg)).ToArray();
+        }
     }
 
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan) =>
@@ -67,23 +107,42 @@ public sealed class VascularPressureSource
         // Age == support has zero weight; the remaining integer-ns interval is
         // exactly support wide, so ceil(support/selectedPeriod) bounds its events.
         long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)sourceTime - _supportNs + 1);
+        long? morphologyAge = null;
         RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, (Int128)sourceTime + 1,
             MaximumEjectionCount, item =>
             {
                 long age = sourceTime - item.SimTimeNs;
-                long coefficient = age < _plan.EjectionDurationNs
-                    ? FixedPointMath.Q62One - Decay(age)
-                    : Decay(age - _plan.EjectionDurationNs) - Decay(age);
+                long coefficient = EjectionCoefficient(age);
                 pressure += (Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient;
+                if (_morphologyTable is not null && age < _morphologyPeriodNs) { morphologyAge = age; }
             }, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // Retain all weighted contributions in Int128/Q62, then round once to
         // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.
         Int128 result = FixedPointMath.RoundDivideTiesToEven(pressure, 1L << 30);
+        if (morphologyAge is { } elapsed)
+        {
+            long pulse = elapsed < _plan.Morphology!.DurationNs
+                ? PeriodicLutLinear.Interpolate(_morphologyTable!,
+                    (ulong)(((UInt128)elapsed << 64) / (ulong)_plan.Morphology.DurationNs)).Value : 0;
+            long reference = (long)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)_referenceOnsetQ32 * Decay(elapsed) +
+                (Int128)_plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(elapsed) * FixedPointMath.Q32One,
+                FixedPointMath.Q62One);
+            // Enforce the nominal minimum against sub-Q32 endpoint rounding.
+            reference = Math.Max(_referenceOnsetQ32, reference);
+            Int128 asymptote = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One;
+            result = asymptote + FixedPointMath.RoundDivideTiesToEven(
+                (result - asymptote) * (_referenceOnsetQ32 + pulse), reference);
+        }
         if (result < 0 || result > short.MaxValue * FixedPointMath.Q32One)
         { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)result;
     }
+
+    private long EjectionCoefficient(long ageNs) => ageNs < _plan.EjectionDurationNs
+        ? FixedPointMath.Q62One - Decay(ageNs)
+        : Decay(ageNs - _plan.EjectionDurationNs) - Decay(ageNs);
 
     private long Decay(long ageNs)
     {

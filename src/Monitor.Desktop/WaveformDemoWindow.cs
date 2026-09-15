@@ -23,6 +23,7 @@ internal sealed class WaveformDemoWindow : Window
     private ElectrodeWaveformGroup? _electrodeSource;
     internal ProjectedEcgDemoConfiguration EcgConfiguration { get; private set; } = ProjectedEcgDemoConfiguration.Default;
     internal ComboBox QtMethod { get; } = new() { ItemsSource = new[] { "原始示意时序", "Bazett", "Fridericia" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
@@ -118,18 +119,25 @@ internal sealed class WaveformDemoWindow : Window
         actions.Children.Add(ShapeButton);
         foreach (Control action in actions.Children) { action.Margin = new Thickness(0, 0, 12, 8); }
         panel.Children.Add(actions);
+        if (projected || physiology)
+        {
+            WrapPanel conduction = new();
+            conduction.Children.Add(new TextBlock { Text = "房室传导比例（心房:心室）" });
+            conduction.Children.Add(ConductionInput);
+            panel.Children.Add(conduction);
+        }
         if (projected)
         {
             WrapPanel settings = new();
             settings.Children.Add(QtMethod);
-            settings.Children.Add(new TextBlock { Text = "源心率（次/分）" });
+            settings.Children.Add(new TextBlock { Text = "源心房率（次/分）" });
             settings.Children.Add(HeartRateInput);
             settings.Children.Add(new TextBlock { Text = "QTc（ms）" });
             settings.Children.Add(QtcInput);
             settings.Children.Add(ApplyEcgButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
-            panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心率不是检测心率；输入范围 30–200 次/分，QTc 1–1000 ms，仍须满足波段时序。" });
+            panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心房率不是检测心率；QTc 使用传导后的室性 RR。固定示意模式保留原 QT。输入范围 30–200 次/分，QTc 1–1000 ms，仍须满足波段时序。" });
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
@@ -294,7 +302,7 @@ internal sealed class WaveformDemoWindow : Window
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = ProjectedEcgDemoConfiguration.Default; }
+            if (QtMethod.SelectedIndex == 0) { configuration = ProjectedEcgDemoConfiguration.Default with { VentricularConductionRatio = ConductionInput.SelectedIndex + 1 }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
@@ -306,13 +314,13 @@ internal sealed class WaveformDemoWindow : Window
                     2 => EcgQtCorrection.Fridericia,
                     _ => throw new ArgumentException("Unknown method."),
                 };
-                configuration = new(hr, qtc, method);
+                configuration = new(hr, qtc, method, ConductionInput.SelectedIndex + 1);
             }
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，并确保 QT 容纳 QRS、T 且不进入下一 P 波。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，并确保 QT 容纳 QRS、T 且满足周期时序。当前数据与扫屏状态保持。";
         }
     }
 
@@ -358,7 +366,7 @@ internal sealed class WaveformDemoWindow : Window
                 durationBreaths = durationCount;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionInput.SelectedIndex + 1));
         }
         catch (ArgumentException)
         {
@@ -382,6 +390,7 @@ internal sealed class WaveformDemoWindow : Window
         BreathConfiguration = breathConfiguration;
         if (_physiology)
         {
+            ConductionInput.SelectedIndex = breathConfiguration.VentricularConductionRatio - 1;
             ActivityDurationBreathsInput.Text = breathConfiguration.ActivityDurationBreaths?.ToString(CultureInfo.InvariantCulture) ?? "";
             ActivityAfterBreathsInput.Text = breathConfiguration.ActivityAfterBreaths?.ToString(CultureInfo.InvariantCulture) ?? "";
             RespiratoryActivityInput.SelectedIndex = (int)breathConfiguration.RespiratoryActivity;
@@ -401,17 +410,18 @@ internal sealed class WaveformDemoWindow : Window
             Co2PlateauInput.Text = breathConfiguration.Co2PlateauStartCentiMmHg is { } plateau
                 ? (plateau / 100m).ToString("0.##", CultureInfo.InvariantCulture) : "";
             _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+                $"已应用：传导 {breathConfiguration.VentricularConductionRatio}:1；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)
         {
             var timing = configuration.ResolveTiming();
             QtMethod.SelectedIndex = configuration.MethodId switch { EcgQtCorrection.Bazett => 1, EcgQtCorrection.Fridericia => 2, _ => 0 };
+            ConductionInput.SelectedIndex = configuration.VentricularConductionRatio - 1;
             HeartRateInput.Text = configuration.HeartRateBpm.ToString(CultureInfo.InvariantCulture);
             QtcInput.Text = configuration.QtcMilliseconds.ToString(CultureInfo.InvariantCulture);
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：源心率 {configuration.HeartRateBpm} 次/分；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                $"已应用：源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms");
             EcgConfigurationStatus.Text = "";
         }

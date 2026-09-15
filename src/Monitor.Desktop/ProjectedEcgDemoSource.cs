@@ -3,20 +3,21 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId)
+internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (VentricularConductionRatio is < 1 or > 4) { throw new ArgumentException("Invalid conduction ratio."); }
         if (MethodId is null)
         {
-            if (this != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
-            return TextbookEcgReference.Timing;
+            if (this with { VentricularConductionRatio = 1 } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
+            return TextbookEcgReference.Timing with { RrIntervalNs = TextbookEcgReference.Timing.RrIntervalNs * VentricularConductionRatio };
         }
         if (HeartRateBpm is < 30 or > 200 || QtcMilliseconds is < 1 or > 1000)
         { throw new ArgumentException("Demo parameter outside supported input bounds."); }
-        long rr = (long)Monitor.Simulation.Determinism.FixedPointMath.RoundDivideTiesToEven(60_000_000_000, HeartRateBpm);
+        long rr = (long)Monitor.Simulation.Determinism.FixedPointMath.RoundDivideTiesToEven(60_000_000_000, HeartRateBpm) * VentricularConductionRatio;
         return new EcgQtCorrection(MethodId, QtcMilliseconds * 1_000_000L, rr).ResolveTiming(TextbookEcgReference.Timing);
     }
 }
@@ -29,10 +30,12 @@ internal static class ProjectedEcgDemoSource
 
     internal static ElectrodeWaveformGroup Create(ProjectedEcgDemoConfiguration? configuration = null)
     {
-        var timing = (configuration ?? ProjectedEcgDemoConfiguration.Default).ResolveTiming();
+        configuration ??= ProjectedEcgDemoConfiguration.Default;
+        var timing = configuration.ResolveTiming();
         var electrodes = TextbookElectrodeReference.CreateElectrodes(timing: timing);
-        RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs, timing.PrIntervalNs,
-            80_000_000, timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000);
+        RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs / configuration.VentricularConductionRatio, timing.PrIntervalNs,
+            80_000_000, timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000,
+            VentricularConductionRatio: configuration.VentricularConductionRatio);
         return ElectrodeWaveformGroup.Start(Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), 1, 1, 1, 0, 16, plan, electrodes,
             Enum.GetValues<EcgLead>().Select(lead => new ElectrodeChannelPlan(lead, ChannelId(lead), 10, 0)).ToArray());

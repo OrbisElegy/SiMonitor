@@ -17,11 +17,14 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
 // Optional duration restores normal activity on the original cycle grid.
+// HeartPeriodNs is the atrial period; ventricular events use its conduction
+// multiple while preserving their explicit electrical/mechanical offsets.
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs,
     long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs,
     long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
     long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0,
-    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null);
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
+    int VentricularConductionRatio = 1);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -41,6 +44,7 @@ public sealed class RegularPhysiologyTimeline
     {
         if (state is null || state.Plan is not { } plan || plan.EpochAnchorSimTimeNs < 0 ||
             plan.HeartPeriodNs <= 0 || plan.BreathPeriodNs <= 0 ||
+            plan.VentricularConductionRatio < 1 || (Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio > long.MaxValue ||
             plan.VentricularElectricalOffsetNs <= 0 || plan.VentricularElectricalOffsetNs >= plan.HeartPeriodNs ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||
             plan.VentricularMechanicalOffsetNs < plan.VentricularElectricalOffsetNs ||
@@ -77,9 +81,10 @@ public sealed class RegularPhysiologyTimeline
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidLimit", nameof(maximumEvents)); }
         List<PhysiologyCycleEvent> events = [];
         Add(PhysiologyCycleEventKind.AtrialElectrical, _plan.HeartPeriodNs, 0);
-        Add(PhysiologyCycleEventKind.VentricularElectrical, _plan.HeartPeriodNs, _plan.VentricularElectricalOffsetNs);
+        long ventricularPeriod = _plan.HeartPeriodNs * _plan.VentricularConductionRatio;
+        Add(PhysiologyCycleEventKind.VentricularElectrical, ventricularPeriod, _plan.VentricularElectricalOffsetNs);
         Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs);
-        Add(PhysiologyCycleEventKind.VentricularMechanical, _plan.HeartPeriodNs, _plan.VentricularMechanicalOffsetNs);
+        Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs);
         if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
         {
             ulong? limit = _plan.RespiratoryActivity == RespiratoryActivity.Absent ? _plan.ActivityAfterBreaths : null;

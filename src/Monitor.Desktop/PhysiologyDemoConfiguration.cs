@@ -8,7 +8,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125,
     int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0,
     int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0,
-    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null)
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000);
 
@@ -33,11 +33,13 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             InspiratoryPauseMilliseconds < 0 || InspiratoryPauseMilliseconds >= InspirationMilliseconds ||
             ExpiratoryPauseMilliseconds < 0 || ExpiratoryPauseMilliseconds >= BreathPeriodMilliseconds - InspirationMilliseconds ||
             RespCardiacArtifactCounts is < -200 or > 200 || !Enum.IsDefined(RespiratoryActivity) ||
-            (ActivityAfterBreaths is { } breaths && (breaths is < 1 or > 100 || RespiratoryActivity == RespiratoryActivity.Breathing)))
+            (ActivityAfterBreaths is { } breaths && (breaths is < 1 or > 100 || RespiratoryActivity == RespiratoryActivity.Breathing)) ||
+            (ActivityDurationBreaths is { } duration && (duration is < 1 or > 100 || ActivityAfterBreaths is null)))
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
         var timing = TextbookEcgReference.Timing;
         return new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,
             timing.PrIntervalNs + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
-            InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null);
+            InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
+            ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null);
     }
 }

@@ -19,9 +19,10 @@ internal static class RespiratoryActivitySmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
-            foreach (var (activity, afterBreaths) in new[] { (RespiratoryActivity.EffortOnly, (int?)null),
-                (RespiratoryActivity.Absent, null), (RespiratoryActivity.Breathing, null),
-                (RespiratoryActivity.EffortOnly, (int?)1), (RespiratoryActivity.Absent, (int?)1) })
+            foreach (var (activity, afterBreaths, durationBreaths) in new[] { (RespiratoryActivity.EffortOnly, (int?)null, (int?)null),
+                (RespiratoryActivity.Absent, null, null), (RespiratoryActivity.Breathing, null, null),
+                (RespiratoryActivity.EffortOnly, (int?)1, null), (RespiratoryActivity.Absent, (int?)1, null),
+                (RespiratoryActivity.EffortOnly, (int?)1, (int?)1), (RespiratoryActivity.Absent, (int?)1, (int?)1) })
             {
                 for (int step = 0; step < 12; step++) { Click(window.StepButton); }
                 Click(window.HoldButton);
@@ -33,6 +34,7 @@ internal static class RespiratoryActivitySmokeChecks
                 window.RespAmplitudeInput.Text = "800";
                 window.Co2BaselineInput.Text = "5";
                 window.RespCardiacArtifactInput.Text = activity == RespiratoryActivity.Absent && afterBreaths is null ? "160" : "0";
+                window.ActivityDurationBreathsInput.Text = durationBreaths?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
                 window.ActivityAfterBreathsInput.Text = afterBreaths?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
                 window.Co2TransportInput.Text = afterBreaths is null ? "0" : "600";
                 window.Co2DispersionInput.Text = afterBreaths is null ? "0" : "100";
@@ -41,12 +43,12 @@ internal static class RespiratoryActivitySmokeChecks
                 Click(window.ApplyBreathButton);
                 window.Pulse(oldTimer);
                 var config = window.BreathConfiguration;
-                if (config.RespiratoryActivity != activity || config.ActivityAfterBreaths != afterBreaths || window.SimulationTimeNs != 0 || window.BlockCount != 0 ||
+                if (config.RespiratoryActivity != activity || config.ActivityAfterBreaths != afterBreaths || config.ActivityDurationBreaths != durationBreaths || window.SimulationTimeNs != 0 || window.BlockCount != 0 ||
                     window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Activity change did not restart the source and fence prior work."); }
                 var source = PhysiologyDemoSource.Create(config);
                 List<WaveformEnvelope> blocks = [];
-                for (int step = 1; step <= 42; step++)
+                for (int step = 1; step <= (durationBreaths is null ? 42 : 78); step++)
                 {
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
@@ -54,7 +56,7 @@ internal static class RespiratoryActivitySmokeChecks
                 var co2 = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(4)).Samples);
                 if (activity == RespiratoryActivity.Breathing || afterBreaths is not null ? !co2.Any(value => value > 0) : co2.Any(value => value != 0))
                 { throw new InvalidOperationException("Native CO2 does not follow source respiratory activity."); }
-                VerifyPixels(window, blocks, activity, afterBreaths);
+                VerifyPixels(window, blocks, activity, afterBreaths, durationBreaths);
                 Click(window.HoldButton);
                 Click(window.RunButton);
                 var held = window.Trace;
@@ -74,8 +76,18 @@ internal static class RespiratoryActivitySmokeChecks
                         !ReferenceEquals(timer, window.ActiveTimer) || window.SimulationTimeNs != before)
                     { throw new InvalidOperationException("Invalid transition schedule changed the active source."); }
                 }
+                window.ActivityAfterBreathsInput.Text = afterBreaths?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                foreach (string invalid in new[] { "0", "101", "1.5", "bad" })
+                {
+                    window.ActivityDurationBreathsInput.Text = invalid;
+                    Click(window.ApplyBreathButton);
+                    if (window.BreathConfiguration != config || !ReferenceEquals(held, window.Trace) ||
+                        !ReferenceEquals(timer, window.ActiveTimer) || window.SimulationTimeNs != before)
+                    { throw new InvalidOperationException("Invalid resumption schedule changed the active source."); }
+                }
                 Click(window.ResetButton);
                 if (window.BreathConfiguration != config || window.RespiratoryActivityInput.SelectedIndex != (int)activity ||
+                    window.ActivityDurationBreathsInput.Text != (durationBreaths?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "") ||
                     window.ActivityAfterBreathsInput.Text != (afterBreaths?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "") ||
                     window.ActiveTimer is not null || window.BlockCount != 0 || window.IsHeld)
                 { throw new InvalidOperationException("Reset lost accepted activity or retained draft state."); }
@@ -85,7 +97,7 @@ internal static class RespiratoryActivitySmokeChecks
         Console.WriteLine("ok: native respiratory activity separates chest effort, gas cycles and cardiac artifact with atomic lifecycle");
     }
 
-    private static void VerifyPixels(WaveformDemoWindow window, List<WaveformEnvelope> blocks, RespiratoryActivity activity, int? afterBreaths)
+    private static void VerifyPixels(WaveformDemoWindow window, List<WaveformEnvelope> blocks, RespiratoryActivity activity, int? afterBreaths, int? durationBreaths)
     {
         var trace = window.Trace;
         trace.Measure(new Size(1000, 840));
@@ -96,7 +108,12 @@ internal static class RespiratoryActivitySmokeChecks
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         List<(int Row, long Time, int Raw)> points = [(4, 4_000_000_000, activity == RespiratoryActivity.Breathing ? 3500 : 0)];
-        if (afterBreaths is not null)
+        if (durationBreaths is not null)
+        {
+            points = [(1, 7_200_000_000, 0), (1, 9_600_000_000, 800), (4, 7_200_000_000, 0),
+                (4, 10_720_000_000, 0), (4, 10_800_000_000, -1), (4, 12_600_000_000, 3500), (4, 13_200_000_000, 0)];
+        }
+        else if (afterBreaths is not null)
         {
             points = [(4, 4_600_000_000, 3500), (4, 4_900_000_000, -1), (4, 5_200_000_000, 0),
                 (1, 1_600_000_000, 800), (1, 5_600_000_000, activity == RespiratoryActivity.Absent ? 0 : 800)];
@@ -110,7 +127,7 @@ internal static class RespiratoryActivitySmokeChecks
                 .Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int raw = plane.Samples[(int)(time % 200_000_000 * plane.SampleRateNumerator / 1_000_000_000)];
             if (expected == -1 ? raw <= 0 || raw >= 3500 : raw != expected) { throw new InvalidOperationException("Activity landmark does not match decoded native data."); }
-            int x = (int)Math.Round(time / 8_000_000.0);
+            int x = (int)Math.Round(time % 8_000_000_000 / 8_000_000.0);
             int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : 590 - (raw / 100.0 + 5) * 1.25);
             bool visible = Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
             {

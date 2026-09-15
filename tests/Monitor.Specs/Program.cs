@@ -51,6 +51,7 @@ internal static class Program
             .. RespCardiacArtifactSpecifications.All,
             .. RespiratoryActivitySpecifications.All,
             .. RespiratoryTransitionSpecifications.All,
+            .. RespiratoryResumptionSpecifications.All,
             .. PulmonaryArterySpecifications.All,
             .. CentralVenousPressureSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,

@@ -7,9 +7,10 @@ namespace Monitor.Simulation.Physiology;
 public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex);
 // TriggerCycleLimit is exclusive in the trigger's cycle-index domain. It gates
 // new contributions; support already triggered before the limit still finishes.
+// Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -37,7 +38,9 @@ public sealed class EventWaveformComposition
         {
             EventWaveformBand band = state.Bands[index];
             if (band is null || !Enum.IsDefined(band.Trigger) || band.DelayNs < 0 || band.DurationNs <= 0 ||
-                band.TriggerCycleLimit == 0 || band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
+                band.TriggerCycleLimit == 0 ||
+                (band.TriggerCycleResume is { } resume && (band.TriggerCycleLimit is null || resume <= band.TriggerCycleLimit.Value)) ||
+                band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
             if (table[0] != 0 || table.Any(value => value < short.MinValue * FixedPointMath.Q32One ||
@@ -72,7 +75,7 @@ public sealed class EventWaveformComposition
             if (item.SimTimeNs < 0 || !Enum.IsDefined(item.Kind) || !identities.Add((item.Kind, item.CycleIndex))) { throw Invalid(); }
             if (index > 0 && (_events[index - 1].SimTimeNs > item.SimTimeNs ||
                 _events[index - 1].SimTimeNs == item.SimTimeNs && _events[index - 1].Kind >= item.Kind)) { throw Invalid(); }
-            foreach (EventWaveformBand band in _bands.Where(band => band.Trigger == item.Kind && (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value)))
+            foreach (EventWaveformBand band in _bands.Where(band => Accepts(band, item)))
             {
                 if ((Int128)item.SimTimeNs + band.DelayNs + band.DurationNs > long.MaxValue) { throw Invalid(); }
             }
@@ -94,7 +97,7 @@ public sealed class EventWaveformComposition
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 EventWaveformBand band = _bands[index];
-                if (band.Trigger != item.Kind || (band.TriggerCycleLimit is { } limit && item.CycleIndex >= limit)) { continue; }
+                if (!Accepts(band, item)) { continue; }
                 long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
                 if (elapsed < 0 || elapsed >= band.DurationNs) { continue; }
                 // Equal adjacent table indices hold phase while time advances.
@@ -108,6 +111,10 @@ public sealed class EventWaveformComposition
         { throw new EventWaveformException("EventWaveform.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)sum;
     }
+
+    private static bool Accepts(EventWaveformBand band, PhysiologyCycleEvent item) => band.Trigger == item.Kind &&
+        (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value ||
+         (band.TriggerCycleResume is { } resume && item.CycleIndex >= resume));
 
     private static EventWaveformException Invalid() => new("EventWaveform.InvalidState", "state");
 

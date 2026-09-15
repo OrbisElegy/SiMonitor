@@ -32,6 +32,7 @@ internal static class PhysiologyConfigurationSmokeChecks
                 Click(window.HoldButton);
                 Click(window.RunButton);
                 var oldTimer = window.ActiveTimer;
+                window.VascularReservoirInput.IsChecked = config.UseVascularReservoir;
                 window.BreathPeriodInput.Text = config.BreathPeriodMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.InspirationInput.Text = config.InspirationMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 window.ExpiratoryPauseInput.Text = config.ExpiratoryPauseMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture);

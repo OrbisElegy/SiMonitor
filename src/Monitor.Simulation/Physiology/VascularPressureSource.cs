@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Simulation.Determinism;
+
+namespace Monitor.Simulation.Physiology;
+
+// Immutable indexed reconstruction from the declared epoch. The model owns its
+// 1 microsecond RC kernel; acquisition rates and call/checkpoint boundaries never integrate
+// pressure. Only accepted ventricular mechanical events contribute flow.
+public sealed class VascularPressureSource
+{
+    public const string KernelId = "VascularPressureRcTrapezoidal1UsQ62@1";
+    public const long MeshStepNs = 1_000;
+    public const int MaximumEjectionCount = 4096;
+    private const long MinimumTimeConstantNs = 100_000_000;
+    private const long MaximumTimeConstantNs = 10_000_000_000;
+    private readonly RegularPhysiologyPlan _physiology;
+    private readonly VascularPressurePlan _plan;
+    private readonly long _decayHorizonNs;
+    private readonly long _supportNs;
+    private readonly long[] _powers;
+
+    private VascularPressureSource(RegularPhysiologyPlan physiology, VascularPressurePlan plan)
+    {
+        if (physiology is null || plan is null) { throw Invalid(); }
+        try { _ = RegularPhysiologyTimeline.Start(physiology); }
+        catch (ArgumentException) { throw Invalid(); }
+        Int128 ventricularPeriod = (Int128)physiology.HeartPeriodNs * physiology.VentricularConductionRatio;
+        Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
+        Int128 selectedPeriod = ventricularPeriod * physiology.MechanicalEveryCycles;
+        if (plan.ModelId != VascularPressurePlan.EvidenceId ||
+            plan.TransitDelayNs < 0 || plan.EjectionDurationNs <= 0 || plan.EjectionDurationNs > ventricularPeriod ||
+            plan.TimeConstantNs is < MinimumTimeConstantNs or > MaximumTimeConstantNs ||
+            support + plan.TransitDelayNs > long.MaxValue ||
+            plan.AsymptoticPressureCentiMmHg < 0 || plan.InitialPressureCentiMmHg < plan.AsymptoticPressureCentiMmHg ||
+            plan.InitialPressureCentiMmHg > short.MaxValue || plan.EjectionEquilibriumCentiMmHg < 0 ||
+            (Int128)plan.AsymptoticPressureCentiMmHg + plan.EjectionEquilibriumCentiMmHg > short.MaxValue ||
+            (support + selectedPeriod - 1) / selectedPeriod > MaximumEjectionCount)
+        { throw Invalid(); }
+        _physiology = physiology;
+        _plan = plan;
+        _decayHorizonNs = 64 * plan.TimeConstantNs;
+        _supportNs = (long)support;
+        _powers = new long[30]; // 64*10 seconds contains at most 640,000,000 whole mesh steps.
+        _powers[0] = (long)FixedPointMath.RoundDivideTiesToEven(
+            (2 * (Int128)plan.TimeConstantNs - MeshStepNs) * FixedPointMath.Q62One,
+            2 * (Int128)plan.TimeConstantNs + MeshStepNs);
+        for (int index = 1; index < _powers.Length; index++)
+        { _powers[index] = Multiply(_powers[index - 1], _powers[index - 1]); }
+        // The 64*tau truncation removes only values already zero in this Q62
+        // kernel. Verify the actual rounded kernel, not a floating-point claim.
+        if (WholeStepDecay(_decayHorizonNs / MeshStepNs) != 0) { throw Invalid(); }
+    }
+
+    public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan) =>
+        new(physiology, plan);
+
+    // Returns complete physical pressure as Q32.32 centi-mmHg.
+    public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (simTimeNs < _physiology.EpochAnchorSimTimeNs)
+        { throw new EventWaveformException("VascularPressure.InvalidTime", nameof(simTimeNs)); }
+        long sourceTime = Math.Max(_physiology.EpochAnchorSimTimeNs, simTimeNs - _plan.TransitDelayNs);
+        Int128 pressure = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q62One +
+            (Int128)(_plan.InitialPressureCentiMmHg - _plan.AsymptoticPressureCentiMmHg) *
+            Decay(sourceTime - _physiology.EpochAnchorSimTimeNs);
+        // Age == support has zero weight; the remaining integer-ns interval is
+        // exactly support wide, so ceil(support/selectedPeriod) bounds its events.
+        long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)sourceTime - _supportNs + 1);
+        RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, (Int128)sourceTime + 1,
+            MaximumEjectionCount, item =>
+            {
+                long age = sourceTime - item.SimTimeNs;
+                long coefficient = age < _plan.EjectionDurationNs
+                    ? FixedPointMath.Q62One - Decay(age)
+                    : Decay(age - _plan.EjectionDurationNs) - Decay(age);
+                pressure += (Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient;
+            }, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        // Retain all weighted contributions in Int128/Q62, then round once to
+        // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.
+        Int128 result = FixedPointMath.RoundDivideTiesToEven(pressure, 1L << 30);
+        if (result < 0 || result > short.MaxValue * FixedPointMath.Q32One)
+        { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(simTimeNs)); }
+        return (long)result;
+    }
+
+    private long Decay(long ageNs)
+    {
+        if (ageNs >= _decayHorizonNs) { return 0; }
+        long steps = ageNs / MeshStepNs;
+        long left = WholeStepDecay(steps);
+        long fraction = ageNs % MeshStepNs;
+        if (fraction == 0) { return left; }
+        long right = WholeStepDecay(steps + 1);
+        return left + (long)FixedPointMath.RoundDivideTiesToEven((Int128)(right - left) * fraction, MeshStepNs);
+    }
+
+    private long WholeStepDecay(long steps)
+    {
+        long value = FixedPointMath.Q62One;
+        for (int index = 0; steps > 0; index++, steps >>= 1)
+        {
+            if ((steps & 1) != 0) { value = Multiply(value, _powers[index]); }
+        }
+        return value;
+    }
+
+    private static long Multiply(long left, long right) =>
+        (long)FixedPointMath.RoundDivideTiesToEven((Int128)left * right, FixedPointMath.Q62One);
+
+    private static EventWaveformException Invalid() => new("VascularPressure.InvalidPlan", "plan");
+}

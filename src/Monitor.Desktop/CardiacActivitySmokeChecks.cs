@@ -21,6 +21,7 @@ internal static class CardiacActivitySmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
+                window.VascularReservoirInput.IsChecked = false;
                 foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent, CardiacActivity.AtrialAndVentricular })
                 {
                     Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);

@@ -23,6 +23,7 @@ internal static class WaveformDemoSmokeChecks
         MechanicalTransitionSmokeChecks.Verify();
         MechanicalResumptionSmokeChecks.Verify();
         MechanicalStrideSmokeChecks.Verify();
+        VascularPressureSmokeChecks.Verify();
         ShortCycleEcgSmokeChecks.Verify();
         UWaveSmokeChecks.Verify();
         VerifyPhysiology();
@@ -290,6 +291,9 @@ internal static class WaveformDemoSmokeChecks
         window.Show();
         try
         {
+            // This fixture deliberately verifies the original template peaks and offsets.
+            window.VascularReservoirInput.IsChecked = false;
+            Click(window.ApplyBreathButton);
             for (int step = 0; step < 10; step++) { Click(window.StepButton); }
             if (window.BlockCount != 0) { throw new InvalidOperationException("Pleth processing delay was bypassed."); }
             Click(window.StepButton);
@@ -331,7 +335,7 @@ internal static class WaveformDemoSmokeChecks
         trace.Arrange(new Rect(0, 0, width, 840));
         if (window.SimulationTimeNs != 2_600_000_000 || window.LiveFrontierNs != 600_000_000 || trace.Height != 840)
         { throw new InvalidOperationException("Seven-channel display did not wait for the shared acquired frontier."); }
-        var blocks = PhysiologyDemoSource.Create().AdvanceTo(2_600_000_000, 650, 13, 100)
+        var blocks = PhysiologyDemoSource.Create(window.BreathConfiguration).AdvanceTo(2_600_000_000, 650, 13, 100)
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
         using RenderTargetBitmap image = new(new PixelSize(width, 840), new Vector(96, 96));
         image.Render(trace);

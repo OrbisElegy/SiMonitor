@@ -1,0 +1,53 @@
+{
+  "id": "VascularPressureRcIllustration@1",
+  "source": "Project-authored finite-ejection RC illustration; no paper waveform points or source code copied",
+  "research": "docs/vascular-pressure-runoff-research.md",
+  "qualification": "Unqualified teaching source; no valve notch, reflections, CVP mean response, independent right-heart source or pressure numerics",
+  "units": {
+    "time": "integer nanoseconds",
+    "pressure": "Q32.32 centi-mmHg, raw-int16 centi-mmHg on acquisition",
+    "ejection_equilibrium": "R*Q pressure increment during constant finite ejection, not full pressure or stroke volume"
+  },
+  "kernel": {
+    "mesh_step_ns": 1000,
+    "coefficient": "Q2.62 nearest-ties-to-even of (2*tau-h)/(2*tau+h)",
+    "integer_power": "cached coefficient squares; nearest-ties-to-even after each Q62 product",
+    "fractional_step": "linear interpolation of independently evaluated adjacent whole-step powers at integer-ns position",
+    "sum": "initial response and all accepted finite-ejection responses in Int128/Q62; one final Q32 rounding",
+    "decay_horizon": "64*tau; reject unless computed whole-step decay is already zero in Q62",
+    "maximum_candidate_ejections": 4096,
+    "clock": "model-owned kernel, independent of acquisition, presentation and call boundaries"
+  },
+  "bounds": {
+    "time_constant_ns": [100000000, 10000000000],
+    "ejection_duration": "positive, at most one conducted ventricular period",
+    "pressure": "0 <= asymptote <= initial <= 32767 centi-mmHg; 0 <= ejection equilibrium; asymptote + ejection equilibrium <= 32767",
+    "support": "transit + ejection duration + 64*tau <= Int64.MaxValue"
+  },
+  "demo": {
+    "arterial": {"transit_ns": 80000000, "ejection_ns": 240000000, "tau_ns": 2900000000, "initial_centi_mm_hg": 8000, "asymptote_centi_mm_hg": 1000, "ejection_equilibrium_centi_mm_hg": 30000},
+    "pulmonary_artery": {"transit_ns": 40000000, "ejection_ns": 200000000, "tau_ns": 700000000, "initial_centi_mm_hg": 1000, "asymptote_centi_mm_hg": 500, "ejection_equilibrium_centi_mm_hg": 5000}
+  },
+  "references": [
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/12907428/",
+      "summary": []
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2644244/",
+      "summary": []
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5960867/",
+      "summary": []
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/8060028/",
+      "summary": []
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12495131/",
+      "summary": []
+    }
+  ]
+}

@@ -19,6 +19,7 @@ internal static class MechanicalUncouplingSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
+            window.VascularReservoirInput.IsChecked = false;
             foreach (bool enabled in new[] { false, true })
             {
                 Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);

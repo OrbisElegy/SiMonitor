@@ -27,6 +27,8 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox MechanicalDurationCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal TextBox MechanicalAfterCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal CheckBox VentricularMechanicalInput { get; } = new() { Content = "生成室性机械事件", IsChecked = true };
+    internal CheckBox VascularReservoirInput { get; } = new() { Content = "血管储压模型（教学）", IsChecked = true };
+    internal TextBlock VascularPressureModeStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件" }, SelectedIndex = 0 };
     internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
@@ -117,7 +119,7 @@ internal sealed class WaveformDemoWindow : Window
         {
             panel.Children.Add(new TextBlock { Text = "第四行 ABP（红）：125 Hz / 80 ms；固定压力尺度 0–160 mmHg。按实际样本的比例与偏移换算压力，未计算 SYS/DIA/MAP。" });
             panel.Children.Add(new TextBlock { Text = "第五行 CO₂（白）：100 Hz / 2 s；固定尺度 0–80 mmHg。由呼气事件驱动，下一吸气触发下降，管路滞后另计；未计算 EtCO₂ 或 RR-CO₂。" });
-            panel.Children.Add(new TextBlock { Text = "第六行 PA（紫红）：125 Hz / 80 ms；固定尺度 0–40 mmHg。独立肺动脉压形态种子，未计算 PAP SYS/DIA/MEAN。" });
+            panel.Children.Add(new TextBlock { Text = "第六行 PA（紫红）：125 Hz / 80 ms；固定尺度 0–40 mmHg。使用独立肺动脉压参数，未计算 PAP SYS/DIA/MEAN。" });
             panel.Children.Add(new TextBlock { Text = "第七行 CVP（橙）：125 Hz / 80 ms；固定尺度 −5–15 mmHg。a/c/v 波与 x/y 下降，基线 6 mmHg，吸气压力变化 −1 mmHg；未计算平均 CVP。" });
             panel.Children.Add(new TextBlock { Text = "Pleth、ABP、PA 由机械搏动触发；示意电机械延迟 80 ms，传播延迟 Pleth/ABP 80 ms、PA 40 ms，处理延迟另计。七通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
         }
@@ -148,10 +150,16 @@ internal sealed class WaveformDemoWindow : Window
                 conduction.Children.Add(MechanicalAfterCyclesInput);
                 conduction.Children.Add(new TextBlock { Text = "机械停止持续周期数（可空）" });
                 conduction.Children.Add(MechanicalDurationCyclesInput);
+                conduction.Children.Add(VascularReservoirInput);
+                ToolTip.SetTip(VascularReservoirInput, "ABP／PA 使用独立 RC 储压源：无射血时压力衰减，恢复后逐搏充盈。有限时宽恒流射血；未建模完整切迹或反射波。取消后使用固定基线形态模板。应用后从源时间零重新开始。");
             }
             panel.Children.Add(conduction);
-            if (physiology) { panel.Children.Add(new TextBlock { Text = "关闭室性机械事件可保留 ECG 电活动，同时停止 Pleth／ABP／PA 搏动分量及室性 CVP 分量。它不是探头故障或 ECG 脱落，也不自动改变压力基线。可在关闭时填写先完成周期数 1～100（需心房与心室事件），先生成这些周期再停止新机械事件，已有波尾继续；留空从零关闭。填写停止持续周期数 1～100 可在原时序上恢复，需先设置完成周期数；持续数留空则不恢复。可选每 N 个室性周期触发一次机械搏动，从第一个周期计数；恢复沿用原周期位置，不重新计数。" }); }
-            panel.Children.Add(new TextBlock { Text = "仅心房事件保留 P 波与房性机械分量；无心脏事件停止全部心脏源波段。呼吸独立继续，压力基线保持配置值。此处未模拟压力衰减或灌注状态；所示时限与频率是源配置。" });
+            if (physiology)
+            {
+                panel.Children.Add(new TextBlock { Text = "关闭室性机械事件可保留 ECG 电活动，同时停止新的 Pleth／ABP／PA 射血输入及室性 CVP 分量。可在关闭时填写先完成周期数 1～100（需心房与心室事件），先生成这些周期再停止新机械事件，已有波尾继续；留空从零关闭。填写停止持续周期数 1～100 可在原时序上恢复，需先设置完成周期数；持续数留空则不恢复。可选每 N 个室性周期触发一次机械搏动，从第一个周期计数；恢复沿用原周期位置，不重新计数。" });
+                panel.Children.Add(VascularPressureModeStatus);
+            }
+            panel.Children.Add(new TextBlock { Text = "仅心房事件保留 P 波与房性机械分量；无心脏事件停止全部心脏源事件。呼吸独立继续；所示时限与频率是源配置，未模拟灌注或测量有效性。" });
         }
         if (projected)
         {
@@ -425,6 +433,8 @@ internal sealed class WaveformDemoWindow : Window
             }
             if (VentricularMechanicalInput.IsChecked is not { } mechanicalEnabled)
             { throw new ArgumentException("Explicit ventricular mechanical selection required."); }
+            if (VascularReservoirInput.IsChecked is not { } vascularReservoir)
+            { throw new ArgumentException("Explicit vascular pressure model selection required."); }
             int? mechanicalAfter = null;
             if (!string.IsNullOrWhiteSpace(MechanicalAfterCyclesInput.Text))
             {
@@ -440,7 +450,7 @@ internal sealed class WaveformDemoWindow : Window
                 mechanicalDuration = durationCycles;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionInput.SelectedIndex + 1, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionInput.SelectedIndex + 1, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir));
         }
         catch (ArgumentException)
         {
@@ -467,6 +477,10 @@ internal sealed class WaveformDemoWindow : Window
             ConductionInput.SelectedIndex = breathConfiguration.VentricularConductionRatio - 1;
             CardiacActivityInput.SelectedIndex = (int)breathConfiguration.CardiacActivity;
             VentricularMechanicalInput.IsChecked = breathConfiguration.VentricularMechanicalEnabled;
+            VascularReservoirInput.IsChecked = breathConfiguration.UseVascularReservoir;
+            VascularPressureModeStatus.Text = breathConfiguration.UseVascularReservoir
+                ? "已应用血管储压模型：ABP／PA 在无射血时分别衰减至 10／5 mmHg，恢复后从残余压力逐搏充盈；RC 恒流射血示意，未建模完整切迹与反射波。参数为教学选择，CVP 仍使用原有分量模型。"
+                : "已应用固定基线形态模板：无新机械事件时 ABP／PA 波尾结束后保持 80／10 mmHg；启用血管储压模型可观察压力衰减与恢复。";
             MechanicalEveryCyclesInput.SelectedIndex = breathConfiguration.MechanicalEveryCycles - 1;
             MechanicalAfterCyclesInput.Text = breathConfiguration.MechanicalAfterCycles?.ToString(CultureInfo.InvariantCulture) ?? "";
             MechanicalDurationCyclesInput.Text = breathConfiguration.MechanicalDurationCycles?.ToString(CultureInfo.InvariantCulture) ?? "";
@@ -615,8 +629,8 @@ internal sealed class WaveformDemoWindow : Window
                             }
                             else if (resp && channel >= 3)
                             {
-                                // Terminal display conversion; raw counts are hundredths
-                                // above the wire baseline, not absolute pressure in mmHg.
+                                // Terminal display conversion uses each plane's affine
+                                // metadata for both template excursions and absolute RC pressure.
                                 double pressureMmHg = (double)plane.Samples[index] * plane.ScaleNumerator / plane.ScaleDenominator +
                                     (double)plane.OffsetNumerator / plane.OffsetDenominator;
                                 double minimum = channel == 6 ? -5 : 0;

@@ -13,6 +13,7 @@ internal static class MechanicalResumptionSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
+            window.VascularReservoirInput.IsChecked = false;
             Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);
             var oldTimer = window.ActiveTimer;
             window.VentricularMechanicalInput.IsChecked = false;

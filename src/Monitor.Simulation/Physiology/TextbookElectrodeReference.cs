@@ -9,11 +9,12 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null)
     {
         timing ??= TextbookEcgReference.Timing;
         timing.Validate();
         uWave?.Validate(timing);
+        int[]? tScales = tWave?.CaptureScales();
         IReadOnlyList<long>[] qrs = [TextbookElectrodeQrsTables.RA, TextbookElectrodeQrsTables.LA,
             TextbookElectrodeQrsTables.RL, TextbookElectrodeQrsTables.LL, TextbookElectrodeQrsTables.C1,
             TextbookElectrodeQrsTables.C2, TextbookElectrodeQrsTables.C3, TextbookElectrodeQrsTables.C4,
@@ -25,6 +26,17 @@ public static class TextbookElectrodeReference
                 TableQ32 = index == 1 ? qrs[(int)electrode] : Array.AsReadOnly(band.TableQ32.Select(value =>
                     checked((long)FixedPointMath.RoundDivideTiesToEven((Int128)value * (index == 0 ? TextbookElectrodeQrsTables.PWeightsQ32 : TextbookElectrodeQrsTables.TWeightsQ32)[(int)electrode], 1000 * (Int128)FixedPointMath.Q32One))).ToArray()),
             }).ToArray()))).ToArray());
+        if (tScales is not null)
+        {
+            electrodes = Array.AsReadOnly(electrodes.Select(item => item with
+            {
+                Bands = Array.AsReadOnly(item.Bands.Select((band, index) => index != 2 ? band : band with
+                {
+                    TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked((long)FixedPointMath.RoundDivideTiesToEven(
+                        (Int128)value * tScales[(int)item.Electrode], 1000))).ToArray()),
+                }).ToArray()),
+            }).ToArray());
+        }
         if (uWave is null) { return electrodes; }
         var extended = electrodes.Select(item => item with
         {

@@ -60,7 +60,7 @@ internal static class EcgLimbPlacementSmokeChecks
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
-        foreach (EcgLead lead in new[] { EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V5 })
+        foreach (EcgLead lead in new[] { EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V3, EcgLead.V5 })
         {
             var samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
             int peak = Enumerable.Range(firstSample, 20).MaxBy(i => Math.Abs((int)samples[i]));

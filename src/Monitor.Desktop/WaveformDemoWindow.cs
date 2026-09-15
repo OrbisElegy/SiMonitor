@@ -144,11 +144,11 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
             conduction.Children.Add(CardiacActivityInput);
             ToolTip.SetTip(CardiacActivityInput, "仅心室模式关闭房性电／机械事件；心室沿原周期与偏移运行。基础周期率不是测得的心房率；不代表已验证的逸搏或房颤预设。");
+            conduction.Children.Add(new TextBlock { Text = "独立心室周期（ms，可空）" });
+            conduction.Children.Add(IndependentVentricularPeriodInput);
+            ToolTip.SetTip(IndependentVentricularPeriodInput, "800～3200 ms，不短于基础心房周期，需选择比例 1:1；留空沿用比例传导。独立模式下 PR 字段只控制首次 QRS 偏移，后续 P 与 QRS 不保持固定间隔；QTc 使用心室 RR。不会自动生成炮击样 a 波或逸搏形态。");
             if (physiology)
             {
-                conduction.Children.Add(new TextBlock { Text = "独立心室周期（ms，可空）" });
-                conduction.Children.Add(IndependentVentricularPeriodInput);
-                ToolTip.SetTip(IndependentVentricularPeriodInput, "800～3200 ms，需选择比例 1:1；留空沿用比例传导。心房仍每 800 ms 触发，心室从原偏移按独立周期触发；不自动生成炮击样 a 波或逸搏形态。");
                 conduction.Children.Add(VentricularMechanicalInput);
                 conduction.Children.Add(new TextBlock { Text = "机械搏动一次／" });
                 conduction.Children.Add(MechanicalEveryCyclesInput);
@@ -174,11 +174,11 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(LimbPlacementInput);
             ToolTip.SetTip(LimbPlacementInput, "仅交换肢体电极连接；潜在心脏事件、采样时钟与胸前电极保持不变。应用后从零重新生成，不表示导联脱落。");
             settings.Children.Add(QtMethod);
-            settings.Children.Add(new TextBlock { Text = "源心房率（次/分）" });
+            settings.Children.Add(new TextBlock { Text = "基础周期率（次/分）" });
             settings.Children.Add(HeartRateInput);
             settings.Children.Add(new TextBlock { Text = "QTc（ms）" });
             settings.Children.Add(QtcInput);
-            foreach (var (label, input) in new[] { ("P 时限（ms）", PDurationInput), ("PR 间期（ms）", PrIntervalInput),
+            foreach (var (label, input) in new[] { ("P 时限（ms）", PDurationInput), ("PR／首次 QRS 偏移（ms）", PrIntervalInput),
                 ("QRS 时限（ms）", QrsDurationInput), ("T 时限（ms）", TDurationInput) })
             {
                 settings.Children.Add(new TextBlock { Text = label });
@@ -399,12 +399,19 @@ internal sealed class WaveformDemoWindow : Window
                 { throw new ArgumentException("Signed integer U amplitude required."); }
             }
             ProjectedEcgUConfiguration u = new(uDelay, uDuration, amplitudes[0], amplitudes[1], amplitudes[2], amplitudes[3], amplitudes[4], amplitudes[5]);
-            configuration = configuration with { UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            int? independentPeriod = null;
+            if (!string.IsNullOrWhiteSpace(IndependentVentricularPeriodInput.Text))
+            {
+                if (!int.TryParse(IndependentVentricularPeriodInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int parsedPeriod))
+                { throw new ArgumentException("Invalid independent ventricular period."); }
+                independentPeriod = parsedPeriod;
+            }
+            configuration = configuration with { IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；独立模式中 PR 为首次 QRS 偏移。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -538,6 +545,7 @@ internal sealed class WaveformDemoWindow : Window
             LimbPlacementInput.SelectedIndex = (int)configuration.Placement;
             QtMethod.SelectedIndex = configuration.MethodId switch { EcgQtCorrection.Bazett => 1, EcgQtCorrection.Fridericia => 2, _ => 0 };
             ConductionInput.SelectedIndex = configuration.VentricularConductionRatio - 1;
+            IndependentVentricularPeriodInput.Text = configuration.IndependentVentricularPeriodMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "";
             CardiacActivityInput.SelectedIndex = (int)configuration.CardiacActivity;
             HeartRateInput.Text = configuration.HeartRateBpm.ToString(CultureInfo.InvariantCulture);
             PDurationInput.Text = configuration.PDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
@@ -552,6 +560,7 @@ internal sealed class WaveformDemoWindow : Window
             { UAmplitudeInputs[index].Text = u.ChestAmplitudes[index].ToString(CultureInfo.InvariantCulture); }
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；基础周期率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms（PR 字段为首次 QRS 偏移，后续 P-QRS 间隔不固定）" : "") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
                 (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
                     $"；u 延迟/时限 {u.DelayMilliseconds}/{u.DurationMilliseconds} ms，V1–V6 幅度 {string.Join("/", u.ChestAmplitudes)} μV");

@@ -52,7 +52,7 @@ public sealed class EcgLeadProjection
 
 public sealed record ElectrodeWaveformPlan(EcgElectrode Electrode, IReadOnlyList<EventWaveformBand> Bands);
 public sealed record ElectrodeWaveformState(IReadOnlyList<ElectrodeWaveformPlan> Electrodes,
-    IReadOnlyList<PhysiologyCycleEvent> Events);
+    IReadOnlyList<PhysiologyCycleEvent> Events, EcgLimbPlacement Placement = EcgLimbPlacement.Standard);
 public sealed record ProjectedEcgSample(long SimTimeNs, EcgLeadProjection Leads);
 
 // Bounded immutable event window, with one shared event set and evaluation time
@@ -60,11 +60,15 @@ public sealed record ProjectedEcgSample(long SimTimeNs, EcgLeadProjection Leads)
 public sealed class ElectrodeWaveformComposition
 {
     private readonly EventWaveformComposition[] _sources;
+    private readonly EcgLimbPlacement _placement;
     private ElectrodeWaveformComposition(ElectrodeWaveformState state)
     {
         if (state is null || state.Electrodes is null || state.Electrodes.Count != 10 ||
             state.Events is null || state.Events.Count > EventWaveformComposition.MaximumEventCount)
         { throw new EventWaveformException("EcgProjection.InvalidElectrodes", "state"); }
+        if (!Enum.IsDefined(state.Placement))
+        { throw new EventWaveformException("EcgPlacement.InvalidWiring", "state"); }
+        _placement = state.Placement;
         PhysiologyCycleEvent[] events = state.Events.ToArray();
         _sources = new EventWaveformComposition[10];
         for (int index = 0; index < _sources.Length; index++)
@@ -80,15 +84,15 @@ public sealed class ElectrodeWaveformComposition
     public ElectrodeWaveformState CaptureState() => new(
         Array.AsReadOnly(_sources.Select((source, index) =>
             new ElectrodeWaveformPlan((EcgElectrode)index, source.CaptureState().Bands)).ToArray()),
-        _sources[0].CaptureState().Events);
+        _sources[0].CaptureState().Events, _placement);
 
     public ProjectedEcgSample EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default)
     {
         long[] values = new long[10];
         for (int index = 0; index < values.Length; index++)
         { values[index] = _sources[index].EvaluateAt(simTimeNs, cancellationToken); }
-        var projection = EcgLeadProjection.Project(new(values[0], values[1], values[2], values[3],
-            values[4], values[5], values[6], values[7], values[8], values[9]));
+        var projection = EcgLeadProjection.Project(EcgLimbWiring.Apply(new(values[0], values[1], values[2], values[3],
+            values[4], values[5], values[6], values[7], values[8], values[9]), _placement));
         cancellationToken.ThrowIfCancellationRequested();
         return new(simTimeNs, projection);
     }

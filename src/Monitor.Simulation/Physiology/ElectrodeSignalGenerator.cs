@@ -5,7 +5,7 @@ using Monitor.Simulation.Determinism;
 namespace Monitor.Simulation.Physiology;
 
 public sealed record ElectrodeSignalState(RegularPhysiologyState Timeline,
-    SignalSampleClockState Clock, IReadOnlyList<ElectrodeWaveformPlan> Electrodes);
+    SignalSampleClockState Clock, IReadOnlyList<ElectrodeWaveformPlan> Electrodes, EcgLimbPlacement Placement = EcgLimbPlacement.Standard);
 public sealed record ElectrodeSignalSample(SignalSampleTick Tick, EcgLeadProjection ExactLeads,
     IReadOnlyList<short> MicrovoltValues);
 public sealed class ElectrodeSignalException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -21,6 +21,7 @@ public sealed class ElectrodeSignalGenerator
     private SignalSampleClock _clock;
     private readonly IReadOnlyList<ElectrodeWaveformPlan> _electrodes;
     private readonly long _lookbackNs;
+    private readonly EcgLimbPlacement _placement;
 
     private ElectrodeSignalGenerator(ElectrodeSignalState state)
     {
@@ -30,16 +31,17 @@ public sealed class ElectrodeSignalGenerator
         if (_clock.ProfileId != "AcqECGMonitor250@1" || state.Timeline.CursorSimTimeNs != _clock.CursorSimTimeNs ||
             state.Timeline.Plan.EpochAnchorSimTimeNs != _clock.EpochAnchorSimTimeNs)
         { throw Invalid(); }
-        _electrodes = ElectrodeWaveformComposition.Restore(new(state.Electrodes, [])).CaptureState().Electrodes;
+        _electrodes = ElectrodeWaveformComposition.Restore(new(state.Electrodes, [], state.Placement)).CaptureState().Electrodes;
+        _placement = state.Placement;
         _lookbackNs = _electrodes.SelectMany(item => item.Bands).Max(band => checked(band.DelayNs + band.DurationNs));
     }
 
     public static ElectrodeSignalGenerator Start(RegularPhysiologyPlan plan, string profileId,
-        ulong streamEpoch, IReadOnlyList<ElectrodeWaveformPlan> electrodes)
+        ulong streamEpoch, IReadOnlyList<ElectrodeWaveformPlan> electrodes, EcgLimbPlacement placement = EcgLimbPlacement.Standard)
     {
         ArgumentNullException.ThrowIfNull(plan);
         return Restore(new(RegularPhysiologyTimeline.Start(plan).CaptureState(),
-            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), electrodes));
+            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), electrodes, placement));
     }
 
     public static ElectrodeSignalGenerator Restore(ElectrodeSignalState state)
@@ -49,7 +51,7 @@ public sealed class ElectrodeSignalGenerator
         catch (OverflowException) { throw Invalid(); }
     }
 
-    public ElectrodeSignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _electrodes);
+    public ElectrodeSignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _electrodes, _placement);
 
     public IReadOnlyList<ElectrodeSignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples,
         int maximumEvents, CancellationToken cancellationToken = default)
@@ -69,7 +71,7 @@ public sealed class ElectrodeSignalGenerator
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
         RegularPhysiologyTimeline trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
-        ElectrodeWaveformComposition composition = ElectrodeWaveformComposition.Restore(new(_electrodes, events));
+        ElectrodeWaveformComposition composition = ElectrodeWaveformComposition.Restore(new(_electrodes, events, _placement));
         SignalSampleClock trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
         ElectrodeSignalSample[] output = new ElectrodeSignalSample[ticks.Count];

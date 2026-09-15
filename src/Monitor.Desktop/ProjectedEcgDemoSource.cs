@@ -6,16 +6,16 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
     internal EcgCycleTiming ResolveTiming()
     {
-        if (VentricularConductionRatio is < 1 or > 4) { throw new ArgumentException("Invalid conduction ratio."); }
+        if (VentricularConductionRatio is < 1 or > 4 || !Enum.IsDefined(CardiacActivity)) { throw new ArgumentException("Invalid conduction ratio or cardiac activity."); }
         if (MethodId is null)
         {
-            if (this with { VentricularConductionRatio = 1, UWave = null } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
+            if (this with { VentricularConductionRatio = 1, UWave = null, CardiacActivity = CardiacActivity.AtrialAndVentricular } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
             return TextbookEcgReference.Timing with { RrIntervalNs = TextbookEcgReference.Timing.RrIntervalNs * VentricularConductionRatio };
         }
         if (HeartRateBpm is < 30 or > 200 || QtcMilliseconds is < 1 or > 1000 ||
@@ -47,7 +47,7 @@ internal static class ProjectedEcgDemoSource
         var electrodes = TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing);
         RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs / configuration.VentricularConductionRatio, timing.PrIntervalNs,
             80_000_000, timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000,
-            VentricularConductionRatio: configuration.VentricularConductionRatio);
+            VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity);
         return ElectrodeWaveformGroup.Start(Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), 1, 1, 1, 0, 16, plan, electrodes,
             Enum.GetValues<EcgLead>().Select(lead => new ElectrodeChannelPlan(lead, ChannelId(lead), 10, 0)).ToArray());

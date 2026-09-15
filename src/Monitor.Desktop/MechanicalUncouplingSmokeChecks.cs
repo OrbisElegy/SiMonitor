@@ -75,16 +75,16 @@ internal static class MechanicalUncouplingSmokeChecks
         Console.WriteLine("ok: mechanical uncoupling retains ECG/gas, removes pulses/artifact, preserves CVP a/respiration and native pixels/lifecycle");
     }
 
-    private static WaveformEnvelope[] Decode(PhysiologyDemoConfiguration config)
+    internal static WaveformEnvelope[] Decode(PhysiologyDemoConfiguration config)
     {
         var source = PhysiologyDemoSource.Create(config);
         return Enumerable.Range(1, 30).SelectMany(step => source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
     }
-    private static short[] Samples(WaveformEnvelope[] blocks, int row) => blocks.SelectMany(block =>
+    internal static short[] Samples(WaveformEnvelope[] blocks, int row) => blocks.SelectMany(block =>
         block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row)).Samples).ToArray();
 
-    private static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks)
+    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks)
     {
         window.Trace.Measure(new Size(1044, 840));
         window.Trace.Arrange(new Rect(0, 0, 1044, 840));

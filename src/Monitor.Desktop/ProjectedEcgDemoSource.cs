@@ -55,7 +55,7 @@ internal static class ProjectedEcgDemoSource
         configuration ??= ProjectedEcgDemoConfiguration.Default;
         var timing = configuration.ResolveTiming();
         long offset = DemoVentricularTiming.ResolveOffset(configuration.IndependentVentricularPeriodMilliseconds, configuration.IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve());
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve(), configuration.TWave?.ResolveShape());
         RegularPhysiologyPlan plan = new(0, configuration.ResolveAtrialPeriodNs(), offset,
             80_000_000, offset + 80_000_000, 3_750_000_000, 1_875_000_000,
             VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity,

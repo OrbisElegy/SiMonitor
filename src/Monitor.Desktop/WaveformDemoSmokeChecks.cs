@@ -19,6 +19,7 @@ internal static class WaveformDemoSmokeChecks
         RespiratoryActivitySmokeChecks.Verify();
         ConductionRatioSmokeChecks.Verify();
         ShortCycleEcgSmokeChecks.Verify();
+        UWaveSmokeChecks.Verify();
         VerifyPhysiology();
         VerifyProgressiveSweep();
         DemoSweepResizeSmokeChecks.VerifyWrapAndRetention();

@@ -29,6 +29,10 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
     internal TextBox QrsDurationInput { get; } = new() { Text = "80", Width = 65, IsEnabled = false };
     internal TextBox TDurationInput { get; } = new() { Text = "180", Width = 65, IsEnabled = false };
+    internal TextBox UDelayInput { get; } = new() { Text = "30", Width = 65 };
+    internal TextBox UDurationInput { get; } = new() { Text = "120", Width = 65 };
+    internal TextBox[] UAmplitudeInputs { get; } = Enumerable.Range(0, 6)
+        .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
@@ -144,10 +148,20 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(new TextBlock { Text = label });
                 settings.Children.Add(input);
             }
+            settings.Children.Add(new TextBlock { Text = "u 波：T 后延迟（ms）" });
+            settings.Children.Add(UDelayInput);
+            settings.Children.Add(new TextBlock { Text = "u 时限（ms）" });
+            settings.Children.Add(UDurationInput);
+            for (int index = 0; index < UAmplitudeInputs.Length; index++)
+            {
+                settings.Children.Add(new TextBlock { Text = $"V{index + 1} u（μV）" });
+                settings.Children.Add(UAmplitudeInputs[index]);
+            }
             settings.Children.Add(ApplyEcgButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
             panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心房率不是检测心率；QTc 使用传导后的室性 RR。固定示意模式保留原 QT。输入范围 30–200 次/分，QTc 与各时限 1–1000 ms；P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR。高心率可按需要缩短各波段，时限不再固定为参考值。" });
+            panel.Children.Add(new TextBlock { Text = "u 波幅度 −1000～1000 μV，全部为 0 时关闭；T 后延迟 0～1000 ms，时限 1～1000 ms。启用时须满足 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR；不计入 QT。此处仅添加胸前 u 波，肢体导联不变，不自动按心率调整幅度。" });
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
@@ -330,11 +344,22 @@ internal sealed class WaveformDemoWindow : Window
                 };
                 configuration = new(hr, qtc, method, ConductionInput.SelectedIndex + 1, p, pr, qrs, t);
             }
+            if (!int.TryParse(UDelayInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int uDelay) ||
+                !int.TryParse(UDurationInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int uDuration))
+            { throw new ArgumentException("Integer U timing required."); }
+            int[] amplitudes = new int[6];
+            for (int index = 0; index < amplitudes.Length; index++)
+            {
+                if (!int.TryParse(UAmplitudeInputs[index].Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out amplitudes[index]))
+                { throw new ArgumentException("Signed integer U amplitude required."); }
+            }
+            ProjectedEcgUConfiguration u = new(uDelay, uDuration, amplitudes[0], amplitudes[1], amplitudes[2], amplitudes[3], amplitudes[4], amplitudes[5]);
+            configuration = configuration with { UWave = u == ProjectedEcgUConfiguration.Default ? null : u };
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -438,9 +463,16 @@ internal sealed class WaveformDemoWindow : Window
             QrsDurationInput.Text = configuration.QrsDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
             TDurationInput.Text = configuration.TDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
             QtcInput.Text = configuration.QtcMilliseconds.ToString(CultureInfo.InvariantCulture);
+            var u = configuration.UWave ?? ProjectedEcgUConfiguration.Default;
+            UDelayInput.Text = u.DelayMilliseconds.ToString(CultureInfo.InvariantCulture);
+            UDurationInput.Text = u.DurationMilliseconds.ToString(CultureInfo.InvariantCulture);
+            for (int index = 0; index < UAmplitudeInputs.Length; index++)
+            { UAmplitudeInputs[index].Text = u.ChestAmplitudes[index].ToString(CultureInfo.InvariantCulture); }
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
                 $"已应用：源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
-                (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms");
+                (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
+                (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
+                    $"；u 延迟/时限 {u.DelayMilliseconds}/{u.DurationMilliseconds} ms，V1–V6 幅度 {string.Join("/", u.ChestAmplitudes)} μV");
             EcgConfigurationStatus.Text = "";
         }
         UsesPulse = pulse;

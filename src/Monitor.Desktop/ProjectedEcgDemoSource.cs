@@ -5,7 +5,8 @@ namespace Monitor.Desktop;
 
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
-    int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180)
+    int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
+    ProjectedEcgUConfiguration? UWave = null)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -14,7 +15,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         if (VentricularConductionRatio is < 1 or > 4) { throw new ArgumentException("Invalid conduction ratio."); }
         if (MethodId is null)
         {
-            if (this with { VentricularConductionRatio = 1 } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
+            if (this with { VentricularConductionRatio = 1, UWave = null } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
             return TextbookEcgReference.Timing with { RrIntervalNs = TextbookEcgReference.Timing.RrIntervalNs * VentricularConductionRatio };
         }
         if (HeartRateBpm is < 30 or > 200 || QtcMilliseconds is < 1 or > 1000 ||
@@ -43,7 +44,7 @@ internal static class ProjectedEcgDemoSource
     {
         configuration ??= ProjectedEcgDemoConfiguration.Default;
         var timing = configuration.ResolveTiming();
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(timing: timing);
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing);
         RegularPhysiologyPlan plan = new(0, timing.RrIntervalNs / configuration.VentricularConductionRatio, timing.PrIntervalNs,
             80_000_000, timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000,
             VentricularConductionRatio: configuration.VentricularConductionRatio);

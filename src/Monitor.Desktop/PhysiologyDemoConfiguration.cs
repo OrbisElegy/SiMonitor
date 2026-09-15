@@ -28,7 +28,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal RegularPhysiologyPlan ResolvePlan()
     {
         // Demo input/display bounds, not physiological normal ranges.
-        if (MechanicalEveryCycles is < 1 or > 4 || (MechanicalAfterCycles is { } cycles && (cycles is < 1 or > 100 || VentricularMechanicalEnabled || CardiacActivity != CardiacActivity.AtrialAndVentricular)) ||
+        if (MechanicalEveryCycles is < 1 or > 4 || (MechanicalAfterCycles is { } cycles && (cycles is < 1 or > 100 || VentricularMechanicalEnabled || CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly))) ||
             (MechanicalDurationCycles is { } mechanicalDuration && (mechanicalDuration is < 1 or > 100 || MechanicalAfterCycles is null)) ||
             !Enum.IsDefined(CardiacActivity) || VentricularConductionRatio is < 1 or > 4 || BreathPeriodMilliseconds is < 1000 or > 10000 || InspirationMilliseconds <= 0 ||
             InspirationMilliseconds >= BreathPeriodMilliseconds || RespAmplitudeCounts is < -1000 or > 1000 ||

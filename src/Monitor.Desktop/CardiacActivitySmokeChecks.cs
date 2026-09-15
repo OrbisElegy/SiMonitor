@@ -22,7 +22,7 @@ internal static class CardiacActivitySmokeChecks
             try
             {
                 window.VascularReservoirInput.IsChecked = false;
-                foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent, CardiacActivity.AtrialAndVentricular })
+                foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent, CardiacActivity.VentricularOnly, CardiacActivity.AtrialAndVentricular })
                 {
                     Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);
                     var oldTimer = window.ActiveTimer;
@@ -51,11 +51,13 @@ internal static class CardiacActivitySmokeChecks
                         .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                     Guid id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
                     short[] ecg = Samples(blocks, id);
-                    if ((activity == CardiacActivity.Absent ? ecg.Any(value => value != 0) : !ecg.Take(25).Any(value => value > 0)) ||
-                        (activity == CardiacActivity.AtrialAndVentricular ? !ecg.Skip(40).Take(20).Any(value => value > 500) :
+                    bool atrial = activity is CardiacActivity.AtrialAndVentricular or CardiacActivity.AtrialOnly;
+                    bool ventricular = activity is CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly;
+                    if ((atrial ? !ecg.Take(25).Any(value => value > 0) : ecg.Take(25).Any(value => value != 0)) ||
+                        (ventricular ? !ecg.Skip(40).Take(20).Any(value => value > 500) :
                             ecg.Where((_, index) => index % 200 >= 25).Any(value => value != 0)))
                     { throw new InvalidOperationException("Native P and QRS do not follow cardiac activity."); }
-                    if (projected && activity != CardiacActivity.AtrialAndVentricular &&
+                    if (projected && !ventricular &&
                         Samples(blocks, ProjectedEcgDemoSource.ChannelId(EcgLead.V3)).Skip(138).Take(30).Any(value => value != 0))
                     { throw new InvalidOperationException("Optional U persisted without a ventricular event."); }
                     if (!projected)
@@ -63,7 +65,7 @@ internal static class CardiacActivitySmokeChecks
                         foreach (int row in new[] { 2, 3, 5 })
                         {
                             var pulse = Samples(blocks, PhysiologyDemoSource.ChannelId(row));
-                            if (activity == CardiacActivity.AtrialAndVentricular ? !pulse.Any(value => value != 0) : pulse.Any(value => value != 0))
+                            if (ventricular ? !pulse.Any(value => value != 0) : pulse.Any(value => value != 0))
                             { throw new InvalidOperationException("Mechanical pulse excursions did not follow ventricular event availability."); }
                         }
                         if (!Samples(blocks, PhysiologyDemoSource.ChannelId(1)).Any(value => value != 0) ||
@@ -88,7 +90,7 @@ internal static class CardiacActivitySmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: native cardiac activity controls distinguish P-only and absent sources, pulses/U, independent breathing and lifecycle");
+        Console.WriteLine("ok: native cardiac activity controls distinguish atrial-only, ventricular-only and absent sources, pulses/U, independent breathing and lifecycle");
     }
 
     private static short[] Samples(WaveformEnvelope[] blocks, Guid id) => blocks.SelectMany(block =>

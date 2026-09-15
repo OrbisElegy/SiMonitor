@@ -15,7 +15,7 @@ public enum PhysiologyCycleEventKind
 public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 
 // Source event availability; no inference of perfusion or detected arrest.
-public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent }
+public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -60,7 +60,7 @@ public sealed class RegularPhysiologyTimeline
             plan.ExpiratoryPauseNs < 0 || plan.ExpiratoryPauseNs >= plan.BreathPeriodNs - plan.InspirationDurationNs ||
             !Enum.IsDefined(plan.RespiratoryActivity) || !Enum.IsDefined(plan.CardiacActivity) ||
             (plan.MechanicalAfterCycles is { } cycles && (cycles == 0 || plan.VentricularMechanicalEnabled ||
-                plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                plan.CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly) ||
                 (Int128)cycles * ((Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio) > long.MaxValue - plan.EpochAnchorSimTimeNs)) ||
             (plan.MechanicalDurationCycles is { } mechanicalDuration && (mechanicalDuration == 0 || plan.MechanicalAfterCycles is null ||
                 (Int128)plan.MechanicalAfterCycles.Value + mechanicalDuration >
@@ -92,12 +92,12 @@ public sealed class RegularPhysiologyTimeline
         if (maximumEvents is <= 0 or > MaximumEventCount)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidLimit", nameof(maximumEvents)); }
         List<PhysiologyCycleEvent> events = [];
-        if (_plan.CardiacActivity != CardiacActivity.Absent)
+        if (_plan.CardiacActivity is CardiacActivity.AtrialAndVentricular or CardiacActivity.AtrialOnly)
         {
             Add(PhysiologyCycleEventKind.AtrialElectrical, _plan.HeartPeriodNs, 0);
             Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs);
         }
-        if (_plan.CardiacActivity == CardiacActivity.AtrialAndVentricular)
+        if (_plan.CardiacActivity is CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly)
         {
             long ventricularPeriod = _plan.HeartPeriodNs * _plan.VentricularConductionRatio;
             Add(PhysiologyCycleEventKind.VentricularElectrical, ventricularPeriod, _plan.VentricularElectricalOffsetNs);
@@ -132,7 +132,7 @@ public sealed class RegularPhysiologyTimeline
         long inclusiveSimTimeNs, Int128 exclusiveSimTimeNs, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        if (plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+        if (plan.CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly) ||
             !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null) { return; }
         ulong? resume = plan.MechanicalAfterCycles is { } first && plan.MechanicalDurationCycles is { } duration ? first + duration : null;
         VisitCycles(plan, PhysiologyCycleEventKind.VentricularMechanical,

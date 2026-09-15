@@ -27,6 +27,7 @@ internal static class VascularPressureSpecifications
 
     public static Specification[] All =>
     [
+        new(nameof(VentricularOnlyRetainsIndexedPressureWithRecovery), VentricularOnlyRetainsIndexedPressureWithRecovery),
         new(nameof(VascularRunoffRetainsPressureWithoutMechanicalEvents), VascularRunoffRetainsPressureWithoutMechanicalEvents),
         new(nameof(VascularResumptionAddsToRemainingPressure), VascularResumptionAddsToRemainingPressure),
         new(nameof(VascularFixedPointTrajectoryMatchesRectangularRcReference), VascularFixedPointTrajectoryMatchesRectangularRcReference),
@@ -38,6 +39,20 @@ internal static class VascularPressureSpecifications
         new(nameof(VascularBoundsAndLegacyDefaultsRejectAmbiguousModels), VascularBoundsAndLegacyDefaultsRejectAmbiguousModels),
         new(nameof(VascularCancellationAndLatePublicationFailureAreAtomic), VascularCancellationAndLatePublicationFailureAreAtomic),
     ];
+
+    private static void VentricularOnlyRetainsIndexedPressureWithRecovery()
+    {
+        foreach (var plan in new[] { Physiology, Interrupted, Interrupted with { MechanicalEveryCycles = 2, VentricularConductionRatio = 3 } })
+        {
+            var expected = VascularPressureSource.Create(plan, Arterial);
+            var actual = VascularPressureSource.Create(plan with { CardiacActivity = CardiacActivity.VentricularOnly }, Arterial);
+            for (long time = 0; time <= 20_000_000_000; time += 8_000_000)
+            {
+                Check.That(actual.EvaluateAt(time) == expected.EvaluateAt(time),
+                    "indexed RC reconstruction uses ventricular-only triggers including recovery and stride");
+            }
+        }
+    }
 
     private static void VascularRunoffRetainsPressureWithoutMechanicalEvents()
     {

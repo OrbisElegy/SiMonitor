@@ -15,11 +15,76 @@ internal static class CardiacActivitySpecifications
         80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000, CardiacActivity: activity);
     public static Specification[] All =>
     [
+        new(nameof(VentricularOnlyRemovesPAndAWithoutChangingOtherSources), VentricularOnlyRemovesPAndAWithoutChangingOtherSources),
+        new(nameof(VentricularOnlySchedulesKeepIndicesAndAtomicFailure), VentricularOnlySchedulesKeepIndicesAndAtomicFailure),
         new(nameof(CardiacActivityFiltersOnlySelectedEvents), CardiacActivityFiltersOnlySelectedEvents),
         new(nameof(AtrialOnlyRetainsPAndCvpAWithoutVentricularPulse), AtrialOnlyRetainsPAndCvpAWithoutVentricularPulse),
         new(nameof(CardiacActivityNativeSamplesRecoverIdentically), CardiacActivityNativeSamplesRecoverIdentically),
         new(nameof(CardiacActivityDefaultsValidationAndAtomicFailure), CardiacActivityDefaultsValidationAndAtomicFailure),
     ];
+
+    private static void VentricularOnlyRemovesPAndAWithoutChangingOtherSources()
+    {
+        var normal = Group(CardiacActivity.AtrialAndVentricular, 160).AdvanceTo(8_000_000_000, 2000, 40, 100);
+        var ventricular = Group(CardiacActivity.VentricularOnly, 160).AdvanceTo(8_000_000_000, 2000, 40, 100);
+        var atrial = Group(CardiacActivity.AtrialOnly).AdvanceTo(8_000_000_000, 2000, 40, 100);
+        foreach (var id in new[] { Ecg, Cvp })
+        {
+            short[] all = Samples(normal, id);
+            short[] a = Samples(atrial, id);
+            short[] v = Samples(ventricular, id);
+            Check.That(a.Any(value => value != 0) && v.Any(value => value != 0) &&
+                all.Select((value, index) => value - a[index]).SequenceEqual(v.Select(value => (int)value)),
+                "only P or CVP a is removed; ventricular components retain original amplitude and timing");
+        }
+        foreach (var id in new[] { Pleth, Resp })
+        {
+            Check.That(Samples(normal, id).SequenceEqual(Samples(ventricular, id)),
+                "mechanical pulse, breathing and cardiac artifact retain exact native samples");
+        }
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(new(30_000_000, 120_000_000, [0, 0, 0, 0, 10, 40, 60, 20, 20, 20]));
+        var reference = ElectrodeSignalGenerator.Start(Plan(CardiacActivity.AtrialAndVentricular), "AcqECGMonitor250@1", 1, electrodes)
+            .GenerateBefore(1_600_000_000, 400, 100);
+        var projected = ElectrodeSignalGenerator.Start(Plan(CardiacActivity.VentricularOnly), "AcqECGMonitor250@1", 1, electrodes)
+            .GenerateBefore(1_600_000_000, 400, 100);
+        for (int index = 0; index < reference.Count; index++)
+        {
+            Check.That(projected[index].Tick == reference[index].Tick && (index % 200 < 25
+                ? projected[index].MicrovoltValues.All(value => value == 0)
+                : projected[index].MicrovoltValues.SequenceEqual(reference[index].MicrovoltValues)),
+                "all twelve leads lose only P while QRS/T/U and sample clocks remain exact");
+        }
+    }
+
+    private static void VentricularOnlySchedulesKeepIndicesAndAtomicFailure()
+    {
+        var plan = Plan(CardiacActivity.AtrialAndVentricular) with
+        {
+            VentricularConductionRatio = 3,
+            VentricularMechanicalEnabled = false,
+            MechanicalAfterCycles = 2,
+            MechanicalDurationCycles = 3,
+            MechanicalEveryCycles = 2,
+        };
+        var expected = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(20_000_000_000, 200)
+            .Where(e => e.Kind is not (PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical)).ToArray();
+        var timeline = RegularPhysiologyTimeline.Start(plan with { CardiacActivity = CardiacActivity.VentricularOnly });
+        string before = JsonSerializer.Serialize(timeline.CaptureState());
+        bool rejected = false;
+        try { timeline.AdvanceBefore(20_000_000_000, 1); }
+        catch (PhysiologyTimelineException) { rejected = true; }
+        Check.That(rejected && JsonSerializer.Serialize(timeline.CaptureState()) == before, "event budget failure does not advance ventricular-only source");
+        List<PhysiologyCycleEvent> actual = [];
+        for (int step = 1; step <= 100; step++)
+        {
+            actual.AddRange(timeline.AdvanceBefore(step * 200_000_000L, 20));
+            timeline = RegularPhysiologyTimeline.Restore(timeline.CaptureState());
+        }
+        Check.That(actual.SequenceEqual(expected) && actual.Any(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical),
+            "suppression, recovery and stride retain original ventricular indices through restore");
+        Check.That((int)CardiacActivity.Absent == 2 && (int)CardiacActivity.VentricularOnly == 3,
+            "appended activity preserves existing serialized enum values");
+    }
 
     private static void CardiacActivityFiltersOnlySelectedEvents()
     {
@@ -32,7 +97,8 @@ internal static class CardiacActivitySpecifications
                 var events = RegularPhysiologyTimeline.Start(plan with { CardiacActivity = activity }).AdvanceBefore(8_000_000_000, 100);
                 var expected = normal.Where(e => e.Kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart ||
                     activity == CardiacActivity.AtrialAndVentricular || activity == CardiacActivity.AtrialOnly &&
-                    e.Kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical);
+                    e.Kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical ||
+                    activity == CardiacActivity.VentricularOnly && e.Kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical);
                 Check.That(events.SequenceEqual(expected), "source activity filters events without shifting remaining timestamps or cycle indices");
             }
         }
@@ -61,13 +127,13 @@ internal static class CardiacActivitySpecifications
         foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent })
         {
             var blocks = Group(activity, 160).AdvanceTo(8_000_000_000, 2000, 40, 100);
-            var ecg = Samples(blocks, Ecg);
+            short[] ecg = Samples(blocks, Ecg);
             Check.That(ecg.Where((_, index) => index % 200 >= 25).All(value => value == 0) &&
                 (activity == CardiacActivity.AtrialOnly ? ecg.Any(value => value > 0) : ecg.All(value => value == 0)),
                 "atrial-only retains P while absent removes it; neither invents ventricular waves");
             Check.That(Samples(blocks, Pleth).All(value => value == 0), "no ventricular mechanical event produces no Pleth excursion");
             Check.That(Samples(blocks, Resp).SequenceEqual(Samples(normal, Resp)), "breathing remains and ventricular cardiac artifact stops");
-            var cvp = Samples(blocks, Cvp);
+            short[] cvp = Samples(blocks, Cvp);
             Check.That(cvp.Where((_, index) => index % 100 < 10 || index % 100 >= 25).All(value => value == 0) &&
                 (activity == CardiacActivity.AtrialOnly ? cvp.Any(value => value > 0) : cvp.All(value => value == 0)),
                 "CVP retains only the atrial a component or no cardiac component, with baseline held separately");
@@ -76,7 +142,7 @@ internal static class CardiacActivitySpecifications
 
     private static void CardiacActivityNativeSamplesRecoverIdentically()
     {
-        foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent })
+        foreach (CardiacActivity activity in new[] { CardiacActivity.AtrialOnly, CardiacActivity.Absent, CardiacActivity.VentricularOnly })
         {
             var expected = Group(activity).AdvanceTo(8_000_000_000, 2000, 40, 100);
             var group = Group(activity);

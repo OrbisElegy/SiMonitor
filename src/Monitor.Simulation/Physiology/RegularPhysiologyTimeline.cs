@@ -27,7 +27,8 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
     long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0,
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
-    int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular);
+    int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
+    bool VentricularMechanicalEnabled = true);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -92,7 +93,8 @@ public sealed class RegularPhysiologyTimeline
         {
             long ventricularPeriod = _plan.HeartPeriodNs * _plan.VentricularConductionRatio;
             Add(PhysiologyCycleEventKind.VentricularElectrical, ventricularPeriod, _plan.VentricularElectricalOffsetNs);
-            Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs);
+            if (_plan.VentricularMechanicalEnabled)
+            { Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs); }
         }
         if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
         {

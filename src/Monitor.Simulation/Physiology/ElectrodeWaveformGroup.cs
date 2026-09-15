@@ -64,7 +64,7 @@ public sealed class ElectrodeWaveformGroup
                 long lookback = source.Electrodes.SelectMany(electrode => electrode.Bands).Max(band => checked(band.DelayNs + band.DurationNs));
                 long start = Math.Max(source.Clock.EpochAnchorSimTimeNs, pending.Min(sample => sample.SourceSimTimeNs) - lookback);
                 var timeline = RegularPhysiologyTimeline.Restore(source.Timeline with { CursorSimTimeNs = start });
-                composition = ElectrodeWaveformComposition.Restore(new(source.Electrodes, timeline.AdvanceBefore(checked(pending.Max(sample => sample.SourceSimTimeNs) + 1), EventWaveformComposition.MaximumEventCount)));
+                composition = ElectrodeWaveformComposition.Restore(new(source.Electrodes, timeline.AdvanceBefore(checked(pending.Max(sample => sample.SourceSimTimeNs) + 1), EventWaveformComposition.MaximumEventCount), source.Placement));
             }
             foreach (DelayedSignalSample sample in pending)
             {
@@ -83,12 +83,12 @@ public sealed class ElectrodeWaveformGroup
     public static ElectrodeWaveformGroup Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch,
         ulong streamEpoch, ulong configurationRevision, ulong firstBlockSequence, int maximumBufferedBlocks,
         RegularPhysiologyPlan physiology, IReadOnlyList<ElectrodeWaveformPlan> electrodes,
-        IReadOnlyList<ElectrodeChannelPlan> channels)
+        IReadOnlyList<ElectrodeChannelPlan> channels, EcgLimbPlacement placement = EcgLimbPlacement.Standard)
     {
         if (channels is null || channels.Count != 12 || channels.Any(channel => channel is null))
         { throw new ElectrodeWaveformGroupException("ElectrodeGroup.InvalidChannels", nameof(channels)); }
         var plans = channels.OrderBy(plan => plan.ChannelId.ToString("N"), StringComparer.Ordinal).ToArray();
-        var source = ElectrodeSignalGenerator.Start(physiology, "AcqECGMonitor250@1", streamEpoch, electrodes);
+        var source = ElectrodeSignalGenerator.Start(physiology, "AcqECGMonitor250@1", streamEpoch, electrodes, placement);
         var sources = plans.Select(plan => new ElectrodeChannelState(plan.Lead, plan.ChannelId,
             SignalAcquisitionDelayLine.Start("AcqECGMonitor250@1", streamEpoch,
                 physiology.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags)).ToArray();

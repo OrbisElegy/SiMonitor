@@ -22,6 +22,7 @@ internal sealed class WaveformDemoWindow : Window
     private readonly bool _projected;
     private ElectrodeWaveformGroup? _electrodeSource;
     internal ProjectedEcgDemoConfiguration EcgConfiguration { get; private set; } = ProjectedEcgDemoConfiguration.Default;
+    internal ComboBox LimbPlacementInput { get; } = new() { ItemsSource = new[] { "标准接线", "RA ↔ LA（右臂／左臂）", "RA ↔ LL（右臂／左腿）", "LA ↔ LL（左臂／左腿）" }, SelectedIndex = 0 };
     internal ComboBox QtMethod { get; } = new() { ItemsSource = new[] { "原始示意时序", "Bazett", "Fridericia" }, SelectedIndex = 0 };
     internal ComboBox MechanicalEveryCyclesInput { get; } = new() { ItemsSource = new[] { "每个室性周期", "每 2 个室性周期", "每 3 个室性周期", "每 4 个室性周期" }, SelectedIndex = 0 };
     internal TextBox MechanicalDurationCyclesInput { get; } = new() { Text = "", Width = 65 };
@@ -164,6 +165,9 @@ internal sealed class WaveformDemoWindow : Window
         if (projected)
         {
             WrapPanel settings = new();
+            settings.Children.Add(new TextBlock { Text = "肢体电极接线" });
+            settings.Children.Add(LimbPlacementInput);
+            ToolTip.SetTip(LimbPlacementInput, "仅交换肢体电极连接；潜在心脏事件、采样时钟与胸前电极保持不变。应用后从零重新生成，不表示导联脱落。");
             settings.Children.Add(QtMethod);
             settings.Children.Add(new TextBlock { Text = "源心房率（次/分）" });
             settings.Children.Add(HeartRateInput);
@@ -390,7 +394,7 @@ internal sealed class WaveformDemoWindow : Window
                 { throw new ArgumentException("Signed integer U amplitude required."); }
             }
             ProjectedEcgUConfiguration u = new(uDelay, uDuration, amplitudes[0], amplitudes[1], amplitudes[2], amplitudes[3], amplitudes[4], amplitudes[5]);
-            configuration = configuration with { UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex };
+            configuration = configuration with { UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
@@ -518,6 +522,7 @@ internal sealed class WaveformDemoWindow : Window
         if (_projected)
         {
             var timing = configuration.ResolveTiming();
+            LimbPlacementInput.SelectedIndex = (int)configuration.Placement;
             QtMethod.SelectedIndex = configuration.MethodId switch { EcgQtCorrection.Bazett => 1, EcgQtCorrection.Fridericia => 2, _ => 0 };
             ConductionInput.SelectedIndex = configuration.VentricularConductionRatio - 1;
             CardiacActivityInput.SelectedIndex = (int)configuration.CardiacActivity;
@@ -533,7 +538,7 @@ internal sealed class WaveformDemoWindow : Window
             for (int index = 0; index < UAmplitudeInputs.Length; index++)
             { UAmplitudeInputs[index].Text = u.ChestAmplitudes[index].ToString(CultureInfo.InvariantCulture); }
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：{CardiacActivityInput.SelectedItem}；源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
                 (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
                     $"；u 延迟/时限 {u.DelayMilliseconds}/{u.DurationMilliseconds} ms，V1–V6 幅度 {string.Join("/", u.ChestAmplitudes)} μV");

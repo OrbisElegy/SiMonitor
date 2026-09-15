@@ -69,7 +69,7 @@ internal static class VascularPressureSmokeChecks
                 { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null, MechanicalDurationCycles = null });
                 foreach (int row in new[] { 3, 5 })
                 {
-                    var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
+                    short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
                     int initial = row == 3 ? 8000 : 1000, asymptote = row == 3 ? 1000 : 500;
                     if (samples[0] != initial || samples.Any(value => value < asymptote) ||
                         blocks.Select(block => block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row)))
@@ -85,7 +85,7 @@ internal static class VascularPressureSmokeChecks
                     else
                     {
                         int firstEnd = row == 3 ? 140 : 135, resume = row == 3 ? 340 : 335, resumedEnd = row == 3 ? 370 : 360;
-                        var reference = MechanicalUncouplingSmokeChecks.Samples(normal, row);
+                        short[] reference = MechanicalUncouplingSmokeChecks.Samples(normal, row);
                         if (!samples.Take(firstEnd + 1).SequenceEqual(reference.Take(firstEnd + 1)) ||
                             Enumerable.Range(firstEnd + 1, resume - firstEnd).Any(index => samples[index] > samples[index - 1]) ||
                             samples[resume] >= samples[firstEnd] || samples[resume + 5] <= samples[resume] ||
@@ -140,8 +140,8 @@ internal static class VascularPressureSmokeChecks
     {
         foreach (int row in new[] { 3, 5 })
         {
-            var samples = MechanicalUncouplingSmokeChecks.Samples(actual, row);
-            var reference = MechanicalUncouplingSmokeChecks.Samples(legacy, row);
+            short[] samples = MechanicalUncouplingSmokeChecks.Samples(actual, row);
+            short[] reference = MechanicalUncouplingSmokeChecks.Samples(legacy, row);
             int arrival = row == 3 ? 40 : 35, peak = row == 3 ? 53 : 50;
             int shoulder = row == 3 ? 75 : 66, notch = row == 3 ? 76 : 68, rebound = row == 3 ? 78 : 73;
             int ejectionEnd = row == 3 ? 70 : 60;
@@ -177,7 +177,7 @@ internal static class VascularPressureSmokeChecks
         }
     }
 
-    private static void VerifyPressurePixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int[] sampleIndices, string? artifactName = null)
+    internal static void VerifyPressurePixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int[] sampleIndices, string? artifactName = null)
     {
         window.Trace.Measure(new Size(1044, 840));
         window.Trace.Arrange(new Rect(0, 0, 1044, 840));
@@ -194,7 +194,7 @@ internal static class VascularPressureSmokeChecks
         foreach (int row in new[] { 3, 5 })
         {
             var plane = blocks[0].Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(row));
-            var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
+            short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
             foreach (int index in sampleIndices)
             {
                 double pressure = samples[index] * (double)plane.ScaleNumerator / plane.ScaleDenominator +

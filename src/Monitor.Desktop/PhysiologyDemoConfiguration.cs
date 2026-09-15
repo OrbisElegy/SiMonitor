@@ -8,7 +8,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125,
     int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0,
     int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0,
-    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false)
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
@@ -28,7 +28,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal RegularPhysiologyPlan ResolvePlan()
     {
         // Demo input/display bounds, not physiological normal ranges.
-        if (MechanicalEveryCycles is < 1 or > 4 || (MechanicalAfterCycles is { } cycles && (cycles is < 1 or > 100 || VentricularMechanicalEnabled || CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly))) ||
+        if ((IndependentVentricularPeriodMilliseconds is { } independent && (independent is < 800 or > 3200 || VentricularConductionRatio != 1)) ||
+            MechanicalEveryCycles is < 1 or > 4 || (MechanicalAfterCycles is { } cycles && (cycles is < 1 or > 100 || VentricularMechanicalEnabled || CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly))) ||
             (MechanicalDurationCycles is { } mechanicalDuration && (mechanicalDuration is < 1 or > 100 || MechanicalAfterCycles is null)) ||
             !Enum.IsDefined(CardiacActivity) || VentricularConductionRatio is < 1 or > 4 || BreathPeriodMilliseconds is < 1000 or > 10000 || InspirationMilliseconds <= 0 ||
             InspirationMilliseconds >= BreathPeriodMilliseconds || RespAmplitudeCounts is < -1000 or > 1000 ||
@@ -42,6 +43,6 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         return new(0, timing.RrIntervalNs, timing.PrIntervalNs, 80_000_000,
             timing.PrIntervalNs + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
-            ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles);
+            ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null);
     }
 }

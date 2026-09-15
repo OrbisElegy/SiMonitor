@@ -27,7 +27,7 @@ public sealed class VascularPressureSource
         if (physiology is null || plan is null) { throw Invalid(); }
         try { _ = RegularPhysiologyTimeline.Start(physiology); }
         catch (ArgumentException) { throw Invalid(); }
-        Int128 ventricularPeriod = (Int128)physiology.HeartPeriodNs * physiology.VentricularConductionRatio;
+        Int128 ventricularPeriod = physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
         Int128 selectedPeriod = ventricularPeriod * physiology.MechanicalEveryCycles;
         if (plan.ModelId != VascularPressurePlan.EvidenceId ||

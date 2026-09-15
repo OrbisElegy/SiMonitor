@@ -21,7 +21,9 @@ public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, Ventricu
 // after that many complete source cycles. Null applies the target from epoch.
 // Optional duration restores normal activity on the original cycle grid.
 // HeartPeriodNs is the atrial period; ventricular events use its conduction
-// multiple while preserving their explicit electrical/mechanical offsets.
+// multiple or an explicit independent period, preserving epoch offsets.
+// Independent periods are at least the atrial period to retain existing band
+// support bounds; require ratio1 to avoid two conflicting ventricular clocks.
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs,
     long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs,
     long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs,
@@ -29,7 +31,10 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
     int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
     bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null,
-    int MechanicalEveryCycles = 1);
+    int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null)
+{
+    internal Int128 VentricularPeriodNs => IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * VentricularConductionRatio;
+}
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -50,7 +55,9 @@ public sealed class RegularPhysiologyTimeline
         if (state is null || state.Plan is not { } plan || plan.EpochAnchorSimTimeNs < 0 ||
             plan.HeartPeriodNs <= 0 || plan.BreathPeriodNs <= 0 ||
             plan.MechanicalEveryCycles < 1 ||
-            plan.VentricularConductionRatio < 1 || (Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio > long.MaxValue ||
+            plan.VentricularConductionRatio < 1 || plan.VentricularPeriodNs > long.MaxValue ||
+            (plan.IndependentVentricularPeriodNs is { } independent &&
+                (independent < plan.HeartPeriodNs || plan.VentricularConductionRatio != 1)) ||
             plan.VentricularElectricalOffsetNs <= 0 || plan.VentricularElectricalOffsetNs >= plan.HeartPeriodNs ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||
             plan.VentricularMechanicalOffsetNs < plan.VentricularElectricalOffsetNs ||
@@ -61,10 +68,10 @@ public sealed class RegularPhysiologyTimeline
             !Enum.IsDefined(plan.RespiratoryActivity) || !Enum.IsDefined(plan.CardiacActivity) ||
             (plan.MechanicalAfterCycles is { } cycles && (cycles == 0 || plan.VentricularMechanicalEnabled ||
                 plan.CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly) ||
-                (Int128)cycles * ((Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio) > long.MaxValue - plan.EpochAnchorSimTimeNs)) ||
+                (Int128)cycles * plan.VentricularPeriodNs > long.MaxValue - plan.EpochAnchorSimTimeNs)) ||
             (plan.MechanicalDurationCycles is { } mechanicalDuration && (mechanicalDuration == 0 || plan.MechanicalAfterCycles is null ||
                 (Int128)plan.MechanicalAfterCycles.Value + mechanicalDuration >
-                    ((Int128)long.MaxValue - plan.EpochAnchorSimTimeNs) / ((Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio))) ||
+                    ((Int128)long.MaxValue - plan.EpochAnchorSimTimeNs) / plan.VentricularPeriodNs)) ||
             (plan.ActivityAfterBreaths is { } breaths && (breaths == 0 || plan.RespiratoryActivity == RespiratoryActivity.Breathing ||
                 (Int128)plan.EpochAnchorSimTimeNs + (Int128)breaths * plan.BreathPeriodNs > long.MaxValue)) ||
             (plan.ActivityDurationBreaths is { } duration && (duration == 0 || plan.ActivityAfterBreaths is null ||
@@ -99,7 +106,7 @@ public sealed class RegularPhysiologyTimeline
         }
         if (_plan.CardiacActivity is CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly)
         {
-            long ventricularPeriod = _plan.HeartPeriodNs * _plan.VentricularConductionRatio;
+            long ventricularPeriod = (long)_plan.VentricularPeriodNs;
             Add(PhysiologyCycleEventKind.VentricularElectrical, ventricularPeriod, _plan.VentricularElectricalOffsetNs);
             VisitVentricularMechanical(_plan, _cursor, exclusiveSimTimeNs,
                 maximumEvents - events.Count, events.Add, cancellationToken);
@@ -136,7 +143,7 @@ public sealed class RegularPhysiologyTimeline
             !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null) { return; }
         ulong? resume = plan.MechanicalAfterCycles is { } first && plan.MechanicalDurationCycles is { } duration ? first + duration : null;
         VisitCycles(plan, PhysiologyCycleEventKind.VentricularMechanical,
-            plan.HeartPeriodNs * plan.VentricularConductionRatio, plan.VentricularMechanicalOffsetNs,
+            (long)plan.VentricularPeriodNs, plan.VentricularMechanicalOffsetNs,
             inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken,
             plan.MechanicalAfterCycles, resume, plan.MechanicalEveryCycles);
     }

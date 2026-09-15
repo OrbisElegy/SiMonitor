@@ -21,15 +21,21 @@ internal static class PhysiologyDemoSource
     {
         configuration ??= PhysiologyDemoConfiguration.Default;
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
+        // Independent teaching RC parameters, not measured vascular/device presets.
+        // The pressure state lives in source samples and their checkpoints.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 TextbookEcgReference.CreateBands(), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
-             new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0),
+             configuration.UseVascularReservoir
+                ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000).CreateChannel(plan, ChannelId(3), 0)
+                : new ArterialPulsePlan(80_000_000, 600_000_000, 80, 40).CreateChannel(plan, ChannelId(3), 0),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
-             new PulmonaryArteryPulsePlan(40_000_000, 640_000_000, 10, 15).CreateChannel(plan, ChannelId(5), 0),
+             configuration.UseVascularReservoir
+                ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000).CreateChannel(plan, ChannelId(5), 0)
+                : new PulmonaryArteryPulsePlan(40_000_000, 640_000_000, 10, 15).CreateChannel(plan, ChannelId(5), 0),
              new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),

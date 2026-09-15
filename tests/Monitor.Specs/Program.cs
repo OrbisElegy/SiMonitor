@@ -41,6 +41,7 @@ internal static class Program
             .. EcgQtCorrectionSpecifications.All,
             .. PlethPulseSpecifications.All,
             .. ArterialPulseSpecifications.All,
+            .. VascularPressureSpecifications.All,
             .. CapnogramSpecifications.All,
             .. CapnogramPlateauSpecifications.All,
             .. CapnogramTransportSpecifications.All,

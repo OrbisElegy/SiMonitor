@@ -5,7 +5,8 @@ using Monitor.Simulation.Determinism;
 namespace Monitor.Simulation.Physiology;
 
 public sealed record PhysiologySignalState(RegularPhysiologyState Timeline,
-    SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands);
+    SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands,
+    VascularPressurePlan? VascularPressure = null);
 public readonly record struct PhysiologySignalSample(SignalSampleTick Tick, long ValueQ32, short NormalizedValue);
 public sealed class PhysiologySignalException(string reason, string parameter) : ArgumentException(reason, parameter)
 {
@@ -19,6 +20,8 @@ public sealed class PhysiologySignalGenerator
     private SignalSampleClock _clock;
     private readonly IReadOnlyList<EventWaveformBand> _bands;
     private readonly long _lookbackNs;
+    private readonly VascularPressurePlan? _vascularPressurePlan;
+    private readonly VascularPressureSource? _vascularPressure;
 
     private PhysiologySignalGenerator(PhysiologySignalState state)
     {
@@ -28,16 +31,29 @@ public sealed class PhysiologySignalGenerator
         if (state.Timeline.CursorSimTimeNs != _clock.CursorSimTimeNs ||
             state.Timeline.Plan.EpochAnchorSimTimeNs != _clock.EpochAnchorSimTimeNs)
         { throw Invalid(); }
-        _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
-        _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));
+        if (state.VascularPressure is { } pressure)
+        {
+            // Pressure is an independent source, not an offset added to a second
+            // copy of the old pressure morphology. Its history is reconstructible
+            // from the immutable plan, independently of the acquisition clock.
+            if (state.Bands is null || state.Bands.Count != 0) { throw Invalid(); }
+            _vascularPressure = VascularPressureSource.Create(state.Timeline.Plan, pressure);
+            _vascularPressurePlan = pressure;
+            _bands = Array.Empty<EventWaveformBand>();
+        }
+        else
+        {
+            _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
+            _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));
+        }
     }
 
     public static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId,
-        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands)
+        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         return Restore(new(RegularPhysiologyTimeline.Start(plan).CaptureState(),
-            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands));
+            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands, vascularPressure));
     }
 
     public static PhysiologySignalGenerator Restore(PhysiologySignalState state)
@@ -47,7 +63,9 @@ public sealed class PhysiologySignalGenerator
         catch (OverflowException) { throw Invalid(); }
     }
 
-    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands);
+    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands, _vascularPressurePlan);
+
+    internal VascularPressureSource? VascularPressure => _vascularPressure;
 
     public IReadOnlyList<PhysiologySignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples,
         int maximumEvents, CancellationToken cancellationToken = default)
@@ -67,14 +85,16 @@ public sealed class PhysiologySignalGenerator
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
         RegularPhysiologyTimeline trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
-        EventWaveformComposition composition = EventWaveformComposition.Restore(new(_bands, events));
+        EventWaveformComposition? composition = _vascularPressure is null ? EventWaveformComposition.Restore(new(_bands, events)) : null;
         SignalSampleClock trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
         PhysiologySignalSample[] output = new PhysiologySignalSample[ticks.Count];
         for (int index = 0; index < ticks.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            long value = composition.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
+            long value = _vascularPressure is { } pressure
+                ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
+                : composition!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
             short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
             output[index] = new(ticks[index], value, normalized);
         }

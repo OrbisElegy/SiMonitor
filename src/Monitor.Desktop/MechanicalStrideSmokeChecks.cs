@@ -13,6 +13,7 @@ internal static class MechanicalStrideSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
+            window.VascularReservoirInput.IsChecked = false;
             foreach (int stride in new[] { 2, 3, 4, 1 })
             {
                 Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);

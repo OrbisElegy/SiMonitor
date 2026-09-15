@@ -101,12 +101,8 @@ public sealed class RegularPhysiologyTimeline
         {
             long ventricularPeriod = _plan.HeartPeriodNs * _plan.VentricularConductionRatio;
             Add(PhysiologyCycleEventKind.VentricularElectrical, ventricularPeriod, _plan.VentricularElectricalOffsetNs);
-            if (_plan.VentricularMechanicalEnabled || _plan.MechanicalAfterCycles is not null)
-            {
-                ulong? resume = _plan.MechanicalAfterCycles is { } first && _plan.MechanicalDurationCycles is { } duration ? first + duration : null;
-                Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs,
-                    _plan.MechanicalAfterCycles, resume, _plan.MechanicalEveryCycles);
-            }
+            VisitVentricularMechanical(_plan, _cursor, exclusiveSimTimeNs,
+                maximumEvents - events.Count, events.Add, cancellationToken);
         }
         if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
         {
@@ -123,30 +119,59 @@ public sealed class RegularPhysiologyTimeline
 
         void Add(PhysiologyCycleEventKind kind, long period, long offset, ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
         {
-            Int128 start = (Int128)_plan.EpochAnchorSimTimeNs + offset;
-            Int128 first = _cursor <= start ? 0 : ((Int128)_cursor - start + period - 1) / period;
-            Int128 time = start + first * period;
-            Int128 count = time >= exclusiveSimTimeNs ? 0 : ((Int128)exclusiveSimTimeNs - 1 - time) / period + 1;
-            Int128 end = first + count;
-            if (cycleLimit is { } limit)
-            {
-                Append(first, Int128.Min(end, limit));
-                if (cycleResume is { } resume) { Append(Int128.Max(first, resume), end); }
-            }
-            else { Append(first, end); }
+            VisitCycles(_plan, kind, period, offset, _cursor, exclusiveSimTimeNs,
+                maximumEvents - events.Count, events.Add, cancellationToken, cycleLimit, cycleResume, cycleStride);
+        }
+    }
 
-            void Append(Int128 begin, Int128 finish)
+    // Shared source-event selection for timeline consumers and indexed pressure
+    // reconstruction. The latter must not consume the unrelated all-event budget.
+    // Callers own validated plans and bounds; Int128 permits an inclusive final
+    // representable timestamp by expressing its exclusive endpoint as MaxValue+1.
+    internal static void VisitVentricularMechanical(RegularPhysiologyPlan plan,
+        long inclusiveSimTimeNs, Int128 exclusiveSimTimeNs, int maximumEvents,
+        Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
+    {
+        if (plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+            !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null) { return; }
+        ulong? resume = plan.MechanicalAfterCycles is { } first && plan.MechanicalDurationCycles is { } duration ? first + duration : null;
+        VisitCycles(plan, PhysiologyCycleEventKind.VentricularMechanical,
+            plan.HeartPeriodNs * plan.VentricularConductionRatio, plan.VentricularMechanicalOffsetNs,
+            inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken,
+            plan.MechanicalAfterCycles, resume, plan.MechanicalEveryCycles);
+    }
+
+    private static void VisitCycles(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
+        long period, long offset, long inclusiveSimTimeNs, Int128 exclusiveSimTimeNs, int maximumEvents,
+        Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
+        ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
+    {
+        Int128 start = (Int128)plan.EpochAnchorSimTimeNs + offset;
+        Int128 first = inclusiveSimTimeNs <= start ? 0 : ((Int128)inclusiveSimTimeNs - start + period - 1) / period;
+        Int128 time = start + first * period;
+        Int128 count = time >= exclusiveSimTimeNs ? 0 : (exclusiveSimTimeNs - 1 - time) / period + 1;
+        Int128 end = first + count;
+        int remaining = maximumEvents;
+        if (cycleLimit is { } limit)
+        {
+            Append(first, Int128.Min(end, limit));
+            if (cycleResume is { } resume) { Append(Int128.Max(first, resume), end); }
+        }
+        else { Append(first, end); }
+
+        void Append(Int128 begin, Int128 finish)
+        {
+            // Retain original cycle indices, including after a skipped range.
+            begin = (begin + cycleStride - 1) / cycleStride * cycleStride;
+            if (begin >= finish) { return; }
+            Int128 selected = (finish - 1 - begin) / cycleStride + 1;
+            if (selected > remaining)
+            { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
+            remaining -= (int)selected;
+            for (Int128 index = begin; index < finish; index += cycleStride)
             {
-                // Retain original cycle indices, including after a skipped range.
-                begin = (begin + cycleStride - 1) / cycleStride * cycleStride;
-                if (begin >= finish) { return; }
-                if ((finish - 1 - begin) / cycleStride + 1 > maximumEvents - events.Count)
-                { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
-                for (Int128 index = begin; index < finish; index += cycleStride)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    events.Add(new((long)(start + index * period), kind, (ulong)index));
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                visitor(new((long)(start + index * period), kind, (ulong)index));
             }
         }
     }

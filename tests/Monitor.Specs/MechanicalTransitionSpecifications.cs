@@ -7,9 +7,9 @@ namespace Monitor.Specs;
 
 internal static class MechanicalTransitionSpecifications
 {
-    private static readonly Guid Ecg = Guid.Parse("11111111-1111-4111-8111-111111111111");
-    private static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
-    private static RegularPhysiologyPlan Plan(ulong? cycles = 1) => new(0, 800_000_000, 160_000_000,
+    internal static readonly Guid Ecg = Guid.Parse("11111111-1111-4111-8111-111111111111");
+    internal static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
+    internal static RegularPhysiologyPlan Plan(ulong? cycles = 1) => new(0, 800_000_000, 160_000_000,
         80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000,
         VentricularMechanicalEnabled: false, MechanicalAfterCycles: cycles);
     public static Specification[] All =>
@@ -33,17 +33,17 @@ internal static class MechanicalTransitionSpecifications
         }
     }
 
-    private static PhysiologyWaveformGroup Group(RegularPhysiologyPlan plan) => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
+    internal static PhysiologyWaveformGroup Group(RegularPhysiologyPlan plan) => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
         [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
          new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(1_080_000_000, 512_000_000, 1000).CreateBands(), 250, 0)]);
-    private static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.SelectMany(bytes =>
+    internal static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.SelectMany(bytes =>
         WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == id).Samples).ToArray();
 
     private static void MechanicalCutoffPreservesDelayedPulseTails()
     {
         var normal = Group(Plan() with { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null }).AdvanceTo(8_000_000_000, 2000, 40, 100);
         var actual = Group(Plan()).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var pulse = Samples(actual, Pleth);
+        short[] pulse = Samples(actual, Pleth);
         Check.That(Samples(actual, Ecg).SequenceEqual(Samples(normal, Ecg)), "ECG continues unchanged after mechanical cutoff");
         Check.That(pulse.Take(229).SequenceEqual(Samples(normal, Pleth).Take(229)) &&
             pulse.Skip(165).Take(64).Any(value => value > 0) && pulse.Skip(229).All(value => value == 0),

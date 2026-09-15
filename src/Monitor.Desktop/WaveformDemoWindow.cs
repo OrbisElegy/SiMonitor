@@ -41,6 +41,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox TDurationInput { get; } = new() { Text = "180", Width = 65, IsEnabled = false };
     internal TextBox UDelayInput { get; } = new() { Text = "30", Width = 65 };
     internal TextBox UDurationInput { get; } = new() { Text = "120", Width = 65 };
+    internal TextBox TPeakInput { get; } = new() { Width = 65 };
     internal TextBox[] TScaleInputs { get; } = Enumerable.Range(0, 6).Select(_ => new TextBox { Text = "1", Width = 65 }).ToArray();
     internal TextBox[] UAmplitudeInputs { get; } = Enumerable.Range(0, 6)
         .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
@@ -203,12 +204,14 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(new TextBlock { Text = $"C{index + 1} T 倍率" });
                 settings.Children.Add(TScaleInputs[index]);
             }
+            settings.Children.Add(new TextBlock { Text = "T 峰位置（%，可空）" });
+            settings.Children.Add(TPeakInput);
             settings.Children.Add(ApplyEcgButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
             panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心房率不是检测心率；QTc 使用传导后的室性 RR。固定示意模式保留原 QT。输入范围 30–200 次/分，QTc 与各时限 1–1000 ms；P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR。高心率可按需要缩短各波段，时限不再固定为参考值。" });
             panel.Children.Add(new TextBlock { Text = "u 波幅度 −1000～1000 μV，全部为 0 时关闭；T 后延迟 0～1000 ms，时限 1～1000 ms。启用时须满足 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR；不计入 QT。此处仅添加胸前 u 波，肢体导联不变，不自动按心率调整幅度。" });
-            panel.Children.Add(new TextBlock { Text = "胸前电极 T 波手动倍率：−4～4，精度 0.001；1 保留参考，0 去除该电极 T 分量，负值反转极性。投影前调整，肢体电极不变；不改变 P/QRS/QT/u，不代表正常或病理预设。" });
+            panel.Children.Add(new TextBlock { Text = "胸前电极 T 波手动倍率：−4～4，精度 0.001；1 保留参考，0 去除该电极 T 分量，负值反转极性。投影前调整，肢体电极不变；不改变 P/QRS/QT/u，不代表正常或病理预设。T 峰位置为 T 自身时限的 10～90%，精度 0.1%；所有电极共用，留空使用参考 62.5%，不改变 T 时限或 QT。" });
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
@@ -425,14 +428,22 @@ internal sealed class WaveformDemoWindow : Window
                 { throw new ArgumentException("Invalid T wave scale."); }
                 tScales[index] = (int)(scale * 1000);
             }
-            ProjectedEcgTConfiguration tWave = new(tScales[0], tScales[1], tScales[2], tScales[3], tScales[4], tScales[5]);
+            int? peakPermille = null;
+            if (!string.IsNullOrWhiteSpace(TPeakInput.Text))
+            {
+                if (!decimal.TryParse(TPeakInput.Text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal peak) ||
+                    peak is < 10 or > 90 || peak * 10 != decimal.Truncate(peak * 10))
+                { throw new ArgumentException("Invalid T peak position."); }
+                peakPermille = (int)(peak * 10);
+            }
+            ProjectedEcgTConfiguration tWave = new(tScales[0], tScales[1], tScales[2], tScales[3], tScales[4], tScales[5], peakPermille);
             int? independentOffset = ParseIndependentVentricularOffset();
             configuration = configuration with { TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：T 峰位置须为 10～90%，精度 0.1% 或留空；T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -590,12 +601,14 @@ internal sealed class WaveformDemoWindow : Window
             for (int index = 0; index < UAmplitudeInputs.Length; index++)
             { UAmplitudeInputs[index].Text = u.ChestAmplitudes[index].ToString(CultureInfo.InvariantCulture); }
             var tWave = configuration.TWave ?? ProjectedEcgTConfiguration.Default;
+            TPeakInput.Text = tWave.PeakPositionPermille is { } peak ? (peak / 10m).ToString("0.#", CultureInfo.InvariantCulture) : "";
             for (int index = 0; index < TScaleInputs.Length; index++)
             { TScaleInputs[index].Text = (tWave.ChestScales[index] / 1000m).ToString("0.###", CultureInfo.InvariantCulture); }
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；基础周期率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
+                (tWave.PeakPositionPermille is null ? "；T 峰参考 62.5%" : $"；手动 T 峰 {TPeakInput.Text}%") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
                 (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
                     $"；u 延迟/时限 {u.DelayMilliseconds}/{u.DurationMilliseconds} ms，V1–V6 幅度 {string.Join("/", u.ChestAmplitudes)} μV");

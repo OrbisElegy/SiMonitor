@@ -43,6 +43,7 @@ internal static class Program
             .. ArterialPulseSpecifications.All,
             .. VascularPressureSpecifications.All,
             .. VascularPressureMorphologySpecifications.All,
+            .. PhysiologyForkSpecifications.All,
             .. CapnogramSpecifications.All,
             .. CapnogramPlateauSpecifications.All,
             .. CapnogramTransportSpecifications.All,

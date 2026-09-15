@@ -272,7 +272,7 @@ internal sealed class WaveformDemoWindow : Window
     {
         if (_closed || _timer is null || !ReferenceEquals(sender, _timer)) { return; }
         long now = Stopwatch.GetTimestamp();
-        long delta = Math.Clamp(Stopwatch.GetElapsedTime(_lastTick, now).Ticks * 100, 1, 50_000_000);
+        long delta = DemoFrameTiming.ResolveElapsed(Stopwatch.GetElapsedTime(_lastTick, now));
         _lastTick = now;
         Pulse(sender, delta);
     }
@@ -280,7 +280,16 @@ internal sealed class WaveformDemoWindow : Window
     internal void Pulse(object? timer, long deltaNs = 16_000_000)
     {
         if (_closed || _timer is null || !ReferenceEquals(timer, _timer)) { return; }
-        try { Advance(deltaNs, progressive: true); }
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deltaNs);
+            while (deltaNs > 0)
+            {
+                long chunk = Math.Min(deltaNs, DemoFrameTiming.MaximumChunkNs);
+                Advance(chunk, progressive: true);
+                deltaNs -= chunk;
+            }
+        }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         {
             Pause();
@@ -307,7 +316,7 @@ internal sealed class WaveformDemoWindow : Window
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deltaNs);
         long next = checked(SimulationTimeNs + deltaNs);
         PeriodicWaveformGroup? trial = _physiology || _projected ? null : PeriodicWaveformGroup.Restore(_source.CaptureState());
-        PhysiologyWaveformGroup? eventTrial = _physiology ? PhysiologyWaveformGroup.Restore(_physiologySource!.CaptureState()) : null;
+        PhysiologyWaveformGroup? eventTrial = _physiology ? _physiologySource!.Fork() : null;
         ElectrodeWaveformGroup? electrodeTrial = _projected ? ElectrodeWaveformGroup.Restore(_electrodeSource!.CaptureState()) : null;
         IReadOnlyList<byte[]> wires = electrodeTrial is not null ? electrodeTrial.AdvanceTo(next, 50, 1, 100) : eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
         WaveformEnvelope[] blocks = _blocks.Concat(wires

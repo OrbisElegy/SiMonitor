@@ -26,6 +26,17 @@ public sealed class PhysiologyWaveformGroup
     private Channel[] _channels;
     private WaveformBlockAssembler _assembler;
 
+    private PhysiologyWaveformGroup(PhysiologyWaveformGroup source)
+    {
+        _channels = source._channels.Select(channel => new Channel(channel.Id, channel.Generator.Fork(),
+            SignalAcquisitionDelayLine.Restore(channel.Delay.CaptureState()), channel.QualityFlags)).ToArray();
+        _assembler = WaveformBlockAssembler.Restore(source._assembler.CaptureState());
+    }
+
+    // Serialized owner-only transaction copy. External checkpoints still use
+    // Restore, including full replay validation of pending waveform samples.
+    public PhysiologyWaveformGroup Fork() => new(this);
+
     private PhysiologyWaveformGroup(PhysiologyWaveformGroupState state)
     {
         if (state.Channels is null || state.Channels.Count is < 1 or > WaveformEnvelopeCodec.MaximumPlaneCount)
@@ -133,7 +144,7 @@ public sealed class PhysiologyWaveformGroup
         cancellationToken.ThrowIfCancellationRequested();
         if (maximumBlocks is < 1 or > WaveformBlockAssembler.MaximumBufferedBlockCount)
         { throw new PhysiologyWaveformGroupException("PhysiologyGroup.InvalidBlockLimit", nameof(maximumBlocks)); }
-        PhysiologyWaveformGroup trial = Restore(CaptureState());
+        PhysiologyWaveformGroup trial = Fork();
         List<byte[]> output = [];
         foreach (Channel channel in trial._channels)
         {

@@ -24,6 +24,7 @@ internal static class WaveformDemoSmokeChecks
         MechanicalResumptionSmokeChecks.Verify();
         MechanicalStrideSmokeChecks.Verify();
         VascularPressureSmokeChecks.Verify();
+        DemoFrameTimingSmokeChecks.Verify();
         ShortCycleEcgSmokeChecks.Verify();
         UWaveSmokeChecks.Verify();
         VerifyPhysiology();
@@ -219,7 +220,7 @@ internal static class WaveformDemoSmokeChecks
         timeout.Start();
         try { Dispatcher.UIThread.PushFrame(frame); }
         finally { timeout.Stop(); first.Tick -= ObserveTick; }
-        if (!delivered || window.SimulationTimeNs <= 0 || window.SimulationTimeNs > 50_000_000)
+        if (!delivered || window.SimulationTimeNs <= 0 || window.SimulationTimeNs > DemoFrameTiming.MaximumElapsedNs)
         { throw new InvalidOperationException("Native timer did not deliver one simulation step."); }
         for (int tick = 0; tick < 150; tick++) { window.Pulse(first); }
         long beforeHold = window.SimulationTimeNs;

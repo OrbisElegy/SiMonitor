@@ -23,6 +23,19 @@ public sealed class PhysiologySignalGenerator
     private readonly VascularPressurePlan? _vascularPressurePlan;
     private readonly VascularPressureSource? _vascularPressure;
 
+    private PhysiologySignalGenerator(PhysiologySignalGenerator source)
+    {
+        _timeline = RegularPhysiologyTimeline.Restore(source._timeline.CaptureState());
+        _clock = SignalSampleClock.Restore(source._clock.CaptureState());
+        _bands = source._bands;
+        _lookbackNs = source._lookbackNs;
+        _vascularPressurePlan = source._vascularPressurePlan;
+        _vascularPressure = source._vascularPressure;
+    }
+
+    // Only immutable, already owned source definitions are shared.
+    internal PhysiologySignalGenerator Fork() => new(this);
+
     private PhysiologySignalGenerator(PhysiologySignalState state)
     {
         ArgumentNullException.ThrowIfNull(state);

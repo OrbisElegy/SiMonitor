@@ -22,6 +22,7 @@ internal static class WaveformDemoSmokeChecks
         MechanicalUncouplingSmokeChecks.Verify();
         MechanicalTransitionSmokeChecks.Verify();
         MechanicalResumptionSmokeChecks.Verify();
+        MechanicalStrideSmokeChecks.Verify();
         ShortCycleEcgSmokeChecks.Verify();
         UWaveSmokeChecks.Verify();
         VerifyPhysiology();

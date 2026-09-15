@@ -28,7 +28,8 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0,
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
     int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
-    bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null);
+    bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null,
+    int MechanicalEveryCycles = 1);
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
 public sealed class PhysiologyTimelineException(string reason, string parameter)
@@ -48,6 +49,7 @@ public sealed class RegularPhysiologyTimeline
     {
         if (state is null || state.Plan is not { } plan || plan.EpochAnchorSimTimeNs < 0 ||
             plan.HeartPeriodNs <= 0 || plan.BreathPeriodNs <= 0 ||
+            plan.MechanicalEveryCycles < 1 ||
             plan.VentricularConductionRatio < 1 || (Int128)plan.HeartPeriodNs * plan.VentricularConductionRatio > long.MaxValue ||
             plan.VentricularElectricalOffsetNs <= 0 || plan.VentricularElectricalOffsetNs >= plan.HeartPeriodNs ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||
@@ -102,7 +104,8 @@ public sealed class RegularPhysiologyTimeline
             if (_plan.VentricularMechanicalEnabled || _plan.MechanicalAfterCycles is not null)
             {
                 ulong? resume = _plan.MechanicalAfterCycles is { } first && _plan.MechanicalDurationCycles is { } duration ? first + duration : null;
-                Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs, _plan.MechanicalAfterCycles, resume);
+                Add(PhysiologyCycleEventKind.VentricularMechanical, ventricularPeriod, _plan.VentricularMechanicalOffsetNs,
+                    _plan.MechanicalAfterCycles, resume, _plan.MechanicalEveryCycles);
             }
         }
         if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
@@ -118,7 +121,7 @@ public sealed class RegularPhysiologyTimeline
         _cursor = exclusiveSimTimeNs;
         return events.AsReadOnly();
 
-        void Add(PhysiologyCycleEventKind kind, long period, long offset, ulong? cycleLimit = null, ulong? cycleResume = null)
+        void Add(PhysiologyCycleEventKind kind, long period, long offset, ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
         {
             Int128 start = (Int128)_plan.EpochAnchorSimTimeNs + offset;
             Int128 first = _cursor <= start ? 0 : ((Int128)_cursor - start + period - 1) / period;
@@ -134,9 +137,12 @@ public sealed class RegularPhysiologyTimeline
 
             void Append(Int128 begin, Int128 finish)
             {
-                if (finish - begin > maximumEvents - events.Count)
+                // Retain original cycle indices, including after a skipped range.
+                begin = (begin + cycleStride - 1) / cycleStride * cycleStride;
+                if (begin >= finish) { return; }
+                if ((finish - 1 - begin) / cycleStride + 1 > maximumEvents - events.Count)
                 { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
-                for (Int128 index = begin; index < finish; index++)
+                for (Int128 index = begin; index < finish; index += cycleStride)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     events.Add(new((long)(start + index * period), kind, (ulong)index));

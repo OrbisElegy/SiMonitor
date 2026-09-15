@@ -25,6 +25,10 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox QtMethod { get; } = new() { ItemsSource = new[] { "原始示意时序", "Bazett", "Fridericia" }, SelectedIndex = 0 };
     internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
+    internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
+    internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
+    internal TextBox QrsDurationInput { get; } = new() { Text = "80", Width = 65, IsEnabled = false };
+    internal TextBox TDurationInput { get; } = new() { Text = "180", Width = 65, IsEnabled = false };
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
@@ -134,10 +138,16 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(HeartRateInput);
             settings.Children.Add(new TextBlock { Text = "QTc（ms）" });
             settings.Children.Add(QtcInput);
+            foreach (var (label, input) in new[] { ("P 时限（ms）", PDurationInput), ("PR 间期（ms）", PrIntervalInput),
+                ("QRS 时限（ms）", QrsDurationInput), ("T 时限（ms）", TDurationInput) })
+            {
+                settings.Children.Add(new TextBlock { Text = label });
+                settings.Children.Add(input);
+            }
             settings.Children.Add(ApplyEcgButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
-            panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心房率不是检测心率；QTc 使用传导后的室性 RR。固定示意模式保留原 QT。输入范围 30–200 次/分，QTc 1–1000 ms，仍须满足波段时序。" });
+            panel.Children.Add(new TextBlock { Text = "应用后暂停扫屏并清空当前及固定画面，从零生成。源心房率不是检测心率；QTc 使用传导后的室性 RR。固定示意模式保留原 QT。输入范围 30–200 次/分，QTc 与各时限 1–1000 ms；P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR。高心率可按需要缩短各波段，时限不再固定为参考值。" });
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
@@ -191,7 +201,7 @@ internal sealed class WaveformDemoWindow : Window
         ResetButton.Click += (_, _) => { if (!_closed) { Reset(); } };
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
         RunButton.Click += (_, _) => ToggleRun();
-        QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
+        QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = PDurationInput.IsEnabled = PrIntervalInput.IsEnabled = QrsDurationInput.IsEnabled = TDurationInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
         ApplyEcgButton.Click += (_, _) => ApplyEcgConfiguration();
         ApplyBreathButton.Click += (_, _) => ApplyBreathConfiguration();
         ShapeButton.Click += (_, _) =>
@@ -306,7 +316,11 @@ internal sealed class WaveformDemoWindow : Window
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
-                    !int.TryParse(QtcInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int qtc))
+                    !int.TryParse(QtcInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int qtc) ||
+                    !int.TryParse(PDurationInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int p) ||
+                    !int.TryParse(PrIntervalInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int pr) ||
+                    !int.TryParse(QrsDurationInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int qrs) ||
+                    !int.TryParse(TDurationInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int t))
                 { throw new ArgumentException("Integer input required."); }
                 string method = QtMethod.SelectedIndex switch
                 {
@@ -314,13 +328,13 @@ internal sealed class WaveformDemoWindow : Window
                     2 => EcgQtCorrection.Fridericia,
                     _ => throw new ArgumentException("Unknown method."),
                 };
-                configuration = new(hr, qtc, method, ConductionInput.SelectedIndex + 1);
+                configuration = new(hr, qtc, method, ConductionInput.SelectedIndex + 1, p, pr, qrs, t);
             }
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，并确保 QT 容纳 QRS、T 且满足周期时序。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -419,9 +433,13 @@ internal sealed class WaveformDemoWindow : Window
             QtMethod.SelectedIndex = configuration.MethodId switch { EcgQtCorrection.Bazett => 1, EcgQtCorrection.Fridericia => 2, _ => 0 };
             ConductionInput.SelectedIndex = configuration.VentricularConductionRatio - 1;
             HeartRateInput.Text = configuration.HeartRateBpm.ToString(CultureInfo.InvariantCulture);
+            PDurationInput.Text = configuration.PDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
+            PrIntervalInput.Text = configuration.PrIntervalMilliseconds.ToString(CultureInfo.InvariantCulture);
+            QrsDurationInput.Text = configuration.QrsDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
+            TDurationInput.Text = configuration.TDurationMilliseconds.ToString(CultureInfo.InvariantCulture);
             QtcInput.Text = configuration.QtcMilliseconds.ToString(CultureInfo.InvariantCulture);
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                $"已应用：源心房率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms");
             EcgConfigurationStatus.Text = "";
         }

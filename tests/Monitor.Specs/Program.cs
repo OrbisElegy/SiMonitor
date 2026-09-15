@@ -55,6 +55,7 @@ internal static class Program
             .. ConductionRatioSpecifications.All,
             .. CardiacActivitySpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
+            .. MechanicalTransitionSpecifications.All,
             .. ShortCycleEcgSpecifications.All,
             .. PulmonaryArterySpecifications.All,
             .. CentralVenousPressureSpecifications.All,

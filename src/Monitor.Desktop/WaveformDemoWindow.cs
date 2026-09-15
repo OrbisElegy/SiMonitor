@@ -23,6 +23,7 @@ internal sealed class WaveformDemoWindow : Window
     private ElectrodeWaveformGroup? _electrodeSource;
     internal ProjectedEcgDemoConfiguration EcgConfiguration { get; private set; } = ProjectedEcgDemoConfiguration.Default;
     internal ComboBox QtMethod { get; } = new() { ItemsSource = new[] { "原始示意时序", "Bazett", "Fridericia" }, SelectedIndex = 0 };
+    internal TextBox MechanicalAfterCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal CheckBox VentricularMechanicalInput { get; } = new() { Content = "生成室性机械事件", IsChecked = true };
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件" }, SelectedIndex = 0 };
     internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1" }, SelectedIndex = 0 };
@@ -136,9 +137,14 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(ConductionInput);
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
             conduction.Children.Add(CardiacActivityInput);
-            if (physiology) { conduction.Children.Add(VentricularMechanicalInput); }
+            if (physiology)
+            {
+                conduction.Children.Add(VentricularMechanicalInput);
+                conduction.Children.Add(new TextBlock { Text = "先完成室性周期数（可空）" });
+                conduction.Children.Add(MechanicalAfterCyclesInput);
+            }
             panel.Children.Add(conduction);
-            if (physiology) { panel.Children.Add(new TextBlock { Text = "关闭室性机械事件可保留 ECG 电活动，同时停止 Pleth／ABP／PA 搏动分量及室性 CVP 分量。它不是探头故障或 ECG 脱落，也不自动改变压力基线。" }); }
+            if (physiology) { panel.Children.Add(new TextBlock { Text = "关闭室性机械事件可保留 ECG 电活动，同时停止 Pleth／ABP／PA 搏动分量及室性 CVP 分量。它不是探头故障或 ECG 脱落，也不自动改变压力基线。可在关闭时填写先完成周期数 1～100（需心房与心室事件），先生成这些周期再停止新机械事件，已有波尾继续；留空从零关闭。" }); }
             panel.Children.Add(new TextBlock { Text = "仅心房事件保留 P 波与房性机械分量；无心脏事件停止全部心脏源波段。呼吸独立继续，压力基线保持配置值。此处未模拟压力衰减或灌注状态；所示时限与频率是源配置。" });
         }
         if (projected)
@@ -413,12 +419,19 @@ internal sealed class WaveformDemoWindow : Window
             }
             if (VentricularMechanicalInput.IsChecked is not { } mechanicalEnabled)
             { throw new ArgumentException("Explicit ventricular mechanical selection required."); }
+            int? mechanicalAfter = null;
+            if (!string.IsNullOrWhiteSpace(MechanicalAfterCyclesInput.Text))
+            {
+                if (!int.TryParse(MechanicalAfterCyclesInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int cycles))
+                { throw new ArgumentException("Integer mechanical cycle count required."); }
+                mechanicalAfter = cycles;
+            }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionInput.SelectedIndex + 1, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionInput.SelectedIndex + 1, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter));
         }
         catch (ArgumentException)
         {
-            BreathConfigurationStatus.Text = "未应用：请检查参数范围；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
+            BreathConfigurationStatus.Text = "未应用：请检查参数范围；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择心房与心室事件；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
         }
     }
 
@@ -441,6 +454,7 @@ internal sealed class WaveformDemoWindow : Window
             ConductionInput.SelectedIndex = breathConfiguration.VentricularConductionRatio - 1;
             CardiacActivityInput.SelectedIndex = (int)breathConfiguration.CardiacActivity;
             VentricularMechanicalInput.IsChecked = breathConfiguration.VentricularMechanicalEnabled;
+            MechanicalAfterCyclesInput.Text = breathConfiguration.MechanicalAfterCycles?.ToString(CultureInfo.InvariantCulture) ?? "";
             ActivityDurationBreathsInput.Text = breathConfiguration.ActivityDurationBreaths?.ToString(CultureInfo.InvariantCulture) ?? "";
             ActivityAfterBreathsInput.Text = breathConfiguration.ActivityAfterBreaths?.ToString(CultureInfo.InvariantCulture) ?? "";
             RespiratoryActivityInput.SelectedIndex = (int)breathConfiguration.RespiratoryActivity;
@@ -460,7 +474,7 @@ internal sealed class WaveformDemoWindow : Window
             Co2PlateauInput.Text = breathConfiguration.Co2PlateauStartCentiMmHg is { } plateau
                 ? (plateau / 100m).ToString("0.##", CultureInfo.InvariantCulture) : "";
             _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：{CardiacActivityInput.SelectedItem}；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}；传导 {breathConfiguration.VentricularConductionRatio}:1；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+                $"已应用：{CardiacActivityInput.SelectedItem}；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即）；传导 {breathConfiguration.VentricularConductionRatio}:1；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)

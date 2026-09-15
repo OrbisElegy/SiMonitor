@@ -58,10 +58,11 @@ public sealed class RegularPhysiologyTimeline
             plan.VentricularConductionRatio < 1 || plan.VentricularPeriodNs > long.MaxValue ||
             (plan.IndependentVentricularPeriodNs is { } independent &&
                 (independent < plan.HeartPeriodNs || plan.VentricularConductionRatio != 1)) ||
-            plan.VentricularElectricalOffsetNs <= 0 || plan.VentricularElectricalOffsetNs >= plan.HeartPeriodNs ||
+            plan.VentricularElectricalOffsetNs < (plan.IndependentVentricularPeriodNs is null ? 1 : 0) ||
+            plan.VentricularElectricalOffsetNs >= (plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs) ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||
             plan.VentricularMechanicalOffsetNs < plan.VentricularElectricalOffsetNs ||
-            plan.VentricularMechanicalOffsetNs >= plan.HeartPeriodNs ||
+            plan.VentricularMechanicalOffsetNs >= (plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs) ||
             plan.InspirationDurationNs <= 0 || plan.InspirationDurationNs >= plan.BreathPeriodNs ||
             plan.InspiratoryPauseNs < 0 || plan.InspiratoryPauseNs >= plan.InspirationDurationNs ||
             plan.ExpiratoryPauseNs < 0 || plan.ExpiratoryPauseNs >= plan.BreathPeriodNs - plan.InspirationDurationNs ||

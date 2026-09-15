@@ -84,7 +84,7 @@ internal static class MechanicalTransitionSmokeChecks
         Console.WriteLine("ok: scheduled mechanical cutoff keeps ECG and sweep clocks, completes pulse tails, preserves pressure pixels and validates/reset inputs");
     }
 
-    private static void VerifyPressureTail(WaveformDemoWindow window, WaveformEnvelope[] blocks)
+    internal static void VerifyPressureTail(WaveformDemoWindow window, WaveformEnvelope[] blocks, int[]? sampleIndices = null)
     {
         window.Trace.Measure(new Size(1044, 840));
         window.Trace.Arrange(new Rect(0, 0, 1044, 840));
@@ -94,7 +94,7 @@ internal static class MechanicalTransitionSmokeChecks
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, 5);
-        foreach (int index in new[] { 105, 150 })
+        foreach (int index in sampleIndices ?? [105, 150])
         {
             int y = (int)Math.Round(710 - (10 + samples[index] / 100.0) * 2.5);
             if (!Enumerable.Range(y - 1, 3).Any(line => Enumerable.Range(index - 1, 3).Any(column =>

@@ -1,0 +1,29 @@
+{
+  "id": "VascularPressureMorphologyRatio@1",
+  "source": "Project-authored empirical combination of the existing RC reservoir and independent pressure contours",
+  "research": "docs/vascular-pressure-runoff-research.md",
+  "qualification": "Unqualified teaching source preserving legacy contour appearance; no valve/reflection dynamics, independent right-heart source, wedge-pressure model, CVP mean response or pressure numerics",
+  "contours": {
+    "Arterial": "eng/physiology/infirmary-arterial-pulse.json",
+    "PulmonaryArtery": "eng/physiology/infirmary-pulmonary-artery.json"
+  },
+  "model": {
+    "reservoir": "VascularPressureRcIllustration@1, unchanged input intensity, duration and decay kernel",
+    "nominal_period": "HeartPeriodNs * VentricularConductionRatio, excluding MechanicalEveryCycles",
+    "reference_excess_at_onset": "S0 = E * (a(T-D) - a(T)) / (1 - a(T))",
+    "reference_excess_within_cycle": "Sref(u) = S0 * a(u) + E * k(u), where k is the finite-ejection response",
+    "desired_contour": "M(u) = S0 + existing finite pressure LUT pulse; zero LUT excursion after its configured duration",
+    "output": "P_infinity + (RC(t) - P_infinity) * M(u) / Sref(u)",
+    "support": "One nominal period following each accepted mechanical event, after transit; raw RC elsewhere",
+    "gates": "Shared ventricular mechanical selection, including activity, conduction, suppression, resumption and original-index stride",
+    "bounds": "Reference onset excess >= 1 centi-mmHg; conservative full-output int16 amplitude budget including 1 centi-mmHg rounding reserve validated before generation",
+    "arithmetic": "Integer-ns timing, Q32.32 pressure, Q2.62 decay, Int128 intermediates, nearest ties to even",
+    "compatibility": "Absent or null Morphology retains the exact raw RC evaluation path"
+  },
+  "verification": [
+    "Independent original-LUT contour comparison at periodic reference",
+    "Default and first resumed ABP/PA peak, notch and rebound landmarks",
+    "No pulses during mechanical absence, continuous runoff and re-entry",
+    "Batching, checkpoint replay, pending-sample tampering and invalid configuration"
+  ]
+}

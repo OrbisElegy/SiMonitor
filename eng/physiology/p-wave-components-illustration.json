@@ -1,0 +1,13 @@
+{
+  "id": "PWaveComponentsIllustrationDraft@1",
+  "authorship": "Project-authored teaching overlap; not an upstream copy or validated disease preset",
+  "implementation_basis": [
+    "TextbookEcgTables.P, divided by its exact Q32 maximum and multiplied by each requested signed microvolt amplitude with Int128 ties-to-even rounding"
+  ],
+  "basis_q32_le_sha256": "705b1fb342d58e4114c3fdd2c9cab771a3d3a95a30b6078685ed68d7d59430fd",
+  "timing": "Both components trigger from AtrialElectrical. Late delay = round-even(3*Pduration/8); both durations = Pduration-delay. Reject delay<=0 or duration<=delay.",
+  "projection": "Ten electrode entries; null keeps reference P, explicit zero pair removes its P. Standard limb/Wilson projection follows.",
+  "limitations": [
+    "Overlap fractions are authoring choices, not textbook measurements. No separate right/left atrial chamber interpretation, disease classification, P-axis model or normality assertion. Component amplitudes are not final lead peaks."
+  ]
+}

@@ -10,7 +10,12 @@ internal static class Program
             using CancellationTokenSource cancellation = new();
             ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; cancellation.Cancel(); };
             Console.CancelKeyPress += handler;
-            try { return SvgFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
+            try
+            {
+                if (args[0] == "--audio-tone-fixture")
+                { return AudioFixtureCommand.Execute(args, Console.OpenStandardOutput(), Console.Error, cancellation.Token); }
+                return SvgFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token);
+            }
             finally { Console.CancelKeyPress -= handler; }
         }
         Specification[] specifications =
@@ -74,6 +79,7 @@ internal static class Program
             .. QrsTemplateBlendSpecifications.All,
             .. AuthoredQrsMeasurementSpecifications.All,
             .. QrsContributionSpecifications.All,
+            .. ToneVoiceSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

@@ -1,0 +1,26 @@
+{
+  "id": "BeatAuditionDraft@1",
+  "status": "Engineering audition, not approved audio profile or release asset",
+  "requirements_source": {
+    "audio_basis": "Project-authored 795 Hz audition tone; 48000 Hz mono float32 logical mix."
+  },
+  "original_authorship": true,
+  "frequency_millihz": 795000,
+  "sample_rate_hz": 48000,
+  "attack_frames": 240,
+  "hold_frames": 4800,
+  "release_frames": 720,
+  "gain_q15": 8192,
+  "cancellation_fade_max_frames": 240,
+  "synthesis_method": "Each one-shot starts at phase zero. Integer sample-index phase, original quarter-sine Q31 table, ties-even interpolation and gain; float32 only at PCM output.",
+  "audition_fixture": {
+    "format": "PCM16 mono WAV",
+    "beat_count": 5,
+    "period_frames": 38400,
+    "duration_frames": 159360
+  },
+  "audition_constraints": [
+    "Envelope and gain are explicit authoring choices pending listening qualification; no copied audio.",
+    "No physiological event mapper, alarm policy, director, mixer, native backend, device qualification or audio scoring is implemented."
+  ]
+}

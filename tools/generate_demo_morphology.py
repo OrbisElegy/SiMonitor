@@ -133,7 +133,10 @@ def main():
         raise ValueError('upstream CO2 license evidence changed')
     if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
         raise ValueError('upstream ABP license evidence changed')
+    st = json.loads((root / 'eng/physiology/st-segment-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/StSegmentTables.cs': render(
+            'Monitor.Simulation.Physiology', 'StSegmentTables', st['tables']),
         root / 'src/Monitor.Simulation/Physiology/CvpComponentTables.cs':
             '// A/V adapted from Infirmary Integrated CVP seeds, Ibi Keller (Tanjera); C/X/Y/Resp are project-authored.\n'
             '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
@@ -172,7 +175,7 @@ def main():
         else:
             target.write_text(expected)
     if args.check:
-        print('ok: ECG, Resp, Pleth, ABP, CO2, PA and CVP Q32 tables match offline authoring')
+        print('ok: ECG/ST, Resp, Pleth, ABP, CO2, PA and CVP Q32 tables match offline authoring')
 
 
 if __name__ == '__main__':

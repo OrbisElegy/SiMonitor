@@ -24,6 +24,7 @@ internal static class WaveformDemoSmokeChecks
         VentricularPhaseSmokeChecks.Verify();
         TWaveScaleSmokeChecks.Verify();
         TWaveShapeSmokeChecks.Verify();
+        StSegmentSmokeChecks.Verify();
         MechanicalUncouplingSmokeChecks.Verify();
         MechanicalTransitionSmokeChecks.Verify();
         MechanicalResumptionSmokeChecks.Verify();

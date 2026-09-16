@@ -9,13 +9,14 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null)
     {
         timing ??= TextbookEcgReference.Timing;
         timing.Validate();
         uWave?.Validate(timing);
         int[]? tScales = tWave?.CaptureScales();
         var tPhases = tShape?.CreatePhasePoints(timing);
+        var stBands = stSegment?.CreateBands(timing);
         IReadOnlyList<long>[] qrs = [TextbookElectrodeQrsTables.RA, TextbookElectrodeQrsTables.LA,
             TextbookElectrodeQrsTables.RL, TextbookElectrodeQrsTables.LL, TextbookElectrodeQrsTables.C1,
             TextbookElectrodeQrsTables.C2, TextbookElectrodeQrsTables.C3, TextbookElectrodeQrsTables.C4,
@@ -37,6 +38,14 @@ public static class TextbookElectrodeReference
                         (Int128)value * tScales[(int)item.Electrode], 1000))).ToArray()),
                     PhasePoints = tPhases,
                 }).ToArray()),
+            }).ToArray());
+        }
+        if (stBands is not null)
+        {
+            electrodes = Array.AsReadOnly(electrodes.Select(item => item with
+            {
+                Bands = stBands[(int)item.Electrode] is { } additions
+                    ? Array.AsReadOnly(item.Bands.Concat(additions).ToArray()) : item.Bands,
             }).ToArray());
         }
         if (uWave is null) { return electrodes; }

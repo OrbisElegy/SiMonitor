@@ -62,6 +62,7 @@ internal static class Program
             .. VentricularPhaseSpecifications.All,
             .. TWaveScaleSpecifications.All,
             .. TWaveShapeSpecifications.All,
+            .. StSegmentSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,
             .. MechanicalResumptionSpecifications.All,

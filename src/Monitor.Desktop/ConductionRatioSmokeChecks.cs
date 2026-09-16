@@ -86,7 +86,7 @@ internal static class ConductionRatioSmokeChecks
 
     private static void VerifyPixels(WaveformDemoWindow window, bool projected, short[] samples, int ratio)
     {
-        int height = projected ? 1920 : 840;
+        int height = projected ? (12 * ProjectedEcgPlotLayout.RowHeight) : 840;
         window.Trace.Measure(new Size(1044, height));
         window.Trace.Arrange(new Rect(0, 0, 1044, height));
         using RenderTargetBitmap image = new(new PixelSize(1044, height), new Vector(96, 96));
@@ -98,7 +98,7 @@ internal static class ConductionRatioSmokeChecks
         foreach (int index in new[] { peak, peak + ratio * 200, 250 })
         {
             int x = (int)Math.Round((projected ? 85 : 0) + index * 4_000_000L / 8_000_000.0);
-            int y = (int)Math.Round((projected ? 240 : 60) - samples[index] * (projected ? 0.04 : 0.05));
+            int y = (int)Math.Round((projected ? ProjectedEcgPlotLayout.RowHeight * 3 / 2 : 60) - samples[index] * (projected ? 0.04 : 0.05));
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
                 Marshal.ReadByte(buffer.Address + line * buffer.RowBytes + column * 4 + 1) > 100)))
             { throw new InvalidOperationException($"Missing conduction pixel: projected={projected}, ratio={ratio}, index={index}, raw={samples[index]}, x={x}, y={y}."); }

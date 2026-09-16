@@ -8,7 +8,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgPlotLayout(int PlotLeft, int PlotWidth)
 {
     internal const long VisibleDurationNs = DemoSweepLayout.ReferenceDurationNs;
-    internal const int RowHeight = 160;
+    internal const int RowHeight = 320;
     internal const uint PixelsPerMillivolt = 40;
     private static readonly SweepStateProjectionState ScaleState = SweepStateProjectionStateMachine.Start(
         new("electrode-demo", 1, 1, 0, VisibleDurationNs, 200_000_000, VisibleDurationNs + 200_000_000), 1, 1,

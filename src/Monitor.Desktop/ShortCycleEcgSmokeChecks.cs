@@ -77,9 +77,9 @@ internal static class ShortCycleEcgSmokeChecks
 
     private static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, EcgCycleTiming timing)
     {
-        window.Trace.Measure(new Size(1044, 1920));
-        window.Trace.Arrange(new Rect(0, 0, 1044, 1920));
-        using RenderTargetBitmap image = new(new PixelSize(1044, 1920), new Vector(96, 96));
+        window.Trace.Measure(new Size(1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        window.Trace.Arrange(new Rect(0, 0, 1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        using RenderTargetBitmap image = new(new PixelSize(1044, (12 * ProjectedEcgPlotLayout.RowHeight)), new Vector(96, 96));
         image.Render(window.Trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
@@ -94,7 +94,7 @@ internal static class ShortCycleEcgSmokeChecks
             int peak = Enumerable.Range(first, last - first + 1).MaxBy(index => samples[index]);
             int raw = samples[peak];
             int x = (int)Math.Round(85 + peak * 4_000_000L / 8_000_000.0);
-            int y = (int)Math.Round((int)lead * 160 + 80 - raw * 0.04);
+            int y = (int)Math.Round((int)lead * ProjectedEcgPlotLayout.RowHeight + ProjectedEcgPlotLayout.RowHeight / 2 - raw * 0.04);
             if (raw < minimum || !Enumerable.Range(y - 2, 5).Any(row => Enumerable.Range(x - 1, 3).Any(column =>
                 Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + column * 4 + 1) > 100)))
             { throw new InvalidOperationException("Short-cycle P/T or subsequent QRS is absent from native samples/pixels."); }

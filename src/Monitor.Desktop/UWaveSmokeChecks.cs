@@ -108,21 +108,21 @@ internal static class UWaveSmokeChecks
 
     private static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, long fromSimTimeNs, long toExclusiveSimTimeNs)
     {
-        window.Trace.Measure(new Size(1044, 1920));
-        window.Trace.Arrange(new Rect(0, 0, 1044, 1920));
-        using RenderTargetBitmap image = new(new PixelSize(1044, 1920), new Vector(96, 96));
+        window.Trace.Measure(new Size(1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        window.Trace.Arrange(new Rect(0, 0, 1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        using RenderTargetBitmap image = new(new PixelSize(1044, (12 * ProjectedEcgPlotLayout.RowHeight)), new Vector(96, 96));
         image.Render(window.Trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         foreach (EcgLead lead in new[] { EcgLead.V2, EcgLead.V3 })
         {
-            var samples = Samples(blocks, lead);
+            short[] samples = Samples(blocks, lead);
             int first = (int)((fromSimTimeNs + 3_999_999) / 4_000_000), last = (int)((toExclusiveSimTimeNs - 1) / 4_000_000);
             int peak = Enumerable.Range(first, last - first + 1).MaxBy(index => Math.Abs((int)samples[index]));
             int raw = samples[peak];
             int x = (int)Math.Round(85 + peak / 2.0);
-            int y = (int)Math.Round((int)lead * 160 + 80 - raw * 0.04);
+            int y = (int)Math.Round((int)lead * ProjectedEcgPlotLayout.RowHeight + ProjectedEcgPlotLayout.RowHeight / 2 - raw * 0.04);
             if ((lead == EcgLead.V2 ? raw < 60 : raw > -75) ||
                 !Enumerable.Range(y - 1, 3).Any(row => Enumerable.Range(x - 1, 3).Any(column =>
                     Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + column * 4 + 1) > 100)))

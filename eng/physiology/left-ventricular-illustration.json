@@ -1,0 +1,82 @@
+{
+  "id": "LeftVentricularIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "464-466"
+  },
+  "textbook_summary": [
+    "Selected chest-lead checks are R > 2.5 mV in V5/V6 and RV5 + SV1 > 4.0 mV; the selected limb-lead check is R > 1.5 mV in I. Not all criteria must be positive simultaneously.",
+    "QRS duration is 100-110 ms.",
+    "R-dominant left-sided leads have downsloping ST depression exceeding 0.05 mV and inverted T waves; S-dominant V1 has upright T. Left-axis deviation is a possible feature, but this example does not additionally alter the axis."
+  ],
+  "scope": "A single teaching example of LVH with secondary ST-T changes, not a diagnosis or anatomical calibration.",
+  "authored_choices": {
+    "qrsDurationMs": 100,
+    "qrsGain": {
+      "limbElectrodes": 3,
+      "projectedChest": 2
+    },
+    "construction": "Limb QRS is multiplied by 3. Chest electrode QRS equals twice the original chest electrode plus the original Wilson mean, approximately doubling projected chest leads. The mean uses Int128/ties-to-even arithmetic with at most Q32 rounding residue.",
+    "electrodeOrder": [
+      "RA",
+      "LA",
+      "RL",
+      "LL",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6"
+    ],
+    "tMicrovolts": [
+      100,
+      -200,
+      0,
+      100,
+      300,
+      250,
+      100,
+      -100,
+      -350,
+      -300
+    ],
+    "jMicrovolts": [
+      20,
+      -40,
+      0,
+      20,
+      0,
+      0,
+      0,
+      -40,
+      -60,
+      -60
+    ],
+    "stEndMicrovolts": [
+      40,
+      -80,
+      0,
+      40,
+      0,
+      0,
+      0,
+      -80,
+      -120,
+      -120
+    ],
+    "basis": "Reuses the original QRS/T and smooth ST kernels. Parameters are authored choices, not exact textbook case data."
+  },
+  "compatibility": "P/u are allowed; PR/QT and atrial events are preserved. Simultaneous manual T/ST, fusion, infarction and three-zone modes are rejected. Atrial/ventricular activity gating still applies.",
+  "verification": [
+    "Checks projected voltages at 250 Hz, ST slope/T polarity, Einthoven identities, unchanged P/u, source recovery, native pixels and atomic rejection. Increased row spacing retains 40 logical pixels/mV and prevents high-amplitude waveforms from entering adjacent rows."
+  ],
+  "limitations": [
+    "Does not represent actual myocardial mass or hemodynamic changes.",
+    "Not all LVH voltage/morphology variants or continuous electrical-axis changes are implemented.",
+    "Right ventricular and biventricular hypertrophy remain unimplemented.",
+    "Manual verification on Windows hardware is deferred to a combined session."
+  ]
+}

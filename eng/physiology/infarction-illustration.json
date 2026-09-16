@@ -1,5 +1,5 @@
 {
-  "id": "ChestInfarctionIllustrationDraft@1",
+  "id": "ChestInfarctionIllustrationDraft@2",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -20,10 +20,69 @@
     "OldQLowT": "Q with reduced R; ST0; T50uV"
   },
   "tables": {
-    "QWithReducedR": {"length":128,"landmarks":[[0,0],[24,-600],[64,0],[88,250],[108,-100],[128,0]]},
-    "QS": {"length":128,"landmarks":[[0,0],[40,-1100],[128,0]]}
+    "QWithReducedR": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          24,
+          -600
+        ],
+        [
+          64,
+          0
+        ],
+        [
+          88,
+          250
+        ],
+        [
+          108,
+          -100
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "QS": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          40,
+          -1100
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    }
   },
   "limitations": [
-    "Manual snapshots, no automatic time course, treatment response or Q disappearance model. Q width follows selected QRS duration and is not classified by a detector. Chest-only selection retains unselected leads; no inferior/reciprocal territory model. Preserve patient QT endpoint and P/U. Stage values override selected ST/T/QRS controls."
-  ]
+    "Manual snapshots, no automatic time course, treatment response or Q disappearance model. Q width follows selected QRS duration and is not classified by a detector. Custom chest selection retains unselected leads; named limb territories have algebraically coupled changes, not a validated reciprocal disease model. Preserve patient QT endpoint and P/U. Stage values override selected ST/T/QRS controls."
+  ],
+  "territories": {
+    "source": {
+      "title": "诊断学（第10版）",
+      "isbn": "9787117363631",
+      "section": "第五篇 辅助检查 第一章 心电图 第五节",
+      "pages": "473"
+    },
+    "Inferior": "II/III/aVF; drive II by zero-sum RA/LA/LL [-u,-u,2u]",
+    "Lateral": "I/aVL/V5/V6; drive I by zero-sum RA/LA/LL [-u,2u,-u]",
+    "Anteroseptal": "V1-V3",
+    "Anterior": "V3-V5",
+    "ExtensiveAnterior": "V1-V5",
+    "implementation": "u is a ties-even Q32 third of desired lead change; duplicate the positive u band twice to retain exact zero-sum after interpolation. Related limb leads change algebraically; unchanged Wilson preserves nonselected chest leads.",
+    "not_available": "V7-V9 posterior and V3R-V4R right ventricular leads not in the current twelve-lead topology. No culprit-vessel inference."
+  }
 }

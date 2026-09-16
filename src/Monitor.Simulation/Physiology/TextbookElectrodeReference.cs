@@ -13,8 +13,8 @@ public static class TextbookElectrodeReference
     {
         if (zones is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null))
         { throw new EventWaveformException("EcgInfarction.ConflictingModes", "zones"); }
-        timing ??= atrial == EcgAtrialIllustration.LeftAtrialAbnormality
-            ? TextbookEcgReference.Timing with { PDurationNs = EcgAtrialIllustrations.LeftPDurationNs } : TextbookEcgReference.Timing;
+        timing ??= TextbookEcgReference.Timing with
+        { PDurationNs = EcgAtrialIllustrations.PDurationNs(atrial) ?? TextbookEcgReference.Timing.PDurationNs };
         timing.Validate();
         var atrialPlan = EcgAtrialIllustrations.Resolve(atrial, timing);
         if (atrialPlan is not null && pWave is not null)

@@ -81,7 +81,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox AtrialInput { get; } = new() { ItemsSource = new[] { "参考 / 手动 P", "左房异常 P 波教学示例" }, SelectedIndex = 0, Width = 220 };
+    internal ComboBox AtrialInput { get; } = new() { ItemsSource = new[] { "参考 / 手动 P", "左房异常 P 波教学示例", "右房异常 P 波教学示例", "双房异常 P 波教学示例" }, SelectedIndex = 0, Width = 220 };
     internal TextBox PEarlyInput { get; } = new() { Width = 65 };
     internal TextBox PLateInput { get; } = new() { Width = 65 };
     internal TextBox TPeakInput { get; } = new() { Width = 65 };
@@ -249,7 +249,7 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(TScaleInputs[index]);
             }
             settings.Children.Add(AtrialInput);
-            settings.Children.Add(new TextBlock { Text = "左房示例固定 P=140ms，保留PR且要求PR<227.5ms；请清空手动P。形态并非左房肥大特有。" });
+            settings.Children.Add(new TextBlock { Text = "右房示例P=100ms，左房/双房P=140ms；保留PR，左房要求PR<227.5ms。请清空手动P；这些形态不具有病因特异性。" });
             settings.Children.Add(new TextBlock { Text = "C1 P 早分量（μV，可空）" });
             settings.Children.Add(PEarlyInput);
             settings.Children.Add(new TextBlock { Text = "C1 P 晚分量（μV，可空）" });
@@ -818,7 +818,7 @@ internal sealed class WaveformDemoWindow : Window
                 ((configuration.Zones is not null || infarction.Components is not null) && components.ContributionLoss is not null ? $"；显式QRS贡献：{contribution.AmplitudeMicrovolts} μV、QRS时限的{contribution.DurationPermille / 10}%、移除{contribution.LossPermille / 10}%（固定参数）" : "") +
                 (configuration.Zones is null && infarction.HasActiveRegion ? $"；区域复极延长 {RepolarizationDelayInput.Text} ms，区域 QT {(timing.QtIntervalNs + infarction.RepolarizationDelayNs) / 1_000_000m:0.###} ms（输入 QTc 为参考）" : "") +
                 (configuration.Zones is not null ? "" : fusion.ChestMask == 0 ? "；融合关闭" : $"；ST–T 融合 {string.Join("/", Enumerable.Range(0, 6).Where(i => (fusion.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}，J/峰 {fusion.JMicrovolts}/{fusion.PeakMicrovolts} μV，J→QT 峰位置 {FusionPositionInput.Text}%（替换该处原 ST/T）") +
-                (configuration.Atrial == EcgAtrialIllustration.LeftAtrialAbnormality ? "；左房异常 P 波教学示例（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
+                (configuration.Atrial != EcgAtrialIllustration.Reference ? $"；{AtrialInput.SelectedItem}（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
                 (configuration.Zones is not null ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
                 (configuration.Zones is not null ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +
                 (configuration.Zones is not null ? "" : tWave.PeakPositionPermille is null ? "；T 峰参考 62.5%" : $"；手动 T 峰 {TPeakInput.Text}%") +

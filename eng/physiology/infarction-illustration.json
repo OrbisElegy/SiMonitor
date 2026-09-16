@@ -1,5 +1,5 @@
 {
-  "id": "ChestInfarctionIllustrationDraft@2",
+  "id": "ChestInfarctionIllustrationDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -68,7 +68,7 @@
     }
   },
   "limitations": [
-    "Manual snapshots, no automatic time course, treatment response or Q disappearance model. Q width follows selected QRS duration and is not classified by a detector. Custom chest selection retains unselected leads; named limb territories have algebraically coupled changes, not a validated reciprocal disease model. Preserve patient QT endpoint and P/U. Stage values override selected ST/T/QRS controls."
+    "Manual snapshots, no automatic time course, treatment response or Q disappearance model. Q width follows selected QRS duration and is not classified by a detector. Custom chest selection retains unselected leads; named limb territories have algebraically coupled changes, not a validated reciprocal disease model. Preserve P/U; optional regional repolarization extension changes QT explicitly. Stage values override selected ST/T/QRS controls."
   ],
   "territories": {
     "source": {
@@ -84,5 +84,6 @@
     "ExtensiveAnterior": "V1-V5",
     "implementation": "u is a ties-even Q32 third of desired lead change; duplicate the positive u band twice to retain exact zero-sum after interpolation. Related limb leads change algebraically; unchanged Wilson preserves nonselected chest leads.",
     "not_available": "V7-V9 posterior and V3R-V4R right ventricular leads not in the current twelve-lead topology. No culprit-vessel inference."
-  }
+  },
+  "repolarization_delay": "Optional explicit nonnegative regional extension: QT and T duration increase equally, preserving ordinary T onset and ST duration. Fusion keeps J and extends its J-to-QT span. Active region required; zero preserves prior samples. Validate cycle capacity and reject extension beyond existing nonzero U onset; never move U implicitly."
 }

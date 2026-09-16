@@ -11,6 +11,11 @@ from spdx_headers import with_header
 
 
 def sample_shape(shape):
+    if 'polynomial_coefficients' in shape:
+        coefficients = shape['polynomial_coefficients']
+        return [round(sum(Fraction(coefficient) * Fraction(index, shape['length']) ** power
+                          for power, coefficient in enumerate(coefficients)) * (1 << 32))
+                for index in range(shape['length'])]
     values = []
     for (start, first), (end, last) in zip(shape['landmarks'], shape['landmarks'][1:]):
         for index in range(start, end):

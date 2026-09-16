@@ -53,9 +53,9 @@ internal static class EcgLimbPlacementSmokeChecks
 
     internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int firstSample = 40, IReadOnlyList<EcgLead>? selectedLeads = null)
     {
-        window.Trace.Measure(new Size(1044, 1920));
-        window.Trace.Arrange(new Rect(0, 0, 1044, 1920));
-        using RenderTargetBitmap image = new(new PixelSize(1044, 1920), new Vector(96, 96));
+        window.Trace.Measure(new Size(1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        window.Trace.Arrange(new Rect(0, 0, 1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        using RenderTargetBitmap image = new(new PixelSize(1044, (12 * ProjectedEcgPlotLayout.RowHeight)), new Vector(96, 96));
         image.Render(window.Trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
@@ -65,7 +65,7 @@ internal static class EcgLimbPlacementSmokeChecks
             var samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
             int peak = Enumerable.Range(firstSample, 20).MaxBy(i => Math.Abs((int)samples[i]));
             int x = (int)Math.Round(85 + peak / 2.0);
-            int y = (int)Math.Round((int)lead * 160 + 80 - samples[peak] * 0.04);
+            int y = (int)Math.Round((int)lead * ProjectedEcgPlotLayout.RowHeight + ProjectedEcgPlotLayout.RowHeight / 2 - samples[peak] * 0.04);
             if (!Enumerable.Range(y - 1, 3).Any(row => Enumerable.Range(x - 1, 3).Any(column =>
                 Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + column * 4 + 1) > 100)))
             { throw new InvalidOperationException("Native limb wiring pixels do not match projected signed samples."); }

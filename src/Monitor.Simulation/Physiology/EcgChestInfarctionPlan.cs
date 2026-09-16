@@ -12,14 +12,15 @@ public enum InfarctionIllustrationStage
 public enum InfarctionTerritory { CustomChest, Inferior, Lateral, Anteroseptal, Anterior, ExtensiveAnterior }
 
 // Explicit teaching snapshots. There is no elapsed-time or treatment rule here.
-public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustrationStage Stage, InfarctionTerritory Territory = InfarctionTerritory.CustomChest, long RepolarizationDelayNs = 0)
+public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustrationStage Stage, InfarctionTerritory Territory = InfarctionTerritory.CustomChest, long RepolarizationDelayNs = 0, EcgInfarctionComponents? Components = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "ChestInfarctionIllustrationDraft@3";
+    public const string EvidenceId = "ChestInfarctionIllustrationDraft@4";
 
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> current, EcgCycleTiming timing)
     {
         if (ChestMask is < 0 or > 63 || !Enum.IsDefined(Stage) || !Enum.IsDefined(Territory) || RepolarizationDelayNs < 0) { throw Invalid(); }
+        Components?.Validate();
         int mask = Territory switch
         {
             InfarctionTerritory.Inferior => 0,
@@ -29,7 +30,7 @@ public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustratio
             InfarctionTerritory.ExtensiveAnterior => 31,
             _ => ChestMask,
         };
-        if ((mask == 0 && Territory != InfarctionTerritory.Inferior) || Stage == InfarctionIllustrationStage.None) { return current; }
+        if ((mask == 0 && Territory != InfarctionTerritory.Inferior) || (Stage == InfarctionIllustrationStage.None && Components is null)) { return current; }
         _ = ResolveRepolarizationTiming(timing);
         var standard = TextbookElectrodeReference.CreateElectrodes(timing: timing);
         // Carry the actual limb ventricular reference through to chest
@@ -76,6 +77,7 @@ public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustratio
     private List<EventWaveformBand> CreateTargets(EcgCycleTiming timing, Func<int, IReadOnlyList<long>> projected)
     {
         timing = ResolveRepolarizationTiming(timing);
+        if (Components is not null) { return Components.CreateTargets(timing, projected); }
         long qrsDuration = Stage == InfarctionIllustrationStage.HyperacuteInjury
             ? checked((long)FixedPointMath.RoundDivideTiesToEven((Int128)timing.QrsDurationNs * 6, 5)) : timing.QrsDurationNs;
         var localTiming = timing with { QrsDurationNs = qrsDuration };
@@ -130,7 +132,7 @@ public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustratio
         return extended;
     }
 
-    public bool HasActiveRegion => Stage != InfarctionIllustrationStage.None &&
+    public bool HasActiveRegion => (Stage != InfarctionIllustrationStage.None || Components is not null) &&
         (Territory != InfarctionTerritory.CustomChest || ChestMask != 0);
 
     private static System.Collections.ObjectModel.ReadOnlyCollection<long> Scale(IReadOnlyList<long> table, Int128 numerator, Int128 denominator) =>

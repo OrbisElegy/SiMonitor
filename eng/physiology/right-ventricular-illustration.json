@@ -1,0 +1,115 @@
+{
+  "id": "RightVentricularIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "466-467"
+  },
+  "textbook_summary": [
+    "V1 R/S >= 1, V5 R/S <= 1, and aVR has a dominant positive deflection.",
+    "RV1+SV5> 1.05 mV, RaVR> 0.5 mV.",
+    "The frontal QRS axis deviates rightward to >= 90 degrees.",
+    "V1/V2 show ST depression and T-wave inversion."
+  ],
+  "authored_choices": {
+    "qrsDurationMs": 80,
+    "leadComponentsMicrovolts": {
+      "I": [
+        150,
+        -1600,
+        -100
+      ],
+      "II": [
+        50,
+        200,
+        -30
+      ],
+      "V1": [
+        0,
+        1100,
+        -250
+      ],
+      "V2": [
+        0,
+        900,
+        -300
+      ],
+      "V3": [
+        0,
+        700,
+        -600
+      ],
+      "V4": [
+        0,
+        500,
+        -750
+      ],
+      "V5": [
+        0,
+        400,
+        -900
+      ],
+      "V6": [
+        0,
+        350,
+        -800
+      ]
+    },
+    "tMicrovolts": [
+      -40,
+      80,
+      0,
+      -40,
+      -300,
+      -250,
+      -100,
+      100,
+      200,
+      200
+    ],
+    "jMicrovolts": [
+      0,
+      0,
+      0,
+      0,
+      -60,
+      -50,
+      0,
+      0,
+      0,
+      0
+    ],
+    "stEndMicrovolts": [
+      0,
+      0,
+      0,
+      0,
+      -120,
+      -100,
+      0,
+      0,
+      0,
+      0
+    ],
+    "electrodeOrder": [
+      "RA",
+      "LA",
+      "RL",
+      "LL",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6"
+    ],
+    "construction": "Reuses existing smooth Early/Main/Terminal basis functions. I/II targets are inverted to RA/LA/LL before projection; chest electrodes carry the Wilson reference. Q32 tables are generated offline with Fraction/ties-to-even arithmetic. These are not exact textbook case samples or actual ventricular contributions."
+  },
+  "limitations": [
+    "A single RVH example; severe qR, cor pulmonale and biventricular hypertrophy are not covered.",
+    "A fixed rightward axis, not a continuous independent-axis interface.",
+    "Mechanical events and perfusion are unchanged.",
+    "Windows visual behavior is not yet manually verified."
+  ]
+}

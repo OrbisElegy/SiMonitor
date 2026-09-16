@@ -81,7 +81,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox VentricularInput { get; } = new() { ItemsSource = new[] { "参考心室波形", "左室肥厚伴 ST-T 改变示例" }, SelectedIndex = 0, Width = 240 };
+    internal ComboBox VentricularInput { get; } = new() { ItemsSource = new[] { "参考心室波形", "左室肥厚伴 ST-T 改变示例", "右室肥厚伴 ST-T 改变示例" }, SelectedIndex = 0, Width = 240 };
     internal ComboBox AtrialInput { get; } = new() { ItemsSource = new[] { "参考 / 手动 P", "左房异常 P 波教学示例", "右房异常 P 波教学示例", "双房异常 P 波教学示例" }, SelectedIndex = 0, Width = 220 };
     internal TextBox PEarlyInput { get; } = new() { Width = 65 };
     internal TextBox PLateInput { get; } = new() { Width = 65 };
@@ -250,7 +250,7 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(TScaleInputs[index]);
             }
             settings.Children.Add(VentricularInput);
-            settings.Children.Add(new TextBlock { Text = "左室示例固定QRS=100ms；需关闭手动T/ST、融合、梗死/三区域模式，可与P/u组合。" });
+            settings.Children.Add(new TextBlock { Text = "左室示例QRS=100ms，右室示例QRS=80ms；需关闭手动T/ST、融合、梗死/三区域模式，可与P/u组合。" });
             settings.Children.Add(AtrialInput);
             settings.Children.Add(new TextBlock { Text = "右房示例P=100ms，左房/双房P=140ms；保留PR，左房要求PR<227.5ms。请清空手动P；这些形态不具有病因特异性。" });
             settings.Children.Add(new TextBlock { Text = "C1 P 早分量（μV，可空）" });
@@ -613,7 +613,7 @@ internal sealed class WaveformDemoWindow : Window
         }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgVentricular.ConflictingModes")
         {
-            EcgConfigurationStatus.Text = "未应用：左室示例不能与手动 T/ST、融合、梗死或三区域编辑同时使用。请关闭这些设置后应用；当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：心室示例不能与手动 T/ST、融合、梗死或三区域编辑同时使用。请关闭这些设置后应用；当前数据与扫屏状态保持。";
         }
         catch (ArgumentException)
         {
@@ -826,7 +826,7 @@ internal sealed class WaveformDemoWindow : Window
                 ((configuration.Zones is not null || infarction.Components is not null) && components.ContributionLoss is not null ? $"；显式QRS贡献：{contribution.AmplitudeMicrovolts} μV、QRS时限的{contribution.DurationPermille / 10}%、移除{contribution.LossPermille / 10}%（固定参数）" : "") +
                 (configuration.Zones is null && infarction.HasActiveRegion ? $"；区域复极延长 {RepolarizationDelayInput.Text} ms，区域 QT {(timing.QtIntervalNs + infarction.RepolarizationDelayNs) / 1_000_000m:0.###} ms（输入 QTc 为参考）" : "") +
                 (configuration.Zones is not null ? "" : fusion.ChestMask == 0 ? "；融合关闭" : $"；ST–T 融合 {string.Join("/", Enumerable.Range(0, 6).Where(i => (fusion.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}，J/峰 {fusion.JMicrovolts}/{fusion.PeakMicrovolts} μV，J→QT 峰位置 {FusionPositionInput.Text}%（替换该处原 ST/T）") +
-                (configuration.Ventricular != EcgVentricularIllustration.Reference ? "；左室肥厚伴ST-T改变教学示例（非特异）" : "") +
+                (configuration.Ventricular != EcgVentricularIllustration.Reference ? $"；{VentricularInput.SelectedItem}（非特异）" : "") +
                 (configuration.Atrial != EcgAtrialIllustration.Reference ? $"；{AtrialInput.SelectedItem}（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
                 (configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
                 (configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +

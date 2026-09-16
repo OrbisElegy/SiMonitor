@@ -1,5 +1,5 @@
 {
-  "id": "ChestInfarctionIllustrationDraft@5",
+  "id": "ChestInfarctionIllustrationDraft@6",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -96,5 +96,35 @@
     "formula": "round_ties_even((templateQ32 * w + projectedReferenceQ32 * (1000-w)) / 1000) at each QRS LUT node; unchanged QRS duration",
     "endpoints": "0 restores projected reference QRS; 1000 preserves original Q/QS template; Reference shape ignores valid weights",
     "scope": "Independent components and necrosis zone only. Preserve P, ST, T, U and regional delay. Reuse existing exact limb projection. No automatic temporal evolution, tissue fraction or abnormal-Q classification."
+  },
+  "continuous_evolution_policy": "Automatic continuous disease evolution is not implemented. Simulation uses manual snapshots and fixed contribution/template parameters; long-term Q changes are not compressed into the demonstration.",
+  "contribution_loss": {
+    "decomposition": "reference = residual + authored contribution; output = reference - loss * contribution. The decomposition is not uniquely recoverable from a surface ECG.",
+    "envelope": "Reuse offline unit bell 16*x^2*(1-x)^2 over explicit initial QRS duration, with zero endpoints/slopes. Integer Q32, Int128 ties-even.",
+    "defaults": {
+      "amplitude_uV": 1200,
+      "duration_permille_of_qrs": 750,
+      "loss_permille": 1000
+    },
+    "bounds": {
+      "core_amplitude_uV": [
+        0,
+        4000
+      ],
+      "native_amplitude_uV": [
+        0,
+        2000
+      ],
+      "duration_permille": [
+        100,
+        1000
+      ],
+      "loss_permille": [
+        0,
+        1000
+      ]
+    },
+    "regions": "Independent mode uses its region; three-zone mode applies loss field only to the necrosis-shape region. Existing zero-sum limb projection is retained.",
+    "limitations": "An explicit teaching decomposition, not a measured local myocardial source, tissue percentage, coronary geometry or validated infarction preset. Reject combination with Q/QS template replacement. No automatic time evolution."
   }
 }

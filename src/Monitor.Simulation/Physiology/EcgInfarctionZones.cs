@@ -19,24 +19,32 @@ public sealed record EcgInfarctionZones(EcgInfarctionRegion Ischemia, EcgInfarct
         {
             (Ischemia, new EcgInfarctionComponents(TPeakMicrovolts: Components.TPeakMicrovolts), RepolarizationDelayNs),
             (Injury, new EcgInfarctionComponents(JMicrovolts: Components.JMicrovolts, StEndMicrovolts: Components.StEndMicrovolts, StArchMicrovolts: Components.StArchMicrovolts), 0L),
-            (Necrosis, new EcgInfarctionComponents(Components.Necrosis, QrsTemplatePermille: Components.QrsTemplatePermille), 0L),
+            (Necrosis, new EcgInfarctionComponents(Components.Necrosis, QrsTemplatePermille: Components.QrsTemplatePermille, ContributionLoss: Components.ContributionLoss), 0L),
         };
         for (int part = 0; part < parts.Length; part++)
         {
             var (region, component, delay) = parts[part];
             var plan = new EcgChestInfarctionPlan(region.ChestMask, InfarctionIllustrationStage.None, region.Territory, delay, component);
             var target = plan.Apply(baseline, timing); // Also validates inactive regions.
+            if (part == 2 && component.ContributionLoss is { } loss)
+            {
+                // Append only the loss field. Re-projecting and subtracting a
+                // reference QRS would leave tiny rounding residues outside it.
+                loss.AddRegionalBands(additions, timing, plan);
+                continue;
+            }
             if (part == 0 && plan.HasActiveRegion && u is not null && u.ElectrodeAmplitudesMicrovolts.Any(v => v != 0) && delay > u.DelayAfterTNs)
             { throw new EventWaveformException("EcgInfarction.UOverlap", "zones"); }
             if ((part == 0 && component.TPeakMicrovolts is null && delay == 0) ||
                 (part == 1 && component.JMicrovolts == 0 && component.StEndMicrovolts == 0 && component.StArchMicrovolts == 0) ||
-                (part == 2 && (component.Necrosis == NecrosisIllustrationShape.Reference || component.QrsTemplatePermille == 0))) { continue; }
+                (part == 2 && component.ContributionLoss?.IsActive != true &&
+                    (component.Necrosis == NecrosisIllustrationShape.Reference || component.QrsTemplatePermille == 0))) { continue; }
             bool Select(EventWaveformBand band) => band.Trigger == PhysiologyCycleEventKind.VentricularElectrical && (part switch
             {
                 0 => band.DelayNs == timing.TOffsetFromQrsNs && (band.DurationNs == timing.TDurationNs || band.DurationNs == timing.TDurationNs + delay),
                 1 => (band.DelayNs == timing.QrsDurationNs - timing.QrsDurationNs / 4 && band.DurationNs == timing.QtIntervalNs - band.DelayNs) ||
                     (band.DelayNs == timing.QrsDurationNs && band.DurationNs == timing.StDurationNs),
-                _ => band.DelayNs == 0 && band.DurationNs == timing.QrsDurationNs,
+                _ => band.DelayNs == 0,
             });
             for (int i = 0; i < 10; i++)
             {

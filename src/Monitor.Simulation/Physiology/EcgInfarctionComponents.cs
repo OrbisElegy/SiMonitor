@@ -8,10 +8,13 @@ public enum NecrosisIllustrationShape { Reference, QWithReducedR, QS }
 // Independent source-shape choices, not severity or tissue-size measurements.
 public sealed record EcgInfarctionComponents(NecrosisIllustrationShape Necrosis = NecrosisIllustrationShape.Reference,
     int? TPeakMicrovolts = null, int JMicrovolts = 0, int StEndMicrovolts = 0, int StArchMicrovolts = 0,
-    int QrsTemplatePermille = 1000)
+    int QrsTemplatePermille = 1000, EcgQrsContributionLoss? ContributionLoss = null)
 {
     internal void Validate()
     {
+        ContributionLoss?.Validate();
+        if (ContributionLoss is not null && (Necrosis != NecrosisIllustrationShape.Reference || QrsTemplatePermille != 1000))
+        { throw new EventWaveformException("EcgQrs.ConflictingAuthoringModes", "components"); }
         if (!Enum.IsDefined(Necrosis) || QrsTemplatePermille is < 0 or > 1000 || TPeakMicrovolts is < -4000 or > 4000 ||
             JMicrovolts is < -4000 or > 4000 || StEndMicrovolts is < -4000 or > 4000 ||
             StArchMicrovolts is < -4000 or > 4000)
@@ -44,6 +47,7 @@ public sealed record EcgInfarctionComponents(NecrosisIllustrationShape Necrosis 
             new(PhysiologyCycleEventKind.VentricularElectrical, 0, timing.QrsDurationNs, qrs),
             new(PhysiologyCycleEventKind.VentricularElectrical, timing.TOffsetFromQrsNs, timing.TDurationNs, t),
         ];
+        if (ContributionLoss?.CreateBand(timing) is { } loss) { result.Add(loss); }
         var st = new EcgStSegmentPlan(Enumerable.Repeat(JMicrovolts, 10).ToArray(),
             Enumerable.Repeat(StEndMicrovolts, 10).ToArray(), Enumerable.Repeat(StArchMicrovolts, 10).ToArray());
         if (st.CreateBands(timing)[4] is { } bands) { result.AddRange(bands); }

@@ -51,7 +51,7 @@ internal static class EcgLimbPlacementSmokeChecks
         Console.WriteLine("ok: native limb electrode swaps and standard restoration, signed lead pixels and atomic configuration lifecycle");
     }
 
-    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int firstSample = 40)
+    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int firstSample = 40, IReadOnlyList<EcgLead>? selectedLeads = null)
     {
         window.Trace.Measure(new Size(1044, 1920));
         window.Trace.Arrange(new Rect(0, 0, 1044, 1920));
@@ -60,7 +60,7 @@ internal static class EcgLimbPlacementSmokeChecks
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
-        foreach (EcgLead lead in new[] { EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V3, EcgLead.V5 })
+        foreach (EcgLead lead in selectedLeads ?? new[] { EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V3, EcgLead.V5 })
         {
             var samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
             int peak = Enumerable.Range(firstSample, 20).MaxBy(i => Math.Abs((int)samples[i]));

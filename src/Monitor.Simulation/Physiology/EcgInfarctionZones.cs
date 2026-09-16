@@ -19,7 +19,7 @@ public sealed record EcgInfarctionZones(EcgInfarctionRegion Ischemia, EcgInfarct
         {
             (Ischemia, new EcgInfarctionComponents(TPeakMicrovolts: Components.TPeakMicrovolts), RepolarizationDelayNs),
             (Injury, new EcgInfarctionComponents(JMicrovolts: Components.JMicrovolts, StEndMicrovolts: Components.StEndMicrovolts, StArchMicrovolts: Components.StArchMicrovolts), 0L),
-            (Necrosis, new EcgInfarctionComponents(Components.Necrosis), 0L),
+            (Necrosis, new EcgInfarctionComponents(Components.Necrosis, QrsTemplatePermille: Components.QrsTemplatePermille), 0L),
         };
         for (int part = 0; part < parts.Length; part++)
         {
@@ -30,7 +30,7 @@ public sealed record EcgInfarctionZones(EcgInfarctionRegion Ischemia, EcgInfarct
             { throw new EventWaveformException("EcgInfarction.UOverlap", "zones"); }
             if ((part == 0 && component.TPeakMicrovolts is null && delay == 0) ||
                 (part == 1 && component.JMicrovolts == 0 && component.StEndMicrovolts == 0 && component.StArchMicrovolts == 0) ||
-                (part == 2 && component.Necrosis == NecrosisIllustrationShape.Reference)) { continue; }
+                (part == 2 && (component.Necrosis == NecrosisIllustrationShape.Reference || component.QrsTemplatePermille == 0))) { continue; }
             bool Select(EventWaveformBand band) => band.Trigger == PhysiologyCycleEventKind.VentricularElectrical && (part switch
             {
                 0 => band.DelayNs == timing.TOffsetFromQrsNs && (band.DurationNs == timing.TDurationNs || band.DurationNs == timing.TDurationNs + delay),

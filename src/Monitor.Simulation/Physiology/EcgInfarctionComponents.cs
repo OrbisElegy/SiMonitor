@@ -7,11 +7,12 @@ public enum NecrosisIllustrationShape { Reference, QWithReducedR, QS }
 
 // Independent source-shape choices, not severity or tissue-size measurements.
 public sealed record EcgInfarctionComponents(NecrosisIllustrationShape Necrosis = NecrosisIllustrationShape.Reference,
-    int? TPeakMicrovolts = null, int JMicrovolts = 0, int StEndMicrovolts = 0, int StArchMicrovolts = 0)
+    int? TPeakMicrovolts = null, int JMicrovolts = 0, int StEndMicrovolts = 0, int StArchMicrovolts = 0,
+    int QrsTemplatePermille = 1000)
 {
     internal void Validate()
     {
-        if (!Enum.IsDefined(Necrosis) || TPeakMicrovolts is < -4000 or > 4000 ||
+        if (!Enum.IsDefined(Necrosis) || QrsTemplatePermille is < 0 or > 1000 || TPeakMicrovolts is < -4000 or > 4000 ||
             JMicrovolts is < -4000 or > 4000 || StEndMicrovolts is < -4000 or > 4000 ||
             StArchMicrovolts is < -4000 or > 4000)
         { throw new EventWaveformException("EcgInfarction.InvalidComponents", "components"); }
@@ -26,6 +27,15 @@ public sealed record EcgInfarctionComponents(NecrosisIllustrationShape Necrosis 
             NecrosisIllustrationShape.QS => InfarctionIllustrationTables.QS,
             _ => projected(1),
         };
+        if (Necrosis != NecrosisIllustrationShape.Reference && QrsTemplatePermille != 1000)
+        {
+            var reference = projected(1);
+            // Blend the projected QRS target, not the entire electrode signal.
+            // The weight is an authoring control, not a myocardial tissue ratio.
+            qrs = QrsTemplatePermille == 0 ? reference : Array.AsReadOnly(qrs.Zip(reference,
+                (target, original) => checked((long)FixedPointMath.RoundDivideTiesToEven(
+                    (Int128)target * QrsTemplatePermille + (Int128)original * (1000 - QrsTemplatePermille), 1000))).ToArray());
+        }
         IReadOnlyList<long> t = TPeakMicrovolts is { } amplitude
             ? Array.AsReadOnly(TextbookEcgTables.T.Select(value => checked((long)FixedPointMath.RoundDivideTiesToEven(
                 (Int128)value * amplitude * FixedPointMath.Q32One, TextbookEcgTables.T.Max()))).ToArray()) : projected(2);

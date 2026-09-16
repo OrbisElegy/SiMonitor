@@ -1,5 +1,5 @@
 {
-  "id": "ChestInfarctionIllustrationDraft@4",
+  "id": "ChestInfarctionIllustrationDraft@5",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -86,5 +86,15 @@
     "not_available": "V7-V9 posterior and V3R-V4R right ventricular leads not in the current twelve-lead topology. No culprit-vessel inference."
   },
   "repolarization_delay": "Optional explicit nonnegative regional extension: QT and T duration increase equally, preserving ordinary T onset and ST duration. Fusion keeps J and extends its J-to-QT span. Active region required; zero preserves prior samples. Validate cycle capacity and reject extension beyond existing nonzero U onset; never move U implicitly.",
-  "independent_components": "Optional explicit QRS Reference/QWithReducedR/QS, nullable T peak (null=reference, zero=suppressed), and independent J/ST-end/arch potentials. Components override stage targets, including stage None, in one chosen region. Regional delay remains separate. No tissue-contribution ablation, severity rule or automatic Q qualification."
+  "independent_components": "Optional explicit QRS Reference/QWithReducedR/QS, nullable T peak (null=reference, zero=suppressed), and independent J/ST-end/arch potentials. Components override stage targets, including stage None, in one chosen region. Regional delay remains separate. No tissue-contribution ablation, severity rule or automatic Q qualification.",
+  "qrs_template_blend": {
+    "range_permille": [
+      0,
+      1000
+    ],
+    "default": 1000,
+    "formula": "round_ties_even((templateQ32 * w + projectedReferenceQ32 * (1000-w)) / 1000) at each QRS LUT node; unchanged QRS duration",
+    "endpoints": "0 restores projected reference QRS; 1000 preserves original Q/QS template; Reference shape ignores valid weights",
+    "scope": "Independent components and necrosis zone only. Preserve P, ST, T, U and regional delay. Reuse existing exact limb projection. No automatic temporal evolution, tissue fraction or abnormal-Q classification."
+  }
 }

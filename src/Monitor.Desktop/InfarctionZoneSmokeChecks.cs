@@ -24,6 +24,7 @@ internal static class InfarctionZoneSmokeChecks
                 window.InjuryZoneInput.SelectedIndex = injury;
                 window.NecrosisZoneInput.SelectedIndex = necrosis;
                 window.NecrosisShapeInput.SelectedIndex = 1;
+                window.QrsTemplateInput.Text = "37.5";
                 window.ComponentTInput.Text = "-500";
                 window.ComponentJInput.Text = "200";
                 window.ComponentEndInput.Text = "100";
@@ -32,7 +33,7 @@ internal static class InfarctionZoneSmokeChecks
                 Click(window.ApplyEcgButton); window.Pulse(stale);
                 var config = window.EcgConfiguration;
                 if (config.Zones is not { } zones || zones.Ischemia != InfarctionZoneSelection.Resolve(ischemia) ||
-                    zones.Injury != InfarctionZoneSelection.Resolve(injury) || zones.Necrosis != InfarctionZoneSelection.Resolve(necrosis) ||
+                    zones.Components.QrsTemplatePermille != 375 || zones.Injury != InfarctionZoneSelection.Resolve(injury) || zones.Necrosis != InfarctionZoneSelection.Resolve(necrosis) ||
                     window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Separate zones did not restart atomically."); }
                 for (int step = 0; step < 14; step++) { Click(window.StepButton); }
@@ -64,7 +65,7 @@ internal static class InfarctionZoneSmokeChecks
                 Click(window.ResetButton);
                 if (window.IschemiaZoneInput.SelectedIndex != ischemia || window.InjuryZoneInput.SelectedIndex != injury ||
                     window.NecrosisZoneInput.SelectedIndex != necrosis || window.SeparateZonesInput.IsChecked != true ||
-                    window.ComponentTInput.Text != "-500" || window.RepolarizationDelayInput.Text != "80")
+                    window.ComponentTInput.Text != "-500" || window.QrsTemplateInput.Text != "37.5" || window.RepolarizationDelayInput.Text != "80")
                 { throw new InvalidOperationException("Reset lost accepted zones."); }
                 window.SeparateZonesInput.IsChecked = false; Click(window.ApplyEcgButton);
                 var off = window.EcgConfiguration;

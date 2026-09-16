@@ -17,16 +17,18 @@ internal static class InfarctionComponentSmokeChecks
         {
             window.InfarctionInputs[2].IsChecked = true;
             window.RepolarizationDelayInput.Text = "80";
-            foreach (var (q, t, j, end) in new[] { (0, "-500", "0", "0"), (1, "", "0", "0"), (0, "", "200", "100"), (2, "-500", "200", "100") })
+            foreach (var (q, t, j, end, weight) in new[] { (0, "-500", "0", "0", "100"), (1, "", "0", "0", "100"), (0, "", "200", "100", "100"), (2, "-500", "200", "100", "100"), (1, "-500", "200", "100", "37.5"), (2, "-500", "200", "100", "0") })
             {
                 Click(window.StepButton); Click(window.HoldButton); Click(window.RunButton);
                 var stale = window.ActiveTimer;
                 window.IndependentComponentsInput.IsChecked = true;
                 window.NecrosisShapeInput.SelectedIndex = q;
+                window.QrsTemplateInput.Text = weight;
                 window.ComponentTInput.Text = t; window.ComponentJInput.Text = j; window.ComponentEndInput.Text = end;
                 Click(window.ApplyEcgButton); window.Pulse(stale);
                 var config = window.EcgConfiguration;
                 if (config.Infarction?.Components is not { } components || (int)components.Necrosis != q ||
+                    components.QrsTemplatePermille != (int)(decimal.Parse(weight, System.Globalization.CultureInfo.InvariantCulture) * 10) ||
                     config.Infarction.Stage != InfarctionIllustrationStage.None || window.SimulationTimeNs != 0 ||
                     window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Independent components did not apply without a stage."); }
@@ -47,9 +49,10 @@ internal static class InfarctionComponentSmokeChecks
                 Click(window.HoldButton); Click(window.RunButton);
                 var held = window.Trace; var timer = window.ActiveTimer; long before = window.SimulationTimeNs;
                 foreach (var (input, invalid) in new[] { (window.ComponentTInput, "-2001"), (window.ComponentJInput, "1001"),
-                    (window.ComponentEndInput, "bad"), (window.ComponentArchInput, "-1001") })
+                    (window.ComponentEndInput, "bad"), (window.ComponentArchInput, "-1001"), (window.QrsTemplateInput, "100.1"), (window.QrsTemplateInput, "-1"),
+                    (window.QrsTemplateInput, "37.55"), (window.QrsTemplateInput, "bad") })
                 {
-                    var old = input.Text; input.Text = invalid; Click(window.ApplyEcgButton);
+                    string? old = input.Text; input.Text = invalid; Click(window.ApplyEcgButton);
                     if (window.EcgConfiguration != config || !ReferenceEquals(held, window.Trace) ||
                         !ReferenceEquals(timer, window.ActiveTimer) || window.SimulationTimeNs != before)
                     { throw new InvalidOperationException("Invalid component input changed accepted source."); }
@@ -58,7 +61,7 @@ internal static class InfarctionComponentSmokeChecks
                 window.NecrosisShapeInput.SelectedIndex = -1; Click(window.ApplyEcgButton);
                 if (window.EcgConfiguration != config) { throw new InvalidOperationException("Unknown necrosis shape accepted."); }
                 Click(window.ResetButton);
-                if (window.NecrosisShapeInput.SelectedIndex != q || window.ComponentTInput.Text != t || window.IndependentComponentsInput.IsChecked != true)
+                if (window.NecrosisShapeInput.SelectedIndex != q || window.ComponentTInput.Text != t || window.QrsTemplateInput.Text != weight || window.IndependentComponentsInput.IsChecked != true)
                 { throw new InvalidOperationException("Reset lost accepted components."); }
             }
             window.IndependentComponentsInput.IsChecked = false; Click(window.ApplyEcgButton);

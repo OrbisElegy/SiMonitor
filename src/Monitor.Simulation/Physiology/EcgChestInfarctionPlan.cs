@@ -15,7 +15,7 @@ public enum InfarctionTerritory { CustomChest, Inferior, Lateral, Anteroseptal, 
 public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustrationStage Stage, InfarctionTerritory Territory = InfarctionTerritory.CustomChest, long RepolarizationDelayNs = 0, EcgInfarctionComponents? Components = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "ChestInfarctionIllustrationDraft@4";
+    public const string EvidenceId = "ChestInfarctionIllustrationDraft@5";
 
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> current, EcgCycleTiming timing)
     {

@@ -9,8 +9,10 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null)
     {
+        if (zones is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null))
+        { throw new EventWaveformException("EcgInfarction.ConflictingModes", "zones"); }
         timing ??= TextbookEcgReference.Timing;
         timing.Validate();
         uWave?.Validate(timing);
@@ -92,6 +94,7 @@ public static class TextbookElectrodeReference
             infarction.RepolarizationDelayNs > uWave.DelayAfterTNs)
         { throw new EventWaveformException("EcgInfarction.UOverlap", "infarction"); }
         var staged = infarction?.Apply(electrodes, timing) ?? electrodes;
+        staged = zones?.Apply(staged, timing, uWave) ?? staged;
         if (uWave is null) { return staged; }
         var extended = staged.Select(item => item with
         {

@@ -69,6 +69,7 @@ internal static class Program
             .. InfarctionIllustrationSpecifications.All,
             .. InfarctionTerritorySpecifications.All,
             .. RegionalRepolarizationSpecifications.All,
+            .. InfarctionComponentSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

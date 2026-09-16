@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Simulation.Determinism;
+
+namespace Monitor.Simulation.Physiology;
+
+public enum NecrosisIllustrationShape { Reference, QWithReducedR, QS }
+
+// Independent source-shape choices, not severity or tissue-size measurements.
+public sealed record EcgInfarctionComponents(NecrosisIllustrationShape Necrosis = NecrosisIllustrationShape.Reference,
+    int? TPeakMicrovolts = null, int JMicrovolts = 0, int StEndMicrovolts = 0, int StArchMicrovolts = 0)
+{
+    internal void Validate()
+    {
+        if (!Enum.IsDefined(Necrosis) || TPeakMicrovolts is < -4000 or > 4000 ||
+            JMicrovolts is < -4000 or > 4000 || StEndMicrovolts is < -4000 or > 4000 ||
+            StArchMicrovolts is < -4000 or > 4000)
+        { throw new EventWaveformException("EcgInfarction.InvalidComponents", "components"); }
+    }
+
+    internal List<EventWaveformBand> CreateTargets(EcgCycleTiming timing, Func<int, IReadOnlyList<long>> projected)
+    {
+        Validate();
+        IReadOnlyList<long> qrs = Necrosis switch
+        {
+            NecrosisIllustrationShape.QWithReducedR => InfarctionIllustrationTables.QWithReducedR,
+            NecrosisIllustrationShape.QS => InfarctionIllustrationTables.QS,
+            _ => projected(1),
+        };
+        IReadOnlyList<long> t = TPeakMicrovolts is { } amplitude
+            ? Array.AsReadOnly(TextbookEcgTables.T.Select(value => checked((long)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)value * amplitude * FixedPointMath.Q32One, TextbookEcgTables.T.Max()))).ToArray()) : projected(2);
+        List<EventWaveformBand> result =
+        [
+            new(PhysiologyCycleEventKind.VentricularElectrical, 0, timing.QrsDurationNs, qrs),
+            new(PhysiologyCycleEventKind.VentricularElectrical, timing.TOffsetFromQrsNs, timing.TDurationNs, t),
+        ];
+        var st = new EcgStSegmentPlan(Enumerable.Repeat(JMicrovolts, 10).ToArray(),
+            Enumerable.Repeat(StEndMicrovolts, 10).ToArray(), Enumerable.Repeat(StArchMicrovolts, 10).ToArray());
+        if (st.CreateBands(timing)[4] is { } bands) { result.AddRange(bands); }
+        return result;
+    }
+}

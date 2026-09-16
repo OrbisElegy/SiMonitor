@@ -85,6 +85,12 @@ public static class TextbookElectrodeReference
                         .Append(replacement[1]).ToArray()) : item.Bands,
             }).ToArray());
         }
+        // U timing remains caller-owned. Until explicit T-U overlap modelling
+        // exists, reject an extended global repolarization endpoint past U onset.
+        if (infarction is { HasActiveRegion: true } && uWave is not null &&
+            uWave.ElectrodeAmplitudesMicrovolts.Any(value => value != 0) &&
+            infarction.RepolarizationDelayNs > uWave.DelayAfterTNs)
+        { throw new EventWaveformException("EcgInfarction.UOverlap", "infarction"); }
         var staged = infarction?.Apply(electrodes, timing) ?? electrodes;
         if (uWave is null) { return staged; }
         var extended = staged.Select(item => item with

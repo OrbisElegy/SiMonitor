@@ -15,6 +15,7 @@ internal static class InfarctionTerritorySmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
+            window.RepolarizationDelayInput.Text = "80";
             window.InfarctionStageInput.SelectedIndex = (int)InfarctionIllustrationStage.AcuteQInvertedT;
             foreach (var territory in Enum.GetValues<InfarctionTerritory>().Skip(1).Append(InfarctionTerritory.CustomChest))
             {

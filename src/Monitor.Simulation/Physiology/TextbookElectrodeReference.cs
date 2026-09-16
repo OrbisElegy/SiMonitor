@@ -9,7 +9,7 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null)
     {
         timing ??= TextbookEcgReference.Timing;
         timing.Validate();
@@ -85,8 +85,9 @@ public static class TextbookElectrodeReference
                         .Append(replacement[1]).ToArray()) : item.Bands,
             }).ToArray());
         }
-        if (uWave is null) { return electrodes; }
-        var extended = electrodes.Select(item => item with
+        var staged = infarction?.Apply(electrodes, timing) ?? electrodes;
+        if (uWave is null) { return staged; }
+        var extended = staged.Select(item => item with
         {
             Bands = Array.AsReadOnly(item.Bands.Append(
             new EventWaveformBand(PhysiologyCycleEventKind.VentricularElectrical,

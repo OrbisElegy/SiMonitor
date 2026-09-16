@@ -41,6 +41,16 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox TDurationInput { get; } = new() { Text = "180", Width = 65, IsEnabled = false };
     internal TextBox UDelayInput { get; } = new() { Text = "30", Width = 65 };
     internal TextBox UDurationInput { get; } = new() { Text = "120", Width = 65 };
+    internal CheckBox[] InfarctionInputs { get; } = Enumerable.Range(1, 6)
+        .Select(i => new CheckBox { Content = $"V{i} 阶段示意", IsChecked = false }).ToArray();
+    internal ComboBox InfarctionStageInput { get; } = new()
+    {
+        SelectedIndex = 0,
+        ItemsSource = new[]
+    { "关闭阶段示意", "超急性：高大 T", "超急性：QRS 增高增宽＋ST/T", "急性：QS＋单向曲线",
+      "急性：Q/R 降低＋ST 抬高＋倒置 T", "急性：QS＋ST 抬高＋倒置 T", "亚急性：Q＋深倒置 T",
+      "亚急性：Q＋倒置 T 变浅", "陈旧：Q＋参考 T", "陈旧：Q＋倒置 T", "陈旧：Q＋低平 T" }
+    };
     internal CheckBox[] FusionInputs { get; } = Enumerable.Range(1, 6)
         .Select(i => new CheckBox { Content = $"V{i} 融合", IsChecked = false }).ToArray();
     internal TextBox FusionJInput { get; } = new() { Text = "200", Width = 65 };
@@ -233,6 +243,8 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(FusionPeakInput);
             settings.Children.Add(new TextBlock { Text = "融合峰位置（J→QT 终点，%）" });
             settings.Children.Add(FusionPositionInput);
+            settings.Children.Add(InfarctionStageInput);
+            foreach (var input in InfarctionInputs) { settings.Children.Add(input); }
             settings.Children.Add(ApplyEcgButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
@@ -242,6 +254,7 @@ internal sealed class WaveformDemoWindow : Window
             panel.Children.Add(new TextBlock { Text = "手动 J/ST 偏移 −1000～1000 μV，共同作用于 C1～C6，肢体电极不变。附加电位从 QRS 最后四分之一平滑升起，在 T 起点达到 ST 末端值，再随 T 时限回到零；会改变 QRS 末端及 T 上的基线，不改变 QT/u。非病理预设；J、末端及弓起均为 0 时关闭，启用时需有非零 ST 时限。ST 中段弓起为 −1000～1000 μV：正值向上隆起，负值向下凹；只叠加于 ST 内，中点达到所填附加电位，保持 J 和末端值。示例：J=200、末端=200、弓起=200 μV。" });
             panel.Children.Add(new TextBlock { Text = "手动 C1 P 双分量：两项同时留空保留参考，否则各为 −1000～1000 μV 整数。两个圆钝波瓣在 P 时限内重叠，可形成切迹或双向波；数值为分量幅度，非最终 V1 峰值。仅替换 C1 的 P，不改变 P 时限/PR 或其他波段；不是疾病预设。" });
             panel.Children.Add(new TextBlock { Text = "ST–T 融合仅替换勾选的胸导联：J 为 −1000～1000 μV，峰为 −2000～2000 μV；峰位置为 J→QT 终点的 0.1～99.9%（精度 0.1%），可早于原 T 起点。统一轮廓取代该处原 T 及 J/ST/弓起，未选导联保持原配置；从 QRS 最后四分之一平滑接入，QT/u 不变。融合电位以 Wilson 复极参考为基准，避免残留原 T 波。取消勾选恢复原参数；不是心梗区域或病程预设。" });
+            panel.Children.Add(new TextBlock { Text = "心梗阶段示意：只替换所选胸导联的 QRS/ST/T，优先于手动融合及 ST/T 设置；其他导联、P/QT/u 保留。超急性损伤示意在所选导联增宽 QRS，需容纳在现有 QT 内。数值为项目示意值，非定量病例；阶段手动切换并从零开始，不代表自动病程、治疗效果或冠脉定位。关闭或取消选择恢复原配置。" });
             panel.Children.Add(_activeEcgConfiguration);
             panel.Children.Add(EcgConfigurationStatus);
         }
@@ -491,13 +504,20 @@ internal sealed class WaveformDemoWindow : Window
                 fusionPosition is < 0.1m or > 99.9m || fusionPosition * 10 != decimal.Truncate(fusionPosition * 10))
             { throw new ArgumentException("Invalid fusion contour."); }
             ProjectedEcgFusionConfiguration fusion = new(fusionMask, fusionJ, fusionPeak, (int)(fusionPosition * 10));
+            int infarctionMask = 0;
+            for (int index = 0; index < InfarctionInputs.Length; index++)
+            {
+                if (InfarctionInputs[index].IsChecked is not { } enabled) { throw new ArgumentException("Invalid infarction selection."); }
+                if (enabled) { infarctionMask |= 1 << index; }
+            }
+            var infarction = new EcgChestInfarctionPlan(infarctionMask, (InfarctionIllustrationStage)InfarctionStageInput.SelectedIndex);
             int? independentOffset = ParseIndependentVentricularOffset();
-            configuration = configuration with { Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            configuration = configuration with { Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：融合 J 须为 ±1000 μV 整数、融合峰 ±2000 μV 整数，融合峰位置 0.1～99.9%（精度 0.1%）；C1 P 双分量须同时留空或均为 −1000～1000 μV 整数；J/ST 偏移及中段弓起须为 −1000～1000 μV 整数，启用时 ST 时限须大于零；T 峰位置须为 10～90%，精度 0.1% 或留空；T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：请选择有效阶段及区域，所选 QRS 增宽后仍须满足 QT 时限；融合 J 须为 ±1000 μV 整数、融合峰 ±2000 μV 整数，融合峰位置 0.1～99.9%（精度 0.1%）；C1 P 双分量须同时留空或均为 −1000～1000 μV 整数；J/ST 偏移及中段弓起须为 −1000～1000 μV 整数，启用时 ST 时限须大于零；T 峰位置须为 10～90%，精度 0.1% 或留空；T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -654,6 +674,10 @@ internal sealed class WaveformDemoWindow : Window
             UDurationInput.Text = u.DurationMilliseconds.ToString(CultureInfo.InvariantCulture);
             for (int index = 0; index < UAmplitudeInputs.Length; index++)
             { UAmplitudeInputs[index].Text = u.ChestAmplitudes[index].ToString(CultureInfo.InvariantCulture); }
+            var infarction = configuration.Infarction ?? new(0, InfarctionIllustrationStage.None);
+            InfarctionStageInput.SelectedIndex = (int)infarction.Stage;
+            for (int index = 0; index < InfarctionInputs.Length; index++)
+            { InfarctionInputs[index].IsChecked = (infarction.ChestMask & (1 << index)) != 0; }
             var fusion = configuration.Fusion ?? ProjectedEcgFusionConfiguration.Default;
             for (int index = 0; index < FusionInputs.Length; index++)
             { FusionInputs[index].IsChecked = (fusion.ChestMask & (1 << index)) != 0; }
@@ -672,6 +696,7 @@ internal sealed class WaveformDemoWindow : Window
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；基础周期率 {configuration.HeartRateBpm} 次/分；传导 {configuration.VentricularConductionRatio}:1；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {configuration.PDurationMilliseconds}/{configuration.PrIntervalMilliseconds}/{configuration.QrsDurationMilliseconds}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
+                (infarction.ChestMask == 0 || infarction.Stage == InfarctionIllustrationStage.None ? "；阶段示意关闭" : $"；{InfarctionStageInput.SelectedItem}：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +
                 (fusion.ChestMask == 0 ? "；融合关闭" : $"；ST–T 融合 {string.Join("/", Enumerable.Range(0, 6).Where(i => (fusion.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}，J/峰 {fusion.JMicrovolts}/{fusion.PeakMicrovolts} μV，J→QT 峰位置 {FusionPositionInput.Text}%（替换该处原 ST/T）") +
                 (configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
                 (configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +

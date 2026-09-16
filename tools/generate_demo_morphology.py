@@ -139,7 +139,10 @@ def main():
     if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
         raise ValueError('upstream ABP license evidence changed')
     st = json.loads((root / 'eng/physiology/st-segment-illustration.json').read_text())
+    infarction = json.loads((root / 'eng/physiology/infarction-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/InfarctionIllustrationTables.cs': render(
+            'Monitor.Simulation.Physiology', 'InfarctionIllustrationTables', infarction['tables']),
         root / 'src/Monitor.Simulation/Physiology/StSegmentTables.cs': render(
             'Monitor.Simulation.Physiology', 'StSegmentTables', st['tables']),
         root / 'src/Monitor.Simulation/Physiology/CvpComponentTables.cs':

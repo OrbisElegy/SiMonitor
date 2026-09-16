@@ -1,0 +1,29 @@
+{
+  "id": "ChestInfarctionIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第五节",
+    "pages": "469-473"
+  },
+  "authorship": "Project-authored chest-region stage illustrations based on the cited textbook narrative; not measured patient data or validated disease presets",
+  "stages": {
+    "HyperacuteT": "reference QRS; T peak 900uV",
+    "HyperacuteInjury": "reference projected QRS scaled 125%, width 120%; fused J250/peak800uV at 60% of J-to-QT",
+    "AcuteMonophasic": "QS; fused J500/peak650uV at 65% of J-to-QT",
+    "AcuteQInvertedT": "Q with reduced R; J200/ST-end100uV; T -500uV",
+    "AcuteQsInvertedT": "QS; J200/ST-end100uV; T -500uV",
+    "SubacuteDeepT": "Q with reduced R; ST0; T -500uV",
+    "SubacuteRecoveringT": "Q with reduced R; ST0; T -200uV",
+    "OldQNormalT": "Q with reduced R; ST0; reference projected T",
+    "OldQInvertedT": "Q with reduced R; ST0; T -150uV",
+    "OldQLowT": "Q with reduced R; ST0; T50uV"
+  },
+  "tables": {
+    "QWithReducedR": {"length":128,"landmarks":[[0,0],[24,-600],[64,0],[88,250],[108,-100],[128,0]]},
+    "QS": {"length":128,"landmarks":[[0,0],[40,-1100],[128,0]]}
+  },
+  "limitations": [
+    "Manual snapshots, no automatic time course, treatment response or Q disappearance model. Q width follows selected QRS duration and is not classified by a detector. Chest-only selection retains unselected leads; no inferior/reciprocal territory model. Preserve patient QT endpoint and P/U. Stage values override selected ST/T/QRS controls."
+  ]
+}

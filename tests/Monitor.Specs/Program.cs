@@ -73,6 +73,7 @@ internal static class Program
             .. InfarctionZoneSpecifications.All,
             .. QrsTemplateBlendSpecifications.All,
             .. AuthoredQrsMeasurementSpecifications.All,
+            .. QrsContributionSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

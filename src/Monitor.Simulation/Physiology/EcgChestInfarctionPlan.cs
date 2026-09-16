@@ -15,21 +15,22 @@ public enum InfarctionTerritory { CustomChest, Inferior, Lateral, Anteroseptal, 
 public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustrationStage Stage, InfarctionTerritory Territory = InfarctionTerritory.CustomChest, long RepolarizationDelayNs = 0, EcgInfarctionComponents? Components = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "ChestInfarctionIllustrationDraft@5";
+    public const string EvidenceId = "ChestInfarctionIllustrationDraft@6";
+    internal int ResolvedChestMask => Territory switch
+    {
+        InfarctionTerritory.Inferior => 0,
+        InfarctionTerritory.Lateral => 48,
+        InfarctionTerritory.Anteroseptal => 7,
+        InfarctionTerritory.Anterior => 28,
+        InfarctionTerritory.ExtensiveAnterior => 31,
+        _ => ChestMask,
+    };
 
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> current, EcgCycleTiming timing)
     {
         if (ChestMask is < 0 or > 63 || !Enum.IsDefined(Stage) || !Enum.IsDefined(Territory) || RepolarizationDelayNs < 0) { throw Invalid(); }
         Components?.Validate();
-        int mask = Territory switch
-        {
-            InfarctionTerritory.Inferior => 0,
-            InfarctionTerritory.Lateral => 48,
-            InfarctionTerritory.Anteroseptal => 7,
-            InfarctionTerritory.Anterior => 28,
-            InfarctionTerritory.ExtensiveAnterior => 31,
-            _ => ChestMask,
-        };
+        int mask = ResolvedChestMask;
         if ((mask == 0 && Territory != InfarctionTerritory.Inferior) || (Stage == InfarctionIllustrationStage.None && Components is null)) { return current; }
         _ = ResolveRepolarizationTiming(timing);
         var standard = TextbookElectrodeReference.CreateElectrodes(timing: timing);

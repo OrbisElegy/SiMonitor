@@ -20,8 +20,8 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     {
         if (!Enum.IsDefined(Atrial)) { throw new ArgumentException("Invalid atrial illustration."); }
         var timing = ResolveBaseTiming();
-        if (Atrial == EcgAtrialIllustration.LeftAtrialAbnormality)
-        { timing = timing with { PDurationNs = EcgAtrialIllustrations.LeftPDurationNs }; }
+        if (EcgAtrialIllustrations.PDurationNs(Atrial) is { } pDuration)
+        { timing = timing with { PDurationNs = pDuration }; }
         timing.Validate();
         return timing;
     }

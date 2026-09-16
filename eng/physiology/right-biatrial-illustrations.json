@@ -1,0 +1,128 @@
+{
+  "id": "RightAndBiatrialIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "463-464"
+  },
+  "textbook_summary": [
+    "Right-atrial findings: total P duration is not prolonged; tall P waves in II/III/aVF are >= 0.25 mV, upright P in V1 is >= 0.15 mV, and the P axis is > 75 degrees.",
+    "Biatrial findings: P duration is >= 120 ms with amplitude >= 0.25 mV, and V1 has a large biphasic P wave."
+  ],
+  "scope": "Nonspecific right-atrial and biatrial abnormal P-wave teaching morphologies, not an anatomical atrial model or diagnostic classifier.",
+  "authored_choices": {
+    "electrodeOrder": [
+      "RA",
+      "LA",
+      "RL",
+      "LL",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6"
+    ],
+    "right": {
+      "pDurationMs": 100,
+      "separationPermille": 0,
+      "earlyLateMicrovolts": [
+        [
+          -100,
+          0
+        ],
+        [
+          -100,
+          0
+        ],
+        null,
+        [
+          200,
+          0
+        ],
+        [
+          180,
+          0
+        ],
+        [
+          150,
+          0
+        ],
+        [
+          120,
+          0
+        ],
+        [
+          100,
+          0
+        ],
+        [
+          100,
+          0
+        ],
+        [
+          100,
+          0
+        ]
+      ],
+      "fixedPaxisDegrees": 90,
+      "shape": "Existing smooth P kernel with one tall peak, total duration 100 ms, and no double-peak notch."
+    },
+    "biatrial": {
+      "pDurationMs": 140,
+      "separationPermille": 375,
+      "earlyLateMicrovolts": [
+        [
+          -180,
+          -180
+        ],
+        [
+          30,
+          30
+        ],
+        null,
+        [
+          150,
+          150
+        ],
+        [
+          220,
+          -200
+        ],
+        [
+          180,
+          -80
+        ],
+        [
+          160,
+          60
+        ],
+        [
+          150,
+          150
+        ],
+        [
+          150,
+          150
+        ],
+        [
+          150,
+          150
+        ]
+      ]
+    },
+    "notes": [
+      "Amplitudes and durations are project-authored choices, not exact textbook case samples. Limb coefficients sum to zero; integer scaling may leave Q32 quantization residue, while electrode projection remains exact. PR and QRS/ST/T/u are not shifted."
+    ]
+  },
+  "verification": [
+    "Checks projected amplitudes, support, peak shape and the fixed right-atrial P axis at 250 Hz, Einthoven identities, unchanged ventricular samples, recovery bytes, native rendering and atomic switching."
+  ],
+  "limitations": [
+    "Continuous independent P/QRS/T axes are not implemented.",
+    "Not all variants of each morphology are included.",
+    "Actual right/left atrial contributions and secondary hemodynamics are not modeled.",
+    "Manual verification on Windows hardware is deferred to a combined session."
+  ]
+}

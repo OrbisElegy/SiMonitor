@@ -32,6 +32,7 @@ internal static class WaveformDemoSmokeChecks
         RegionalRepolarizationSmokeChecks.Verify();
         InfarctionComponentSmokeChecks.Verify();
         InfarctionZoneSmokeChecks.Verify();
+        AuthoredQrsSmokeChecks.Verify();
         MechanicalUncouplingSmokeChecks.Verify();
         MechanicalTransitionSmokeChecks.Verify();
         MechanicalResumptionSmokeChecks.Verify();

@@ -1,0 +1,18 @@
+{
+  "id": "StTFusionIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第五节",
+    "pages": "470-472"
+  },
+  "authorship": "Project-authored continuous contour, motivated by the cited textbook figures 5-1-43, 5-1-46 and 5-1-47 through 49; no digitized clinical preset",
+  "implementation_basis": [
+    "Reuse StSegmentTables.J and End complementary smoothstep bases at indices 0/32/64/128"
+  ],
+  "timing": "Start at final QRS quarter; J at QRS end; peak at J + round-even((QT-QRS)*PeakPositionPermille/1000); zero at QT end. Peak fraction 1..999; reject collapsed intervals.",
+  "composition": "Replace selected electrode T band and suppress its old ST offset/arch bands. P, QRS basis and U remain. Chest contour is relative to Wilson repolarization: add one third of each RA/LA/LL repolarization band to the selected chest electrode before projection, with ties-even Q32 rounding.",
+  "limitations": [
+    "Chest-only desktop selection preserves all other lead samples. Limb electrode changes necessarily couple limb leads and Wilson. Not a coronary territory, reciprocal-change or infarction evolution preset. Extreme peak timings may lie between acquisition samples. The smooth terminal-QRS transition changes its last quarter; original QRS basis and QT remain."
+  ]
+}

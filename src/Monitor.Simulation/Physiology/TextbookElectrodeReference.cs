@@ -9,12 +9,17 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null, EcgAtrialIllustration atrial = EcgAtrialIllustration.Reference)
     {
         if (zones is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null))
         { throw new EventWaveformException("EcgInfarction.ConflictingModes", "zones"); }
-        timing ??= TextbookEcgReference.Timing;
+        timing ??= atrial == EcgAtrialIllustration.LeftAtrialAbnormality
+            ? TextbookEcgReference.Timing with { PDurationNs = EcgAtrialIllustrations.LeftPDurationNs } : TextbookEcgReference.Timing;
         timing.Validate();
+        var atrialPlan = EcgAtrialIllustrations.Resolve(atrial, timing);
+        if (atrialPlan is not null && pWave is not null)
+        { throw new EventWaveformException("EcgAtrial.ConflictingModes", "pWave"); }
+        pWave = atrialPlan ?? pWave;
         uWave?.Validate(timing);
         int[]? tScales = tWave?.CaptureScales();
         var tPhases = tShape?.CreatePhasePoints(timing);

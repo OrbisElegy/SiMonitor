@@ -1,0 +1,81 @@
+{
+  "id": "LeftAtrialIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "463-464"
+  },
+  "textbook_summary": [
+    "P duration is at least 120 ms.",
+    "Separation between P-wave peaks is at least 40 ms.",
+    "P-wave notching is prominent in leads I, II, aVL.",
+    "The ratio of P duration to PR-segment duration is greater than 1.6.",
+    "The magnitude of terminal P force in V1 is at least 0.04 mm*s at 10 mm/mV."
+  ],
+  "scope": "An abnormal left-atrial P-wave teaching example, not a specific diagnosis of left atrial enlargement or a realistic atrial model.",
+  "authored_choices": {
+    "pDurationMs": 140,
+    "earlyLateSeparationMs": 52.5,
+    "lobeDurationMs": 87.5,
+    "electrodeOrder": [
+      "RA",
+      "LA",
+      "RL",
+      "LL",
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6"
+    ],
+    "earlyLateMicrovolts": [
+      [
+        -100,
+        -100
+      ],
+      [
+        100,
+        100
+      ],
+      null,
+      [
+        0,
+        0
+      ],
+      [
+        80,
+        -120
+      ],
+      [
+        100,
+        -40
+      ],
+      [
+        100,
+        40
+      ],
+      [
+        100,
+        100
+      ],
+      [
+        100,
+        100
+      ],
+      [
+        100,
+        100
+      ]
+    ],
+    "kernel": "Existing rounded PWaveComponentsIllustrationDraft@1; no new LUT",
+    "notes": [
+      "Values are authored illustration choices, not textbook patient measurements. Opposite RA/LA and zero LL retain zero Wilson P exactly. RL is not used in lead projection. PR, QRS, ST, T and U remain caller-owned. Initial PR constraint is not a measured PR in AV dissociation."
+    ]
+  },
+  "verification": [
+    "Projected 250Hz samples: P span, two-peak separation, V1 positive onset and terminal depth*duration; exact Einthoven relation; ventricular parity; checkpoint bytes; native pixels and atomic application"
+  ],
+  "limitations": ["No right or biatrial preset", "No validated atrial chamber model", "No acquired-signal diagnostic classifier", "Atrial activity gating still applies", "Windows visual behavior is not yet manually verified"]
+}

@@ -1,12 +1,63 @@
 {
-  "id": "StSegmentIllustrationDraft@1",
+  "id": "StSegmentIllustrationDraft@2",
   "authorship": "Project-authored teaching basis; not an upstream copy or validated disease preset",
   "timing": "Smooth onset over final quarter of QRS; J at QRS end; endpoint at T onset; decay to zero at T end",
   "limitations": [
     "The additive offset changes terminal QRS and the baseline under T. It does not independently preserve T height above the isoelectric line. No ischemic territory, reciprocal lead or normality inference."
   ],
   "tables": {
-    "J": { "length": 128, "landmarks": [[0, 0], [32, 1], [64, 0], [128, 0]] },
-    "End": { "length": 128, "landmarks": [[0, 0], [32, 0], [64, 1], [128, 0]] }
-  }
+    "J": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          32,
+          1
+        ],
+        [
+          64,
+          0
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "End": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          32,
+          0
+        ],
+        [
+          64,
+          1
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "Arch": {
+      "length": 128,
+      "polynomial_coefficients": [
+        0,
+        0,
+        16,
+        -32,
+        16
+      ]
+    }
+  },
+  "arch": "Optional signed 16*x^2*(1-x)^2 basis on ST only, normalized phase x in [0,1]. Zero value and slope at both ends; unit midpoint. Project-authored contour, not a disease preset."
 }

@@ -6,7 +6,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -19,7 +19,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal EcgCycleTiming ResolveTiming()
     {
         if (!Enum.IsDefined(Placement) || VentricularConductionRatio is < 1 or > 4 || !Enum.IsDefined(CardiacActivity)) { throw new ArgumentException("Invalid conduction ratio or cardiac activity."); }
-        if (ChestJMicrovolts is < -1000 or > 1000 || ChestStEndMicrovolts is < -1000 or > 1000) { throw new ArgumentException("Invalid chest ST offsets."); }
+        if (ChestStArchMicrovolts is < -1000 or > 1000 || ChestJMicrovolts is < -1000 or > 1000 || ChestStEndMicrovolts is < -1000 or > 1000) { throw new ArgumentException("Invalid chest ST offsets."); }
         if (ChestP is { } p && (p.EarlyMicrovolts is < -1000 or > 1000 || p.LateMicrovolts is < -1000 or > 1000))
         { throw new ArgumentException("Invalid C1 P components."); }
         long atrialPeriod = ResolveAtrialPeriodNs();
@@ -29,7 +29,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         long rr = IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : atrialPeriod * VentricularConductionRatio;
         if (MethodId is null)
         {
-            if (this with { VentricularConductionRatio = 1, UWave = null, CardiacActivity = CardiacActivity.AtrialAndVentricular, Placement = EcgLimbPlacement.Standard, IndependentVentricularPeriodMilliseconds = null, IndependentVentricularOffsetMilliseconds = null, TWave = null, ChestJMicrovolts = 0, ChestStEndMicrovolts = 0, ChestP = null } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
+            if (this with { VentricularConductionRatio = 1, UWave = null, CardiacActivity = CardiacActivity.AtrialAndVentricular, Placement = EcgLimbPlacement.Standard, IndependentVentricularPeriodMilliseconds = null, IndependentVentricularOffsetMilliseconds = null, TWave = null, ChestJMicrovolts = 0, ChestStEndMicrovolts = 0, ChestP = null, ChestStArchMicrovolts = 0 } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
             return TextbookEcgReference.Timing with { RrIntervalNs = rr };
         }
         if (HeartRateBpm is < 30 or > 200 || QtcMilliseconds is < 1 or > 1000 ||
@@ -58,9 +58,10 @@ internal static class ProjectedEcgDemoSource
         configuration ??= ProjectedEcgDemoConfiguration.Default;
         var timing = configuration.ResolveTiming();
         long offset = DemoVentricularTiming.ResolveOffset(configuration.IndependentVentricularPeriodMilliseconds, configuration.IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        EcgStSegmentPlan? st = configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 ? null : new(
+        EcgStSegmentPlan? st = configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? null : new(
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestJMicrovolts).ToArray(),
-            Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStEndMicrovolts).ToArray());
+            Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStEndMicrovolts).ToArray(),
+            Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
         var electrodes = TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve(), configuration.TWave?.ResolveShape(), st, pWave);

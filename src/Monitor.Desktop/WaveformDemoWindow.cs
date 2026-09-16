@@ -86,6 +86,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
+    internal TextBlock QrsMeasurementStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _activeEcgConfiguration = new() { TextWrapping = TextWrapping.Wrap };
     private PhysiologyWaveformGroup? _physiologySource;
     internal PhysiologyDemoConfiguration BreathConfiguration { get; private set; } = PhysiologyDemoConfiguration.Default;
@@ -293,9 +294,10 @@ internal sealed class WaveformDemoWindow : Window
             panel.Children.Add(new TextBlock { Text = "ST–T 融合仅替换勾选的胸导联：J 为 −1000～1000 μV，峰为 −2000～2000 μV；峰位置为 J→QT 终点的 0.1～99.9%（精度 0.1%），可早于原 T 起点。统一轮廓取代该处原 T 及 J/ST/弓起，未选导联保持原配置；从 QRS 最后四分之一平滑接入，QT/u 不变。融合电位以 Wilson 复极参考为基准，避免残留原 T 波。取消勾选恢复原参数；不是心梗区域或病程预设。" });
             panel.Children.Add(new TextBlock { Text = "心梗阶段示意：命名区域优先于胸导联勾选；下壁作用于 II/III/aVF，侧壁作用于 I/aVL/V5/V6。肢体导联保持投影恒等式，相关导联会同时变化（不等同于额外梗死区域），Wilson 不变；后壁 V7–V9、右室 V3R–V4R 暂未接入。替换目标区域的 QRS/ST/T，优先于手动融合及 ST/T 设置；未选胸导联及 P/u 保留；区域 QT 可由复极延长参数改变。超急性损伤示意在所选导联增宽 QRS，需容纳在现有 QT 内。数值为项目示意值，非定量病例；阶段手动切换并从零开始，不代表自动病程、治疗效果或冠脉定位。关闭或取消选择恢复原配置。" });
             panel.Children.Add(new TextBlock { Text = "区域复极延长仅在有效阶段或独立组合及区域启用，0 保留原数据。普通 T 保持起点并增加时限，区域 QT 同量延长；融合轮廓保持 J 点并延伸至新 QT 终点。参数不随阶段自动推断。原 u 波时间不移动，暂不允许延长 T 与 u 重叠；阶段和独立组合均关闭时，保留延长输入但不生效。显示 QTc 仍是输入参考值，不是延长后的测量结果。" });
-            panel.Children.Add(new TextBlock { Text = "独立组合使用上述同一区域，可分别设置 Q/QS、T 峰和 ST 轮廓，并使用区域复极延长；无需启用阶段。Q/QS 模板混合0～100%（精度0.1%）：0为参考QRS，100为完整模板，中间值仅混合该处QRS，不改变ST/T；选择参考QRS时此值不起作用。该值不是组织比例，不自动随病程变化。T 留空采用参考，0 去除该 T 分量，负值倒置；ST 各项0关闭附加电位。此模式取代区域内原 QRS/ST/T 和阶段值，不自动判断缺血程度或异常 Q 标准。取消勾选恢复阶段入口。" });
+            panel.Children.Add(new TextBlock { Text = "独立组合使用上述同一区域，可分别设置 Q/QS、T 峰和 ST 轮廓，并使用区域复极延长；无需启用阶段。Q/QS 模板混合0～100%（精度0.1%）：0为参考QRS，100为完整模板，中间值仅混合该处QRS，不改变ST/T；选择参考QRS时此值不起作用。该值不是组织比例，不自动随病程变化。T 留空采用参考，0 去除该 T 分量，负值倒置；ST 各项0关闭附加电位。此模式取代区域内原 QRS/ST/T 和阶段值，不自动判断缺血程度；下方另列隔离 QRS 的数值核验。取消勾选恢复阶段入口。" });
             panel.Children.Add(new TextBlock { Text = "三区域模式分别应用组合 T/复极延长、组合 ST、组合 QRS，区域可重叠或关闭。以参考 QRS/ST/T 为底板，保留 P/u/节律；阶段、同区组合与其他手动 ST/T/融合参数保留但暂不使用。重叠采用独立分量叠加，肢体区域仍有投影联动，不要求人为嵌套。关闭模式恢复旧入口；这不是组织深度、梗死大小或病程模型。" });
             panel.Children.Add(_activeEcgConfiguration);
+            panel.Children.Add(QrsMeasurementStatus);
             panel.Children.Add(EcgConfigurationStatus);
         }
         if (_physiology)
@@ -677,12 +679,14 @@ internal sealed class WaveformDemoWindow : Window
         PeriodicWaveformGroup source = CreateSource(pulse);
         PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create(breathConfiguration) : null;
         ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create(configuration) : null;
+        string qrsSummary = electrodeSource is null ? "" : AuthoredQrsSummary.Create(electrodeSource, configuration.CardiacActivity);
         RawTrace empty = new([], _physiology, projected: _projected);
         Pause();
         _source = source;
         _physiologySource = eventSource;
         _electrodeSource = electrodeSource;
         EcgConfiguration = configuration;
+        QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
         if (_physiology)
         {

@@ -65,6 +65,7 @@ internal static class Program
             .. PWaveComponentSpecifications.All,
             .. StSegmentSpecifications.All,
             .. StArchSpecifications.All,
+            .. StTFusionSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

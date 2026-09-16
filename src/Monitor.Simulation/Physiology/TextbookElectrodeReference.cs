@@ -9,7 +9,7 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null)
     {
         timing ??= TextbookEcgReference.Timing;
         timing.Validate();
@@ -17,6 +17,7 @@ public static class TextbookElectrodeReference
         int[]? tScales = tWave?.CaptureScales();
         var tPhases = tShape?.CreatePhasePoints(timing);
         var stBands = stSegment?.CreateBands(timing);
+        var fusionBands = fusion?.CreateBands(timing);
         var pBands = pWave?.CreateBands(timing);
         IReadOnlyList<long>[] qrs = [TextbookElectrodeQrsTables.RA, TextbookElectrodeQrsTables.LA,
             TextbookElectrodeQrsTables.RL, TextbookElectrodeQrsTables.LL, TextbookElectrodeQrsTables.C1,
@@ -41,12 +42,38 @@ public static class TextbookElectrodeReference
                 }).ToArray()),
             }).ToArray());
         }
+        if (fusionBands is not null)
+        {
+            electrodes = Array.AsReadOnly(electrodes.Select(item => item with
+            {
+                Bands = fusionBands[(int)item.Electrode] is { } replacement
+                    ? Array.AsReadOnly(item.Bands.Select((band, index) => index == 2 ? replacement : band).ToArray()) : item.Bands,
+            }).ToArray());
+        }
         if (stBands is not null)
         {
             electrodes = Array.AsReadOnly(electrodes.Select(item => item with
             {
-                Bands = stBands[(int)item.Electrode] is { } additions
+                Bands = fusionBands?[(int)item.Electrode] is null && stBands[(int)item.Electrode] is { } additions
                     ? Array.AsReadOnly(item.Bands.Concat(additions).ToArray()) : item.Bands,
+            }).ToArray());
+        }
+        // Chest fusion is specified relative to Wilson repolarization. Carry
+        // that reference into each selected chest electrode so subtraction
+        // cannot leave a residual inverted T wave in an otherwise single crown.
+        if (fusionBands is not null)
+        {
+            var reference = new[] { EcgElectrode.RA, EcgElectrode.LA, EcgElectrode.LL }
+                .SelectMany(electrode => electrodes[(int)electrode].Bands.Skip(2))
+                .Select(band => band with
+                {
+                    TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value =>
+                        (long)FixedPointMath.RoundDivideTiesToEven(value, 3)).ToArray()),
+                }).ToArray();
+            electrodes = Array.AsReadOnly(electrodes.Select(item => item with
+            {
+                Bands = item.Electrode >= EcgElectrode.C1 && fusionBands[(int)item.Electrode] is not null
+                    ? Array.AsReadOnly(item.Bands.Concat(reference).ToArray()) : item.Bands,
             }).ToArray());
         }
         if (pBands is not null)

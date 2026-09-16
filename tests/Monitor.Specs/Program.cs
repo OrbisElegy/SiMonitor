@@ -66,6 +66,7 @@ internal static class Program
             .. StSegmentSpecifications.All,
             .. StArchSpecifications.All,
             .. StTFusionSpecifications.All,
+            .. InfarctionIllustrationSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

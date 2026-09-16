@@ -3,16 +3,18 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain }
+public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain, RightHypertrophyWithStrain }
 
 // Explicit teaching coefficients, not chamber mass or anatomical calibration.
 public static class EcgVentricularIllustrations
 {
     public const string EvidenceId = "LeftVentricularIllustrationDraft@1";
+    public const string RightEvidenceId = "RightVentricularIllustrationDraft@1";
     public static long? QrsDurationNs(EcgVentricularIllustration illustration) => illustration switch
     {
         EcgVentricularIllustration.Reference => null,
         EcgVentricularIllustration.LeftHypertrophyWithStrain => 100_000_000,
+        EcgVentricularIllustration.RightHypertrophyWithStrain => 80_000_000,
         _ => throw new EventWaveformException("EcgVentricular.InvalidIllustration", "ventricular"),
     };
 
@@ -22,9 +24,16 @@ public static class EcgVentricularIllustrations
         if (QrsDurationNs(illustration) is not { } duration) { return source; }
         if (timing.QrsDurationNs != duration || timing.StDurationNs <= 0)
         { throw new EventWaveformException("EcgVentricular.InvalidTiming", "timing"); }
-        int[] t = [100, -200, 0, 100, 300, 250, 100, -100, -350, -300];
-        var st = new EcgStSegmentPlan([20, -40, 0, 20, 0, 0, 0, -40, -60, -60],
-            [40, -80, 0, 40, 0, 0, 0, -80, -120, -120]).CreateBands(timing);
+        bool right = illustration == EcgVentricularIllustration.RightHypertrophyWithStrain;
+        IReadOnlyList<long>[]? rightQrs = right ? [RightVentricularQrsTables.RA, RightVentricularQrsTables.LA,
+            RightVentricularQrsTables.RL, RightVentricularQrsTables.LL, RightVentricularQrsTables.C1,
+            RightVentricularQrsTables.C2, RightVentricularQrsTables.C3, RightVentricularQrsTables.C4,
+            RightVentricularQrsTables.C5, RightVentricularQrsTables.C6] : null;
+        int[] t = right ? [-40, 80, 0, -40, -300, -250, -100, 100, 200, 200]
+            : [100, -200, 0, 100, 300, 250, 100, -100, -350, -300];
+        var st = (right ? new EcgStSegmentPlan([0, 0, 0, 0, -60, -50, 0, 0, 0, 0],
+            [0, 0, 0, 0, -120, -100, 0, 0, 0, 0]) : new EcgStSegmentPlan([20, -40, 0, 20, 0, 0, 0, -40, -60, -60],
+            [40, -80, 0, 40, 0, 0, 0, -80, -120, -120])).CreateBands(timing);
         long peak = TextbookEcgTables.T.Max();
         return Array.AsReadOnly(source.Select((electrode, i) => electrode with
         {
@@ -34,7 +43,7 @@ public static class EcgVentricularIllustrations
                 // the changed Wilson reference into each chest electrode.
                 1 => band with
                 {
-                    TableQ32 = Array.AsReadOnly(band.TableQ32.Select((value, k) => i < 4
+                    TableQ32 = rightQrs?[i] ?? Array.AsReadOnly(band.TableQ32.Select((value, k) => i < 4
                     ? checked(value * 3)
                     : checked(value * 2 + (long)FixedPointMath.RoundDivideTiesToEven(
                         (Int128)source[0].Bands[1].TableQ32[k] + source[1].Bands[1].TableQ32[k] + source[3].Bands[1].TableQ32[k], 3))).ToArray())

@@ -68,6 +68,7 @@ internal static class Program
             .. TWaveScaleSpecifications.All,
             .. TWaveShapeSpecifications.All,
             .. PWaveComponentSpecifications.All,
+            .. AtrialIllustrationSpecifications.All,
             .. StSegmentSpecifications.All,
             .. StArchSpecifications.All,
             .. StTFusionSpecifications.All,

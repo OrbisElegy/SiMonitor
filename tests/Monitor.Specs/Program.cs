@@ -63,6 +63,7 @@ internal static class Program
             .. TWaveScaleSpecifications.All,
             .. TWaveShapeSpecifications.All,
             .. StSegmentSpecifications.All,
+            .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,
             .. MechanicalResumptionSpecifications.All,

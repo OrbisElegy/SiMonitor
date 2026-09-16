@@ -347,7 +347,7 @@ internal sealed class WaveformDemoWindow : Window
         long next = checked(SimulationTimeNs + deltaNs);
         PeriodicWaveformGroup? trial = _physiology || _projected ? null : PeriodicWaveformGroup.Restore(_source.CaptureState());
         PhysiologyWaveformGroup? eventTrial = _physiology ? _physiologySource!.Fork() : null;
-        ElectrodeWaveformGroup? electrodeTrial = _projected ? ElectrodeWaveformGroup.Restore(_electrodeSource!.CaptureState()) : null;
+        ElectrodeWaveformGroup? electrodeTrial = _projected ? _electrodeSource!.Fork() : null;
         IReadOnlyList<byte[]> wires = electrodeTrial is not null ? electrodeTrial.AdvanceTo(next, 50, 1, 100) : eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
         WaveformEnvelope[] blocks = _blocks.Concat(wires
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(DemoSweepLayout.RetainedBlockCount).ToArray();

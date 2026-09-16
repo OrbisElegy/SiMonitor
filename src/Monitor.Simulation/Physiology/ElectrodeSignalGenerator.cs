@@ -23,6 +23,18 @@ public sealed class ElectrodeSignalGenerator
     private readonly long _lookbackNs;
     private readonly EcgLimbPlacement _placement;
 
+    private ElectrodeSignalGenerator(ElectrodeSignalGenerator source)
+    {
+        _timeline = RegularPhysiologyTimeline.Restore(source._timeline.CaptureState());
+        _clock = SignalSampleClock.Restore(source._clock.CaptureState());
+        _electrodes = source._electrodes;
+        _lookbackNs = source._lookbackNs;
+        _placement = source._placement;
+    }
+
+    // Only immutable, already owned electrode bands and phase maps are shared.
+    internal ElectrodeSignalGenerator Fork() => new(this);
+
     private ElectrodeSignalGenerator(ElectrodeSignalState state)
     {
         ArgumentNullException.ThrowIfNull(state);

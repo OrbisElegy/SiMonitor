@@ -25,6 +25,18 @@ public sealed class ElectrodeWaveformGroup
     private ElectrodeSignalGenerator _generator;
     private WaveformBlockAssembler _assembler;
 
+    private ElectrodeWaveformGroup(ElectrodeWaveformGroup source)
+    {
+        _generator = source._generator.Fork();
+        _channels = source._channels.Select(channel => new Channel(channel.Lead, channel.Id,
+            SignalAcquisitionDelayLine.Restore(channel.Delay.CaptureState()), channel.QualityFlags)).ToArray();
+        _assembler = WaveformBlockAssembler.Restore(source._assembler.CaptureState());
+    }
+
+    // Owner-only transaction copy; external checkpoints still require full
+    // Restore validation, including reconstruction of pending lead samples.
+    public ElectrodeWaveformGroup Fork() => new(this);
+
     private ElectrodeWaveformGroup(ElectrodeWaveformGroupState state)
     {
         if (state.Channels is null || state.Channels.Count != 12)
@@ -45,7 +57,7 @@ public sealed class ElectrodeWaveformGroup
             string key = item.ChannelId.ToString("N");
             if (previous is not null && StringComparer.Ordinal.Compare(previous, key) >= 0) { throw InvalidCheckpoint(); }
             previous = key;
-            SignalAcquisitionDelayLine delay = SignalAcquisitionDelayLine.Restore(item.Delay);
+            var delay = SignalAcquisitionDelayLine.Restore(item.Delay);
             SignalAcquisitionDelayState waiting = delay.CaptureState();
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
             if (plane is null || plane.Configuration.ScaleNumerator != 1 || plane.Configuration.ScaleDenominator != 1 ||
@@ -120,7 +132,7 @@ public sealed class ElectrodeWaveformGroup
         cancellationToken.ThrowIfCancellationRequested();
         if (maximumBlocks is < 1 or > WaveformBlockAssembler.MaximumBufferedBlockCount)
         { throw new ElectrodeWaveformGroupException("ElectrodeGroup.InvalidBlockLimit", nameof(maximumBlocks)); }
-        ElectrodeWaveformGroup trial = Restore(CaptureState());
+        ElectrodeWaveformGroup trial = Fork();
         List<byte[]> output = [];
         IReadOnlyList<ElectrodeSignalSample> samples = trial._generator.GenerateBefore(simTimeNs, maximumSamples, maximumEvents, cancellationToken);
         foreach (Channel channel in trial._channels)

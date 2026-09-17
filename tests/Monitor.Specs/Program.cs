@@ -57,6 +57,7 @@ internal static class Program
             .. RespirationSpecifications.All,
             .. RespiratoryPatternSpecifications.All,
             .. GroupedConductionSpecifications.All,
+            .. RightBundleBlockSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,

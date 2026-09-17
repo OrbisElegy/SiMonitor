@@ -5,7 +5,7 @@ namespace Monitor.Desktop;
 internal static class SecondDegreeBlockPreset
 {
     internal static int FromSelection(int selection) => selection switch
-    { 6 => 0, 16 => 1, 17 => 2, 18 => 3, 19 => 4, 1 => 5, _ => -1 };
+    { 6 => 0, 16 => 1, 17 => 2, 18 => 3, 19 => 4, 1 => 5, 20 => 6, _ => -1 };
     internal static bool RequiresReload(Monitor.Simulation.Physiology.AvConductionPattern pattern) => pattern is
         Monitor.Simulation.Physiology.AvConductionPattern.CompleteAvBlockJunctionalIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.CompleteAvBlockVentricularIllustration or
@@ -23,6 +23,7 @@ internal static class SecondDegreeBlockPreset
         3 => 18,
         4 => 19,
         5 => 1,
+        6 => 20,
         _ => throw new ArgumentOutOfRangeException(nameof(index)),
     };
     internal static ProjectedEcgDemoConfiguration Ecg(int index)
@@ -30,7 +31,7 @@ internal static class SecondDegreeBlockPreset
         int selection = Selection(index);
         var (atrial, conducted) = ConductionSelection.Resolve(selection);
         return ProjectedEcgDemoConfiguration.Default with
-        { VentricularConductionRatio = atrial, ConductedBeatsPerGroup = conducted, ConductionPattern = ConductionSelection.Pattern(selection) };
+        { QrsDurationMilliseconds = index == 6 ? 140 : 80, VentricularConductionRatio = atrial, ConductedBeatsPerGroup = conducted, ConductionPattern = ConductionSelection.Pattern(selection) };
     }
     internal static PhysiologyDemoConfiguration Physiology(int index)
     {

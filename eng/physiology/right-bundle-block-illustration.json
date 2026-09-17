@@ -1,0 +1,318 @@
+{
+  "id": "RightBundleBlockIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "486,488"
+  },
+  "authored_choices": {
+    "qrsMs": 140,
+    "qtMs": 400,
+    "tMs": 180,
+    "prMs": 160,
+    "atrialPeriodMs": 800,
+    "conduction": "4:3 conduction with fixed PR.",
+    "leadQrsShapes": {
+      "I": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            50
+          ],
+          [
+            48,
+            900
+          ],
+          [
+            88,
+            0
+          ],
+          [
+            128,
+            -220
+          ],
+          [
+            170,
+            -180
+          ],
+          [
+            208,
+            -260
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "II": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            60
+          ],
+          [
+            50,
+            1100
+          ],
+          [
+            88,
+            0
+          ],
+          [
+            128,
+            -250
+          ],
+          [
+            170,
+            -210
+          ],
+          [
+            208,
+            -300
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V1": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            40,
+            180
+          ],
+          [
+            85,
+            -400
+          ],
+          [
+            160,
+            1100
+          ],
+          [
+            195,
+            900
+          ],
+          [
+            215,
+            1000
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V2": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            40,
+            300
+          ],
+          [
+            85,
+            -450
+          ],
+          [
+            160,
+            1000
+          ],
+          [
+            195,
+            800
+          ],
+          [
+            215,
+            900
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V3": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            48,
+            650
+          ],
+          [
+            85,
+            -200
+          ],
+          [
+            160,
+            400
+          ],
+          [
+            210,
+            300
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V4": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            -50
+          ],
+          [
+            48,
+            1100
+          ],
+          [
+            88,
+            0
+          ],
+          [
+            128,
+            -300
+          ],
+          [
+            170,
+            -220
+          ],
+          [
+            208,
+            -320
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V5": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            -60
+          ],
+          [
+            48,
+            1500
+          ],
+          [
+            88,
+            0
+          ],
+          [
+            128,
+            -350
+          ],
+          [
+            170,
+            -270
+          ],
+          [
+            208,
+            -400
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V6": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            -50
+          ],
+          [
+            48,
+            1100
+          ],
+          [
+            88,
+            0
+          ],
+          [
+            128,
+            -300
+          ],
+          [
+            170,
+            -220
+          ],
+          [
+            208,
+            -350
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      }
+    },
+    "leadTMicrovolts": {
+      "I": 200,
+      "II": 250,
+      "V1": -250,
+      "V2": -200,
+      "V3": -60,
+      "V4": 150,
+      "V5": 300,
+      "V6": 250
+    },
+    "rightChestStMicrovolts": [
+      -50,
+      -80
+    ]
+  },
+  "limitations": [
+    "An authored combination of complete RBBB with fixed-PR 4:3 Mobitz II block, not a case recording or anatomical model.",
+    "A single morphology; LBBB, incomplete RBBB and other bundle/fascicular types are not covered.",
+    "Existing mechanical delay is retained; no new electromechanical dyssynchrony or beatwise filling/ejection-volume inference."
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "id": "TContourIllustrationDraft@2",
+  "id": "TContourIllustrationDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -12,6 +12,7 @@
       "Landmark positions and equal-amplitude biphasic shapes are authored choices. T onset/end and QT are preserved; interpolation runs directly between positive and negative peaks without a flat zero-crossing knot."
     ]
   },
+  "crossingTiming": "Biphasic T permits a zero-crossing position of 1-999 permille; null or 500 preserves original timing. Extrema lie at the crossing plus/minus half the shorter adjacent span. Phase speed changes only at extrema, without an extra slope discontinuity at zero. Not applicable to notched T; not an etiological parameter.",
   "tables": {
     "Biphasic": {
       "length": 128,

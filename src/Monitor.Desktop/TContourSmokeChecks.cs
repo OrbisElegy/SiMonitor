@@ -22,8 +22,12 @@ internal static class TContourSmokeChecks
                     var oldTimer = window.ActiveTimer;
                     window.TContourInput.SelectedIndex = shape;
                     window.TContourLeadInput.SelectedIndex = target == 0 ? shape == 1 ? 0 : shape == 2 ? 4 : 6 : target;
+                    string crossing = shape == 3 ? "" : target % 2 == 0 ? "20" : "80";
+                    window.TContourCrossingInput.Text = crossing;
                     Click(window.ApplyEcgButton); window.Pulse(oldTimer);
                     var config = window.EcgConfiguration;
+                    if (config.TContour?.CrossingPositionPermille != (shape == 3 ? (int?)null : target % 2 == 0 ? 200 : 800))
+                    { throw new InvalidOperationException("Crossing not applied."); }
                     if ((target > 6 && config.TContour?.Target != (EcgTContourTarget)(target - 6)) || config.TContour?.Shape != (EcgTContourShape)shape || window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("T contour did not atomically restart."); }
                     for (int i = 0; i < 14; i++) { Click(window.StepButton); }
@@ -44,12 +48,21 @@ internal static class TContourSmokeChecks
                         if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time)
                         { throw new InvalidOperationException("Invalid contour altered current state."); }
                     }
-                    window.TContourPeakInput.Text = "300"; window.ChestJInput.Text = "100"; Click(window.ApplyEcgButton);
+                    window.TContourPeakInput.Text = "300";
+                    foreach (string invalid in new[] { "0", "100", "bad", "20.01", shape == 3 ? "50" : "-1" })
+                    {
+                        window.TContourCrossingInput.Text = invalid; Click(window.ApplyEcgButton);
+                        if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time)
+                        { throw new InvalidOperationException("Invalid crossing changed active state."); }
+                    }
+                    window.TContourCrossingInput.Text = crossing;
+                    window.ChestJInput.Text = "100"; Click(window.ApplyEcgButton);
                     if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer)
                     { throw new InvalidOperationException("Conflicting ST changed active contour."); }
                     Click(window.ResetButton);
-                    if ((target > 6 && window.TContourLeadInput.SelectedIndex != target) || window.TContourInput.SelectedIndex != shape || window.TContourPeakInput.Text != "300" || window.ChestJInput.Text != "0")
+                    if ((target > 6 && window.TContourLeadInput.SelectedIndex != target) || window.TContourInput.SelectedIndex != shape || window.TContourPeakInput.Text != "300" || window.TContourCrossingInput.Text != crossing || window.ChestJInput.Text != "0")
                     { throw new InvalidOperationException("Reset lost contour."); }
+                    window.TContourCrossingInput.Text = "";
                     window.TContourInput.SelectedIndex = 0; Click(window.ApplyEcgButton);
                     if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default)
                     { throw new InvalidOperationException("Clearing contour did not recover reference."); }

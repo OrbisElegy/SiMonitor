@@ -11,9 +11,11 @@ internal static class ConductionSelection
         4 => (3, 2),
         5 or 6 => (4, 3),
         7 or 8 => (1, 1),
+        9 => (2, 1),
+        10 => (4, 1),
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
-    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, _ => AvConductionPattern.FixedPr };
+    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, 9 or 10 => AvConductionPattern.AtrialFlutterIllustration, _ => AvConductionPattern.FixedPr };
     internal static string Summary(int atrial, int conducted, AvConductionPattern pattern) =>
         pattern is AvConductionPattern.CompleteAvBlockJunctionalIllustration or AvConductionPattern.CompleteAvBlockVentricularIllustration ? "房室分离（无下传）" : $"传导 {atrial}:{conducted}";
     internal static int Index(int atrial, int conducted, AvConductionPattern pattern = AvConductionPattern.FixedPr) => (atrial, conducted, pattern) switch
@@ -24,6 +26,8 @@ internal static class ConductionSelection
         (4, 3, AvConductionPattern.WenckebachFourToThreeIllustration) => 6,
         (1, 1, AvConductionPattern.CompleteAvBlockJunctionalIllustration) => 7,
         (1, 1, AvConductionPattern.CompleteAvBlockVentricularIllustration) => 8,
+        (2, 1, AvConductionPattern.AtrialFlutterIllustration) => 9,
+        (4, 1, AvConductionPattern.AtrialFlutterIllustration) => 10,
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
 }

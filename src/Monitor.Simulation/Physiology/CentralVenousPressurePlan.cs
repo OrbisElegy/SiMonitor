@@ -17,10 +17,12 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         CvpWaveComponent[] components = [A, C, X, V, Y];
         long budget = Math.Abs((long)RespiratoryDeltaCentiMmHg);
         if (BaselineCentiMmHg is < short.MinValue or > short.MaxValue) { throw Invalid(); }
-        foreach (var component in components)
+        for (int index = 0; index < components.Length; index++)
         {
+            var component = components[index];
+            Int128 triggerPeriod = index == 0 ? physiology.HeartPeriodNs : physiology.VentricularPeriodNs;
             if (component is null || component.DelayNs < 0 || component.DurationNs <= 0 ||
-                component.DurationNs > physiology.HeartPeriodNs || component.DelayNs > long.MaxValue - component.DurationNs ||
+                component.DurationNs > triggerPeriod || component.DelayNs > long.MaxValue - component.DurationNs ||
                 component.MagnitudeCentiMmHg is < 0 or > short.MaxValue) { throw Invalid(); }
             budget += component.MagnitudeCentiMmHg;
         }

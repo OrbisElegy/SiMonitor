@@ -11,7 +11,7 @@ public sealed record PulmonaryArteryPulsePlan(long TransitDelayNs, long Duration
         Guid channelId, uint qualityFlags)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
-        if (TransitDelayNs < 0 || DurationNs <= 0 || DurationNs > physiology.HeartPeriodNs ||
+        if (TransitDelayNs < 0 || DurationNs <= 0 || DurationNs > physiology.VentricularPeriodNs ||
             TransitDelayNs > long.MaxValue - DurationNs || BaselineMmHg is < 0 or > short.MaxValue ||
             PulseHeightMmHg is < 0 or > 327)
         { throw new EventWaveformException("PulmonaryArtery.InvalidPlan", "plan"); }

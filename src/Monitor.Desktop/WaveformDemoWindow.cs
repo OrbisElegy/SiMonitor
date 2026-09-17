@@ -81,7 +81,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T", "对称倒置T（冠状T形态）", "高尖T", "高耸T" }, SelectedIndex = 0, Width = 160 };
+    internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T", "对称倒置T（冠状T形态）", "高尖T", "高耸T", "单相正向T（可低平）", "普通倒置T" }, SelectedIndex = 0, Width = 160 };
     internal ComboBox TContourLeadInput { get; } = new() { ItemsSource = new[] { "V1", "V2", "V3", "V4", "V5", "V6", "V1–V6", "I", "II", "III", "aVR", "aVL", "aVF" }, SelectedIndex = 0, Width = 90 };
     internal TextBox TContourCrossingInput { get; } = new() { Width = 65 };
     internal TextBox TContourPeakInput { get; } = new() { Text = "300", Width = 65 };
@@ -255,7 +255,7 @@ internal sealed class WaveformDemoWindow : Window
             }
             settings.Children.Add(TContourInput);
             settings.Children.Add(TContourLeadInput);
-            settings.Children.Add(new TextBlock { Text = "T轮廓峰幅（μV，1～2000）" });
+            settings.Children.Add(new TextBlock { Text = "T轮廓峰幅（μV，1～2000；单相正向/普通倒置允许0压平）" });
             settings.Children.Add(TContourPeakInput);
             settings.Children.Add(new TextBlock { Text = "双向T过零位置（T时限%，0.1～99.9，留空50；非双向留空）" });
             settings.Children.Add(TContourCrossingInput);
@@ -619,8 +619,8 @@ internal sealed class WaveformDemoWindow : Window
                 InfarctionZoneSelection.Resolve(InjuryZoneInput.SelectedIndex), InfarctionZoneSelection.Resolve(NecrosisZoneInput.SelectedIndex),
                 components!, delayMs * 1_000_000L) : null;
             int? independentOffset = ParseIndependentVentricularOffset();
-            if (TContourInput.SelectedIndex is < 0 or > 6 || TContourLeadInput.SelectedIndex is < 0 or > 12 ||
-                !int.TryParse(TContourPeakInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int contourPeak) || contourPeak is < 1 or > 2000)
+            if (TContourInput.SelectedIndex is < 0 or > 8 || TContourLeadInput.SelectedIndex is < 0 or > 12 ||
+                !int.TryParse(TContourPeakInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int contourPeak) || contourPeak is < 0 or > 2000 || (contourPeak == 0 && TContourInput.SelectedIndex is not (7 or 8)))
             { throw new ArgumentException("Invalid T contour selection."); }
             int? crossing = null;
             if (!string.IsNullOrWhiteSpace(TContourCrossingInput.Text))

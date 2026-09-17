@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）", "二度Ⅱ型3:2示意", "二度Ⅱ型4:3示意" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）", "二度Ⅱ型3:2示意", "二度Ⅱ型4:3示意", "二度Ⅱ型4:3＋完全RBBB" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -96,7 +96,7 @@ internal sealed class WaveformDemoWindow : Window
         .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button VentricularDisorganizationButton { get; } = new() { Content = "载入室扑／室颤示例（重置参数）" };
-    internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）" }, SelectedIndex = 0 };
+    internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）", "二度Ⅱ型4:3＋完全RBBB" }, SelectedIndex = 0 };
     internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
     internal Button FibrillationButton { get; } = new() { Content = "载入房颤粗颤示例（重置参数）" };
     internal Button FlutterButton { get; } = new() { Content = "载入房扑4:1示例（重置参数）" };
@@ -206,7 +206,7 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(VentricularEscapeButton);
             conduction.Children.Add(SecondDegreePresetInput);
             conduction.Children.Add(SecondDegreePresetButton);
-            conduction.Children.Add(new TextBlock { Text = "从室扑/室颤、房扑/房颤或逸搏切换至二度阻滞并应用时，将加载完整示例并重置参数。也可使用载入按钮。Ⅱ型示例PR恒定160ms，QRS80ms；仅示窄QRS型，不含束支阻滞。2:1比例本身不区分Ⅰ/Ⅱ型。" });
+            conduction.Children.Add(new TextBlock { Text = "从室扑/室颤、房扑/房颤或逸搏切换至二度阻滞并应用时，将加载完整示例并重置参数。也可使用载入按钮。Ⅱ型示例PR恒定160ms：窄QRS80ms，合并完全RBBB为140ms且有右胸ST–T改变。2:1比例本身不区分Ⅰ/Ⅱ型。" });
             conduction.Children.Add(FlutterButton);
             conduction.Children.Add(FibrillationButton);
             conduction.Children.Add(VentricularDisorganizationButton);
@@ -413,7 +413,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         SecondDegreePresetButton.Click += (_, _) =>
         {
-            if (_closed || SecondDegreePresetInput.SelectedIndex is < 0 or > 5) { return; }
+            if (_closed || SecondDegreePresetInput.SelectedIndex is < 0 or > 6) { return; }
             Reset(UsesPulse, SecondDegreeBlockPreset.Ecg(SecondDegreePresetInput.SelectedIndex), SecondDegreeBlockPreset.Physiology(SecondDegreePresetInput.SelectedIndex));
         };
         FibrillationButton.Click += (_, _) =>
@@ -561,7 +561,7 @@ internal sealed class WaveformDemoWindow : Window
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => ProjectedEcgDemoConfiguration.Default }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
+            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => ProjectedEcgDemoConfiguration.Default }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||

@@ -62,7 +62,7 @@ def ventricular_shapes(manifest, chest):
 
 
 
-def escape_shapes(manifest):
+def conduction_shapes(manifest):
     authored = manifest['authored_choices']
     leads = {name: sample_shape(shape) for name, shape in authored['leadQrsShapes'].items()}
     def electrodes(values):
@@ -236,7 +236,10 @@ def main():
     flutter_shapes['AmplitudesQ32'] = {'values_q32': [value * (1 << 32) for value in flutter['authored_choices']['electrodeAmplitudesMicrovolts']]}
     fibrillation = json.loads((root / 'eng/physiology/atrial-fibrillation-illustration.json').read_text())
     ventricular_disorganization = json.loads((root / 'eng/physiology/ventricular-disorganization-illustration.json').read_text())
+    rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/RightBundleBlockTables.cs': render(
+            'Monitor.Simulation.Physiology', 'RightBundleBlockTables', conduction_shapes(rbbb)),
         root / 'src/Monitor.Simulation/Physiology/VentricularDisorganizationTables.cs': render(
             'Monitor.Simulation.Physiology', 'VentricularDisorganizationTables', ventricular_disorganization_shapes(ventricular_disorganization)),
         root / 'src/Monitor.Simulation/Physiology/AtrialFibrillationTables.cs': render(
@@ -244,7 +247,7 @@ def main():
         root / 'src/Monitor.Simulation/Physiology/AtrialFlutterTables.cs': render(
             'Monitor.Simulation.Physiology', 'AtrialFlutterTables', flutter_shapes),
         root / 'src/Monitor.Simulation/Physiology/VentricularEscapeTables.cs': render(
-            'Monitor.Simulation.Physiology', 'VentricularEscapeTables', escape_shapes(escape)),
+            'Monitor.Simulation.Physiology', 'VentricularEscapeTables', conduction_shapes(escape)),
         root / 'src/Monitor.Simulation/Physiology/TContourTables.cs': render(
             'Monitor.Simulation.Physiology', 'TContourTables', t_contour['tables']),
         root / 'src/Monitor.Simulation/Physiology/SevereRightVentricularQrsTables.cs': render(

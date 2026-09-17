@@ -1,0 +1,32 @@
+{
+  "id": "CompleteAvBlockJunctionalIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "487"
+  },
+  "textbook_summary": [
+    "Atrial and ventricular pacemakers operate independently; the atrial rate exceeds the ventricular rate and PR is not fixed.",
+    "Junctional escape is generally 40-60/min with normal QRS morphology."
+  ],
+  "scope": "A teaching example of established junctional escape in third-degree AV block.",
+  "authoredDefault": {
+    "atrialPeriodNs": 800000000,
+    "escapePeriodNs": 1200000000,
+    "firstQrsNs": 400000000,
+    "mechanicalLagNs": 80000000,
+    "qrsDurationNs": 80000000,
+    "qtDurationNs": 360000000
+  },
+  "shape": "Reuses existing normal QRS references for twelve-lead and single-lead output without changing electrode projection. Overlapping atrial and ventricular events remain additive.",
+  "unimplemented": [
+    "Broad abnormal QRS morphology for ventricular escape remains unimplemented.",
+    "First-escape triggering after arrest and competing pacemakers remain unimplemented.",
+    "Retrograde conduction, filling/ejection feedback and beatwise QT adaptation remain unimplemented.",
+    "Atrial flutter, atrial fibrillation, ventricular flutter and ventricular fibrillation remain unimplemented."
+  ],
+  "constraints": [
+    "A 1000-1500 ms cycle and a faster atrial rate are example bounds, not diagnostic thresholds. The twelve-lead example exposes only escape period/phase and rejects conflicting morphology/timing controls."
+  ]
+}

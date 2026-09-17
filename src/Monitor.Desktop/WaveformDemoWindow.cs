@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -95,6 +95,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox[] UAmplitudeInputs { get; } = Enumerable.Range(0, 6)
         .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
+    internal Button JunctionalEscapeButton { get; } = new() { Content = "载入三度AVB交界性逸搏示例（重置参数）" };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     internal TextBlock QrsMeasurementStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
@@ -193,8 +194,10 @@ internal sealed class WaveformDemoWindow : Window
         if (projected || physiology)
         {
             WrapPanel conduction = new();
-            conduction.Children.Add(new TextBlock { Text = "基础周期:心室周期比例" });
+            conduction.Children.Add(new TextBlock { Text = "传导模式" });
             conduction.Children.Add(ConductionInput);
+            conduction.Children.Add(JunctionalEscapeButton);
+            conduction.Children.Add(new TextBlock { Text = "交界性逸搏示例：房率75、室率50，正常80ms QRS，无固定PR；可改独立室周期1000–1500ms及首次偏移。12导联需保留参考形态和固定时限。此示例从已建立的逸搏开始。" });
             conduction.Children.Add(new TextBlock { Text = "固定PR与文氏示意分开：文氏PR依次+0/+80/+120 ms，第4次脱漏并复位。需房室活动、无独立心室周期，机械比例1且清空机械日程；成组传导的QT采用最短RR下界（房性周期）约束；文氏末次机械事件须在同一房性周期内。" });
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
             conduction.Children.Add(CardiacActivityInput);
@@ -387,6 +390,10 @@ internal sealed class WaveformDemoWindow : Window
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
         RunButton.Click += (_, _) => ToggleRun();
         QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = PDurationInput.IsEnabled = PrIntervalInput.IsEnabled = QrsDurationInput.IsEnabled = TDurationInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
+        JunctionalEscapeButton.Click += (_, _) =>
+        {
+            if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.JunctionalEscape, PhysiologyDemoConfiguration.JunctionalEscape); }
+        };
         ApplyEcgButton.Click += (_, _) => ApplyEcgConfiguration();
         ApplyBreathButton.Click += (_, _) => ApplyBreathConfiguration();
         ShapeButton.Click += (_, _) =>
@@ -799,7 +806,7 @@ internal sealed class WaveformDemoWindow : Window
             Co2PlateauInput.Text = breathConfiguration.Co2PlateauStartCentiMmHg is { } plateau
                 ? (plateau / 100m).ToString("0.##", CultureInfo.InvariantCulture) : "";
             _activeBreathConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用：{RespiratoryPatternInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；首次 QRS 偏移 {breathConfiguration.IndependentVentricularOffsetMilliseconds ?? 160} ms；独立心室周期 {breathConfiguration.IndependentVentricularPeriodMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "未启用"} ms；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}、每 {breathConfiguration.MechanicalEveryCycles} 个室性周期一次（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即；停止持续周期数 {MechanicalDurationCyclesInput.Text}，空为不恢复）；{ConductionInput.SelectedItem}；传导 {breathConfiguration.VentricularConductionRatio}:{breathConfiguration.ConductedBeatsPerGroup}；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+                $"已应用：{RespiratoryPatternInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；首次 QRS 偏移 {breathConfiguration.IndependentVentricularOffsetMilliseconds ?? 160} ms；独立心室周期 {breathConfiguration.IndependentVentricularPeriodMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "未启用"} ms；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}、每 {breathConfiguration.MechanicalEveryCycles} 个室性周期一次（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即；停止持续周期数 {MechanicalDurationCyclesInput.Text}，空为不恢复）；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(breathConfiguration.VentricularConductionRatio, breathConfiguration.ConductedBeatsPerGroup, breathConfiguration.ConductionPattern)}；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/呼气末目标 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)
@@ -868,7 +875,7 @@ internal sealed class WaveformDemoWindow : Window
             for (int index = 0; index < TScaleInputs.Length; index++)
             { TScaleInputs[index].Text = (tWave.ChestScales[index] / 1000m).ToString("0.###", CultureInfo.InvariantCulture); }
             _activeEcgConfiguration.Text = string.Create(CultureInfo.InvariantCulture,
-                $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；基础周期率 {configuration.HeartRateBpm} 次/分；{ConductionInput.SelectedItem}；传导 {configuration.VentricularConductionRatio}:{configuration.ConductedBeatsPerGroup}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/PR/QRS/T {timing.PDurationNs / 1_000_000m:0.###}/{configuration.PrIntervalMilliseconds}/{timing.QrsDurationNs / 1_000_000m:0.###}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；基础周期率 {configuration.HeartRateBpm} 次/分；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern)}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；P/模板PR/QRS/T {timing.PDurationNs / 1_000_000m:0.###}/{configuration.PrIntervalMilliseconds}/{timing.QrsDurationNs / 1_000_000m:0.###}/{configuration.TDurationMilliseconds} ms；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.Zones is not null ? "" : !infarction.HasActiveRegion ? "；阶段示意关闭" : $"；{(infarction.Components is null ? InfarctionStageInput.SelectedItem : "独立组合")}／{InfarctionTerritoryInput.SelectedItem}（仅自选模式使用勾选项）：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +
                 (configuration.Zones is not null ? $"；三区域：缺血={IschemiaZoneInput.SelectedItem}，损伤={InjuryZoneInput.SelectedItem}，坏死={NecrosisZoneInput.SelectedItem}；缺血区域复极延长 {RepolarizationDelayInput.Text} ms（区域关闭时不生效）；使用组合 Q/ST/T 值，阶段及其他手动 ST/T/融合暂不生效" : "") +

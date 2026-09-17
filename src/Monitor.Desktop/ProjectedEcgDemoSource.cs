@@ -10,6 +10,13 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
+    internal static ProjectedEcgDemoConfiguration JunctionalEscape { get; } = Default with
+    {
+        ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
+        IndependentVentricularPeriodMilliseconds = 1200,
+        IndependentVentricularOffsetMilliseconds = 400,
+    };
+
     internal long ResolveAtrialPeriodNs()
     {
         if (HeartRateBpm is < 30 or > 200) { throw new ArgumentException("Invalid base rate."); }
@@ -19,6 +26,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal EcgCycleTiming ResolveTiming()
     {
         if (!Enum.IsDefined(Atrial)) { throw new ArgumentException("Invalid atrial illustration."); }
+        if (ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration &&
+            this with { IndependentVentricularPeriodMilliseconds = 1200, IndependentVentricularOffsetMilliseconds = 400 } != JunctionalEscape)
+        { throw new ArgumentException("Junctional illustration requires the reference morphology and timing; only escape period/phase are editable."); }
         var timing = ResolveBaseTiming();
         if (EcgAtrialIllustrations.PDurationNs(Atrial) is { } pDuration)
         { timing = timing with { PDurationNs = pDuration }; }
@@ -77,7 +87,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.Zones is { } zones
+        var electrodes = configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration
+            ? CompleteAvBlockJunctionalReference.CreateElectrodes()
+            : configuration.Zones is { } zones
             ? TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, pWave: pWave, zones: zones, atrial: configuration.Atrial, ventricular: configuration.Ventricular, tContour: configuration.TContour)
             : TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve(), configuration.TWave?.ResolveShape(), st, pWave, configuration.Fusion?.Resolve(), configuration.Infarction, atrial: configuration.Atrial, ventricular: configuration.Ventricular, tContour: configuration.TContour);
         RegularPhysiologyPlan plan = new(0, configuration.ResolveAtrialPeriodNs(), offset,

@@ -8,15 +8,18 @@ public enum EcgTContourTarget { Chest, I, II, III, AVR, AVL, AVF }
 public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted, PeakedUpright, BroadUpright, ReferenceUpright, ReferenceInverted }
 
 // T targets carried through electrode projection; limb targets couple other limb leads.
-public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null)
+public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null, int? SecondPeakMicrovolts = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "TContourIllustrationDraft@7";
+    public const string EvidenceId = "TContourIllustrationDraft@8";
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
         if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 0 or > 4000 ||
             (PeakMicrovolts == 0 && Shape is not (EcgTContourShape.ReferenceUpright or EcgTContourShape.ReferenceInverted)))
         { throw new EventWaveformException("EcgTContour.InvalidPlan", "tContour"); }
+        if (SecondPeakMicrovolts is { } second && (second is < 1 or > 4000 ||
+            Shape is not (EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive)))
+        { throw new EventWaveformException("EcgTContour.InvalidSecondPeak", "tContour"); }
         var phasePoints = CreatePhasePoints(source[0].Bands[2].DurationNs);
         var basis = Shape switch
         {
@@ -28,7 +31,21 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
             _ => TContourTables.Biphasic,
         };
         int signedPeak = Shape is EcgTContourShape.NegativePositive or EcgTContourShape.ReferenceInverted ? -PeakMicrovolts : PeakMicrovolts;
-        var table = Array.AsReadOnly(basis.Select(value => (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * signedPeak, 1000)).ToArray());
+        var table = Array.AsReadOnly(basis.Select(value =>
+        {
+            if (SecondPeakMicrovolts is not { } secondPeak || secondPeak == PeakMicrovolts)
+            { return (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * signedPeak, 1000); }
+            // Monotone amplitude map with the same derivative at zero on both
+            // sides: g(u)=m*u+(a-m)*u^2, m=min(first,second), u in [0,1].
+            // This preserves crossing/peaks without a piecewise-gain kink.
+            long magnitude = Math.Abs(value);
+            int amplitude = value >= 0 ? PeakMicrovolts : secondPeak;
+            int common = Math.Min(PeakMicrovolts, secondPeak);
+            const long unit = 1000L << 32;
+            Int128 numerator = (Int128)common * magnitude * unit + (Int128)(amplitude - common) * magnitude * magnitude;
+            long mapped = (long)FixedPointMath.RoundDivideTiesToEven(numerator, (Int128)1000 * unit);
+            return (value < 0 ? -mapped : mapped) * (Shape == EcgTContourShape.NegativePositive ? -1 : 1);
+        }).ToArray());
         if (Target != EcgTContourTarget.Chest)
         {
             int[] weights = Target switch

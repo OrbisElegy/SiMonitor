@@ -8,6 +8,8 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(UnequalBiphasicPeaksPreserveCrossingAndProjection), UnequalBiphasicPeaksPreserveCrossingAndProjection),
+        new(nameof(SecondPeakCompatibilityAndValidation), SecondPeakCompatibilityAndValidation),
         new(nameof(MonophasicTAmplitudeAndFlatTargets), MonophasicTAmplitudeAndFlatTargets),
         new(nameof(BroadTWidthAmplitudeAndRecovery), BroadTWidthAmplitudeAndRecovery),
         new(nameof(PeakedTIsNarrowerAndPreservesU), PeakedTIsNarrowerAndPreservesU),
@@ -18,6 +20,69 @@ internal static class TContourSpecifications
         new(nameof(TContoursRestoreAndRetainU), TContoursRestoreAndRetainU),
         new(nameof(TContoursRejectInvalidAndConflictingPlans), TContoursRejectInvalidAndConflictingPlans),
     ];
+    private static void UnequalBiphasicPeaksPreserveCrossingAndProjection()
+    {
+        var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(u)).GenerateBefore(800_000_000, 200, 100);
+        foreach (var target in Enum.GetValues<EcgTContourTarget>())
+            foreach (var shape in new[] { EcgTContourShape.PositiveNegative, EcgTContourShape.NegativePositive })
+                foreach (int second in new[] { 100, 600 })
+                    foreach (int crossing in new[] { 200, 800 })
+                    {
+                        var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                            TextbookElectrodeReference.CreateElectrodes(u, tContour: new(63, shape, 300, target, crossing, second)));
+                        var first = source.GenerateBefore(400_000_000, 100, 100);
+                        var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                        var tail = source.GenerateBefore(800_000_000, 100, 100);
+                        Check.That(tail.Zip(restored.GenerateBefore(800_000_000, 100, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "unequal T recovery with U");
+                        var samples = first.Concat(tail).ToArray();
+                        var leads = target == EcgTContourTarget.Chest ? Enumerable.Range(6, 6) : [(int)target - 1];
+                        foreach (int lead in leads)
+                        {
+                            int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
+                            int[] t = samples.Skip(85).Take(45).Select(p => p.MicrovoltValues[lead] * sign).ToArray();
+                            int cross = 45 * crossing / 1000;
+                            Check.That(t[cross] == 0 && t[cross - 1] > 0 && t[cross + 1] < 0, "unequal peaks retain selected crossing and polarity");
+                            Check.That(t.Max() <= 300 && t.Max() >= 280 && t.Min() >= -second && t.Min() <= -second * 93 / 100, "independent peak magnitudes without overshoot");
+                        }
+                        for (int i = 0; i < samples.Length; i++)
+                        {
+                            var p = samples[i].ExactLeads;
+                            Check.That(p[EcgLead.I].Numerator + p[EcgLead.III].Numerator == p[EcgLead.II].Numerator &&
+                                p[EcgLead.AVR].Numerator + p[EcgLead.AVL].Numerator + p[EcgLead.AVF].Numerator == 0, "unequal peaks preserve limb identities");
+                            for (int lead = 0; lead < 12; lead++)
+                                if (i < 85 || i >= 130 || (target == EcgTContourTarget.Chest ? lead < 6 : lead >= 6))
+                                { Check.That(p[(EcgLead)lead].Numerator == baseline[i].ExactLeads[(EcgLead)lead].Numerator, "non-T/U and uncoupled leads unchanged"); }
+                        }
+                    }
+    }
+    private static void SecondPeakCompatibilityAndValidation()
+    {
+        foreach (var shape in new[] { EcgTContourShape.PositiveNegative, EcgTContourShape.NegativePositive })
+        {
+            var legacy = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                TextbookElectrodeReference.CreateElectrodes(tContour: new(63, shape, 300, CrossingPositionPermille: 200))).GenerateBefore(800_000_000, 200, 100);
+            var equal = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                TextbookElectrodeReference.CreateElectrodes(tContour: new(63, shape, 300, CrossingPositionPermille: 200, SecondPeakMicrovolts: 300))).GenerateBefore(800_000_000, 200, 100);
+            Check.That(legacy.Zip(equal).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "explicit equal peaks preserve old samples");
+            foreach (int second in new[] { 1, 100, 4000 })
+            {
+                var table = TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, SecondPeakMicrovolts: second))[4].Bands[2].TableQ32;
+                int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
+                Check.That(table[32] * sign == 300L << 32 && table[96] * sign == -(long)second << 32 && table[64] == 0, "exact authored extrema and zero at amplitude bounds");
+                Check.That(Enumerable.Range(32, 64).All(i => table[i] * sign >= table[i + 1] * sign), "no extra peak between opposite lobes");
+                if (second == 100)
+                { Check.That(Math.Abs(table[63]) * 100 < Math.Abs(table[65]) * 115, "near-zero slopes avoid the threefold gain jump"); }
+            }
+        }
+        foreach (var plan in new EcgTContourPlan[] { new(1, EcgTContourShape.PositiveNegative, 300, SecondPeakMicrovolts: 0), new(1, EcgTContourShape.PositiveNegative, 300, SecondPeakMicrovolts: 4001), new(1, EcgTContourShape.Notched, 300, SecondPeakMicrovolts: 100) })
+        {
+            try { TextbookElectrodeReference.CreateElectrodes(tContour: plan); }
+            catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidSecondPeak", "stable second-peak rejection"); continue; }
+            throw new InvalidOperationException("Invalid second peak accepted.");
+        }
+    }
     private static void CrossingTimingMovesSmoothly()
     {
         var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
@@ -75,7 +140,7 @@ internal static class TContourSpecifications
                     Check.That(tail.Zip(recovered).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "limb contour recovers mid-T");
                     var samples = first.Concat(tail).ToArray();
                     int lead = (int)target - 1;
-                    var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
+                    int[] t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
                     if (shape == EcgTContourShape.Notched)
                     { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
                     else if (shape == EcgTContourShape.PeakedUpright)
@@ -116,7 +181,7 @@ internal static class TContourSpecifications
                 var samples = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
                     TextbookElectrodeReference.CreateElectrodes(tContour: new(1 << chest, shape, 300))).GenerateBefore(800_000_000, 200, 100);
                 int lead = chest + 6;
-                var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
+                int[] t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
                 if (shape == EcgTContourShape.Notched)
                 { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "two positive peaks and a notch"); }
                 else if (shape == EcgTContourShape.PeakedUpright)
@@ -196,7 +261,7 @@ internal static class TContourSpecifications
     private static void VerifyMonophasic(int[] samples, EcgTContourShape shape)
     {
         int sign = shape == EcgTContourShape.ReferenceInverted ? -1 : 1;
-        var values = samples.Select(v => v * sign).ToArray();
+        int[] values = samples.Select(v => v * sign).ToArray();
         Check.That(values.Min() == 0 && values.Max() > 295 && Array.IndexOf(values, values.Max()) == 28,
             "reference polarity and asymmetric peak timing");
         Check.That(values[14] > values[42], "reference limbs remain asymmetric");
@@ -221,7 +286,7 @@ internal static class TContourSpecifications
                     foreach (int lead in leads)
                     {
                         int sign = shape == EcgTContourShape.ReferenceInverted ? -1 : 1;
-                        var values = samples.Skip(85).Take(45).Select(p => p.MicrovoltValues[lead] * sign).ToArray();
+                        int[] values = samples.Skip(85).Take(45).Select(p => p.MicrovoltValues[lead] * sign).ToArray();
                         Check.That(values.Min() >= 0 && values.Max() <= amplitude && values.Max() >= amplitude * 99 / 100, "flat/low/boundary target amplitude");
                     }
                     for (int i = 0; i < samples.Length; i++)

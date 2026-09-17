@@ -1,5 +1,5 @@
 {
-  "id": "TContourIllustrationDraft@7",
+  "id": "TContourIllustrationDraft@8",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -136,5 +136,6 @@
   "symmetricInverted": "Symmetric inverted T teaching contour: -1000*[4*x*(1-x)]^3, peaking halfway through T with zero endpoint potentials/slopes. Normalized curvature is authored; amplitude is explicit. QT is not automatically prolonged and no cause is inferred.",
   "peakedUpright": "Peaked T teaching contour: 1000*[4*x*(1-x)]^8, with a positive midpoint peak, symmetric sides and zero endpoint potentials/slopes. Exponent 8 and full-T support are authored to produce a narrower peak. QT is not automatically shortened; this is not a hyperkalemia/ischemia preset. Peak amplitude is explicit.",
   "broadUpright": "Broad tall T teaching contour: normalized x^5*(1-x)^3, peaking at 62.5%, wider than the peaked template, with a longer rise and shorter fall. Endpoint potentials/slopes are zero. Polynomial and peak position are authored; amplitude is independent. T/QT are preserved without automatic ST elevation or etiological inference.",
-  "monophasic": "Reuses asymmetric reference-T landmarks and smooth interpolation normalized to unit peak. Upright/ordinary inverted monophasic shapes allow explicit 0-4000 uV peak amplitude; zero flattens the target T. Low amplitude is a demonstration, not a separate diagnostic threshold. T/QT are preserved; polarity follows shape selection."
+  "monophasic": "Reuses asymmetric reference-T landmarks and smooth interpolation normalized to unit peak. Upright/ordinary inverted monophasic shapes allow explicit 0-4000 uV peak amplitude; zero flattens the target T. Low amplitude is a demonstration, not a separate diagnostic threshold. T/QT are preserved; polarity follows shape selection.",
+  "independentBiphasicPeaks": "The second-lobe peak may be null or 1-4000 uV for biphasic T only. Null/equal peaks preserve previous bytes. Unequal peaks map normalized absolute potential u by g(u)=m*u+(a-m)*u^2, where m is the smaller peak and a is the respective lobe amplitude. Both zero-point derivatives equal m; the map is monotone and bounded, preserving zero/extremum phases. This is an authored morphology transform; sampled derivatives still depend on LUT linear interpolation."
 }

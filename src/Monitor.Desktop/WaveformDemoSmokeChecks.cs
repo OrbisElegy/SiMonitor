@@ -17,6 +17,7 @@ internal static class WaveformDemoSmokeChecks
         RespCo2CouplingSmokeChecks.Verify();
         PhysiologyConfigurationSmokeChecks.Verify();
         RespiratoryActivitySmokeChecks.Verify();
+        RespiratoryPatternSmokeChecks.Verify();
         ConductionRatioSmokeChecks.Verify();
         CardiacActivitySmokeChecks.Verify();
         IndependentVentricularSmokeChecks.Verify();

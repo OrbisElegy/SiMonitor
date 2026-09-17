@@ -20,7 +20,7 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
         var phases = RespiratoryPhaseMap.Create(physiology, table.Count);
         List<EventWaveformBand> bands =
         [
-            new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs, table, phases),
+            new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs, table, phases, DepthPattern: physiology.RespiratoryPattern),
         ];
         if (CardiacArtifactCounts != 0)
         {

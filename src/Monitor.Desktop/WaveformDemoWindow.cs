@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -210,7 +210,7 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(new TextBlock { Text = "房扑示例：房率300，连续F波，选2:1/4:1对应室率150/75；QRS80ms、QT300ms。12导联使用固定形态/时限；未模拟房扑机械收缩，CVP不生成正常a波。" });
             conduction.Children.Add(new TextBlock { Text = "室性逸搏示例：房率75、室率30，宽大切迹QRS160ms/反向T，固定QT480ms；可改室周期1500–3000ms及首次偏移。12导联保留此例形态/时限；不代表逸搏起源定位。" });
             conduction.Children.Add(new TextBlock { Text = "交界性逸搏示例：房率75、室率50，正常80ms QRS，无固定PR；可改独立室周期1000–1500ms及首次偏移。12导联需保留参考形态和固定时限。此示例从已建立的逸搏开始。" });
-            conduction.Children.Add(new TextBlock { Text = "固定PR与文氏示意分开：文氏PR依次+0/+80/+120 ms，第4次脱漏并复位。需房室活动、无独立心室周期，机械比例1且清空机械日程；成组传导的QT采用最短RR下界（房性周期）约束；文氏末次机械事件须在同一房性周期内。" });
+            conduction.Children.Add(new TextBlock { Text = "固定PR与文氏示意分开：文氏3:2、4:3、5:4的PR附加延迟分别为0/80、0/80/120、0/80/120/140 ms；每组最后一次P不下传，下一组复位。需房室活动、无独立心室周期，机械比例1且清空机械日程；成组传导的QT采用最短RR下界（房性周期）约束；文氏末次机械事件须在同一房性周期内。" });
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
             conduction.Children.Add(CardiacActivityInput);
             ToolTip.SetTip(CardiacActivityInput, "仅心室模式关闭房性电／机械事件；心室沿原周期与偏移运行。基础周期率不是测得的心房率；不代表已验证的逸搏或房颤预设。");

@@ -1,29 +1,42 @@
 {
-  "id": "WenckebachFourToThreeIllustrationDraft@1",
+  "id": "WenckebachIllustrationDraft@2",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
     "section": "第五篇 辅助检查 第一章 心电图 第六节",
     "pages": "486"
   },
-  "scope": "A 4:3 Wenckebach teaching example, not a clinical AV-node electrophysiological model.",
-  "authoredPrExtraNs": [
-    0,
-    80000000,
-    120000000,
-    null
-  ],
-  "rule": "P waves are equally spaced. PR increases beat by beat with decreasing increments; the fourth P is blocked, then the sequence resets. Mechanical events retain their delay relative to electrical events.",
+  "scope": "Teaching examples of 3:2, 4:3 and 5:4 Wenckebach cycles, not a clinical AV-node electrophysiological model.",
+  "rule": "P waves are equally spaced. Conducted beats have progressively increasing PR with authored increments of 80/40/20 ms. The final P in each group is blocked, then the sequence resets. Mechanical events retain their delay relative to electrical events.",
   "constraints": [
-    "Only 4:3 conduction with the original grouped constraints. The final mechanical offset plus 120 ms must be strictly less than the atrial period. QT uses the atrial period as a conservative lower interval bound, without beatwise adaptation."
+    "Only the listed 3:2, 4:3 and 5:4 sequences are supported, retaining grouped constraints. The final mechanical offset plus the sequence's largest extra delay must be strictly less than the atrial period. QT uses the atrial period as a conservative lower interval bound, without beatwise adaptation."
   ],
   "verification": [
     "Checks exact event times/window boundaries, checkpoints, twelve-lead recovery, delayed pressure/runoff, atomic event budgets, cancellation and times near long.MaxValue, plus native data/pixels in both demos."
   ],
   "unimplemented": [
     "Other Wenckebach ratios and variable sequences remain unimplemented.",
-    "Third-degree AV block and escape origins/morphologies remain unimplemented.",
-    "Atrial flutter, atrial fibrillation, ventricular flutter and ventricular fibrillation remain unimplemented.",
+    "First escape, capture, fusion and other AV-block examples remain unimplemented.",
     "Beatwise filling/ejection-volume feedback remains unimplemented."
-  ]
+  ],
+  "authoredSequencesNs": {
+    "3:2": [
+      0,
+      80000000,
+      null
+    ],
+    "4:3": [
+      0,
+      80000000,
+      120000000,
+      null
+    ],
+    "5:4": [
+      0,
+      80000000,
+      120000000,
+      140000000,
+      null
+    ]
+  }
 }

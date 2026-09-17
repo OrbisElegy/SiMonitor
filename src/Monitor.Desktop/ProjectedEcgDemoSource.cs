@@ -96,7 +96,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     private EcgCycleTiming ResolveBaseTiming()
     {
         _ = ConductionSelection.Index(VentricularConductionRatio, ConductedBeatsPerGroup, ConductionPattern);
-        if (!Enum.IsDefined(Placement) || VentricularConductionRatio is < 1 or > 4 || !Enum.IsDefined(CardiacActivity)) { throw new ArgumentException("Invalid conduction ratio or cardiac activity."); }
+        if (!Enum.IsDefined(Placement) || VentricularConductionRatio is < 1 or > 5 || !Enum.IsDefined(CardiacActivity)) { throw new ArgumentException("Invalid conduction ratio or cardiac activity."); }
         if (ChestStArchMicrovolts is < -1000 or > 1000 || ChestJMicrovolts is < -1000 or > 1000 || ChestStEndMicrovolts is < -1000 or > 1000) { throw new ArgumentException("Invalid chest ST offsets."); }
         if (ChestP is { } p && (p.EarlyMicrovolts is < -1000 or > 1000 || p.LateMicrovolts is < -1000 or > 1000))
         { throw new ArgumentException("Invalid C1 P components."); }

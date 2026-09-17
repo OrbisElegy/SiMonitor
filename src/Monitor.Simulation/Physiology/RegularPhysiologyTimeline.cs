@@ -20,7 +20,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -94,9 +94,9 @@ public sealed class RegularPhysiologyTimeline
                  plan.HeartPeriodNs >= plan.IndependentVentricularPeriodNs ||
                  plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
                  plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1)) ||
-            (plan.ConductionPattern == AvConductionPattern.WenckebachFourToThreeIllustration &&
-                (plan.VentricularConductionRatio != 4 || plan.ConductedBeatsPerGroup != 3 ||
-                 (Int128)plan.VentricularMechanicalOffsetNs + 120_000_000 >= plan.HeartPeriodNs)) ||
+            (WenckebachIllustration.GroupSize(plan.ConductionPattern) is > 0 and var groupSize &&
+                (plan.VentricularConductionRatio != groupSize || plan.ConductedBeatsPerGroup != groupSize - 1 ||
+                 (Int128)plan.VentricularMechanicalOffsetNs + WenckebachIllustration.ExtraDelayNs(groupSize - 2) >= plan.HeartPeriodNs)) ||
             (plan.ConductedBeatsPerGroup > 1 && (plan.ConductedBeatsPerGroup >= plan.VentricularConductionRatio ||
                 plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
                 plan.MechanicalEveryCycles != 1 || plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
@@ -214,7 +214,7 @@ public sealed class RegularPhysiologyTimeline
             AtrialFibrillationReference.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
             return;
         }
-        if (plan.ConductionPattern == AvConductionPattern.WenckebachFourToThreeIllustration &&
+        if (WenckebachIllustration.GroupSize(plan.ConductionPattern) > 0 &&
             kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
         {
             VisitWenckebach(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
@@ -262,18 +262,19 @@ public sealed class RegularPhysiologyTimeline
         }
     }
 
-    // Three periodic streams share an atrial group. Count exact half-open
+    // Conducted periodic streams share an atrial group. Count exact half-open
     // intersections before visiting, then emit in time order for pressure RC.
-    // Authored example: successive PR increments 80 ms, then 40 ms, then drop.
+    // Authored successive PR increments: 80/40/20 ms, then one dropped P.
     private static void VisitWenckebach(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        Int128 period = (Int128)plan.HeartPeriodNs * 4;
+        int groupSize = WenckebachIllustration.GroupSize(plan.ConductionPattern);
+        Int128 period = (Int128)plan.HeartPeriodNs * groupSize;
         Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset +
-            (Int128)slot * plan.HeartPeriodNs + (slot == 1 ? 80_000_000 : slot == 2 ? 120_000_000 : 0);
+            (Int128)slot * plan.HeartPeriodNs + WenckebachIllustration.ExtraDelayNs(slot);
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;
-        for (int slot = 0; slot < 3; slot++)
+        for (int slot = 0; slot < groupSize - 1; slot++)
         {
             Int128 start = Start(slot);
             Int128 first = inclusive <= start ? 0 : ((Int128)inclusive - start + period - 1) / period;
@@ -288,11 +289,11 @@ public sealed class RegularPhysiologyTimeline
         for (Int128 group = firstGroup; group <= lastGroup; group++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            for (int slot = 0; slot < 3; slot++)
+            for (int slot = 0; slot < groupSize - 1; slot++)
             {
                 Int128 time = Start(slot) + group * period;
                 if (time >= inclusive && time < exclusive)
-                { visitor(new((long)time, kind, (ulong)(group * 4 + slot))); }
+                { visitor(new((long)time, kind, (ulong)(group * groupSize + slot))); }
             }
         }
     }

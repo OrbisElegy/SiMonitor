@@ -5,13 +5,13 @@ namespace Monitor.Simulation.Physiology;
 
 public enum EcgTContourTarget { Chest, I, II, III, AVR, AVL, AVF }
 
-public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted, PeakedUpright }
+public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted, PeakedUpright, BroadUpright }
 
 // T targets carried through electrode projection; limb targets couple other limb leads.
 public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "TContourIllustrationDraft@5";
+    public const string EvidenceId = "TContourIllustrationDraft@6";
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
         if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 1 or > 4000)
@@ -22,6 +22,7 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
             EcgTContourShape.Notched => TContourTables.Notched,
             EcgTContourShape.SymmetricInverted => TContourTables.SymmetricInverted,
             EcgTContourShape.PeakedUpright => TContourTables.PeakedUpright,
+            EcgTContourShape.BroadUpright => TContourTables.BroadUpright,
             _ => TContourTables.Biphasic,
         };
         int signedPeak = Shape == EcgTContourShape.NegativePositive ? -PeakMicrovolts : PeakMicrovolts;

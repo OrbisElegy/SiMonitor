@@ -8,6 +8,7 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(BroadTWidthAmplitudeAndRecovery), BroadTWidthAmplitudeAndRecovery),
         new(nameof(PeakedTIsNarrowerAndPreservesU), PeakedTIsNarrowerAndPreservesU),
         new(nameof(SymmetricInversionRetainsUAndAmplitudeBounds), SymmetricInversionRetainsUAndAmplitudeBounds),
         new(nameof(CrossingTimingMovesSmoothly), CrossingTimingMovesSmoothly),
@@ -50,7 +51,7 @@ internal static class TContourSpecifications
         Check.That(collapsedRejected, "collapsed nanosecond intervals are rejected");
         foreach (int value in new[] { 1, 999 })
         { TextbookElectrodeReference.CreateElectrodes(tContour: new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: value)); }
-        foreach (var plan in new[] { new EcgTContourPlan(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 0), new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 1000), new(1, EcgTContourShape.Notched, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.SymmetricInverted, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.PeakedUpright, 300, CrossingPositionPermille: 500) })
+        foreach (var plan in new[] { new EcgTContourPlan(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 0), new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 1000), new(1, EcgTContourShape.Notched, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.SymmetricInverted, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.PeakedUpright, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.BroadUpright, 300, CrossingPositionPermille: 500) })
         {
             try { TextbookElectrodeReference.CreateElectrodes(tContour: plan); }
             catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidCrossing", "stable crossing rejection"); continue; }
@@ -78,6 +79,8 @@ internal static class TContourSpecifications
                     { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
                     else if (shape == EcgTContourShape.PeakedUpright)
                     { VerifyPeakedUpright(t); }
+                    else if (shape == EcgTContourShape.BroadUpright)
+                    { VerifyBroadUpright(t); }
                     else if (shape == EcgTContourShape.SymmetricInverted)
                     { VerifySymmetricInversion(t); }
                     else
@@ -115,6 +118,8 @@ internal static class TContourSpecifications
                 { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "two positive peaks and a notch"); }
                 else if (shape == EcgTContourShape.PeakedUpright)
                 { VerifyPeakedUpright(t); }
+                else if (shape == EcgTContourShape.BroadUpright)
+                { VerifyBroadUpright(t); }
                 else if (shape == EcgTContourShape.SymmetricInverted)
                 { VerifySymmetricInversion(t); }
                 else
@@ -181,6 +186,45 @@ internal static class TContourSpecifications
                 }
             }
             Check.That(samples.Skip(130).Zip(baseline.Skip(130)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "peaked T preserves U");
+        }
+    }
+    private static void VerifyBroadUpright(int[] samples)
+    {
+        Check.That(samples.Min() == 0 && samples.Max() > 295, "broad upright T has a positive peak without undershoot");
+        int peak = Array.IndexOf(samples, samples.Max());
+        Check.That(peak == 28, "broad peak occurs near 62.5% rather than midpoint");
+        Check.That(samples.Take(peak).Zip(samples.Skip(1).Take(peak)).All(p => p.First <= p.Second) &&
+            samples.Skip(peak).Zip(samples.Skip(peak + 1)).All(p => p.First >= p.Second), "broad T has a single peak and smooth limbs");
+        Check.That(samples.Count(v => v >= 150) > 14 && samples[20] > samples[36], "broad T has a wider peak and asymmetric flanks");
+    }
+    private static void BroadTWidthAmplitudeAndRecovery()
+    {
+        var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(u)).GenerateBefore(800_000_000, 200, 100);
+        var narrow = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(tContour: new(63, EcgTContourShape.PeakedUpright, 1000))).GenerateBefore(800_000_000, 200, 100);
+        foreach (int amplitude in new[] { 1, 1000, 4000 })
+        {
+            var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                TextbookElectrodeReference.CreateElectrodes(u, tContour: new(63, EcgTContourShape.BroadUpright, amplitude)));
+            var first = source.GenerateBefore(400_000_000, 100, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            var tail = source.GenerateBefore(800_000_000, 100, 100);
+            Check.That(tail.Zip(restored.GenerateBefore(800_000_000, 100, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "broad T restores with U");
+            var samples = first.Concat(tail).ToArray();
+            foreach (int lead in Enumerable.Range(6, 6))
+            {
+                long maximum = samples.Skip(85).Take(45).Max(p => p.MicrovoltValues[lead]);
+                Check.That(maximum <= amplitude && maximum >= amplitude * 99 / 100, "broad T amplitude boundaries");
+                if (amplitude == 1000)
+                {
+                    int width = samples.Skip(85).Take(45).Count(p => p.MicrovoltValues[lead] >= 500);
+                    int narrowWidth = narrow.Skip(85).Take(45).Count(p => p.MicrovoltValues[lead] >= 500);
+                    Check.That(width > narrowWidth, "broad T is wider at equal amplitude and T duration");
+                }
+            }
+            Check.That(samples.Skip(130).Zip(baseline.Skip(130)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "broad T preserves U");
         }
     }
     private static void VerifyPeakedUpright(int[] samples)

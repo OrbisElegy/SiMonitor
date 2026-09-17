@@ -11,7 +11,7 @@ internal static class TContourSmokeChecks
     internal static void Verify()
     {
         foreach (int target in new[] { 0, 7, 8, 9, 10, 11, 12 })
-            foreach (int shape in target == 0 ? new[] { 1, 2, 3, 4, 5 } : new[] { 1, 4, 5 })
+            foreach (int shape in target == 0 ? new[] { 1, 2, 3, 4, 5, 6 } : new[] { 1, 4, 5, 6 })
             {
                 WaveformDemoWindow window = new(projected: true);
                 window.Show();
@@ -67,6 +67,6 @@ internal static class TContourSmokeChecks
                 }
                 finally { window.Close(); }
             }
-        Console.WriteLine("ok: native biphasic/notched/symmetric inverted/peaked T contours, signed pixels, recovery and atomic rejection");
+        Console.WriteLine("ok: native biphasic/notched/symmetric inverted/peaked/broad T contours, signed pixels, recovery and atomic rejection");
     }
 }

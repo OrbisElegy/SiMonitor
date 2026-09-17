@@ -21,7 +21,7 @@ internal static class ConductionRatioSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (int selection in new[] { 1, 2, 3, 4, 5, 6, 16, 17, 0 })
+                foreach (int selection in new[] { 1, 2, 3, 4, 5, 6, 16, 17, 18, 19, 0 })
                 {
                     var (ratio, conducted) = ConductionSelection.Resolve(selection);
                     for (int step = 0; step < 12; step++) { Click(window.StepButton); }

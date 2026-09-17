@@ -1,5 +1,5 @@
 {
-  "id": "TContourIllustrationDraft@4",
+  "id": "TContourIllustrationDraft@5",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -71,6 +71,28 @@
         -192000,
         64000
       ]
+    },
+    "PeakedUpright": {
+      "length": 128,
+      "polynomial_coefficients": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        65536000,
+        -524288000,
+        1835008000,
+        -3670016000,
+        4587520000,
+        -3670016000,
+        1835008000,
+        -524288000,
+        65536000
+      ]
     }
   },
   "limitations": [
@@ -80,5 +102,6 @@
     "Only one limb-lead target at a time; all six limb leads cannot be set independently."
   ],
   "limbProjection": "I/II/III target differences are injected through paired positive/negative electrode bands. Augmented leads use 2/-1/-1, with 2 formed by duplicating the same band rather than rescaling. Each band's electrode increments sum to zero, preserving Wilson and chest leads while other limb leads follow projection identities. Integer division of target differences may leave Q32 rounding residue.",
-  "symmetricInverted": "Symmetric inverted T teaching contour: -1000*[4*x*(1-x)]^3, peaking halfway through T with zero endpoint potentials/slopes. Normalized curvature is authored; amplitude is explicit. QT is not automatically prolonged and no cause is inferred."
+  "symmetricInverted": "Symmetric inverted T teaching contour: -1000*[4*x*(1-x)]^3, peaking halfway through T with zero endpoint potentials/slopes. Normalized curvature is authored; amplitude is explicit. QT is not automatically prolonged and no cause is inferred.",
+  "peakedUpright": "Peaked T teaching contour: 1000*[4*x*(1-x)]^8, with a positive midpoint peak, symmetric sides and zero endpoint potentials/slopes. Exponent 8 and full-T support are authored to produce a narrower peak. QT is not automatically shortened; this is not a hyperkalemia/ischemia preset. Peak amplitude is explicit."
 }

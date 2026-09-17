@@ -9,6 +9,7 @@ internal static class GroupedConductionSpecifications
         80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000, VentricularConductionRatio: total, ConductedBeatsPerGroup: conducted);
     public static Specification[] All =>
     [
+        new(nameof(MobitzTwoKeepsPrConstantAcrossDroppedBeats), MobitzTwoKeepsPrConstantAcrossDroppedBeats),
         new(nameof(GroupedConductionKeepsAtriaAndMechanicalPairs), GroupedConductionKeepsAtriaAndMechanicalPairs),
         new(nameof(GroupedSourcesRecoverAndPressureRunsOff), GroupedSourcesRecoverAndPressureRunsOff),
         new(nameof(GroupedConductionRejectsConflictsAndBudgetsAtomically), GroupedConductionRejectsConflictsAndBudgetsAtomically),
@@ -16,6 +17,38 @@ internal static class GroupedConductionSpecifications
         new(nameof(WenckebachProgressesResetsAndRestores), WenckebachProgressesResetsAndRestores),
         new(nameof(WenckebachRejectsConflictsAndHonorsBoundaries), WenckebachRejectsConflictsAndHonorsBoundaries),
     ];
+    private static void MobitzTwoKeepsPrConstantAcrossDroppedBeats()
+    {
+        foreach (var (size, pattern) in new[] { (3, AvConductionPattern.MobitzTwoThreeToTwoIllustration), (4, AvConductionPattern.MobitzTwoFourToThreeIllustration) })
+        {
+            var reference = Plan(size, size - 1);
+            var plan = reference with { ConductionPattern = pattern };
+            long end = size * 3 * 800_000_000L;
+            var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(end, 100);
+            Check.That(events.SequenceEqual(RegularPhysiologyTimeline.Start(reference).AdvanceBefore(end, 100)), "named Mobitz II retains constant PR and fixed dropped slots");
+            var beats = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).ToArray();
+            Check.That(beats.Length == 3 * (size - 1) && beats.All(e => e.SimTimeNs - (long)e.CycleIndex * 800_000_000 == 160_000_000), "all conducted beats including post-pause retain PR160");
+            var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes());
+            source.GenerateBefore(1_000_000_000, 250, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            Check.That(source.GenerateBefore(end, 3000, 100).Zip(restored.GenerateBefore(end, 3000, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "named narrow QRS source recovers across dropped beat");
+            var pressurePlan = new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000);
+            var pressure = VascularPressureSource.Create(plan, pressurePlan);
+            var expected = VascularPressureSource.Create(reference, pressurePlan);
+            for (long time = 0; time < end; time += 100_000_000)
+            { Check.That(pressure.EvaluateAt(time) == expected.EvaluateAt(time), "named pattern shares grouped mechanical and runoff schedule"); }
+            foreach (var invalid in new[] { plan with { ConductedBeatsPerGroup = 1 }, plan with { VentricularElectricalOffsetNs = 200_000_000 }, plan with { VentricularMechanicalOffsetNs = 280_000_000 }, plan with { CardiacActivity = CardiacActivity.VentricularOnly } })
+            {
+                try { RegularPhysiologyTimeline.Start(invalid); }
+                catch (PhysiologyTimelineException) { continue; }
+                throw new InvalidOperationException("Conflicting Mobitz II preset accepted.");
+            }
+            var timeline = RegularPhysiologyTimeline.Start(plan);
+            var state = timeline.CaptureState();
+            try { timeline.AdvanceBefore(end, 1); throw new InvalidOperationException("Budget accepted."); }
+            catch (PhysiologyTimelineException) { Check.That(timeline.CaptureState() == state, "failed event budget atomic"); }
+        }
+    }
     private static void AdditionalWenckebachRatiosKeepSharedTiming()
     {
         foreach (var (size, pattern) in new[] { (3, AvConductionPattern.WenckebachThreeToTwoIllustration), (5, AvConductionPattern.WenckebachFiveToFourIllustration) })
@@ -25,7 +58,7 @@ internal static class GroupedConductionSpecifications
             long end = 3 * size * plan.HeartPeriodNs;
             var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(end, 100);
             var electrical = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).ToArray();
-            var expected = Enumerable.Range(0, size * 3).Where(i => i % size < size - 1)
+            long[] expected = Enumerable.Range(0, size * 3).Where(i => i % size < size - 1)
                 .Select(i => i * plan.HeartPeriodNs + 160_000_000 + delays[i % size]).ToArray();
             Check.That(electrical.Select(e => e.SimTimeNs).SequenceEqual(expected), "progressive PR, last P dropped and first PR restored");
             Check.That(events.Count(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical) == size * 3, "atrial rhythm remains regular through dropped beats");

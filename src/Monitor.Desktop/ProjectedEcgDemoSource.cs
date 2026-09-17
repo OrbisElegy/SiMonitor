@@ -56,6 +56,12 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (ConductionPattern is AvConductionPattern.MobitzTwoThreeToTwoIllustration or AvConductionPattern.MobitzTwoFourToThreeIllustration)
+        {
+            int preset = ConductionPattern == AvConductionPattern.MobitzTwoThreeToTwoIllustration ? 3 : 4;
+            if (this != SecondDegreeBlockPreset.Ecg(preset)) { throw new ArgumentException("Mobitz II illustration requires its fixed reference shape and timing."); }
+            return TextbookEcgReference.Timing;
+        }
         if (VentricularDisorganizationReference.IsPattern(ConductionPattern))
         {
             if (this != Disorganized(ConductionPattern)) { throw new ArgumentException("Ventricular disorganization requires its authored preset."); }

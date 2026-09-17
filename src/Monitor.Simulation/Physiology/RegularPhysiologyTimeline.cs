@@ -20,7 +20,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -94,6 +94,10 @@ public sealed class RegularPhysiologyTimeline
                  plan.HeartPeriodNs >= plan.IndependentVentricularPeriodNs ||
                  plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
                  plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1)) ||
+            (plan.ConductionPattern is AvConductionPattern.MobitzTwoThreeToTwoIllustration or AvConductionPattern.MobitzTwoFourToThreeIllustration &&
+                (plan.VentricularConductionRatio != (plan.ConductionPattern == AvConductionPattern.MobitzTwoThreeToTwoIllustration ? 3 : 4) ||
+                 plan.ConductedBeatsPerGroup != plan.VentricularConductionRatio - 1 ||
+                 plan.VentricularElectricalOffsetNs != 160_000_000 || plan.VentricularMechanicalOffsetNs != 240_000_000)) ||
             (WenckebachIllustration.GroupSize(plan.ConductionPattern) is > 0 and var groupSize &&
                 (plan.VentricularConductionRatio != groupSize || plan.ConductedBeatsPerGroup != groupSize - 1 ||
                  (Int128)plan.VentricularMechanicalOffsetNs + WenckebachIllustration.ExtraDelayNs(groupSize - 2) >= plan.HeartPeriodNs)) ||

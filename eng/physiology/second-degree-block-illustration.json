@@ -1,0 +1,30 @@
+{
+  "id": "SecondDegreeBlockIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "486"
+  },
+  "textbook_summary": [
+    "Mobitz I progressively prolongs PR before a blocked beat. In Mobitz II, conducted beats have constant PR while some P waves are not followed by QRS complexes."
+  ],
+  "authored_choices": {
+    "atrialPeriodMs": 800,
+    "mobitzTwoPrMs": 160,
+    "qrsMs": 80,
+    "mechanicalLagMs": 80,
+    "mobitzTwoGroups": [
+      "3:2",
+      "4:3"
+    ],
+    "blockedSlot": "The final P wave in each group.",
+    "wenckebachEvidence": "wenckebach-illustration.json",
+    "twoToOne": "Presented separately as 2:1 block; the ratio alone does not assign Mobitz I or II."
+  },
+  "limitations": [
+    "The Mobitz II teaching example has narrow QRS only; broad QRS with bundle block has not been added.",
+    "No anatomical block location, random dropped beats, filling or beatwise ejection-volume model.",
+    "Switching from atrial flutter/fibrillation, ventricular flutter/fibrillation or third-degree AV block loads the complete template and resets previous parameters. Manual edits still require validation."
+  ]
+}

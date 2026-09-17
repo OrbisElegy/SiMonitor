@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）", "二度Ⅱ型3:2示意", "二度Ⅱ型4:3示意" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -96,6 +96,8 @@ internal sealed class WaveformDemoWindow : Window
         .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button VentricularDisorganizationButton { get; } = new() { Content = "载入室扑／室颤示例（重置参数）" };
+    internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）" }, SelectedIndex = 0 };
+    internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
     internal Button FibrillationButton { get; } = new() { Content = "载入房颤粗颤示例（重置参数）" };
     internal Button FlutterButton { get; } = new() { Content = "载入房扑4:1示例（重置参数）" };
     internal Button VentricularEscapeButton { get; } = new() { Content = "载入三度AVB室性逸搏示例（重置参数）" };
@@ -202,6 +204,9 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(ConductionInput);
             conduction.Children.Add(JunctionalEscapeButton);
             conduction.Children.Add(VentricularEscapeButton);
+            conduction.Children.Add(SecondDegreePresetInput);
+            conduction.Children.Add(SecondDegreePresetButton);
+            conduction.Children.Add(new TextBlock { Text = "从室扑/室颤、房扑/房颤或逸搏切换至二度阻滞并应用时，将加载完整示例并重置参数。也可使用载入按钮。Ⅱ型示例PR恒定160ms，QRS80ms；仅示窄QRS型，不含束支阻滞。2:1比例本身不区分Ⅰ/Ⅱ型。" });
             conduction.Children.Add(FlutterButton);
             conduction.Children.Add(FibrillationButton);
             conduction.Children.Add(VentricularDisorganizationButton);
@@ -406,6 +411,11 @@ internal sealed class WaveformDemoWindow : Window
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration), PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration)); }
         };
+        SecondDegreePresetButton.Click += (_, _) =>
+        {
+            if (_closed || SecondDegreePresetInput.SelectedIndex is < 0 or > 5) { return; }
+            Reset(UsesPulse, SecondDegreeBlockPreset.Ecg(SecondDegreePresetInput.SelectedIndex), SecondDegreeBlockPreset.Physiology(SecondDegreePresetInput.SelectedIndex));
+        };
         FibrillationButton.Click += (_, _) =>
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Fibrillation(), PhysiologyDemoConfiguration.Fibrillation()); }
@@ -535,9 +545,19 @@ internal sealed class WaveformDemoWindow : Window
 
     private void Reset() => Reset(UsesPulse);
 
+    private bool TryLoadSecondDegreeTransition(AvConductionPattern current)
+    {
+        int preset = SecondDegreeBlockPreset.FromSelection(ConductionInput.SelectedIndex);
+        if (preset < 0 || !SecondDegreeBlockPreset.RequiresReload(current)) { return false; }
+        Reset(UsesPulse, SecondDegreeBlockPreset.Ecg(preset), SecondDegreeBlockPreset.Physiology(preset));
+        SecondDegreePresetInput.SelectedIndex = preset;
+        return true;
+    }
+
     private void ApplyEcgConfiguration()
     {
         if (_closed || !_projected) { return; }
+        if (TryLoadSecondDegreeTransition(EcgConfiguration.ConductionPattern)) { return; }
         try
         {
             ProjectedEcgDemoConfiguration configuration;
@@ -697,7 +717,7 @@ internal sealed class WaveformDemoWindow : Window
         }
         catch (ArgumentException)
         {
-            EcgConfigurationStatus.Text = "未应用：成组下传需房室活动且关闭独立心室周期；贡献移除需参考QRS、100%模板混合，峰值0～2000 μV、时限10～100%、移除0～100%均为整数；三区域须选择有效区域；独立组合需有效 QRS 形态、Q/QS 混合 0～100%（精度0.1%）、T 峰 ±2000 μV（或空）、J/末端/弓起各 ±1000 μV；复极延长须为 0～500 ms 整数，延长后 PR＋QT ≤ 室性 RR；启用 u 波时延长量不能超过原 T→u 间隔；请选择有效阶段及区域，所选 QRS 增宽后仍须满足 QT 时限；融合 J 须为 ±1000 μV 整数、融合峰 ±2000 μV 整数，融合峰位置 0.1～99.9%（精度 0.1%）；C1 P 双分量须同时留空或均为 −1000～1000 μV 整数；J/ST 偏移及中段弓起须为 −1000～1000 μV 整数，启用时 ST 时限须大于零；T 峰位置须为 10～90%，精度 0.1% 或留空；T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
+            EcgConfigurationStatus.Text = "未应用：可使用“载入二度阻滞示例（重置参数）”清除此前节律参数；成组下传需房室活动且关闭独立心室周期；贡献移除需参考QRS、100%模板混合，峰值0～2000 μV、时限10～100%、移除0～100%均为整数；三区域须选择有效区域；独立组合需有效 QRS 形态、Q/QS 混合 0～100%（精度0.1%）、T 峰 ±2000 μV（或空）、J/末端/弓起各 ±1000 μV；复极延长须为 0～500 ms 整数，延长后 PR＋QT ≤ 室性 RR；启用 u 波时延长量不能超过原 T→u 间隔；请选择有效阶段及区域，所选 QRS 增宽后仍须满足 QT 时限；融合 J 须为 ±1000 μV 整数、融合峰 ±2000 μV 整数，融合峰位置 0.1～99.9%（精度 0.1%）；C1 P 双分量须同时留空或均为 −1000～1000 μV 整数；J/ST 偏移及中段弓起须为 −1000～1000 μV 整数，启用时 ST 时限须大于零；T 峰位置须为 10～90%，精度 0.1% 或留空；T 倍率须为 −4～4 且精度不超过 0.001；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；独立心室周期须为 800～3200 ms 且不短于基础心房周期，需比例 1:1，或留空；起始偏移留空时沿用 PR。请输入范围内的整数，传导比例须为 1:1～4:1，各时限为 1～1000 ms，并满足 P ≤ PR、QRS＋T ≤ QT、PR＋QT ≤ 室性 RR；u 波参数须在所示范围内，启用时 PR＋QT＋u 延迟＋u 时限 ≤ 室性 RR。当前数据与扫屏状态保持。";
         }
     }
 
@@ -712,6 +732,7 @@ internal sealed class WaveformDemoWindow : Window
     private void ApplyBreathConfiguration()
     {
         if (_closed || !_physiology) { return; }
+        if (TryLoadSecondDegreeTransition(BreathConfiguration.ConductionPattern)) { return; }
         try
         {
             if (!int.TryParse(BreathPeriodInput.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int period) ||
@@ -780,7 +801,7 @@ internal sealed class WaveformDemoWindow : Window
         }
         catch (ArgumentException)
         {
-            BreathConfigurationStatus.Text = "未应用：成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
+            BreathConfigurationStatus.Text = "未应用：可用“载入二度阻滞示例（重置参数）”清除旧参数；成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
         }
     }
 

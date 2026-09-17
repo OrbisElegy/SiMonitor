@@ -8,15 +8,15 @@ internal static class ConductionSelection
     internal static (int Atrial, int Conducted) Resolve(int index) => index switch
     {
         >= 0 and <= 3 => (index + 1, 1),
-        4 or 16 => (3, 2),
+        4 or 16 or 18 => (3, 2),
         17 => (5, 4),
-        5 or 6 => (4, 3),
+        5 or 6 or 19 => (4, 3),
         7 or 8 or 11 or 12 or 13 or 14 or 15 => (1, 1),
         9 => (2, 1),
         10 => (4, 1),
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
-    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, 9 or 10 => AvConductionPattern.AtrialFlutterIllustration, 11 => AvConductionPattern.AtrialFibrillationCoarseIllustration, 12 => AvConductionPattern.AtrialFibrillationFineIllustration, 13 => AvConductionPattern.VentricularFlutterIllustration, 14 => AvConductionPattern.VentricularFibrillationCoarseIllustration, 15 => AvConductionPattern.VentricularFibrillationFineIllustration, 16 => AvConductionPattern.WenckebachThreeToTwoIllustration, 17 => AvConductionPattern.WenckebachFiveToFourIllustration, _ => AvConductionPattern.FixedPr };
+    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, 9 or 10 => AvConductionPattern.AtrialFlutterIllustration, 11 => AvConductionPattern.AtrialFibrillationCoarseIllustration, 12 => AvConductionPattern.AtrialFibrillationFineIllustration, 13 => AvConductionPattern.VentricularFlutterIllustration, 14 => AvConductionPattern.VentricularFibrillationCoarseIllustration, 15 => AvConductionPattern.VentricularFibrillationFineIllustration, 16 => AvConductionPattern.WenckebachThreeToTwoIllustration, 17 => AvConductionPattern.WenckebachFiveToFourIllustration, 18 => AvConductionPattern.MobitzTwoThreeToTwoIllustration, 19 => AvConductionPattern.MobitzTwoFourToThreeIllustration, _ => AvConductionPattern.FixedPr };
     internal static string Summary(int atrial, int conducted, AvConductionPattern pattern) =>
         VentricularDisorganizationReference.IsPattern(pattern) ? "无组织性QRS／有效射血" :
         AtrialFibrillationReference.IsPattern(pattern) ? "RR逐搏不规则（无固定传导比）" :
@@ -38,6 +38,8 @@ internal static class ConductionSelection
         (1, 1, AvConductionPattern.VentricularFibrillationFineIllustration) => 15,
         (3, 2, AvConductionPattern.WenckebachThreeToTwoIllustration) => 16,
         (5, 4, AvConductionPattern.WenckebachFiveToFourIllustration) => 17,
+        (3, 2, AvConductionPattern.MobitzTwoThreeToTwoIllustration) => 18,
+        (4, 3, AvConductionPattern.MobitzTwoFourToThreeIllustration) => 19,
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
 }

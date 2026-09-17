@@ -31,7 +31,7 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
     int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
     bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null,
-    int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null)
+    int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular)
 {
     internal Int128 VentricularPeriodNs => IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * VentricularConductionRatio;
 }
@@ -66,6 +66,8 @@ public sealed class RegularPhysiologyTimeline
             plan.InspirationDurationNs <= 0 || plan.InspirationDurationNs >= plan.BreathPeriodNs ||
             plan.InspiratoryPauseNs < 0 || plan.InspiratoryPauseNs >= plan.InspirationDurationNs ||
             plan.ExpiratoryPauseNs < 0 || plan.ExpiratoryPauseNs >= plan.BreathPeriodNs - plan.InspirationDurationNs ||
+            !Enum.IsDefined(plan.RespiratoryPattern) ||
+            (plan.RespiratoryPattern != RespiratoryPattern.Regular && (plan.RespiratoryActivity != RespiratoryActivity.Breathing || plan.ActivityAfterBreaths is not null || plan.ActivityDurationBreaths is not null)) ||
             !Enum.IsDefined(plan.RespiratoryActivity) || !Enum.IsDefined(plan.CardiacActivity) ||
             (plan.MechanicalAfterCycles is { } cycles && (cycles == 0 || plan.VentricularMechanicalEnabled ||
                 plan.CardiacActivity is not (CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly) ||
@@ -172,13 +174,16 @@ public sealed class RegularPhysiologyTimeline
             // Retain original cycle indices, including after a skipped range.
             begin = (begin + cycleStride - 1) / cycleStride * cycleStride;
             if (begin >= finish) { return; }
-            Int128 selected = (finish - 1 - begin) / cycleStride + 1;
+            bool patternedBreath = plan.RespiratoryPattern == RespiratoryPattern.CheyneStokesIllustration &&
+                kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart;
+            Int128 selected = patternedBreath ? RespiratoryPatternDepth.ActiveBefore(finish) - RespiratoryPatternDepth.ActiveBefore(begin) : (finish - 1 - begin) / cycleStride + 1;
             if (selected > remaining)
             { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
             remaining -= (int)selected;
             for (Int128 index = begin; index < finish; index += cycleStride)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (patternedBreath && RespiratoryPatternDepth.At(plan.RespiratoryPattern, (ulong)index) == 0) { continue; }
                 visitor(new((long)(start + index * period), kind, (ulong)index));
             }
         }

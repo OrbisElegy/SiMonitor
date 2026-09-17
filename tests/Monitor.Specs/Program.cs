@@ -55,6 +55,7 @@ internal static class Program
             .. CapnogramTransportSpecifications.All,
             .. CapnogramDispersionSpecifications.All,
             .. RespirationSpecifications.All,
+            .. RespiratoryPatternSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,
             .. RespCardiacArtifactSpecifications.All,

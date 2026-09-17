@@ -1,0 +1,31 @@
+{
+  "id": "CheyneStokesIllustrationDraft@1",
+  "source": "Project-authored illustration of Cheyne-Stokes breathing with crescendo-decrescendo depth and central pauses.",
+  "scope": "A fixed-parameter teaching example, not a complete respiratory-control or gas-exchange model.",
+  "relativeDepthPermille": [
+    200,
+    400,
+    600,
+    800,
+    1000,
+    800,
+    600,
+    400,
+    200,
+    0,
+    0
+  ],
+  "authored_choices": {
+    "notes": [
+      "Each group spans 11 original respiratory cycles: nine crescendo-decrescendo breaths followed by two empty cycles. The sequence and pause duration are authored; respiratory rate does not vary with depth."
+    ]
+  },
+  "coupling": "Zero-depth slots emit no inspiration/expiration events. Resp and respiratory CVP components scale with depth; cardiac artifacts and events remain independent. CO2 only stops new expiratory waves; triggered tails and tubing delays continue. Active-phase concentration is not directly scaled by thoracic-impedance depth.",
+  "limitations": [
+    "Does not represent tidal volume or physiological feedback.",
+    "Does not change SpO2 or authoritative gas-exchange values.",
+    "No automatic respiratory-rate, EtCO2 or apnea detection.",
+    "Must not be combined with a manual respiratory-activity switching schedule.",
+    "Windows behavior is not yet manually verified."
+  ]
+}

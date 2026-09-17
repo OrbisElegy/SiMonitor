@@ -10,7 +10,7 @@ public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIn
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -37,7 +37,8 @@ public sealed class EventWaveformComposition
         for (int index = 0; index < _bands.Length; index++)
         {
             EventWaveformBand band = state.Bands[index];
-            if (band is null || !Enum.IsDefined(band.Trigger) || band.DelayNs < 0 || band.DurationNs <= 0 ||
+            if (band is null || !Enum.IsDefined(band.DepthPattern) ||
+                (band.DepthPattern != RespiratoryPattern.Regular && band.Trigger != PhysiologyCycleEventKind.InspirationStart) || !Enum.IsDefined(band.Trigger) || band.DelayNs < 0 || band.DurationNs <= 0 ||
                 band.TriggerCycleLimit == 0 ||
                 (band.TriggerCycleResume is { } resume && (band.TriggerCycleLimit is null || resume <= band.TriggerCycleLimit.Value)) ||
                 band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
@@ -103,7 +104,9 @@ public sealed class EventWaveformComposition
                 // Equal adjacent table indices hold phase while time advances.
                 // Integer phase maps the finite support into one frozen LUT cycle.
                 ulong phase = PhaseAt(band, elapsed);
-                sum += PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
+                long value = PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
+                sum += band.DepthPattern == RespiratoryPattern.Regular ? value : FixedPointMath.RoundDivideTiesToEven(
+                    (Int128)value * RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex), 1000);
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

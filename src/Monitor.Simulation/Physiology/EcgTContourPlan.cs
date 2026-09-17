@@ -5,16 +5,17 @@ namespace Monitor.Simulation.Physiology;
 
 public enum EcgTContourTarget { Chest, I, II, III, AVR, AVL, AVF }
 
-public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted, PeakedUpright, BroadUpright }
+public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted, PeakedUpright, BroadUpright, ReferenceUpright, ReferenceInverted }
 
 // T targets carried through electrode projection; limb targets couple other limb leads.
 public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "TContourIllustrationDraft@6";
+    public const string EvidenceId = "TContourIllustrationDraft@7";
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
-        if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 1 or > 4000)
+        if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 0 or > 4000 ||
+            (PeakMicrovolts == 0 && Shape is not (EcgTContourShape.ReferenceUpright or EcgTContourShape.ReferenceInverted)))
         { throw new EventWaveformException("EcgTContour.InvalidPlan", "tContour"); }
         var phasePoints = CreatePhasePoints(source[0].Bands[2].DurationNs);
         var basis = Shape switch
@@ -23,9 +24,10 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
             EcgTContourShape.SymmetricInverted => TContourTables.SymmetricInverted,
             EcgTContourShape.PeakedUpright => TContourTables.PeakedUpright,
             EcgTContourShape.BroadUpright => TContourTables.BroadUpright,
+            EcgTContourShape.ReferenceUpright or EcgTContourShape.ReferenceInverted => TContourTables.ReferenceMonophasic,
             _ => TContourTables.Biphasic,
         };
-        int signedPeak = Shape == EcgTContourShape.NegativePositive ? -PeakMicrovolts : PeakMicrovolts;
+        int signedPeak = Shape is EcgTContourShape.NegativePositive or EcgTContourShape.ReferenceInverted ? -PeakMicrovolts : PeakMicrovolts;
         var table = Array.AsReadOnly(basis.Select(value => (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * signedPeak, 1000)).ToArray());
         if (Target != EcgTContourTarget.Chest)
         {

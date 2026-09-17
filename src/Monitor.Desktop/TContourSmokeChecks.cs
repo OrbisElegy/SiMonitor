@@ -11,7 +11,7 @@ internal static class TContourSmokeChecks
     internal static void Verify()
     {
         foreach (int target in new[] { 0, 7, 8, 9, 10, 11, 12 })
-            foreach (int shape in target == 0 ? new[] { 1, 2, 3, 4, 5, 6 } : new[] { 1, 4, 5, 6 })
+            foreach (int shape in target == 0 ? new[] { 1, 2, 3, 4, 5, 6, 7, 8 } : new[] { 1, 4, 5, 6, 7, 8 })
             {
                 WaveformDemoWindow window = new(projected: true);
                 window.Show();
@@ -40,7 +40,7 @@ internal static class TContourSmokeChecks
                     { throw new InvalidOperationException("Contour recovery changed bytes."); }
                     Click(window.HoldButton); Click(window.RunButton);
                     var trace = window.Trace; var timer = window.ActiveTimer; long time = window.SimulationTimeNs;
-                    foreach (string invalid in new[] { "0", "2001", "bad", "1.5" })
+                    foreach (string invalid in new[] { shape >= 7 ? "-1" : "0", "2001", "bad", "1.5" })
                     {
                         window.TContourPeakInput.Text = invalid; Click(window.ApplyEcgButton);
                         if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time)
@@ -60,6 +60,18 @@ internal static class TContourSmokeChecks
                     Click(window.ResetButton);
                     if ((target > 6 && window.TContourLeadInput.SelectedIndex != target) || window.TContourInput.SelectedIndex != shape || window.TContourPeakInput.Text != "300" || window.TContourCrossingInput.Text != crossing || window.ChestJInput.Text != "0")
                     { throw new InvalidOperationException("Reset lost contour."); }
+                    if (shape >= 7)
+                    {
+                        window.TContourPeakInput.Text = "0"; Click(window.ApplyEcgButton);
+                        if (window.EcgConfiguration.TContour?.PeakMicrovolts != 0 || window.SimulationTimeNs != 0)
+                        { throw new InvalidOperationException("Flat T did not apply."); }
+                        Click(window.ResetButton);
+                        if (window.TContourPeakInput.Text != "0") { throw new InvalidOperationException("Flat T reset lost zero."); }
+                        for (int i = 0; i < 14; i++) { Click(window.StepButton); }
+                        var flat = ProjectedEcgDemoSource.Create(window.EcgConfiguration).AdvanceTo(2_800_000_000, 700, 14, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, flat, 110, [EcgLead.I, EcgLead.II, EcgLead.III, EcgLead.AVR, EcgLead.AVL, EcgLead.AVF, EcgLead.V1]);
+                    }
+                    window.TContourPeakInput.Text = "300";
                     window.TContourCrossingInput.Text = "";
                     window.TContourInput.SelectedIndex = 0; Click(window.ApplyEcgButton);
                     if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default)

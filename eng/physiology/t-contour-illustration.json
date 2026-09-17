@@ -1,5 +1,5 @@
 {
-  "id": "TContourIllustrationDraft@6",
+  "id": "TContourIllustrationDraft@7",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -107,6 +107,23 @@
         "134217728/225",
         "-134217728/675"
       ]
+    },
+    "ReferenceMonophasic": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          80,
+          1000
+        ],
+        [
+          128,
+          0
+        ]
+      ]
     }
   },
   "limitations": [
@@ -118,5 +135,6 @@
   "limbProjection": "I/II/III target differences are injected through paired positive/negative electrode bands. Augmented leads use 2/-1/-1, with 2 formed by duplicating the same band rather than rescaling. Each band's electrode increments sum to zero, preserving Wilson and chest leads while other limb leads follow projection identities. Integer division of target differences may leave Q32 rounding residue.",
   "symmetricInverted": "Symmetric inverted T teaching contour: -1000*[4*x*(1-x)]^3, peaking halfway through T with zero endpoint potentials/slopes. Normalized curvature is authored; amplitude is explicit. QT is not automatically prolonged and no cause is inferred.",
   "peakedUpright": "Peaked T teaching contour: 1000*[4*x*(1-x)]^8, with a positive midpoint peak, symmetric sides and zero endpoint potentials/slopes. Exponent 8 and full-T support are authored to produce a narrower peak. QT is not automatically shortened; this is not a hyperkalemia/ischemia preset. Peak amplitude is explicit.",
-  "broadUpright": "Broad tall T teaching contour: normalized x^5*(1-x)^3, peaking at 62.5%, wider than the peaked template, with a longer rise and shorter fall. Endpoint potentials/slopes are zero. Polynomial and peak position are authored; amplitude is independent. T/QT are preserved without automatic ST elevation or etiological inference."
+  "broadUpright": "Broad tall T teaching contour: normalized x^5*(1-x)^3, peaking at 62.5%, wider than the peaked template, with a longer rise and shorter fall. Endpoint potentials/slopes are zero. Polynomial and peak position are authored; amplitude is independent. T/QT are preserved without automatic ST elevation or etiological inference.",
+  "monophasic": "Reuses asymmetric reference-T landmarks and smooth interpolation normalized to unit peak. Upright/ordinary inverted monophasic shapes allow explicit 0-4000 uV peak amplitude; zero flattens the target T. Low amplitude is a demonstration, not a separate diagnostic threshold. T/QT are preserved; polarity follows shape selection."
 }

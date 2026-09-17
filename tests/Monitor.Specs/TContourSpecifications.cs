@@ -8,6 +8,7 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(MonophasicTAmplitudeAndFlatTargets), MonophasicTAmplitudeAndFlatTargets),
         new(nameof(BroadTWidthAmplitudeAndRecovery), BroadTWidthAmplitudeAndRecovery),
         new(nameof(PeakedTIsNarrowerAndPreservesU), PeakedTIsNarrowerAndPreservesU),
         new(nameof(SymmetricInversionRetainsUAndAmplitudeBounds), SymmetricInversionRetainsUAndAmplitudeBounds),
@@ -81,6 +82,8 @@ internal static class TContourSpecifications
                     { VerifyPeakedUpright(t); }
                     else if (shape == EcgTContourShape.BroadUpright)
                     { VerifyBroadUpright(t); }
+                    else if (shape is EcgTContourShape.ReferenceUpright or EcgTContourShape.ReferenceInverted)
+                    { VerifyMonophasic(t, shape); }
                     else if (shape == EcgTContourShape.SymmetricInverted)
                     { VerifySymmetricInversion(t); }
                     else
@@ -120,6 +123,8 @@ internal static class TContourSpecifications
                 { VerifyPeakedUpright(t); }
                 else if (shape == EcgTContourShape.BroadUpright)
                 { VerifyBroadUpright(t); }
+                else if (shape is EcgTContourShape.ReferenceUpright or EcgTContourShape.ReferenceInverted)
+                { VerifyMonophasic(t, shape); }
                 else if (shape == EcgTContourShape.SymmetricInverted)
                 { VerifySymmetricInversion(t); }
                 else
@@ -186,6 +191,49 @@ internal static class TContourSpecifications
                 }
             }
             Check.That(samples.Skip(130).Zip(baseline.Skip(130)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "peaked T preserves U");
+        }
+    }
+    private static void VerifyMonophasic(int[] samples, EcgTContourShape shape)
+    {
+        int sign = shape == EcgTContourShape.ReferenceInverted ? -1 : 1;
+        var values = samples.Select(v => v * sign).ToArray();
+        Check.That(values.Min() == 0 && values.Max() > 295 && Array.IndexOf(values, values.Max()) == 28,
+            "reference polarity and asymmetric peak timing");
+        Check.That(values[14] > values[42], "reference limbs remain asymmetric");
+    }
+    private static void MonophasicTAmplitudeAndFlatTargets()
+    {
+        var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(u)).GenerateBefore(800_000_000, 200, 100);
+        foreach (var shape in new[] { EcgTContourShape.ReferenceUpright, EcgTContourShape.ReferenceInverted })
+            foreach (var target in Enum.GetValues<EcgTContourTarget>())
+                foreach (int amplitude in new[] { 0, 1, 50, 4000 })
+                {
+                    var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                        TextbookElectrodeReference.CreateElectrodes(u, tContour: new(63, shape, amplitude, target)));
+                    var first = source.GenerateBefore(400_000_000, 100, 100);
+                    var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                    var tail = source.GenerateBefore(800_000_000, 100, 100);
+                    Check.That(tail.Zip(restored.GenerateBefore(800_000_000, 100, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "monophasic recovery");
+                    var samples = first.Concat(tail).ToArray();
+                    var leads = target == EcgTContourTarget.Chest ? Enumerable.Range(6, 6) : [(int)target - 1];
+                    foreach (int lead in leads)
+                    {
+                        int sign = shape == EcgTContourShape.ReferenceInverted ? -1 : 1;
+                        var values = samples.Skip(85).Take(45).Select(p => p.MicrovoltValues[lead] * sign).ToArray();
+                        Check.That(values.Min() >= 0 && values.Max() <= amplitude && values.Max() >= amplitude * 99 / 100, "flat/low/boundary target amplitude");
+                    }
+                    for (int i = 0; i < samples.Length; i++)
+                        for (int lead = 0; lead < 12; lead++)
+                            if (i < 85 || i >= 130 || (target == EcgTContourTarget.Chest ? lead < 6 : lead >= 6))
+                            { Check.That(samples[i].ExactLeads[(EcgLead)lead].Numerator == baseline[i].ExactLeads[(EcgLead)lead].Numerator, "monophasic keeps non-T/U and uncoupled leads"); }
+                }
+        foreach (var shape in new[] { EcgTContourShape.ReferenceUpright, EcgTContourShape.ReferenceInverted })
+        {
+            try { TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, CrossingPositionPermille: 500)); }
+            catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidCrossing", "single phase rejects crossing"); continue; }
+            throw new InvalidOperationException("Single phase crossing accepted.");
         }
     }
     private static void VerifyBroadUpright(int[] samples)

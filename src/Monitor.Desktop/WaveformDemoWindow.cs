@@ -81,7 +81,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T", "对称倒置T（冠状T形态）", "高尖T" }, SelectedIndex = 0, Width = 160 };
+    internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T", "对称倒置T（冠状T形态）", "高尖T", "高耸T" }, SelectedIndex = 0, Width = 160 };
     internal ComboBox TContourLeadInput { get; } = new() { ItemsSource = new[] { "V1", "V2", "V3", "V4", "V5", "V6", "V1–V6", "I", "II", "III", "aVR", "aVL", "aVF" }, SelectedIndex = 0, Width = 90 };
     internal TextBox TContourCrossingInput { get; } = new() { Width = 65 };
     internal TextBox TContourPeakInput { get; } = new() { Text = "300", Width = 65 };
@@ -619,7 +619,7 @@ internal sealed class WaveformDemoWindow : Window
                 InfarctionZoneSelection.Resolve(InjuryZoneInput.SelectedIndex), InfarctionZoneSelection.Resolve(NecrosisZoneInput.SelectedIndex),
                 components!, delayMs * 1_000_000L) : null;
             int? independentOffset = ParseIndependentVentricularOffset();
-            if (TContourInput.SelectedIndex is < 0 or > 5 || TContourLeadInput.SelectedIndex is < 0 or > 12 ||
+            if (TContourInput.SelectedIndex is < 0 or > 6 || TContourLeadInput.SelectedIndex is < 0 or > 12 ||
                 !int.TryParse(TContourPeakInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int contourPeak) || contourPeak is < 1 or > 2000)
             { throw new ArgumentException("Invalid T contour selection."); }
             int? crossing = null;

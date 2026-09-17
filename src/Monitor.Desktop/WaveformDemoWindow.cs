@@ -81,7 +81,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox VentricularInput { get; } = new() { ItemsSource = new[] { "参考心室波形", "左室肥厚伴 ST-T 改变示例", "右室肥厚伴 ST-T 改变示例", "双室肥厚组合征象示例" }, SelectedIndex = 0, Width = 240 };
+    internal ComboBox VentricularInput { get; } = new() { ItemsSource = new[] { "参考心室波形", "左室肥厚伴 ST-T 改变示例", "右室肥厚伴 ST-T 改变示例", "双室肥厚组合征象示例", "重度右室肥厚 qR 示例", "肺源性心脏病 rS 形态示例" }, SelectedIndex = 0, Width = 240 };
     internal ComboBox AtrialInput { get; } = new() { ItemsSource = new[] { "参考 / 手动 P", "左房异常 P 波教学示例", "右房异常 P 波教学示例", "双房异常 P 波教学示例" }, SelectedIndex = 0, Width = 220 };
     internal TextBox PEarlyInput { get; } = new() { Width = 65 };
     internal TextBox PLateInput { get; } = new() { Width = 65 };
@@ -250,7 +250,7 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(TScaleInputs[index]);
             }
             settings.Children.Add(VentricularInput);
-            settings.Children.Add(new TextBlock { Text = "左室/双室示例QRS=100ms，右室80ms；双室保留参考ST/T，仅表示组合征象。需关闭手动T/ST、融合、梗死/三区域模式，可与P/u组合。" });
+            settings.Children.Add(new TextBlock { Text = "左室/双室示例QRS=100ms，右室/qR/肺源性形态80ms；双室和肺源性形态保留参考ST/T；肺源性形态可另选右房P。需关闭手动T/ST、融合、梗死/三区域模式，可与P/u组合。" });
             settings.Children.Add(AtrialInput);
             settings.Children.Add(new TextBlock { Text = "右房示例P=100ms，左房/双房P=140ms；保留PR，左房要求PR<227.5ms。请清空手动P；这些形态不具有病因特异性。" });
             settings.Children.Add(new TextBlock { Text = "C1 P 早分量（μV，可空）" });

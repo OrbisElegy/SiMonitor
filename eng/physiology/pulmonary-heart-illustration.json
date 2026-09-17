@@ -1,0 +1,69 @@
+{
+  "id": "PulmonaryHeartIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "466"
+  },
+  "textbook_summary": [
+    "V1-V6 have rS morphology with R/S < 1.",
+    "QRS voltage is low in lead I.",
+    "The frontal electrical axis deviates rightward.",
+    "Increased P amplitude is common; the right-atrial P example may be explicitly combined with this morphology."
+  ],
+  "authored_choices": {
+    "qrsDurationMs": 80,
+    "leadComponentsMicrovolts": {
+      "I": [
+        0,
+        70,
+        -100
+      ],
+      "II": [
+        0,
+        500,
+        -100
+      ],
+      "V1": [
+        0,
+        200,
+        -1000
+      ],
+      "V2": [
+        0,
+        250,
+        -1200
+      ],
+      "V3": [
+        0,
+        300,
+        -1200
+      ],
+      "V4": [
+        0,
+        350,
+        -1100
+      ],
+      "V5": [
+        0,
+        400,
+        -1000
+      ],
+      "V6": [
+        0,
+        400,
+        -900
+      ]
+    },
+    "repolarization": "Reference ST/T are retained; this does not assert that the disease necessarily has normal ST/T.",
+    "atrial": "P morphology is selected independently; right-atrial abnormality is not added automatically.",
+    "construction": "Authored coefficients and existing smooth components, not exact samples from textbook cases."
+  },
+  "limitations": [
+    "ECG morphology only; no pulmonary pathology, pulmonary arterial pressure or perfusion is defined.",
+    "The axis is fixed; a continuous-axis interface is not implemented.",
+    "Does not represent all chronic cor pulmonale morphologies.",
+    "Behavior on Windows hardware is not yet verified."
+  ]
+}

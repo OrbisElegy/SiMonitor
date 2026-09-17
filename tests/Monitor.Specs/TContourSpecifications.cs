@@ -8,6 +8,7 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(SymmetricInversionRetainsUAndAmplitudeBounds), SymmetricInversionRetainsUAndAmplitudeBounds),
         new(nameof(CrossingTimingMovesSmoothly), CrossingTimingMovesSmoothly),
         new(nameof(LimbContoursPreserveWilsonAndCoupleLeads), LimbContoursPreserveWilsonAndCoupleLeads),
         new(nameof(TContoursReachOnlySelectedLeadSupport), TContoursReachOnlySelectedLeadSupport),
@@ -48,7 +49,7 @@ internal static class TContourSpecifications
         Check.That(collapsedRejected, "collapsed nanosecond intervals are rejected");
         foreach (int value in new[] { 1, 999 })
         { TextbookElectrodeReference.CreateElectrodes(tContour: new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: value)); }
-        foreach (var plan in new[] { new EcgTContourPlan(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 0), new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 1000), new(1, EcgTContourShape.Notched, 300, CrossingPositionPermille: 500) })
+        foreach (var plan in new[] { new EcgTContourPlan(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 0), new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 1000), new(1, EcgTContourShape.Notched, 300, CrossingPositionPermille: 500), new(1, EcgTContourShape.SymmetricInverted, 300, CrossingPositionPermille: 500) })
         {
             try { TextbookElectrodeReference.CreateElectrodes(tContour: plan); }
             catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidCrossing", "stable crossing rejection"); continue; }
@@ -60,7 +61,7 @@ internal static class TContourSpecifications
         var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
         foreach (var target in Enum.GetValues<EcgTContourTarget>().Where(t => t != EcgTContourTarget.Chest))
             foreach (var shape in Enum.GetValues<EcgTContourShape>())
-                foreach (int? crossing in shape == EcgTContourShape.Notched ? new int?[] { null } : new int?[] { null, 200, 800 })
+                foreach (int? crossing in shape is EcgTContourShape.Notched or EcgTContourShape.SymmetricInverted ? new int?[] { null } : new int?[] { null, 200, 800 })
                 {
                     var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
                         TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, target, crossing)));
@@ -74,6 +75,8 @@ internal static class TContourSpecifications
                     var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
                     if (shape == EcgTContourShape.Notched)
                     { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
+                    else if (shape == EcgTContourShape.SymmetricInverted)
+                    { VerifySymmetricInversion(t); }
                     else
                     {
                         int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
@@ -107,6 +110,8 @@ internal static class TContourSpecifications
                 var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
                 if (shape == EcgTContourShape.Notched)
                 { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "two positive peaks and a notch"); }
+                else if (shape == EcgTContourShape.SymmetricInverted)
+                { VerifySymmetricInversion(t); }
                 else
                 {
                     int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
@@ -120,6 +125,36 @@ internal static class TContourSpecifications
                         { Check.That(samples[i].MicrovoltValues[l] == original[i].MicrovoltValues[l], "unselected leads and outside T support unchanged"); }
                     }
             }
+    }
+    private static void SymmetricInversionRetainsUAndAmplitudeBounds()
+    {
+        var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(u)).GenerateBefore(800_000_000, 200, 100);
+        foreach (int amplitude in new[] { 1, 4000 })
+        {
+            var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                TextbookElectrodeReference.CreateElectrodes(u, tContour: new(63, EcgTContourShape.SymmetricInverted, amplitude)));
+            var first = source.GenerateBefore(400_000_000, 100, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            var tail = source.GenerateBefore(800_000_000, 100, 100);
+            Check.That(tail.Zip(restored.GenerateBefore(800_000_000, 100, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "inverted contour restores with U");
+            var samples = first.Concat(tail).ToArray();
+            foreach (int lead in Enumerable.Range(6, 6))
+            {
+                long minimum = samples.Skip(85).Take(45).Min(p => p.MicrovoltValues[lead]);
+                Check.That(minimum >= -amplitude && minimum <= -amplitude * 99 / 100, "boundary depth remains bounded and sampled near its target");
+            }
+            Check.That(samples.Skip(130).Zip(baseline.Skip(130)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "U unchanged by symmetric inversion");
+        }
+    }
+    private static void VerifySymmetricInversion(int[] samples)
+    {
+        Check.That(samples.Max() == 0 && samples.Min() < -295, "negative single peak reaches requested depth");
+        for (int i = 1; i < samples.Length; i++)
+        { Check.That(Math.Abs(samples[i] - samples[samples.Length - i]) <= 1, "symmetric rising and falling limbs"); }
+        Check.That(samples.Take(23).Zip(samples.Skip(1).Take(22)).All(p => p.First >= p.Second) &&
+            samples.Skip(23).Zip(samples.Skip(24)).All(p => p.First <= p.Second), "single trough without secondary lobes");
     }
     private static void TContoursRestoreAndRetainU()
     {

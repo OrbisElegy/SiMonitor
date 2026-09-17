@@ -5,19 +5,24 @@ namespace Monitor.Simulation.Physiology;
 
 public enum EcgTContourTarget { Chest, I, II, III, AVR, AVL, AVF }
 
-public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched }
+public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched, SymmetricInverted }
 
 // T targets carried through electrode projection; limb targets couple other limb leads.
 public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "TContourIllustrationDraft@3";
+    public const string EvidenceId = "TContourIllustrationDraft@4";
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
         if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 1 or > 4000)
         { throw new EventWaveformException("EcgTContour.InvalidPlan", "tContour"); }
         var phasePoints = CreatePhasePoints(source[0].Bands[2].DurationNs);
-        var basis = Shape == EcgTContourShape.Notched ? TContourTables.Notched : TContourTables.Biphasic;
+        var basis = Shape switch
+        {
+            EcgTContourShape.Notched => TContourTables.Notched,
+            EcgTContourShape.SymmetricInverted => TContourTables.SymmetricInverted,
+            _ => TContourTables.Biphasic,
+        };
         int signedPeak = Shape == EcgTContourShape.NegativePositive ? -PeakMicrovolts : PeakMicrovolts;
         var table = Array.AsReadOnly(basis.Select(value => (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * signedPeak, 1000)).ToArray());
         if (Target != EcgTContourTarget.Chest)
@@ -75,7 +80,7 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
     private System.Collections.ObjectModel.ReadOnlyCollection<EventWaveformPhasePoint>? CreatePhasePoints(long durationNs)
     {
         if (CrossingPositionPermille is null) { return null; }
-        if (Shape == EcgTContourShape.Notched || CrossingPositionPermille is < 1 or > 999)
+        if (Shape is not (EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive) || CrossingPositionPermille is < 1 or > 999)
         { throw new EventWaveformException("EcgTContour.InvalidCrossing", "tContour"); }
         if (CrossingPositionPermille == 500) { return null; }
         long crossing = (long)FixedPointMath.RoundDivideTiesToEven((Int128)durationNs * CrossingPositionPermille.Value, 1000);

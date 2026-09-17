@@ -1,5 +1,5 @@
 {
-  "id": "TContourIllustrationDraft@3",
+  "id": "TContourIllustrationDraft@4",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -59,6 +59,18 @@
           0
         ]
       ]
+    },
+    "SymmetricInverted": {
+      "length": 128,
+      "polynomial_coefficients": [
+        0,
+        0,
+        0,
+        -64000,
+        192000,
+        -192000,
+        64000
+      ]
     }
   },
   "limitations": [
@@ -67,5 +79,6 @@
     "Windows behavior is not yet manually verified.",
     "Only one limb-lead target at a time; all six limb leads cannot be set independently."
   ],
-  "limbProjection": "I/II/III target differences are injected through paired positive/negative electrode bands. Augmented leads use 2/-1/-1, with 2 formed by duplicating the same band rather than rescaling. Each band's electrode increments sum to zero, preserving Wilson and chest leads while other limb leads follow projection identities. Integer division of target differences may leave Q32 rounding residue."
+  "limbProjection": "I/II/III target differences are injected through paired positive/negative electrode bands. Augmented leads use 2/-1/-1, with 2 formed by duplicating the same band rather than rescaling. Each band's electrode increments sum to zero, preserving Wilson and chest leads while other limb leads follow projection identities. Integer division of target differences may leave Q32 rounding residue.",
+  "symmetricInverted": "Symmetric inverted T teaching contour: -1000*[4*x*(1-x)]^3, peaking halfway through T with zero endpoint potentials/slopes. Normalized curvature is authored; amplitude is explicit. QT is not automatically prolonged and no cause is inferred."
 }

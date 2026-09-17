@@ -8,10 +8,50 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(LimbContoursPreserveWilsonAndCoupleLeads), LimbContoursPreserveWilsonAndCoupleLeads),
         new(nameof(TContoursReachOnlySelectedLeadSupport), TContoursReachOnlySelectedLeadSupport),
         new(nameof(TContoursRestoreAndRetainU), TContoursRestoreAndRetainU),
         new(nameof(TContoursRejectInvalidAndConflictingPlans), TContoursRejectInvalidAndConflictingPlans),
     ];
+    private static void LimbContoursPreserveWilsonAndCoupleLeads()
+    {
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
+        foreach (var target in Enum.GetValues<EcgTContourTarget>().Where(t => t != EcgTContourTarget.Chest))
+            foreach (var shape in Enum.GetValues<EcgTContourShape>())
+            {
+                var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                    TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, target)));
+                var first = source.GenerateBefore(400_000_000, 100, 100);
+                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                var tail = source.GenerateBefore(800_000_000, 100, 100);
+                var recovered = restored.GenerateBefore(800_000_000, 100, 100);
+                Check.That(tail.Zip(recovered).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "limb contour recovers mid-T");
+                var samples = first.Concat(tail).ToArray();
+                int lead = (int)target - 1;
+                var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
+                if (shape == EcgTContourShape.Notched)
+                { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
+                else
+                {
+                    int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
+                    Check.That(t[11] * sign > 290 && t[34] * sign < -290, "selected limb has ordered biphasic target");
+                }
+                bool coupled = false;
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    var p = samples[i].ExactLeads;
+                    Check.That(p[EcgLead.I].Numerator + p[EcgLead.III].Numerator == p[EcgLead.II].Numerator &&
+                        p[EcgLead.AVR].Numerator + p[EcgLead.AVL].Numerator + p[EcgLead.AVF].Numerator == 0, "limb identities are exact");
+                    for (int l = 0; l < 12; l++)
+                    {
+                        bool same = p[(EcgLead)l].Numerator == baseline[i].ExactLeads[(EcgLead)l].Numerator;
+                        if (l >= 6 || i < 85 || i >= 130) { Check.That(same, "Wilson chest and all non-T samples remain exact"); }
+                        else if (l != lead) { coupled |= !same; }
+                    }
+                }
+                Check.That(coupled, "other limb leads change with electrode drive");
+            }
+    }
     private static void TContoursReachOnlySelectedLeadSupport()
     {
         var original = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
@@ -54,7 +94,7 @@ internal static class TContourSpecifications
     }
     private static void TContoursRejectInvalidAndConflictingPlans()
     {
-        foreach (var plan in new EcgTContourPlan[] { new(0, EcgTContourShape.Notched, 300), new(64, EcgTContourShape.Notched, 300), new(1, (EcgTContourShape)0, 300), new(1, EcgTContourShape.Notched, 0), new(1, EcgTContourShape.Notched, 4001) })
+        foreach (var plan in new EcgTContourPlan[] { new(0, EcgTContourShape.Notched, 300), new(64, EcgTContourShape.Notched, 300), new(1, (EcgTContourShape)0, 300), new(1, EcgTContourShape.Notched, 0), new(1, EcgTContourShape.Notched, 4001), new(1, EcgTContourShape.Notched, 300, (EcgTContourTarget)99) })
         {
             try { TextbookElectrodeReference.CreateElectrodes(tContour: plan); }
             catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidPlan", "stable invalid contour reason"); continue; }

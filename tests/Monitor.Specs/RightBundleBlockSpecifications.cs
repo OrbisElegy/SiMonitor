@@ -34,13 +34,15 @@ internal static class RightBundleBlockSpecifications
         var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, RightBundleBlockReference.CreateLeadIIBands()).GenerateBefore(800_000_000, 200, 100);
         Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitor II shares projected source");
     }
-    private static void RightBundleBlockRetainsConductionAndRecovers()
+    private static void RightBundleBlockRetainsConductionAndRecovers() => VerifyConductionAndRecovery(false);
+
+    internal static void VerifyConductionAndRecovery(bool left)
     {
-        var plan = RightBundleBlockReference.CreatePlan();
+        var plan = left ? LeftBundleBlockReference.CreatePlan() : RightBundleBlockReference.CreatePlan();
         var narrow = plan with { ConductionPattern = AvConductionPattern.MobitzTwoFourToThreeIllustration };
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(6_400_000_000, 100);
         Check.That(events.SequenceEqual(RegularPhysiologyTimeline.Start(narrow).AdvanceBefore(6_400_000_000, 100)), "wide morphology leaves fixed PR and dropped mechanical events unchanged");
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, RightBundleBlockReference.CreateElectrodes());
+        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, left ? LeftBundleBlockReference.CreateElectrodes() : RightBundleBlockReference.CreateElectrodes());
         source.GenerateBefore(2_400_000_000, 600, 100);
         var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
         var samples = source.GenerateBefore(4_000_000_000, 400, 100);
@@ -55,7 +57,7 @@ internal static class RightBundleBlockSpecifications
         {
             try { RegularPhysiologyTimeline.Start(invalid); }
             catch (PhysiologyTimelineException) { continue; }
-            throw new InvalidOperationException("Conflicting RBBB block plan accepted.");
+            throw new InvalidOperationException("Conflicting bundle-block plan accepted.");
         }
     }
 }

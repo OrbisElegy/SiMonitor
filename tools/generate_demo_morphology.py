@@ -237,7 +237,10 @@ def main():
     fibrillation = json.loads((root / 'eng/physiology/atrial-fibrillation-illustration.json').read_text())
     ventricular_disorganization = json.loads((root / 'eng/physiology/ventricular-disorganization-illustration.json').read_text())
     rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
+    lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/LeftBundleBlockTables.cs': render(
+            'Monitor.Simulation.Physiology', 'LeftBundleBlockTables', conduction_shapes(lbbb)),
         root / 'src/Monitor.Simulation/Physiology/RightBundleBlockTables.cs': render(
             'Monitor.Simulation.Physiology', 'RightBundleBlockTables', conduction_shapes(rbbb)),
         root / 'src/Monitor.Simulation/Physiology/VentricularDisorganizationTables.cs': render(

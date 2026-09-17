@@ -45,7 +45,7 @@ def electrode_shapes(manifest, reference):
     return shapes
 
 
-def right_ventricular_shapes(manifest, chest):
+def ventricular_shapes(manifest, chest):
     phases = [sample_shape({'length': chest['phase_length'], 'landmarks': chest['phase_landmarks'][name]})
               for name in ['Early', 'Main', 'Terminal']]
     leads = {name: [sum(weight * phase[i] for weight, phase in zip(weights, phases))
@@ -157,9 +157,12 @@ def main():
     st = json.loads((root / 'eng/physiology/st-segment-illustration.json').read_text())
     infarction = json.loads((root / 'eng/physiology/infarction-illustration.json').read_text())
     right_ventricular = json.loads((root / 'eng/physiology/right-ventricular-illustration.json').read_text())
+    biventricular = json.loads((root / 'eng/physiology/biventricular-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/BiventricularQrsTables.cs': render(
+            'Monitor.Simulation.Physiology', 'BiventricularQrsTables', ventricular_shapes(biventricular, chest)),
         root / 'src/Monitor.Simulation/Physiology/RightVentricularQrsTables.cs': render(
-            'Monitor.Simulation.Physiology', 'RightVentricularQrsTables', right_ventricular_shapes(right_ventricular, chest)),
+            'Monitor.Simulation.Physiology', 'RightVentricularQrsTables', ventricular_shapes(right_ventricular, chest)),
         root / 'src/Monitor.Simulation/Physiology/InfarctionIllustrationTables.cs': render(
             'Monitor.Simulation.Physiology', 'InfarctionIllustrationTables', infarction['tables']),
         root / 'src/Monitor.Simulation/Physiology/StSegmentTables.cs': render(

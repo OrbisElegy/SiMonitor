@@ -180,7 +180,12 @@ def main():
     pulmonary_heart = json.loads((root / 'eng/physiology/pulmonary-heart-illustration.json').read_text())
     t_contour = json.loads((root / 'eng/physiology/t-contour-illustration.json').read_text())
     escape = json.loads((root / 'eng/physiology/complete-avb-ventricular-illustration.json').read_text())
+    flutter = json.loads((root / 'eng/physiology/atrial-flutter-illustration.json').read_text())
+    flutter_shapes = dict(flutter['tables'])
+    flutter_shapes['AmplitudesQ32'] = {'values_q32': [value * (1 << 32) for value in flutter['authored_choices']['electrodeAmplitudesMicrovolts']]}
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/AtrialFlutterTables.cs': render(
+            'Monitor.Simulation.Physiology', 'AtrialFlutterTables', flutter_shapes),
         root / 'src/Monitor.Simulation/Physiology/VentricularEscapeTables.cs': render(
             'Monitor.Simulation.Physiology', 'VentricularEscapeTables', escape_shapes(escape)),
         root / 'src/Monitor.Simulation/Physiology/TContourTables.cs': render(

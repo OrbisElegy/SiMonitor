@@ -1,0 +1,67 @@
+{
+  "id": "AtrialFlutterIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482-483"
+  },
+  "textbook_summary": [
+    "P waves are replaced by continuous, regular sawtooth F waves without an isoelectric baseline, clearly visible in II, III and aVF.",
+    "The atrial rate is 240-350/min, commonly with fixed 2:1 or 4:1 conduction; QRS complexes are usually narrow."
+  ],
+  "authored_choices": {
+    "atrialPeriodMs": 200,
+    "conductionRatios": [
+      2,
+      4
+    ],
+    "electricalOffsetMs": 80,
+    "mechanicalOffsetMs": 160,
+    "qrsMs": 80,
+    "qtMs": 300,
+    "tMs": 140,
+    "electrodeAmplitudesMicrovolts": [
+      -100,
+      -50,
+      0,
+      150,
+      -180,
+      -140,
+      -80,
+      50,
+      100,
+      100
+    ]
+  },
+  "tables": {
+    "Cycle": {
+      "length": 256,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          176,
+          -1000
+        ],
+        [
+          224,
+          400
+        ],
+        [
+          256,
+          0
+        ]
+      ]
+    }
+  },
+  "scope": "A single regular flutter example. Electrode amplitudes, F-wave contour and timing are authored choices, not anatomical localization. F waves continuously overlap QRS/T.",
+  "limitations": [
+    "Only fixed 300/min with 2:1 or 4:1 conduction; no variable-conduction or impure-flutter patterns.",
+    "Flutter mechanical contraction is not modeled; normal AtrialMechanical events and the normal CVP a wave are suppressed.",
+    "The 2:1 physiology demo shortens pulse/pressure morphology support to 320 ms while retaining existing ejection and RC parameters; these are not calibrated hemodynamics.",
+    "QT is fixed at 300 ms, without beatwise QT feedback or clinical detection."
+  ]
+}

@@ -20,6 +20,7 @@ internal static class WaveformDemoSmokeChecks
         RespiratoryPatternSmokeChecks.Verify();
         ConductionRatioSmokeChecks.Verify();
         JunctionalEscapeSmokeChecks.Verify();
+        AtrialFlutterSmokeChecks.Verify();
         CardiacActivitySmokeChecks.Verify();
         IndependentVentricularSmokeChecks.Verify();
         IndependentProjectedEcgSmokeChecks.Verify();

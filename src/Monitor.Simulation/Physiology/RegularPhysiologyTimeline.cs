@@ -17,7 +17,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -60,6 +60,11 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalEveryCycles < 1 ||
             plan.ConductedBeatsPerGroup < 1 ||
             !Enum.IsDefined(plan.ConductionPattern) ||
+            (plan.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration &&
+                (plan.HeartPeriodNs != 200_000_000 || plan.VentricularConductionRatio is not (2 or 4) ||
+                 plan.ConductedBeatsPerGroup != 1 || plan.IndependentVentricularPeriodNs is not null ||
+                 plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                 plan.VentricularElectricalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 160_000_000)) ||
             (plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration &&
                 (plan.IndependentVentricularPeriodNs is not (>= 1_500_000_000 and <= 3_000_000_000) ||
                  plan.HeartPeriodNs >= plan.IndependentVentricularPeriodNs ||
@@ -126,7 +131,10 @@ public sealed class RegularPhysiologyTimeline
         if (_plan.CardiacActivity is CardiacActivity.AtrialAndVentricular or CardiacActivity.AtrialOnly)
         {
             Add(PhysiologyCycleEventKind.AtrialElectrical, _plan.HeartPeriodNs, 0);
-            Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs);
+            // Flutter mechanics are not modelled; do not emit normal atrial
+            // contractions at the electrical flutter frequency.
+            if (_plan.ConductionPattern != AvConductionPattern.AtrialFlutterIllustration)
+            { Add(PhysiologyCycleEventKind.AtrialMechanical, _plan.HeartPeriodNs, _plan.AtrialMechanicalOffsetNs); }
         }
         if (_plan.CardiacActivity is CardiacActivity.AtrialAndVentricular or CardiacActivity.VentricularOnly)
         {

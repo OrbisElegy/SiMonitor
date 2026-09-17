@@ -59,6 +59,7 @@ internal static class Program
             .. GroupedConductionSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
+            .. AtrialFlutterSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,
             .. RespCardiacArtifactSpecifications.All,

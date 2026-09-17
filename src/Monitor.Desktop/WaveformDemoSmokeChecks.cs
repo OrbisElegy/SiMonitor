@@ -27,6 +27,7 @@ internal static class WaveformDemoSmokeChecks
         PWaveComponentSmokeChecks.Verify();
         AtrialIllustrationSmokeChecks.Verify();
         VentricularIllustrationSmokeChecks.Verify();
+        TContourSmokeChecks.Verify();
         StSegmentSmokeChecks.Verify();
         StTFusionSmokeChecks.Verify();
         InfarctionIllustrationSmokeChecks.Verify();

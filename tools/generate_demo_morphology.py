@@ -160,7 +160,10 @@ def main():
     biventricular = json.loads((root / 'eng/physiology/biventricular-illustration.json').read_text())
     severe_right = json.loads((root / 'eng/physiology/severe-right-ventricular-illustration.json').read_text())
     pulmonary_heart = json.loads((root / 'eng/physiology/pulmonary-heart-illustration.json').read_text())
+    t_contour = json.loads((root / 'eng/physiology/t-contour-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/TContourTables.cs': render(
+            'Monitor.Simulation.Physiology', 'TContourTables', t_contour['tables']),
         root / 'src/Monitor.Simulation/Physiology/SevereRightVentricularQrsTables.cs': render(
             'Monitor.Simulation.Physiology', 'SevereRightVentricularQrsTables', ventricular_shapes(severe_right, chest)),
         root / 'src/Monitor.Simulation/Physiology/PulmonaryHeartQrsTables.cs': render(

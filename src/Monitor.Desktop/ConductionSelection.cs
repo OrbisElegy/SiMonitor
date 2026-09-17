@@ -10,15 +10,19 @@ internal static class ConductionSelection
         >= 0 and <= 3 => (index + 1, 1),
         4 => (3, 2),
         5 or 6 => (4, 3),
+        7 => (1, 1),
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
-    internal static AvConductionPattern Pattern(int index) => index == 6 ? AvConductionPattern.WenckebachFourToThreeIllustration : AvConductionPattern.FixedPr;
+    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, _ => AvConductionPattern.FixedPr };
+    internal static string Summary(int atrial, int conducted, AvConductionPattern pattern) =>
+        pattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration ? "房室分离（无下传）" : $"传导 {atrial}:{conducted}";
     internal static int Index(int atrial, int conducted, AvConductionPattern pattern = AvConductionPattern.FixedPr) => (atrial, conducted, pattern) switch
     {
         ( >= 1 and <= 4, 1, AvConductionPattern.FixedPr) => atrial - 1,
         (3, 2, AvConductionPattern.FixedPr) => 4,
         (4, 3, AvConductionPattern.FixedPr) => 5,
         (4, 3, AvConductionPattern.WenckebachFourToThreeIllustration) => 6,
+        (1, 1, AvConductionPattern.CompleteAvBlockJunctionalIllustration) => 7,
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
 }

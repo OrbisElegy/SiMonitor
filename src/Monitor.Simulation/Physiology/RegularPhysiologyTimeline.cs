@@ -17,7 +17,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -60,6 +60,11 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalEveryCycles < 1 ||
             plan.ConductedBeatsPerGroup < 1 ||
             !Enum.IsDefined(plan.ConductionPattern) ||
+            (plan.ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration &&
+                (plan.IndependentVentricularPeriodNs is not (>= 1_000_000_000 and <= 1_500_000_000) ||
+                 plan.HeartPeriodNs >= plan.IndependentVentricularPeriodNs ||
+                 plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                 plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1)) ||
             (plan.ConductionPattern == AvConductionPattern.WenckebachFourToThreeIllustration &&
                 (plan.VentricularConductionRatio != 4 || plan.ConductedBeatsPerGroup != 3 ||
                  (Int128)plan.VentricularMechanicalOffsetNs + 120_000_000 >= plan.HeartPeriodNs)) ||

@@ -12,6 +12,13 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
+    internal static PhysiologyDemoConfiguration JunctionalEscape { get; } = Default with
+    {
+        ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
+        IndependentVentricularPeriodMilliseconds = 1200,
+        IndependentVentricularOffsetMilliseconds = 400,
+    };
+
     internal CapnogramPlan ResolveCapnogram()
     {
         // Match the demo's fixed0..80mmHg display range; source limits are separate.

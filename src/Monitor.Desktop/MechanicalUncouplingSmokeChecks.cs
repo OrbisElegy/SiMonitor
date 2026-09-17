@@ -85,7 +85,7 @@ internal static class MechanicalUncouplingSmokeChecks
     internal static short[] Samples(WaveformEnvelope[] blocks, int row) => blocks.SelectMany(block =>
         block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row)).Samples).ToArray();
 
-    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks)
+    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int ecgStartIndex = 40)
     {
         window.Trace.Measure(new Size(1044, 840));
         window.Trace.Arrange(new Rect(0, 0, 1044, 840));
@@ -97,7 +97,7 @@ internal static class MechanicalUncouplingSmokeChecks
         foreach (int row in new[] { 0, 2 })
         {
             var samples = Samples(blocks, row);
-            int peak = row == 0 ? Enumerable.Range(40, 20).MaxBy(i => samples[i]) : Enumerable.Range(40, 64).MaxBy(i => samples[i]);
+            int peak = row == 0 ? Enumerable.Range(ecgStartIndex, 20).MaxBy(i => samples[i]) : Enumerable.Range(40, 64).MaxBy(i => samples[i]);
             int x = (int)Math.Round(row == 0 ? peak / 2.0 : peak);
             int y = (int)Math.Round(row * 120 + 60 - samples[peak] * 0.05);
             if (!Enumerable.Range(y - 1, 3).Any(line => Enumerable.Range(x - 1, 3).Any(column =>

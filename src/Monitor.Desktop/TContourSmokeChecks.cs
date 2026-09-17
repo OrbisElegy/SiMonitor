@@ -11,7 +11,7 @@ internal static class TContourSmokeChecks
     internal static void Verify()
     {
         foreach (int target in new[] { 0, 7, 8, 9, 10, 11, 12 })
-            foreach (int shape in target == 0 ? new[] { 1, 2, 3 } : new[] { 1 })
+            foreach (int shape in target == 0 ? new[] { 1, 2, 3, 4 } : new[] { 1, 4 })
             {
                 WaveformDemoWindow window = new(projected: true);
                 window.Show();
@@ -22,11 +22,11 @@ internal static class TContourSmokeChecks
                     var oldTimer = window.ActiveTimer;
                     window.TContourInput.SelectedIndex = shape;
                     window.TContourLeadInput.SelectedIndex = target == 0 ? shape == 1 ? 0 : shape == 2 ? 4 : 6 : target;
-                    string crossing = shape == 3 ? "" : target % 2 == 0 ? "20" : "80";
+                    string crossing = shape >= 3 ? "" : target % 2 == 0 ? "20" : "80";
                     window.TContourCrossingInput.Text = crossing;
                     Click(window.ApplyEcgButton); window.Pulse(oldTimer);
                     var config = window.EcgConfiguration;
-                    if (config.TContour?.CrossingPositionPermille != (shape == 3 ? (int?)null : target % 2 == 0 ? 200 : 800))
+                    if (config.TContour?.CrossingPositionPermille != (shape >= 3 ? (int?)null : target % 2 == 0 ? 200 : 800))
                     { throw new InvalidOperationException("Crossing not applied."); }
                     if ((target > 6 && config.TContour?.Target != (EcgTContourTarget)(target - 6)) || config.TContour?.Shape != (EcgTContourShape)shape || window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("T contour did not atomically restart."); }
@@ -49,7 +49,7 @@ internal static class TContourSmokeChecks
                         { throw new InvalidOperationException("Invalid contour altered current state."); }
                     }
                     window.TContourPeakInput.Text = "300";
-                    foreach (string invalid in new[] { "0", "100", "bad", "20.01", shape == 3 ? "50" : "-1" })
+                    foreach (string invalid in new[] { "0", "100", "bad", "20.01", shape >= 3 ? "50" : "-1" })
                     {
                         window.TContourCrossingInput.Text = invalid; Click(window.ApplyEcgButton);
                         if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time)
@@ -69,6 +69,6 @@ internal static class TContourSmokeChecks
                 }
                 finally { window.Close(); }
             }
-        Console.WriteLine("ok: native biphasic/notched T contours, signed pixels, recovery and atomic rejection");
+        Console.WriteLine("ok: native biphasic/notched/symmetric inverted T contours, signed pixels, recovery and atomic rejection");
     }
 }

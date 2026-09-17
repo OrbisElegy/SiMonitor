@@ -1,0 +1,55 @@
+{
+  "id": "AtrialFibrillationIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "483"
+  },
+  "textbook_summary": [
+    "P waves are absent; fibrillatory f waves vary in amplitude, morphology and interval, are prominent in V1, and may be coarse or fine.",
+    "The f-wave rate is 350-600/min; RR intervals are completely irregular and QRS complexes are usually narrow.",
+    "Coordinated atrial contraction is absent."
+  ],
+  "authored_choices": {
+    "tileLength": 4096,
+    "samplePeriodNs": 4000000,
+    "offlineSeed": 20260917,
+    "fCycleSamples": [
+      25,
+      42
+    ],
+    "coarsePeakMicrovolts": [
+      80,
+      220
+    ],
+    "fineScalePer1000": 300,
+    "electrodeWeightsPer1000": [
+      -100,
+      50,
+      0,
+      100,
+      1000,
+      650,
+      350,
+      200,
+      150,
+      100
+    ],
+    "ventricularGridNs": 800000000,
+    "ventricularJitterMs": [
+      0,
+      360
+    ],
+    "minimumRrNs": 440000000,
+    "qrsNs": 80000000,
+    "qtNs": 300000000,
+    "mechanicalLagNs": 80000000
+  },
+  "limitations": [
+    "The f-wave table repeats every 16.384 s; it is a fixed authored example, not a calibrated physiological or statistical model of AF.",
+    "RR jitter is bounded and derived from beat-index hashes without stateful random numbers. This is not an AV-node conduction model; the long-term mean ventricular rate is 75/min.",
+    "No aberrant conduction, AF with complete AV block, or filling, stroke-volume or pulse-deficit feedback.",
+    "Mechanical ejection follows the electrical event by 80 ms. Pressure morphology uses the minimum RR as its reference; pulse duration is 360 ms and QT is fixed at 300 ms."
+  ]
+}

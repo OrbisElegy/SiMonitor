@@ -36,6 +36,14 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         ConductionPattern = AvConductionPattern.AtrialFlutterIllustration,
     };
 
+    internal static ProjectedEcgDemoConfiguration Fibrillation(bool fine = false) => Default with
+    {
+        PDurationMilliseconds = 40,
+        PrIntervalMilliseconds = 80,
+        TDurationMilliseconds = 140,
+        ConductionPattern = fine ? AvConductionPattern.AtrialFibrillationFineIllustration : AvConductionPattern.AtrialFibrillationCoarseIllustration,
+    };
+
     internal long ResolveAtrialPeriodNs()
     {
         if (ConductionPattern == AvConductionPattern.AtrialFlutterIllustration) { return 200_000_000; }
@@ -45,6 +53,12 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (AtrialFibrillationReference.IsPattern(ConductionPattern))
+        {
+            if (this != Fibrillation(ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration))
+            { throw new ArgumentException("AF illustration requires the authored irregular schedule and morphology."); }
+            return AtrialFibrillationReference.Timing;
+        }
         if (ConductionPattern == AvConductionPattern.AtrialFlutterIllustration)
         {
             if (this != Flutter(VentricularConductionRatio))
@@ -120,7 +134,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration
+        var electrodes = AtrialFibrillationReference.IsPattern(configuration.ConductionPattern)
+            ? AtrialFibrillationReference.CreateElectrodes(configuration.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration)
+            : configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration
             ? AtrialFlutterReference.CreateElectrodes(configuration.VentricularConductionRatio)
             : configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
             ? CompleteAvBlockVentricularReference.CreateElectrodes()

@@ -3,17 +3,19 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain, RightHypertrophyWithStrain }
+public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain, RightHypertrophyWithStrain, BiventricularCombinedSigns }
 
 // Explicit teaching coefficients, not chamber mass or anatomical calibration.
 public static class EcgVentricularIllustrations
 {
     public const string EvidenceId = "LeftVentricularIllustrationDraft@1";
+    public const string BiventricularEvidenceId = "BiventricularIllustrationDraft@1";
     public const string RightEvidenceId = "RightVentricularIllustrationDraft@1";
     public static long? QrsDurationNs(EcgVentricularIllustration illustration) => illustration switch
     {
         EcgVentricularIllustration.Reference => null,
         EcgVentricularIllustration.LeftHypertrophyWithStrain => 100_000_000,
+        EcgVentricularIllustration.BiventricularCombinedSigns => 100_000_000,
         EcgVentricularIllustration.RightHypertrophyWithStrain => 80_000_000,
         _ => throw new EventWaveformException("EcgVentricular.InvalidIllustration", "ventricular"),
     };
@@ -22,8 +24,20 @@ public static class EcgVentricularIllustrations
         IReadOnlyList<ElectrodeWaveformPlan> source, EcgCycleTiming timing)
     {
         if (QrsDurationNs(illustration) is not { } duration) { return source; }
-        if (timing.QrsDurationNs != duration || timing.StDurationNs <= 0)
+        if (timing.QrsDurationNs != duration || (timing.StDurationNs <= 0 && illustration != EcgVentricularIllustration.BiventricularCombinedSigns))
         { throw new EventWaveformException("EcgVentricular.InvalidTiming", "timing"); }
+        if (illustration == EcgVentricularIllustration.BiventricularCombinedSigns)
+        {
+            IReadOnlyList<long>[] qrs = [BiventricularQrsTables.RA, BiventricularQrsTables.LA,
+                BiventricularQrsTables.RL, BiventricularQrsTables.LL, BiventricularQrsTables.C1,
+                BiventricularQrsTables.C2, BiventricularQrsTables.C3, BiventricularQrsTables.C4,
+                BiventricularQrsTables.C5, BiventricularQrsTables.C6];
+            return Array.AsReadOnly(source.Select((electrode, i) => electrode with
+            {
+                Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) =>
+                    index == 1 ? band with { TableQ32 = qrs[i] } : band).ToArray()),
+            }).ToArray());
+        }
         bool right = illustration == EcgVentricularIllustration.RightHypertrophyWithStrain;
         IReadOnlyList<long>[]? rightQrs = right ? [RightVentricularQrsTables.RA, RightVentricularQrsTables.LA,
             RightVentricularQrsTables.RL, RightVentricularQrsTables.LL, RightVentricularQrsTables.C1,

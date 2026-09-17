@@ -9,6 +9,7 @@ internal static class VentricularIllustrationSpecifications
     public static Specification[] All =>
     [
         new(nameof(RightVentricularExampleMeetsProjectedConstraints), RightVentricularExampleMeetsProjectedConstraints),
+        new(nameof(BiventricularExampleCombinesSignsWithoutSumming), BiventricularExampleCombinesSignsWithoutSumming),
         new(nameof(LeftVentricularExampleMeetsProjectedConstraints), LeftVentricularExampleMeetsProjectedConstraints),
         new(nameof(VentricularExamplePreservesAtrialAndUAndRecovers), VentricularExamplePreservesAtrialAndUAndRecovers),
         new(nameof(VentricularExampleRejectsConflictsAndInvalidTiming), VentricularExampleRejectsConflictsAndInvalidTiming),
@@ -30,6 +31,22 @@ internal static class VentricularIllustrationSpecifications
         }
         foreach (var sample in samples)
         { Check.That(sample.ExactLeads[EcgLead.I].Numerator + sample.ExactLeads[EcgLead.III].Numerator == sample.ExactLeads[EcgLead.II].Numerator, "right projection identity"); }
+    }
+    private static void BiventricularExampleCombinesSignsWithoutSumming()
+    {
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(ventricular: EcgVentricularIllustration.BiventricularCombinedSigns);
+        var samples = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
+        int[] Qrs(EcgLead lead) => samples.Skip(40).Take(25).Select(s => (int)s.MicrovoltValues[(int)lead]).ToArray();
+        Check.That(Qrs(EcgLead.V1).Max() > -Qrs(EcgLead.V1).Min() && Qrs(EcgLead.V5).Max() > -Qrs(EcgLead.V5).Min() && Qrs(EcgLead.V5).Max() > 2500, "V1 and high V5 both R-dominant");
+        Check.That(Qrs(EcgLead.I).Sum() < 0 && Qrs(EcgLead.II).Sum() > 0, "rightward QRS area axis remains");
+        for (int i = 65; i < samples.Count; i++)
+        { Check.That(samples[i].MicrovoltValues.SequenceEqual(baseline[i].MicrovoltValues), "combined example retains reference ST/T"); }
+        var left = TextbookElectrodeReference.CreateElectrodes(ventricular: EcgVentricularIllustration.LeftHypertrophyWithStrain);
+        var right = TextbookElectrodeReference.CreateElectrodes(ventricular: EcgVentricularIllustration.RightHypertrophyWithStrain);
+        Check.That(!electrodes[8].Bands[1].TableQ32.SequenceEqual(left[8].Bands[1].TableQ32.Zip(right[8].Bands[1].TableQ32, (l, r) => l + r)), "independent authored target is not LVH plus RVH");
+        foreach (var sample in samples)
+        { Check.That(sample.ExactLeads[EcgLead.I].Numerator + sample.ExactLeads[EcgLead.III].Numerator == sample.ExactLeads[EcgLead.II].Numerator, "combined electrode projection identity"); }
     }
     private static void LeftVentricularExampleMeetsProjectedConstraints()
     {
@@ -59,7 +76,7 @@ internal static class VentricularIllustrationSpecifications
         var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
         var reference = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
             TextbookElectrodeReference.CreateElectrodes(u, atrial: EcgAtrialIllustration.BiatrialAbnormality)).GenerateBefore(1_600_000_000, 400, 100);
-        foreach (var mode in new[] { EcgVentricularIllustration.LeftHypertrophyWithStrain, EcgVentricularIllustration.RightHypertrophyWithStrain })
+        foreach (var mode in new[] { EcgVentricularIllustration.LeftHypertrophyWithStrain, EcgVentricularIllustration.RightHypertrophyWithStrain, EcgVentricularIllustration.BiventricularCombinedSigns })
         {
             var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
                 TextbookElectrodeReference.CreateElectrodes(u, atrial: EcgAtrialIllustration.BiatrialAbnormality,
@@ -85,6 +102,10 @@ internal static class VentricularIllustrationSpecifications
             catch (EventWaveformException e) { Check.That(e.ReasonCode == reason, "stable ventricular reason"); return; }
             throw new InvalidOperationException("Invalid ventricular illustration accepted.");
         }
+        var combined = EcgVentricularIllustration.BiventricularCombinedSigns;
+        Reject(() => TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing, ventricular: combined), "EcgVentricular.InvalidTiming");
+        Reject(() => TextbookElectrodeReference.CreateElectrodes(stSegment: new(new int[10], new int[10]), ventricular: combined), "EcgVentricular.ConflictingModes");
+        TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing with { QrsDurationNs = 100_000_000, TDurationNs = 260_000_000 }, ventricular: combined);
         var right = EcgVentricularIllustration.RightHypertrophyWithStrain;
         Reject(() => TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing with { QrsDurationNs = 100_000_000 }, ventricular: right), "EcgVentricular.InvalidTiming");
         Reject(() => TextbookElectrodeReference.CreateElectrodes(tWave: new(new int[10]), ventricular: right), "EcgVentricular.ConflictingModes");

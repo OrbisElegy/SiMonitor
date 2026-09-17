@@ -1,0 +1,66 @@
+{
+  "id": "BiventricularIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第三节",
+    "pages": "467"
+  },
+  "textbook_summary": [
+    "Biventricular findings cannot be represented by simply adding the findings of each ventricle.",
+    "Combined findings include an R-dominant V1 and right-axis deviation together with V5 R/S > 1 and increased R amplitude."
+  ],
+  "authored_choices": {
+    "qrsDurationMs": 100,
+    "leadComponentsMicrovolts": {
+      "I": [
+        150,
+        -1600,
+        -100
+      ],
+      "II": [
+        50,
+        200,
+        -30
+      ],
+      "V1": [
+        0,
+        1100,
+        -250
+      ],
+      "V2": [
+        0,
+        1200,
+        -400
+      ],
+      "V3": [
+        0,
+        1600,
+        -800
+      ],
+      "V4": [
+        -60,
+        2200,
+        -800
+      ],
+      "V5": [
+        -100,
+        2800,
+        -600
+      ],
+      "V6": [
+        -100,
+        2500,
+        -400
+      ]
+    },
+    "repolarization": "Reference ST/T are retained; this does not imply that clinical biventricular hypertrophy necessarily has normal ST/T.",
+    "construction": "Independent authored QRS targets reuse smooth components and inverse electrode construction. They are not a sum of the left/right ventricular examples or a calibrated tissue-vector model."
+  },
+  "limitations": [
+    "Only the third category of combined findings is represented; tissue mechanisms producing near-normal vector cancellation or masking of one ventricle are not modeled.",
+    "Not all biventricular hypertrophy morphologies are represented.",
+    "The axis is fixed; no continuous electrical-axis interface is provided.",
+    "Mechanical events and perfusion are unchanged; behavior on Windows hardware is not yet verified."
+  ]
+}

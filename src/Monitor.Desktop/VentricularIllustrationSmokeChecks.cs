@@ -10,8 +10,8 @@ internal static class VentricularIllustrationSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (int mode in new[] { 1, 2, 3 })
-            foreach (int selection in new[] { 0, 3 })
+        foreach (int mode in new[] { 1, 2, 3, 4, 5 })
+            foreach (int selection in mode == 5 ? new[] { 0, 2 } : new[] { 0, 3 })
             {
                 WaveformDemoWindow window = new(projected: true);
                 window.Show();
@@ -25,7 +25,7 @@ internal static class VentricularIllustrationSmokeChecks
                     Click(window.ApplyEcgButton);
                     window.Pulse(oldTimer);
                     var config = window.EcgConfiguration;
-                    if (config.Ventricular != (EcgVentricularIllustration)mode || config.ResolveTiming().QrsDurationNs != (mode == 2 ? 80_000_000 : 100_000_000) ||
+                    if (config.Ventricular != (EcgVentricularIllustration)mode || config.ResolveTiming().QrsDurationNs != (mode is 1 or 3 ? 100_000_000 : 80_000_000) ||
                         window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("Ventricular illustration did not atomically restart."); }
                     for (int i = 0; i < 14; i++) { Click(window.StepButton); }
@@ -65,6 +65,6 @@ internal static class VentricularIllustrationSmokeChecks
                 }
                 finally { window.Close(); }
             }
-        Console.WriteLine("ok: native left/right/biventricular illustration, projected pixels, recovery and atomic lifecycle");
+        Console.WriteLine("ok: native ventricular and pulmonary-heart illustrations, projected pixels, recovery and atomic lifecycle");
     }
 }

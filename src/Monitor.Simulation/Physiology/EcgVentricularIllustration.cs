@@ -3,20 +3,22 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain, RightHypertrophyWithStrain, BiventricularCombinedSigns }
+public enum EcgVentricularIllustration { Reference, LeftHypertrophyWithStrain, RightHypertrophyWithStrain, BiventricularCombinedSigns, SevereRightQr, PulmonaryHeartSigns }
 
 // Explicit teaching coefficients, not chamber mass or anatomical calibration.
 public static class EcgVentricularIllustrations
 {
     public const string EvidenceId = "LeftVentricularIllustrationDraft@1";
     public const string BiventricularEvidenceId = "BiventricularIllustrationDraft@1";
+    public const string SevereRightEvidenceId = "SevereRightVentricularIllustrationDraft@1";
+    public const string PulmonaryHeartEvidenceId = "PulmonaryHeartIllustrationDraft@1";
     public const string RightEvidenceId = "RightVentricularIllustrationDraft@1";
     public static long? QrsDurationNs(EcgVentricularIllustration illustration) => illustration switch
     {
         EcgVentricularIllustration.Reference => null,
         EcgVentricularIllustration.LeftHypertrophyWithStrain => 100_000_000,
         EcgVentricularIllustration.BiventricularCombinedSigns => 100_000_000,
-        EcgVentricularIllustration.RightHypertrophyWithStrain => 80_000_000,
+        EcgVentricularIllustration.RightHypertrophyWithStrain or EcgVentricularIllustration.SevereRightQr or EcgVentricularIllustration.PulmonaryHeartSigns => 80_000_000,
         _ => throw new EventWaveformException("EcgVentricular.InvalidIllustration", "ventricular"),
     };
 
@@ -24,11 +26,15 @@ public static class EcgVentricularIllustrations
         IReadOnlyList<ElectrodeWaveformPlan> source, EcgCycleTiming timing)
     {
         if (QrsDurationNs(illustration) is not { } duration) { return source; }
-        if (timing.QrsDurationNs != duration || (timing.StDurationNs <= 0 && illustration != EcgVentricularIllustration.BiventricularCombinedSigns))
+        bool preserveRepolarization = illustration is EcgVentricularIllustration.BiventricularCombinedSigns or EcgVentricularIllustration.PulmonaryHeartSigns;
+        if (timing.QrsDurationNs != duration || (timing.StDurationNs <= 0 && !preserveRepolarization))
         { throw new EventWaveformException("EcgVentricular.InvalidTiming", "timing"); }
-        if (illustration == EcgVentricularIllustration.BiventricularCombinedSigns)
+        if (preserveRepolarization)
         {
-            IReadOnlyList<long>[] qrs = [BiventricularQrsTables.RA, BiventricularQrsTables.LA,
+            IReadOnlyList<long>[] qrs = illustration == EcgVentricularIllustration.PulmonaryHeartSigns
+                ? [PulmonaryHeartQrsTables.RA, PulmonaryHeartQrsTables.LA, PulmonaryHeartQrsTables.RL, PulmonaryHeartQrsTables.LL,
+                    PulmonaryHeartQrsTables.C1, PulmonaryHeartQrsTables.C2, PulmonaryHeartQrsTables.C3, PulmonaryHeartQrsTables.C4, PulmonaryHeartQrsTables.C5, PulmonaryHeartQrsTables.C6]
+                : [BiventricularQrsTables.RA, BiventricularQrsTables.LA,
                 BiventricularQrsTables.RL, BiventricularQrsTables.LL, BiventricularQrsTables.C1,
                 BiventricularQrsTables.C2, BiventricularQrsTables.C3, BiventricularQrsTables.C4,
                 BiventricularQrsTables.C5, BiventricularQrsTables.C6];
@@ -38,8 +44,11 @@ public static class EcgVentricularIllustrations
                     index == 1 ? band with { TableQ32 = qrs[i] } : band).ToArray()),
             }).ToArray());
         }
-        bool right = illustration == EcgVentricularIllustration.RightHypertrophyWithStrain;
-        IReadOnlyList<long>[]? rightQrs = right ? [RightVentricularQrsTables.RA, RightVentricularQrsTables.LA,
+        bool right = illustration is EcgVentricularIllustration.RightHypertrophyWithStrain or EcgVentricularIllustration.SevereRightQr;
+        IReadOnlyList<long>[]? rightQrs = illustration == EcgVentricularIllustration.SevereRightQr
+            ? [SevereRightVentricularQrsTables.RA, SevereRightVentricularQrsTables.LA, SevereRightVentricularQrsTables.RL, SevereRightVentricularQrsTables.LL,
+                SevereRightVentricularQrsTables.C1, SevereRightVentricularQrsTables.C2, SevereRightVentricularQrsTables.C3, SevereRightVentricularQrsTables.C4, SevereRightVentricularQrsTables.C5, SevereRightVentricularQrsTables.C6]
+            : right ? [RightVentricularQrsTables.RA, RightVentricularQrsTables.LA,
             RightVentricularQrsTables.RL, RightVentricularQrsTables.LL, RightVentricularQrsTables.C1,
             RightVentricularQrsTables.C2, RightVentricularQrsTables.C3, RightVentricularQrsTables.C4,
             RightVentricularQrsTables.C5, RightVentricularQrsTables.C6] : null;

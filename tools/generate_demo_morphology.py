@@ -158,7 +158,13 @@ def main():
     infarction = json.loads((root / 'eng/physiology/infarction-illustration.json').read_text())
     right_ventricular = json.loads((root / 'eng/physiology/right-ventricular-illustration.json').read_text())
     biventricular = json.loads((root / 'eng/physiology/biventricular-illustration.json').read_text())
+    severe_right = json.loads((root / 'eng/physiology/severe-right-ventricular-illustration.json').read_text())
+    pulmonary_heart = json.loads((root / 'eng/physiology/pulmonary-heart-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/SevereRightVentricularQrsTables.cs': render(
+            'Monitor.Simulation.Physiology', 'SevereRightVentricularQrsTables', ventricular_shapes(severe_right, chest)),
+        root / 'src/Monitor.Simulation/Physiology/PulmonaryHeartQrsTables.cs': render(
+            'Monitor.Simulation.Physiology', 'PulmonaryHeartQrsTables', ventricular_shapes(pulmonary_heart, chest)),
         root / 'src/Monitor.Simulation/Physiology/BiventricularQrsTables.cs': render(
             'Monitor.Simulation.Physiology', 'BiventricularQrsTables', ventricular_shapes(biventricular, chest)),
         root / 'src/Monitor.Simulation/Physiology/RightVentricularQrsTables.cs': render(

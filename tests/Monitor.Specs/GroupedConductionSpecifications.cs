@@ -12,7 +12,55 @@ internal static class GroupedConductionSpecifications
         new(nameof(GroupedConductionKeepsAtriaAndMechanicalPairs), GroupedConductionKeepsAtriaAndMechanicalPairs),
         new(nameof(GroupedSourcesRecoverAndPressureRunsOff), GroupedSourcesRecoverAndPressureRunsOff),
         new(nameof(GroupedConductionRejectsConflictsAndBudgetsAtomically), GroupedConductionRejectsConflictsAndBudgetsAtomically),
+        new(nameof(WenckebachProgressesResetsAndRestores), WenckebachProgressesResetsAndRestores),
+        new(nameof(WenckebachRejectsConflictsAndHonorsBoundaries), WenckebachRejectsConflictsAndHonorsBoundaries),
     ];
+    private static void WenckebachProgressesResetsAndRestores()
+    {
+        var plan = Plan(4, 3) with { ConductionPattern = AvConductionPattern.WenckebachFourToThreeIllustration };
+        var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(6_400_000_000, 100);
+        var electrical = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).ToArray();
+        Check.That(electrical.Select(e => e.SimTimeNs).SequenceEqual(new long[] { 160_000_000, 1_040_000_000, 1_880_000_000, 3_360_000_000, 4_240_000_000, 5_080_000_000 }), "PR 160/240/280 ms, dropped fourth P and reset");
+        Check.That(events.Where(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical).Select(e => e.SimTimeNs).SequenceEqual(Enumerable.Range(0, 8).Select(i => i * 800_000_000L)), "P remains regular");
+        Check.That(electrical.Zip(events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical)).All(p => p.Second.CycleIndex == p.First.CycleIndex && p.Second.SimTimeNs - p.First.SimTimeNs == 80_000_000), "mechanics shares progressive delay");
+        foreach (long boundary in new long[] { 1_040_000_000, 1_040_000_001, 1_880_000_000, 2_700_000_000 })
+        {
+            var timeline = RegularPhysiologyTimeline.Start(plan);
+            var head = timeline.AdvanceBefore(boundary, 100);
+            Check.That(head.Concat(RegularPhysiologyTimeline.Restore(timeline.CaptureState()).AdvanceBefore(6_400_000_000, 100)).SequenceEqual(events), "split at delayed event/drop restores exact phase");
+        }
+        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes());
+        source.GenerateBefore(1_000_000_000, 250, 100);
+        var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+        var tail = source.GenerateBefore(3_200_000_000, 550, 100);
+        Check.That(tail.Zip(restored.GenerateBefore(3_200_000_000, 550, 100)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "twelve-lead samples restore before shifted QRS");
+        var pressurePlan = new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000);
+        var pressure = VascularPressureSource.Create(plan, pressurePlan);
+        Check.That(pressure.EvaluateAt(1_180_000_000) < pressure.EvaluateAt(1_100_000_000) && pressure.EvaluateAt(1_400_000_000) > pressure.EvaluateAt(1_200_000_000), "pressure waits for delayed mechanical event plus transit");
+        Check.That(pressure.EvaluateAt(2_700_000_000) > pressure.EvaluateAt(3_200_000_000), "dropped beat has passive pressure runoff");
+    }
+    private static void WenckebachRejectsConflictsAndHonorsBoundaries()
+    {
+        var plan = Plan(4, 3) with { ConductionPattern = AvConductionPattern.WenckebachFourToThreeIllustration };
+        foreach (var invalid in new[] { plan with { ConductedBeatsPerGroup = 2 }, plan with { VentricularConductionRatio = 5 }, plan with { ConductionPattern = (AvConductionPattern)99 }, plan with { HeartPeriodNs = 360_000_000 } })
+        {
+            try { RegularPhysiologyTimeline.Start(invalid); }
+            catch (PhysiologyTimelineException) { continue; }
+            throw new InvalidOperationException("Invalid Wenckebach configuration accepted.");
+        }
+        var timeline = RegularPhysiologyTimeline.Restore(new(plan, 1_000_000_000));
+        var state = timeline.CaptureState();
+        try { timeline.AdvanceBefore(1_200_000_000, 1); throw new InvalidOperationException("Budget accepted."); }
+        catch (PhysiologyTimelineException e) { Check.That(e.ReasonCode == "PhysiologyTimeline.EventLimitExceeded" && timeline.CaptureState() == state, "delayed event budget failure atomic"); }
+        Check.That(timeline.AdvanceBefore(1_200_000_000, 2).Count == 2, "count actual delayed electrical and mechanical events");
+        var latePlan = plan with { EpochAnchorSimTimeNs = long.MaxValue - 2_000_000_000 };
+        var late = RegularPhysiologyTimeline.Start(latePlan).AdvanceBefore(long.MaxValue, 100);
+        Check.That(late.Count(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical) == 3 && late.All(e => e.SimTimeNs >= latePlan.EpochAnchorSimTimeNs), "Int128 group arithmetic near maximum timestamp");
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        state = timeline.CaptureState();
+        try { timeline.AdvanceBefore(3_200_000_000, 100, cancelled.Token); throw new InvalidOperationException("Cancellation ignored."); }
+        catch (OperationCanceledException) { Check.That(timeline.CaptureState() == state, "cancel is atomic"); }
+    }
     private static void GroupedConductionKeepsAtriaAndMechanicalPairs()
     {
         foreach (var (total, conducted) in new[] { (3, 2), (4, 3), (5, 2) })

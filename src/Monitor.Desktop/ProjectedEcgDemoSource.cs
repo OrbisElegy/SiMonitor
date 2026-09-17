@@ -56,6 +56,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration)
+        {
+            if (this != SecondDegreeBlockPreset.Ecg(7)) { throw new ArgumentException("LBBB illustration requires its authored morphology and timing."); }
+            return LeftBundleBlockReference.Timing;
+        }
         if (ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration)
         {
             if (this != SecondDegreeBlockPreset.Ecg(6)) { throw new ArgumentException("RBBB illustration requires its authored morphology and timing."); }
@@ -153,7 +158,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
+        var electrodes = configuration.ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration
+            ? LeftBundleBlockReference.CreateElectrodes()
+            : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
             : VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern)
             ? VentricularDisorganizationReference.CreateElectrodes(configuration.ConductionPattern)

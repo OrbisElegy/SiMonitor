@@ -21,7 +21,7 @@ internal static class ConductionRatioSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (int selection in new[] { 1, 2, 3, 4, 5, 6, 0 })
+                foreach (int selection in new[] { 1, 2, 3, 4, 5, 6, 16, 17, 0 })
                 {
                     var (ratio, conducted) = ConductionSelection.Resolve(selection);
                     for (int step = 0; step < 12; step++) { Click(window.StepButton); }
@@ -34,7 +34,7 @@ internal static class ConductionRatioSmokeChecks
                     if ((projected ? window.EcgConfiguration.VentricularConductionRatio : window.BreathConfiguration.VentricularConductionRatio) != ratio ||
                         window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("Conduction input did not atomically restart the source."); }
-                    for (int step = 0; step < 30; step++) { Click(window.StepButton); }
+                    for (int step = 0; step < 35; step++) { Click(window.StepButton); }
                     Func<long, IReadOnlyList<byte[]>> advance;
                     if (projected)
                     {
@@ -46,12 +46,12 @@ internal static class ConductionRatioSmokeChecks
                         var source = PhysiologyDemoSource.Create(window.BreathConfiguration);
                         advance = time => source.AdvanceTo(time, 50, 1, 100);
                     }
-                    var blocks = Enumerable.Range(1, 30).SelectMany(step => advance(step * 200_000_000L))
+                    var blocks = Enumerable.Range(1, 35).SelectMany(step => advance(step * 200_000_000L))
                         .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                     Guid id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
                     short[] samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == id).Samples).ToArray();
                     if (!samples.Skip(200).Take(25).Any(value => value > 0) ||
-                        (ratio == 1 || conducted > 1 ? !samples.Skip(selection == 6 ? 260 : 240).Take(20).Any(value => value > 500) : samples.Skip(selection == 6 ? 260 : 240).Take(20).Any(value => value != 0)))
+                        (ratio == 1 || conducted > 1 ? !samples.Skip(selection is 6 or 16 or 17 ? 260 : 240).Take(20).Any(value => value > 500) : samples.Skip(selection is 6 or 16 or 17 ? 260 : 240).Take(20).Any(value => value != 0)))
                     { throw new InvalidOperationException("Native P/QRS data did not follow the selected conduction ratio."); }
                     if ((projected ? window.EcgConfiguration.ConductedBeatsPerGroup : window.BreathConfiguration.ConductedBeatsPerGroup) != conducted)
                     { throw new InvalidOperationException("Lost group count."); }
@@ -60,6 +60,8 @@ internal static class ConductionRatioSmokeChecks
                     if (selection == 6 && (samples.Skip(240).Take(20).Any(v => v != 0) ||
                         samples.Skip(440).Take(20).Any(v => v != 0) || !samples.Skip(470).Take(20).Any(v => v > 500)))
                     { throw new InvalidOperationException("Wenckebach QRS failed to move with progressive PR."); }
+                    if (selection == 17 && (!samples.Skip(675).Take(20).Any(v => v > 500) || samples.Skip(640).Take(20).Any(v => v != 0)))
+                    { throw new InvalidOperationException("5:4 fourth conducted QRS failed PR extension."); }
                     if (conducted > 1)
                     {
                         if (samples.Skip(conducted * 200 + 40).Take(20).Any(v => v != 0))
@@ -71,7 +73,7 @@ internal static class ConductionRatioSmokeChecks
                             { throw new InvalidOperationException("Grouped mechanical pulses did not follow conduction."); }
                         }
                     }
-                    VerifyPixels(window, projected, samples, ratio, conducted, selection == 6);
+                    VerifyPixels(window, projected, samples, ratio, conducted, selection is 6 or 16 or 17);
                     Click(window.HoldButton);
                     Click(window.RunButton);
                     var held = window.Trace;
@@ -96,7 +98,7 @@ internal static class ConductionRatioSmokeChecks
                     if (timing.RrIntervalNs != 1_600_000_000 || timing.QtIntervalNs !=
                         new EcgQtCorrection(EcgQtCorrection.Bazett, 400_000_000, 1_600_000_000).ResolveQtIntervalNs())
                     { throw new InvalidOperationException("QTc did not use conducted ventricular RR."); }
-                    foreach (int selection in new[] { 4, 5, 6 })
+                    foreach (int selection in new[] { 4, 5, 6, 16, 17 })
                     {
                         window.ConductionInput.SelectedIndex = selection; Click(window.ApplyEcgButton);
                         if (window.EcgConfiguration.ResolveTiming().RrIntervalNs != 800_000_000)

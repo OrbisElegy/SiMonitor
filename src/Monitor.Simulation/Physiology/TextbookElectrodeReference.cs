@@ -9,8 +9,10 @@ public static class TextbookElectrodeReference
 {
     public const string EvidenceId = "TextbookChestProgressionDraft@3";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgUWavePlan? uWave = null,
-        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null, EcgAtrialIllustration atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration ventricular = EcgVentricularIllustration.Reference)
+        EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null, EcgAtrialIllustration atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? tContour = null)
     {
+        if (tContour is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null || zones is not null || ventricular != EcgVentricularIllustration.Reference))
+        { throw new EventWaveformException("EcgTContour.ConflictingModes", "tContour"); }
         long? ventricularDuration = EcgVentricularIllustrations.QrsDurationNs(ventricular);
         if (ventricularDuration is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null || zones is not null))
         { throw new EventWaveformException("EcgVentricular.ConflictingModes", "ventricular"); }
@@ -107,6 +109,7 @@ public static class TextbookElectrodeReference
         var ventricularSource = EcgVentricularIllustrations.Apply(ventricular, electrodes, timing);
         var staged = infarction?.Apply(ventricularSource, timing) ?? ventricularSource;
         staged = zones?.Apply(staged, timing, uWave) ?? staged;
+        staged = tContour?.Apply(staged) ?? staged;
         if (uWave is null) { return staged; }
         var extended = staged.Select(item => item with
         {

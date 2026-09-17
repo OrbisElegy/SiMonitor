@@ -6,7 +6,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -41,7 +41,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         long rr = IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : atrialPeriod * VentricularConductionRatio;
         if (MethodId is null)
         {
-            if (this with { VentricularConductionRatio = 1, UWave = null, CardiacActivity = CardiacActivity.AtrialAndVentricular, Placement = EcgLimbPlacement.Standard, IndependentVentricularPeriodMilliseconds = null, IndependentVentricularOffsetMilliseconds = null, TWave = null, ChestJMicrovolts = 0, ChestStEndMicrovolts = 0, ChestP = null, ChestStArchMicrovolts = 0, Fusion = null, Infarction = null, Zones = null, Atrial = EcgAtrialIllustration.Reference, Ventricular = EcgVentricularIllustration.Reference } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
+            if (this with { VentricularConductionRatio = 1, UWave = null, CardiacActivity = CardiacActivity.AtrialAndVentricular, Placement = EcgLimbPlacement.Standard, IndependentVentricularPeriodMilliseconds = null, IndependentVentricularOffsetMilliseconds = null, TWave = null, ChestJMicrovolts = 0, ChestStEndMicrovolts = 0, ChestP = null, ChestStArchMicrovolts = 0, Fusion = null, Infarction = null, Zones = null, Atrial = EcgAtrialIllustration.Reference, Ventricular = EcgVentricularIllustration.Reference, TContour = null } != Default) { throw new ArgumentException("Invalid fixed reference configuration."); }
             return TextbookEcgReference.Timing with { RrIntervalNs = rr };
         }
         if (HeartRateBpm is < 30 or > 200 || QtcMilliseconds is < 1 or > 1000 ||
@@ -77,8 +77,8 @@ internal static class ProjectedEcgDemoSource
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
         var electrodes = configuration.Zones is { } zones
-            ? TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, pWave: pWave, zones: zones, atrial: configuration.Atrial, ventricular: configuration.Ventricular)
-            : TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve(), configuration.TWave?.ResolveShape(), st, pWave, configuration.Fusion?.Resolve(), configuration.Infarction, atrial: configuration.Atrial, ventricular: configuration.Ventricular);
+            ? TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, pWave: pWave, zones: zones, atrial: configuration.Atrial, ventricular: configuration.Ventricular, tContour: configuration.TContour)
+            : TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, configuration.TWave?.Resolve(), configuration.TWave?.ResolveShape(), st, pWave, configuration.Fusion?.Resolve(), configuration.Infarction, atrial: configuration.Atrial, ventricular: configuration.Ventricular, tContour: configuration.TContour);
         RegularPhysiologyPlan plan = new(0, configuration.ResolveAtrialPeriodNs(), offset,
             80_000_000, offset + 80_000_000, 3_750_000_000, 1_875_000_000,
             VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity,

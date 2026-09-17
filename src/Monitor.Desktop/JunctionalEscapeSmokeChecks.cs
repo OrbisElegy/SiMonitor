@@ -10,8 +10,11 @@ internal static class JunctionalEscapeSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (bool projected in new[] { false, true })
+        foreach (var (projected, ventricular) in new[] { (false, false), (true, false), (false, true), (true, true) })
         {
+            int selection = ventricular ? 8 : 7;
+            int secondQrs = ventricular ? 600 : 400;
+            string defaultPeriod = ventricular ? "2000" : "1200";
             WaveformDemoWindow window = new(physiology: !projected, projected: projected);
             window.Show();
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -19,8 +22,8 @@ internal static class JunctionalEscapeSmokeChecks
             {
                 Click(window.StepButton); Click(window.RunButton);
                 var oldTimer = window.ActiveTimer;
-                Click(window.JunctionalEscapeButton); window.Pulse(oldTimer);
-                if (window.ConductionInput.SelectedIndex != 7 || window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.ActiveTimer is not null)
+                Click(ventricular ? window.VentricularEscapeButton : window.JunctionalEscapeButton); window.Pulse(oldTimer);
+                if (window.ConductionInput.SelectedIndex != selection || window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Junctional preset failed to reset and fence timer."); }
                 Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text))
@@ -44,7 +47,12 @@ internal static class JunctionalEscapeSmokeChecks
                     { throw new InvalidOperationException("Junctional checkpoint changed twelve-lead blocks."); }
                     blocks = expected.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 100);
-                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 400);
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, secondQrs);
+                    if (ventricular)
+                    {
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 125);
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 175);
+                    }
                 }
                 else
                 {
@@ -53,25 +61,27 @@ internal static class JunctionalEscapeSmokeChecks
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                 }
                 var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
-                var ecg = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
-                if (!ecg.Skip(100).Take(20).Any(v => v > 500) || !ecg.Skip(400).Take(20).Any(v => v > 500) ||
-                    !ecg.Skip(200).Take(25).Any(v => v > 0) || ecg.Skip(240).Take(20).Any(v => v > 500))
+                short[] ecg = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
+                if (!ecg.Skip(100).Take(20).Any(v => v > 500) || !ecg.Skip(secondQrs).Take(20).Any(v => v > 500) ||
+                    !ecg.Skip(ventricular ? 400 : 200).Take(25).Any(v => v > 0) || ecg.Skip(240).Take(20).Any(v => v > 500))
                 { throw new InvalidOperationException("Native escape QRS is not independent of regular P."); }
+                if (ventricular && (!ecg.Skip(125).Take(10).Any(v => v > 500) || !ecg.Skip(175).Take(20).Any(v => v < -100)))
+                { throw new InvalidOperationException("Ventricular escape lost broad QRS or discordant T."); }
                 Click(window.HoldButton); Click(window.RunButton);
                 var held = window.Trace; var timer = window.ActiveTimer;
                 var acceptedEcg = window.EcgConfiguration; var acceptedBreath = window.BreathConfiguration;
                 long before = window.SimulationTimeNs;
-                foreach (string invalid in new[] { "999", "1501", "" })
+                foreach (string invalid in (ventricular ? new[] { "1499", "3001", "" } : new[] { "999", "1501", "" }))
                 {
                     window.IndependentVentricularPeriodInput.Text = invalid;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                     Unchanged();
                 }
-                window.IndependentVentricularPeriodInput.Text = "1200";
+                window.IndependentVentricularPeriodInput.Text = defaultPeriod;
                 window.CardiacActivityInput.SelectedIndex = (int)CardiacActivity.VentricularOnly;
                 Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton); Unchanged();
                 Click(window.ResetButton);
-                if (window.ConductionInput.SelectedIndex != 7 || window.IndependentVentricularPeriodInput.Text != "1200" || window.ActiveTimer is not null)
+                if (window.ConductionInput.SelectedIndex != selection || window.IndependentVentricularPeriodInput.Text != defaultPeriod || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Reset lost escape preset."); }
                 if (projected)
                 {
@@ -80,7 +90,7 @@ internal static class JunctionalEscapeSmokeChecks
                     if (window.EcgConfiguration != acceptedEcg) { throw new InvalidOperationException("Escape preset accepted conflicting QRS morphology."); }
                     Click(window.ResetButton);
                 }
-                foreach (string valid in new[] { "1000", "1500" })
+                foreach (string valid in (ventricular ? new[] { "1500", "3000" } : new[] { "1000", "1500" }))
                 {
                     window.IndependentVentricularPeriodInput.Text = valid;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
@@ -96,6 +106,6 @@ internal static class JunctionalEscapeSmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: junctional complete-AVB preset preserves independent P/QRS, pressure pixels, recovery and atomic controls");
+        Console.WriteLine("ok: junctional/ventricular complete-AVB presets preserves independent P/QRS, pressure pixels, recovery and atomic controls");
     }
 }

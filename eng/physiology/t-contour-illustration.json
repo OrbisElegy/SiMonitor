@@ -1,12 +1,12 @@
 {
-  "id": "TContourIllustrationDraft@1",
+  "id": "TContourIllustrationDraft@2",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
     "section": "第五篇 辅助检查 第一章 心电图 第二节",
     "pages": "461"
   },
-  "scope": "Explicit chest-lead T-contour teaching templates, not etiological or ischemic presets.",
+  "scope": "Explicit chest/limb-lead T-contour teaching templates, not etiological or ischemic presets.",
   "authored_choices": {
     "notes": [
       "Landmark positions and equal-amplitude biphasic shapes are authored choices. T onset/end and QT are preserved; interpolation runs directly between positive and negative peaks without a flat zero-crossing knot."
@@ -61,9 +61,10 @@
     }
   },
   "limitations": [
-    "Chest leads only; limb-lead T contours remain to be added.",
     "No cause is inferred for notched or biphasic T waves.",
     "ST-T fusion and other ventricular editing modes must be disabled.",
-    "Windows behavior is not yet manually verified."
-  ]
+    "Windows behavior is not yet manually verified.",
+    "Only one limb-lead target at a time; all six limb leads cannot be set independently."
+  ],
+  "limbProjection": "I/II/III target differences are injected through paired positive/negative electrode bands. Augmented leads use 2/-1/-1, with 2 formed by duplicating the same band rather than rescaling. Each band's electrode increments sum to zero, preserving Wilson and chest leads while other limb leads follow projection identities. Integer division of target differences may leave Q32 rounding residue."
 }

@@ -1,0 +1,22 @@
+{
+  "id": "GroupedConductionIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "485-487"
+  },
+  "scope": "Grouped conduction with a fixed PR for conducted beats, not a Wenckebach cycle or a complete Mobitz II pathological preset.",
+  "authored_choices": {
+    "notes": [
+      "Each N atrial cycles conduct the first K consecutively and block the remaining N-K. The demo adds 3:2 and 4:3 schedules with user-specified PR; ventricular mechanical events retain the existing electromechanical offset."
+    ]
+  },
+  "compatibility": "K=1 preserves the original N:1 samples and ventricular cycleIndex. K>1 retains atrial slot indices and uses the shortest RR for QT bounds. It cannot be combined with independent ventricular clocks or beatwise mechanical ratios/switching schedules.",
+  "limitations": [
+    "Progressive beatwise PR prolongation and Wenckebach cycles are not implemented.",
+    "Third-degree AV block and escape origins/morphologies are not implemented.",
+    "Pressure retains the original RC runoff without beatwise filling or ejection-volume feedback.",
+    "Grouped conduction ratios are not automatically diagnosed as Mobitz I or II."
+  ]
+}

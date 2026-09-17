@@ -31,9 +31,9 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null,
     int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
     bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null,
-    int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular)
+    int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1)
 {
-    internal Int128 VentricularPeriodNs => IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * VentricularConductionRatio;
+    internal Int128 VentricularPeriodNs => IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * (ConductedBeatsPerGroup > 1 ? 1 : VentricularConductionRatio);
 }
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
 public readonly record struct PhysiologyCycleEvent(long SimTimeNs, PhysiologyCycleEventKind Kind, ulong CycleIndex);
@@ -55,6 +55,10 @@ public sealed class RegularPhysiologyTimeline
         if (state is null || state.Plan is not { } plan || plan.EpochAnchorSimTimeNs < 0 ||
             plan.HeartPeriodNs <= 0 || plan.BreathPeriodNs <= 0 ||
             plan.MechanicalEveryCycles < 1 ||
+            plan.ConductedBeatsPerGroup < 1 ||
+            (plan.ConductedBeatsPerGroup > 1 && (plan.ConductedBeatsPerGroup >= plan.VentricularConductionRatio ||
+                plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                plan.MechanicalEveryCycles != 1 || plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             plan.VentricularConductionRatio < 1 || plan.VentricularPeriodNs > long.MaxValue ||
             (plan.IndependentVentricularPeriodNs is { } independent &&
                 (independent < plan.HeartPeriodNs || plan.VentricularConductionRatio != 1)) ||
@@ -176,13 +180,22 @@ public sealed class RegularPhysiologyTimeline
             if (begin >= finish) { return; }
             bool patternedBreath = plan.RespiratoryPattern == RespiratoryPattern.CheyneStokesIllustration &&
                 kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart;
-            Int128 selected = patternedBreath ? RespiratoryPatternDepth.ActiveBefore(finish) - RespiratoryPatternDepth.ActiveBefore(begin) : (finish - 1 - begin) / cycleStride + 1;
+            bool groupedConduction = plan.ConductedBeatsPerGroup > 1 &&
+                kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
+            Int128 ConductedBefore(Int128 slot) => slot / plan.VentricularConductionRatio * plan.ConductedBeatsPerGroup +
+                Int128.Min(slot % plan.VentricularConductionRatio, plan.ConductedBeatsPerGroup);
+            Int128 selected = groupedConduction ? ConductedBefore(finish) - ConductedBefore(begin) : patternedBreath ? RespiratoryPatternDepth.ActiveBefore(finish) - RespiratoryPatternDepth.ActiveBefore(begin) : (finish - 1 - begin) / cycleStride + 1;
             if (selected > remaining)
             { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
             remaining -= (int)selected;
             for (Int128 index = begin; index < finish; index += cycleStride)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (groupedConduction && index % plan.VentricularConductionRatio >= plan.ConductedBeatsPerGroup)
+                {
+                    index += plan.VentricularConductionRatio - index % plan.VentricularConductionRatio - 1;
+                    continue;
+                }
                 if (patternedBreath && RespiratoryPatternDepth.At(plan.RespiratoryPattern, (ulong)index) == 0) { continue; }
                 visitor(new((long)(start + index * period), kind, (ulong)index));
             }

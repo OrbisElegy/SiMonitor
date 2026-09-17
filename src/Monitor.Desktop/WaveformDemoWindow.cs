@@ -83,6 +83,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
     internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T" }, SelectedIndex = 0, Width = 160 };
     internal ComboBox TContourLeadInput { get; } = new() { ItemsSource = new[] { "V1", "V2", "V3", "V4", "V5", "V6", "V1–V6", "I", "II", "III", "aVR", "aVL", "aVF" }, SelectedIndex = 0, Width = 90 };
+    internal TextBox TContourCrossingInput { get; } = new() { Width = 65 };
     internal TextBox TContourPeakInput { get; } = new() { Text = "300", Width = 65 };
     internal ComboBox VentricularInput { get; } = new() { ItemsSource = new[] { "参考心室波形", "左室肥厚伴 ST-T 改变示例", "右室肥厚伴 ST-T 改变示例", "双室肥厚组合征象示例", "重度右室肥厚 qR 示例", "肺源性心脏病 rS 形态示例" }, SelectedIndex = 0, Width = 240 };
     internal ComboBox AtrialInput { get; } = new() { ItemsSource = new[] { "参考 / 手动 P", "左房异常 P 波教学示例", "右房异常 P 波教学示例", "双房异常 P 波教学示例" }, SelectedIndex = 0, Width = 220 };
@@ -256,6 +257,8 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(TContourLeadInput);
             settings.Children.Add(new TextBlock { Text = "T轮廓峰幅（μV，1～2000）" });
             settings.Children.Add(TContourPeakInput);
+            settings.Children.Add(new TextBlock { Text = "双向T过零位置（T时限%，0.1～99.9，留空50；双峰留空）" });
+            settings.Children.Add(TContourCrossingInput);
             settings.Children.Add(new TextBlock { Text = "胸导联轮廓仅改所选T；肢体目标会联动其余肢体导联，胸导联保持。需关闭其他T/ST、融合、梗死和心室示例。" });
             settings.Children.Add(VentricularInput);
             settings.Children.Add(new TextBlock { Text = "左室/双室示例QRS=100ms，右室/qR/肺源性形态80ms；双室和肺源性形态保留参考ST/T；肺源性形态可另选右房P。需关闭手动T/ST、融合、梗死/三区域模式，可与P/u组合。" });
@@ -619,11 +622,21 @@ internal sealed class WaveformDemoWindow : Window
             if (TContourInput.SelectedIndex is < 0 or > 3 || TContourLeadInput.SelectedIndex is < 0 or > 12 ||
                 !int.TryParse(TContourPeakInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int contourPeak) || contourPeak is < 1 or > 2000)
             { throw new ArgumentException("Invalid T contour selection."); }
+            int? crossing = null;
+            if (!string.IsNullOrWhiteSpace(TContourCrossingInput.Text))
+            {
+                if (!decimal.TryParse(TContourCrossingInput.Text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value) ||
+                    value is < 0.1m or > 99.9m || value * 10 != decimal.Truncate(value * 10) || TContourInput.SelectedIndex is not (1 or 2))
+                { throw new EventWaveformException("EcgTContour.InvalidCrossing", "tContour"); }
+                crossing = (int)(value * 10);
+            }
             EcgTContourPlan? contour = TContourInput.SelectedIndex == 0 ? null : new(TContourLeadInput.SelectedIndex == 6 ? 63 : TContourLeadInput.SelectedIndex > 6 ? 1 : 1 << TContourLeadInput.SelectedIndex,
-                (EcgTContourShape)TContourInput.SelectedIndex, contourPeak, TContourLeadInput.SelectedIndex > 6 ? (EcgTContourTarget)(TContourLeadInput.SelectedIndex - 6) : EcgTContourTarget.Chest);
+                (EcgTContourShape)TContourInput.SelectedIndex, contourPeak, TContourLeadInput.SelectedIndex > 6 ? (EcgTContourTarget)(TContourLeadInput.SelectedIndex - 6) : EcgTContourTarget.Chest, crossing);
             configuration = configuration with { TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
+        catch (EventWaveformException error) when (error.ReasonCode == "EcgTContour.InvalidCrossing")
+        { EcgConfigurationStatus.Text = "未应用：过零位置仅用于双向T，范围0.1～99.9%，精度0.1%；留空为50%，双峰或参考T须留空。当前数据与扫屏状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgTContour.ConflictingModes")
         { EcgConfigurationStatus.Text = "未应用：T轮廓需要关闭其他T/ST、融合、梗死/三区域和心室示例。当前数据与扫屏状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgVentricular.ConflictingModes")
@@ -822,6 +835,7 @@ internal sealed class WaveformDemoWindow : Window
             FusionPositionInput.Text = (fusion.PeakPositionPermille / 10m).ToString("0.#", CultureInfo.InvariantCulture);
             TContourInput.SelectedIndex = configuration.TContour is { } contour ? (int)contour.Shape : 0;
             TContourLeadInput.SelectedIndex = configuration.TContour is { } contourTarget ? contourTarget.Target != EcgTContourTarget.Chest ? (int)contourTarget.Target + 6 : contourTarget.ChestMask == 63 ? 6 : Enumerable.Range(0, 6).Single(i => contourTarget.ChestMask == 1 << i) : 0;
+            TContourCrossingInput.Text = configuration.TContour?.CrossingPositionPermille is { } crossing ? (crossing / 10m).ToString("0.#", CultureInfo.InvariantCulture) : "";
             TContourPeakInput.Text = (configuration.TContour?.PeakMicrovolts ?? 300).ToString(CultureInfo.InvariantCulture);
             VentricularInput.SelectedIndex = (int)configuration.Ventricular;
             AtrialInput.SelectedIndex = (int)configuration.Atrial;
@@ -844,7 +858,7 @@ internal sealed class WaveformDemoWindow : Window
                 ((configuration.Zones is not null || infarction.Components is not null) && components.ContributionLoss is not null ? $"；显式QRS贡献：{contribution.AmplitudeMicrovolts} μV、QRS时限的{contribution.DurationPermille / 10}%、移除{contribution.LossPermille / 10}%（固定参数）" : "") +
                 (configuration.Zones is null && infarction.HasActiveRegion ? $"；区域复极延长 {RepolarizationDelayInput.Text} ms，区域 QT {(timing.QtIntervalNs + infarction.RepolarizationDelayNs) / 1_000_000m:0.###} ms（输入 QTc 为参考）" : "") +
                 (configuration.Zones is not null ? "" : fusion.ChestMask == 0 ? "；融合关闭" : $"；ST–T 融合 {string.Join("/", Enumerable.Range(0, 6).Where(i => (fusion.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}，J/峰 {fusion.JMicrovolts}/{fusion.PeakMicrovolts} μV，J→QT 峰位置 {FusionPositionInput.Text}%（替换该处原 ST/T）") +
-                (configuration.TContour is { } tc ? $"；{TContourLeadInput.SelectedItem} {TContourInput.SelectedItem} 峰幅{tc.PeakMicrovolts} μV" : "") +
+                (configuration.TContour is { } tc ? $"；{TContourLeadInput.SelectedItem} {TContourInput.SelectedItem} 峰幅{tc.PeakMicrovolts} μV" + (tc.Shape == EcgTContourShape.Notched ? "" : $"，过零{(tc.CrossingPositionPermille ?? 500) / 10m:0.#}%") : "") +
                 (configuration.Ventricular != EcgVentricularIllustration.Reference ? $"；{VentricularInput.SelectedItem}（非特异）" : "") +
                 (configuration.Atrial != EcgAtrialIllustration.Reference ? $"；{AtrialInput.SelectedItem}（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
                 (configuration.TContour is not null || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +

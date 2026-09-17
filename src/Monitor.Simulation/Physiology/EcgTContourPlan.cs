@@ -8,14 +8,15 @@ public enum EcgTContourTarget { Chest, I, II, III, AVR, AVL, AVF }
 public enum EcgTContourShape { PositiveNegative = 1, NegativePositive, Notched }
 
 // T targets carried through electrode projection; limb targets couple other limb leads.
-public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest)
+public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int PeakMicrovolts, EcgTContourTarget Target = EcgTContourTarget.Chest, int? CrossingPositionPermille = null)
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
-    public const string EvidenceId = "TContourIllustrationDraft@2";
+    public const string EvidenceId = "TContourIllustrationDraft@3";
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
         if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 1 or > 4000)
         { throw new EventWaveformException("EcgTContour.InvalidPlan", "tContour"); }
+        var phasePoints = CreatePhasePoints(source[0].Bands[2].DurationNs);
         var basis = Shape == EcgTContourShape.Notched ? TContourTables.Notched : TContourTables.Biphasic;
         int signedPeak = Shape == EcgTContourShape.NegativePositive ? -PeakMicrovolts : PeakMicrovolts;
         var table = Array.AsReadOnly(basis.Select(value => (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * signedPeak, 1000)).ToArray());
@@ -37,7 +38,7 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
                 (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * numerator, divisor)).ToArray());
             // delta = target - projected current T. Inject a zero-sum limb
             // drive; coupled limb leads change, Wilson/chest remain exact.
-            List<EventWaveformBand> delta = [source[0].Bands[2] with { TableQ32 = table }];
+            List<EventWaveformBand> delta = [source[0].Bands[2] with { TableQ32 = table, PhasePoints = phasePoints }];
             for (int n = 0; n < LimbIndices.Length; n++)
             {
                 if (weights[n] == 0) { continue; }
@@ -67,8 +68,27 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
         }).ToArray();
         return Array.AsReadOnly(source.Select((electrode, i) => i < 4 || (ChestMask & (1 << (i - 4))) == 0 ? electrode : electrode with
         {
-            Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index == 2 ? band with { TableQ32 = table } : band)
+            Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index == 2 ? band with { TableQ32 = table, PhasePoints = phasePoints } : band)
                 .Concat(wilson).ToArray()),
         }).ToArray());
     }
+    private System.Collections.ObjectModel.ReadOnlyCollection<EventWaveformPhasePoint>? CreatePhasePoints(long durationNs)
+    {
+        if (CrossingPositionPermille is null) { return null; }
+        if (Shape == EcgTContourShape.Notched || CrossingPositionPermille is < 1 or > 999)
+        { throw new EventWaveformException("EcgTContour.InvalidCrossing", "tContour"); }
+        if (CrossingPositionPermille == 500) { return null; }
+        long crossing = (long)FixedPointMath.RoundDivideTiesToEven((Int128)durationNs * CrossingPositionPermille.Value, 1000);
+        long halfSpan = Math.Min(crossing, durationNs - crossing) / 2;
+        if (halfSpan <= 0 || crossing - halfSpan <= 0 || crossing + halfSpan >= durationNs)
+        { throw new EventWaveformException("EcgTContour.InvalidCrossing", "tContour"); }
+        // Warp at stationary extrema only. The crossing lies inside one linear
+        // phase interval, avoiding a slope discontinuity at the baseline.
+        return Array.AsReadOnly(new EventWaveformPhasePoint[]
+        {
+            new(0, 0), new(crossing - halfSpan, 32),
+            new(crossing + halfSpan, 96), new(durationNs, 128),
+        });
+    }
+
 }

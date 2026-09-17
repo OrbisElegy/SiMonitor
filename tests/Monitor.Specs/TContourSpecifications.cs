@@ -8,49 +8,92 @@ internal static class TContourSpecifications
     private static RegularPhysiologyPlan Plan => new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000);
     public static Specification[] All =>
     [
+        new(nameof(CrossingTimingMovesSmoothly), CrossingTimingMovesSmoothly),
         new(nameof(LimbContoursPreserveWilsonAndCoupleLeads), LimbContoursPreserveWilsonAndCoupleLeads),
         new(nameof(TContoursReachOnlySelectedLeadSupport), TContoursReachOnlySelectedLeadSupport),
         new(nameof(TContoursRestoreAndRetainU), TContoursRestoreAndRetainU),
         new(nameof(TContoursRejectInvalidAndConflictingPlans), TContoursRejectInvalidAndConflictingPlans),
     ];
+    private static void CrossingTimingMovesSmoothly()
+    {
+        var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
+        foreach (int position in new[] { 200, 800 })
+            foreach (var shape in new[] { EcgTContourShape.PositiveNegative, EcgTContourShape.NegativePositive })
+            {
+                var samples = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                    TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, CrossingPositionPermille: position))).GenerateBefore(800_000_000, 200, 100);
+                int cross = 85 + 45 * position / 1000;
+                int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
+                long before = samples[cross - 1].MicrovoltValues[6] * sign;
+                long at = samples[cross].MicrovoltValues[6] * sign;
+                long after = samples[cross + 1].MicrovoltValues[6] * sign;
+                Check.That(before > 0 && at == 0 && after < 0 && Math.Abs(before + after) <= 1, "requested crossing has symmetric nonzero slope");
+                for (int i = 0; i < samples.Count; i++)
+                    for (int lead = 0; lead < 12; lead++)
+                        if (lead != 6 || i < 85 || i >= 130)
+                        { Check.That(samples[i].ExactLeads[(EcgLead)lead].Numerator == baseline[i].ExactLeads[(EcgLead)lead].Numerator, "crossing preserves unselected leads and outside T"); }
+            }
+        var legacy = TextbookElectrodeReference.CreateElectrodes(tContour: new(1, EcgTContourShape.PositiveNegative, 300));
+        var midpoint = TextbookElectrodeReference.CreateElectrodes(tContour: new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 500));
+        var a = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, legacy).GenerateBefore(800_000_000, 200, 100);
+        var b = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, midpoint).GenerateBefore(800_000_000, 200, 100);
+        Check.That(a.Zip(b).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "explicit midpoint preserves default bytes");
+        bool collapsedRejected = false;
+        try
+        {
+            TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing with { TDurationNs = 1 },
+                tContour: new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 200));
+        }
+        catch (EventWaveformException e) { collapsedRejected = e.ReasonCode == "EcgTContour.InvalidCrossing"; }
+        Check.That(collapsedRejected, "collapsed nanosecond intervals are rejected");
+        foreach (int value in new[] { 1, 999 })
+        { TextbookElectrodeReference.CreateElectrodes(tContour: new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: value)); }
+        foreach (var plan in new[] { new EcgTContourPlan(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 0), new(1, EcgTContourShape.PositiveNegative, 300, CrossingPositionPermille: 1000), new(1, EcgTContourShape.Notched, 300, CrossingPositionPermille: 500) })
+        {
+            try { TextbookElectrodeReference.CreateElectrodes(tContour: plan); }
+            catch (EventWaveformException e) { Check.That(e.ReasonCode == "EcgTContour.InvalidCrossing", "stable crossing rejection"); continue; }
+            throw new InvalidOperationException("Invalid crossing accepted.");
+        }
+    }
     private static void LimbContoursPreserveWilsonAndCoupleLeads()
     {
         var baseline = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes()).GenerateBefore(800_000_000, 200, 100);
         foreach (var target in Enum.GetValues<EcgTContourTarget>().Where(t => t != EcgTContourTarget.Chest))
             foreach (var shape in Enum.GetValues<EcgTContourShape>())
-            {
-                var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
-                    TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, target)));
-                var first = source.GenerateBefore(400_000_000, 100, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var tail = source.GenerateBefore(800_000_000, 100, 100);
-                var recovered = restored.GenerateBefore(800_000_000, 100, 100);
-                Check.That(tail.Zip(recovered).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "limb contour recovers mid-T");
-                var samples = first.Concat(tail).ToArray();
-                int lead = (int)target - 1;
-                var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
-                if (shape == EcgTContourShape.Notched)
-                { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
-                else
+                foreach (int? crossing in shape == EcgTContourShape.Notched ? new int?[] { null } : new int?[] { null, 200, 800 })
                 {
-                    int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
-                    Check.That(t[11] * sign > 290 && t[34] * sign < -290, "selected limb has ordered biphasic target");
-                }
-                bool coupled = false;
-                for (int i = 0; i < samples.Length; i++)
-                {
-                    var p = samples[i].ExactLeads;
-                    Check.That(p[EcgLead.I].Numerator + p[EcgLead.III].Numerator == p[EcgLead.II].Numerator &&
-                        p[EcgLead.AVR].Numerator + p[EcgLead.AVL].Numerator + p[EcgLead.AVF].Numerator == 0, "limb identities are exact");
-                    for (int l = 0; l < 12; l++)
+                    var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
+                        TextbookElectrodeReference.CreateElectrodes(tContour: new(1, shape, 300, target, crossing)));
+                    var first = source.GenerateBefore(400_000_000, 100, 100);
+                    var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                    var tail = source.GenerateBefore(800_000_000, 100, 100);
+                    var recovered = restored.GenerateBefore(800_000_000, 100, 100);
+                    Check.That(tail.Zip(recovered).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "limb contour recovers mid-T");
+                    var samples = first.Concat(tail).ToArray();
+                    int lead = (int)target - 1;
+                    var t = samples.Skip(85).Take(45).Select(s => (int)s.MicrovoltValues[lead]).ToArray();
+                    if (shape == EcgTContourShape.Notched)
+                    { Check.That(t.Take(22).Max() > 290 && t.Skip(23).Max() > 290 && t[22] < 200 && t.Min() >= 0, "selected limb has notched target"); }
+                    else
                     {
-                        bool same = p[(EcgLead)l].Numerator == baseline[i].ExactLeads[(EcgLead)l].Numerator;
-                        if (l >= 6 || i < 85 || i >= 130) { Check.That(same, "Wilson chest and all non-T samples remain exact"); }
-                        else if (l != lead) { coupled |= !same; }
+                        int sign = shape == EcgTContourShape.PositiveNegative ? 1 : -1;
+                        Check.That(t.Max() > 280 && t.Min() < -280 && t[1] * sign > 0, "selected limb has ordered biphasic target");
                     }
+                    bool coupled = false;
+                    for (int i = 0; i < samples.Length; i++)
+                    {
+                        var p = samples[i].ExactLeads;
+                        Check.That(p[EcgLead.I].Numerator + p[EcgLead.III].Numerator == p[EcgLead.II].Numerator &&
+                            p[EcgLead.AVR].Numerator + p[EcgLead.AVL].Numerator + p[EcgLead.AVF].Numerator == 0, "limb identities are exact");
+                        for (int l = 0; l < 12; l++)
+                        {
+                            bool same = p[(EcgLead)l].Numerator == baseline[i].ExactLeads[(EcgLead)l].Numerator;
+                            if (l >= 6 || i < 85 || i >= 130) { Check.That(same, "Wilson chest and all non-T samples remain exact"); }
+                            else if (l != lead) { coupled |= !same; }
+                        }
+                    }
+                    Check.That(coupled, "other limb leads change with electrode drive");
                 }
-                Check.That(coupled, "other limb leads change with electrode drive");
-            }
     }
     private static void TContoursReachOnlySelectedLeadSupport()
     {
@@ -81,7 +124,7 @@ internal static class TContourSpecifications
     private static void TContoursRestoreAndRetainU()
     {
         var u = new EcgUWavePlan(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]);
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(u, atrial: EcgAtrialIllustration.LeftAtrialAbnormality, tContour: new(63, EcgTContourShape.NegativePositive, 4000));
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(u, atrial: EcgAtrialIllustration.LeftAtrialAbnormality, tContour: new(63, EcgTContourShape.NegativePositive, 4000, CrossingPositionPermille: 800));
         var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, electrodes);
         source.GenerateBefore(400_000_000, 100, 100);
         var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());

@@ -17,6 +17,15 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         IndependentVentricularOffsetMilliseconds = 400,
     };
 
+    internal static ProjectedEcgDemoConfiguration VentricularEscape { get; } = Default with
+    {
+        ConductionPattern = AvConductionPattern.CompleteAvBlockVentricularIllustration,
+        IndependentVentricularPeriodMilliseconds = 2000,
+        IndependentVentricularOffsetMilliseconds = 400,
+        QrsDurationMilliseconds = 160,
+        TDurationMilliseconds = 220,
+    };
+
     internal long ResolveAtrialPeriodNs()
     {
         if (HeartRateBpm is < 30 or > 200) { throw new ArgumentException("Invalid base rate."); }
@@ -25,6 +34,13 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration)
+        {
+            if (this with { IndependentVentricularPeriodMilliseconds = 2000, IndependentVentricularOffsetMilliseconds = 400 } != VentricularEscape ||
+                IndependentVentricularPeriodMilliseconds is not (>= 1500 and <= 3000))
+            { throw new ArgumentException("Ventricular escape requires the authored shape/timing and a 1500-3000ms escape period."); }
+            return CompleteAvBlockVentricularReference.Timing with { RrIntervalNs = IndependentVentricularPeriodMilliseconds.Value * 1_000_000L };
+        }
         if (!Enum.IsDefined(Atrial)) { throw new ArgumentException("Invalid atrial illustration."); }
         if (ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration &&
             this with { IndependentVentricularPeriodMilliseconds = 1200, IndependentVentricularOffsetMilliseconds = 400 } != JunctionalEscape)
@@ -87,7 +103,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration
+        var electrodes = configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
+            ? CompleteAvBlockVentricularReference.CreateElectrodes()
+            : configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockJunctionalIllustration
             ? CompleteAvBlockJunctionalReference.CreateElectrodes()
             : configuration.Zones is { } zones
             ? TextbookElectrodeReference.CreateElectrodes(configuration.UWave?.Resolve(timing), timing, pWave: pWave, zones: zones, atrial: configuration.Atrial, ventricular: configuration.Ventricular, tContour: configuration.TContour)

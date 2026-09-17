@@ -1,0 +1,293 @@
+{
+  "id": "CompleteAvBlockVentricularIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "477,479,487"
+  },
+  "textbook_summary": [
+    "Ventricular escape generally has broad abnormal QRS complexes at 20-40/min.",
+    "Atrial and ventricular pacemakers operate independently; the atrial rate exceeds the ventricular rate and PR is not fixed."
+  ],
+  "authored_choices": {
+    "atrialPeriodMs": 800,
+    "escapePeriodMs": 2000,
+    "firstQrsMs": 400,
+    "mechanicalLagMs": 80,
+    "qrsMs": 160,
+    "qtMs": 480,
+    "tMs": 220,
+    "leadQrsShapes": {
+      "I": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            80
+          ],
+          [
+            72,
+            800
+          ],
+          [
+            112,
+            600
+          ],
+          [
+            160,
+            880
+          ],
+          [
+            220,
+            80
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "II": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            100
+          ],
+          [
+            72,
+            1000
+          ],
+          [
+            112,
+            750
+          ],
+          [
+            160,
+            1100
+          ],
+          [
+            220,
+            100
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V4": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            50
+          ],
+          [
+            72,
+            500
+          ],
+          [
+            112,
+            375
+          ],
+          [
+            160,
+            550
+          ],
+          [
+            220,
+            50
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V5": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            110
+          ],
+          [
+            72,
+            1100
+          ],
+          [
+            112,
+            825
+          ],
+          [
+            160,
+            1210
+          ],
+          [
+            220,
+            110
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V6": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            100
+          ],
+          [
+            72,
+            1000
+          ],
+          [
+            112,
+            750
+          ],
+          [
+            160,
+            1100
+          ],
+          [
+            220,
+            100
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V1": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            150
+          ],
+          [
+            60,
+            -200
+          ],
+          [
+            128,
+            -1200
+          ],
+          [
+            196,
+            -1000
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V2": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            128
+          ],
+          [
+            60,
+            -170
+          ],
+          [
+            128,
+            -1020
+          ],
+          [
+            196,
+            -850
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      },
+      "V3": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            24,
+            90
+          ],
+          [
+            60,
+            -120
+          ],
+          [
+            128,
+            -720
+          ],
+          [
+            196,
+            -600
+          ],
+          [
+            256,
+            0
+          ]
+        ]
+      }
+    },
+    "leadTMicrovolts": {
+      "I": -250,
+      "II": -300,
+      "V1": 300,
+      "V2": 260,
+      "V3": 200,
+      "V4": -180,
+      "V5": -300,
+      "V6": -280
+    }
+  },
+  "construction": "An authored broad, notched QRS and discordant T example. Offline smoothing constructs electrode potentials that preserve limb-lead identities. It does not stretch the normal QRS or identify an anatomical origin.",
+  "limitations": [
+    "Established escape only, without first triggering after arrest or pacemaker competition.",
+    "A single morphology, not all ventricular escape origins.",
+    "Mechanical lag and pressure use existing illustrations, without stroke-volume or filling feedback.",
+    "Fixed QT duration, without beatwise adaptation or clinical calibration."
+  ]
+}

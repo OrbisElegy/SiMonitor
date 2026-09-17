@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -95,6 +95,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox[] UAmplitudeInputs { get; } = Enumerable.Range(0, 6)
         .Select(_ => new TextBox { Text = "0", Width = 65 }).ToArray();
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
+    internal Button VentricularEscapeButton { get; } = new() { Content = "载入三度AVB室性逸搏示例（重置参数）" };
     internal Button JunctionalEscapeButton { get; } = new() { Content = "载入三度AVB交界性逸搏示例（重置参数）" };
     internal Button ApplyEcgButton { get; } = new() { Content = "应用并重新开始" };
     internal TextBlock EcgConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
@@ -197,6 +198,8 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(new TextBlock { Text = "传导模式" });
             conduction.Children.Add(ConductionInput);
             conduction.Children.Add(JunctionalEscapeButton);
+            conduction.Children.Add(VentricularEscapeButton);
+            conduction.Children.Add(new TextBlock { Text = "室性逸搏示例：房率75、室率30，宽大切迹QRS160ms/反向T，固定QT480ms；可改室周期1500–3000ms及首次偏移。12导联保留此例形态/时限；不代表逸搏起源定位。" });
             conduction.Children.Add(new TextBlock { Text = "交界性逸搏示例：房率75、室率50，正常80ms QRS，无固定PR；可改独立室周期1000–1500ms及首次偏移。12导联需保留参考形态和固定时限。此示例从已建立的逸搏开始。" });
             conduction.Children.Add(new TextBlock { Text = "固定PR与文氏示意分开：文氏PR依次+0/+80/+120 ms，第4次脱漏并复位。需房室活动、无独立心室周期，机械比例1且清空机械日程；成组传导的QT采用最短RR下界（房性周期）约束；文氏末次机械事件须在同一房性周期内。" });
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
@@ -390,6 +393,10 @@ internal sealed class WaveformDemoWindow : Window
         HoldButton.Click += (_, _) => { if (!_closed) { ToggleHold(); } };
         RunButton.Click += (_, _) => ToggleRun();
         QtMethod.SelectionChanged += (_, _) => { HeartRateInput.IsEnabled = QtcInput.IsEnabled = PDurationInput.IsEnabled = PrIntervalInput.IsEnabled = QrsDurationInput.IsEnabled = TDurationInput.IsEnabled = !_closed && QtMethod.SelectedIndex != 0; };
+        VentricularEscapeButton.Click += (_, _) =>
+        {
+            if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.VentricularEscape, PhysiologyDemoConfiguration.VentricularEscape); }
+        };
         JunctionalEscapeButton.Click += (_, _) =>
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.JunctionalEscape, PhysiologyDemoConfiguration.JunctionalEscape); }
@@ -513,7 +520,7 @@ internal sealed class WaveformDemoWindow : Window
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = ProjectedEcgDemoConfiguration.Default with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
+            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex == 8 ? ProjectedEcgDemoConfiguration.VentricularEscape : ProjectedEcgDemoConfiguration.Default) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||

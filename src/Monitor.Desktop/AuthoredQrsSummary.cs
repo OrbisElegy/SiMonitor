@@ -12,6 +12,8 @@ internal static class AuthoredQrsSummary
         if (activity is CardiacActivity.Absent or CardiacActivity.AtrialOnly)
         { return "QRS 形态核验：无心室事件，不核验。"; }
         var state = source.CaptureState().Generator;
+        if (VentricularDisorganizationReference.IsPattern(state.Timeline.Plan.ConductionPattern))
+        { return "QRS 形态核验：室扑／室颤仍有室性电活动，但无独立 QRS 分量，不核验。"; }
         if (state.Electrodes.SelectMany(e => e.Bands).Any(b =>
             b.Trigger == PhysiologyCycleEventKind.VentricularElectrical && b.DelayNs == 0 && b.DurationNs < 2_000_000))
         { return "QRS 形态核验不可用：QRS 分量短于 2 ms，1 ms 网格不足；波形配置仍可应用。"; }

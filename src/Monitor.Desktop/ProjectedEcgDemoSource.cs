@@ -36,6 +36,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         ConductionPattern = AvConductionPattern.AtrialFlutterIllustration,
     };
 
+    internal static ProjectedEcgDemoConfiguration Disorganized(AvConductionPattern pattern) => Default with
+    { CardiacActivity = CardiacActivity.VentricularOnly, ConductionPattern = pattern };
+
     internal static ProjectedEcgDemoConfiguration Fibrillation(bool fine = false) => Default with
     {
         PDurationMilliseconds = 40,
@@ -53,6 +56,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (VentricularDisorganizationReference.IsPattern(ConductionPattern))
+        {
+            if (this != Disorganized(ConductionPattern)) { throw new ArgumentException("Ventricular disorganization requires its authored preset."); }
+            return TextbookEcgReference.Timing; // Construction bounds only; no P/QRS/T bands.
+        }
         if (AtrialFibrillationReference.IsPattern(ConductionPattern))
         {
             if (this != Fibrillation(ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration))
@@ -134,7 +142,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = AtrialFibrillationReference.IsPattern(configuration.ConductionPattern)
+        var electrodes = VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern)
+            ? VentricularDisorganizationReference.CreateElectrodes(configuration.ConductionPattern)
+            : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern)
             ? AtrialFibrillationReference.CreateElectrodes(configuration.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration)
             : configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration
             ? AtrialFlutterReference.CreateElectrodes(configuration.VentricularConductionRatio)
@@ -148,6 +158,7 @@ internal static class ProjectedEcgDemoSource
         RegularPhysiologyPlan plan = new(0, configuration.ResolveAtrialPeriodNs(), offset,
             80_000_000, offset + 80_000_000, 3_750_000_000, 1_875_000_000,
             VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity,
+            VentricularMechanicalEnabled: !VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern),
             IndependentVentricularPeriodNs: configuration.IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, ConductedBeatsPerGroup: configuration.ConductedBeatsPerGroup, ConductionPattern: configuration.ConductionPattern);
         return ElectrodeWaveformGroup.Start(Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), 1, 1, 1, 0, 16, plan, electrodes,

@@ -29,6 +29,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration Flutter(int ratio) => Default with
     { VentricularConductionRatio = ratio, ConductionPattern = AvConductionPattern.AtrialFlutterIllustration };
 
+    internal static PhysiologyDemoConfiguration Disorganized(AvConductionPattern pattern) => Default with
+    { CardiacActivity = CardiacActivity.VentricularOnly, VentricularMechanicalEnabled = false, UseVascularReservoir = true, ConductionPattern = pattern };
+
     internal static PhysiologyDemoConfiguration Fibrillation(bool fine = false) => Default with
     { ConductionPattern = fine ? AvConductionPattern.AtrialFibrillationFineIllustration : AvConductionPattern.AtrialFibrillationCoarseIllustration };
 
@@ -60,6 +63,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             (ActivityAfterBreaths is { } breaths && (breaths is < 1 or > 100 || RespiratoryActivity == RespiratoryActivity.Breathing)) ||
             (ActivityDurationBreaths is { } duration && (duration is < 1 or > 100 || ActivityAfterBreaths is null)))
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
+        if (VentricularDisorganizationReference.IsPattern(ConductionPattern) && !UseVascularReservoir)
+        { throw new ArgumentException("Ventricular disorganization requires passive reservoir decay."); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         var timing = fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;

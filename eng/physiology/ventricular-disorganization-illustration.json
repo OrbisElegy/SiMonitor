@@ -1,0 +1,57 @@
+{
+  "id": "VentricularDisorganizationIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "484-485"
+  },
+  "textbook_summary": [
+    "Ventricular flutter lacks normal QRS-T complexes and shows continuous rapid, relatively regular, large-amplitude oscillations at 200-250/min.",
+    "Ventricular fibrillation lacks identifiable QRS-T complexes and shows highly irregular oscillations of varying amplitude at 200-500/min.",
+    "Ventricular flutter/fibrillation do not provide effective cardiac output."
+  ],
+  "authored_choices": {
+    "flutterPeriodNs": 250000000,
+    "flutterShape": {
+      "length": 256,
+      "polynomial_coefficients": [
+        0,
+        10392,
+        -31176,
+        20784
+      ]
+    },
+    "vfTileLength": 4096,
+    "vfSamplePeriodNs": 4000000,
+    "vfSeed": 20260918,
+    "vfCycleSamples": [
+      30,
+      75
+    ],
+    "vfPeakMicrovolts": [
+      200,
+      600
+    ],
+    "fineScalePer1000": 200,
+    "electrodeWeightsPer1000": [
+      -350,
+      350,
+      0,
+      650,
+      -700,
+      -450,
+      100,
+      700,
+      1000,
+      900
+    ]
+  },
+  "limitations": [
+    "A single projected-source teaching morphology, not anatomical localization or a realistic multifocal electrical model.",
+    "Ventricular flutter uses a C1-continuous sinusoid-like polynomial. The VF table repeats every 16.384 s without automatic coarse/fine evolution.",
+    "No normal P/QRS/T, normal atrial mechanics or effective ventricular ejection. This does not classify the electrical activity as asystole.",
+    "RC pressure decay is retained. Respiration/CO2 remain independent, without circulatory gas-exchange feedback or automatic apnea.",
+    "No new detector, alarm, defibrillation or resuscitation decision logic."
+  ]
+}

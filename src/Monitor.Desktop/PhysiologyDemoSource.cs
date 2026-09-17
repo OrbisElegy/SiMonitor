@@ -22,11 +22,13 @@ internal static class PhysiologyDemoSource
         configuration ??= PhysiologyDemoConfiguration.Default;
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool flutter = plan.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
-        long PulseDuration(long normal) => flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
+        long PulseDuration(long normal) => fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
+                fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration) :
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :
                 plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),

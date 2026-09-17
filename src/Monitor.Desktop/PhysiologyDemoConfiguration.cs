@@ -29,6 +29,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration Flutter(int ratio) => Default with
     { VentricularConductionRatio = ratio, ConductionPattern = AvConductionPattern.AtrialFlutterIllustration };
 
+    internal static PhysiologyDemoConfiguration Fibrillation(bool fine = false) => Default with
+    { ConductionPattern = fine ? AvConductionPattern.AtrialFibrillationFineIllustration : AvConductionPattern.AtrialFibrillationCoarseIllustration };
+
     internal CapnogramPlan ResolveCapnogram()
     {
         // Match the demo's fixed0..80mmHg display range; source limits are separate.
@@ -58,9 +61,10 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             (ActivityDurationBreaths is { } duration && (duration is < 1 or > 100 || ActivityAfterBreaths is null)))
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
-        var timing = flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
+        bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
+        var timing = fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
         long offset = DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        return new(0, flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
+        return new(0, fibrillation ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
             offset + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
             ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, RespiratoryPattern, ConductedBeatsPerGroup, ConductionPattern);

@@ -1,5 +1,5 @@
 {
-  "id": "PrematureVentricularIllustrationDraft@6",
+  "id": "PrematureVentricularIllustrationDraft@7",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -223,6 +223,30 @@
       "morphologyA": "First PVC: QRS 160 ms, QT 480 ms and T 220 ms.",
       "morphologyB": "Only the second PVC uses the existing inverted-potential authored transformation with QRS/QT/T of 180/500/220 ms.",
       "mechanics": "Each mechanical event remains QRS + 80 ms, with ejection direction/amplitude matching the monomorphic couplet. Potential polarity does not imply pressure changes."
+    },
+    "ronTLongQtVariant": {
+      "groupMs": 3200,
+      "qrsOffsetsMs": [
+        160,
+        960,
+        1760,
+        2260
+      ],
+      "normalQrsMask": 7,
+      "normalTMask": 3,
+      "prolongedTMask": 4,
+      "pvcMask": 8,
+      "precedingQtMs": 640,
+      "precedingTMs": 440,
+      "precedingTSupportMs": [
+        1960,
+        2400
+      ],
+      "pvcRPeakLeadIIMs": 2360,
+      "couplingMs": 500,
+      "postEctopicPauseMs": 1100,
+      "composition": "Only slot 2's repolarization band is extended. Its QRS and other sinus P/QRS/T remain unchanged; the long T and PVC QRS add as potentials. This is a teaching signal combination, not a tissue-repolarization reset or vulnerable-period model.",
+      "mechanics": "Retains the original monomorphic PVC mechanical timing, ejection and pressure; no automatic VT/VF generation."
     }
   },
   "implementation": [
@@ -237,7 +261,7 @@
   ],
   "limitations": [
     "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
-    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling, interpolated and monomorphic/dual-morphology couplet examples are implemented. Other couplet variants, R-on-T and remaining variants are unimplemented.",
+    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling, interpolated and monomorphic/dual-morphology couplet examples are implemented, along with long-QT R-on-T. Normal-QT short-coupled R-on-T, other couplet and remaining variants are unimplemented.",
     "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
     "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
     "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",
@@ -254,6 +278,12 @@
       "url": "https://abccardiol.org/wp-content/uploads/articles_xml/0066-782X-abc-121-3-e20240110/0066-782X-abc-121-3-e20240110-en.x80891.pdf",
       "summary": [
         "Section 4.17.3.1 of the 2024 guideline allows identical or different PVC morphologies within a couplet. It does not supply this example's parameters or anatomical localization."
+      ]
+    },
+    {
+      "url": "https://www.ncbi.nlm.nih.gov/medgen/364623",
+      "summary": [
+        "R-on-T means that the PVC R wave falls on the preceding T wave. The source does not supply this example's local QT or mechanistic parameters."
       ]
     }
   ]

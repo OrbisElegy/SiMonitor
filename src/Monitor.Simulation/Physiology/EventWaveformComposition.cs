@@ -5,12 +5,14 @@ using Monitor.Simulation.Determinism;
 namespace Monitor.Simulation.Physiology;
 
 public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex);
+// Local morphology selection by original ventricular beat ordinal; not a wire event.
+public readonly record struct VentricularCyclePattern(int Length, ulong IncludedSlots);
 // TriggerCycleLimit is exclusive in the trigger's cycle-index domain. It gates
 // new contributions; support already triggered before the limit still finishes.
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -44,6 +46,10 @@ public sealed class EventWaveformComposition
                 band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
+            if (band.VentricularCycles is { } cycles &&
+                (band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || cycles.Length is < 1 or > 64 ||
+                 cycles.IncludedSlots == 0 || (cycles.Length < 64 && cycles.IncludedSlots >> cycles.Length != 0)))
+            { throw Invalid(); }
             if (table[0] != 0 || table.Any(value => value < short.MinValue * FixedPointMath.Q32One ||
                 value > short.MaxValue * FixedPointMath.Q32One)) { throw Invalid(); }
             int[]? gains = null;
@@ -129,6 +135,7 @@ public sealed class EventWaveformComposition
     }
 
     private static bool Accepts(EventWaveformBand band, PhysiologyCycleEvent item) => band.Trigger == item.Kind &&
+        (band.VentricularCycles is not { } cycles || (cycles.IncludedSlots & (1UL << (int)(item.CycleIndex % (ulong)cycles.Length))) != 0) &&
         (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value ||
          (band.TriggerCycleResume is { } resume && item.CycleIndex >= resume));
 

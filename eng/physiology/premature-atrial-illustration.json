@@ -1,5 +1,5 @@
 {
-  "id": "PrematureAtrialIllustrationDraft@2",
+  "id": "PrematureAtrialIllustrationDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -10,7 +10,8 @@
     "Premature ectopic P-prime waves differ in morphology from sinus P waves.",
     "The normally conducted example has P-prime-to-R > 120 ms and narrow QRS complexes.",
     "The pause is usually incompletely compensatory: the interval between surrounding sinus P waves is less than twice the normal PP interval.",
-    "A blocked premature atrial P-prime wave may overlap the preceding T wave without a subsequent new QRS-T complex (figure C)."
+    "A blocked premature atrial P-prime wave may overlap the preceding T wave without a subsequent new QRS-T complex (figure C).",
+    "Premature atrial beats may show intraventricular aberrancy with broad abnormal QRS complexes, often resembling RBBB (figure B); not all sinus beats must be broad."
   ],
   "authored_choices": {
     "normalSinusPeriodMs": 800,
@@ -72,6 +73,30 @@
       "pPrimeOverlay": "P-prime spans 2000-2080 ms and naturally overlaps the preceding T at 1940-2080 ms; the existing T wave is not replaced.",
       "unchanged": "The 3100 ms group, P/P-prime amplitudes and durations, QRS/QT/T and 80 ms atrial mechanical delay match the normally conducted example. Only ventricular electrical/mechanical events corresponding to the premature atrial beat are suppressed.",
       "pulseSupport": "Standard Pleth/ABP/PA support of 512/600/640 ms is retained because the minimum RR is 800 ms."
+    },
+    "aberrantVariant": {
+      "atrialOffsetsMs": [
+        0,
+        800,
+        1600,
+        2100
+      ],
+      "ectopicSlot": 3,
+      "sinusQrsQtTMs": [
+        80,
+        320,
+        140
+      ],
+      "ectopicQrsQtTMs": [
+        140,
+        400,
+        180
+      ],
+      "followingRrMs": 1000,
+      "normalSlotMask": 7,
+      "aberrantSlotMask": 8,
+      "morphology": "Reuses complete RBBB electrode tables and secondary ST/T only for ventricular beats whose original ordinal modulo 4 equals 3.",
+      "unchanged": "The normally conducted example retains P/P-prime, PR 160 ms, coupling 500 ms, pause 1000 ms, mechanical timing, pressure and other physiological channels. Durations are authored choices."
     }
   },
   "implementation": [
@@ -80,11 +105,12 @@
     "Short-term recovery reconstructs bounded lookback without replaying from the epoch or indirectly producing premature atrial beats through temporary heart-rate changes.",
     "The conducted mode has minimum PP/RR of 500 ms. The blocked mode separately bounds minimum PP at 400 ms and RR at 800 ms. Sinus QRS/T remain unchanged.",
     "Twelve-lead and monitor lead II share one source. Both demos load fixed examples and clear previous rhythm/morphology settings.",
-    "Blocked PAC still emits PrematureAtrialElectrical and AtrialMechanical. The shared indexed accessor excludes both VentricularElectrical and VentricularMechanical in the final slot. No new PR measurement or sinus-arrest inference is added."
+    "Blocked PAC still emits PrematureAtrialElectrical and AtrialMechanical. The shared indexed accessor excludes both VentricularElectrical and VentricularMechanical in the final slot. No new PR measurement or sinus-arrest inference is added.",
+    "VentricularCycles is an immutable 1-64-slot mask restricted to VentricularElectrical. Sinus and aberrant bands are selected exclusively, without duplicate events. Recovery retains the original ordinal; the QRS measurement summary explicitly measures sinus slot 0 only."
   ],
   "limitations": [
     "Intervals, QT, the P-prime electrode vector and one premature atrial beat after every three sinus beats are authored choices, not traced textbook recordings or calibrated electrophysiological parameters.",
-    "Intraventricular aberrancy, other ectopic P-prime shapes and different coupling intervals are unimplemented.",
+    "Only one fixed RBBB aberrancy example is covered. Other ectopic P-prime shapes, coupling/PR prolongation and aberrant morphologies are unimplemented; no refractory period or automatic Ashman phenomenon is inferred.",
     "Mechanical events occur early, but CVP/Pleth/ejection inputs retain existing shapes and amplitudes without beatwise filling/stroke-volume feedback. Ventricular mechanical events may be explicitly disabled.",
     "No automatic diagnosis or RR/QTc detection; fixed QT does not adapt to short/long intervals.",
     "Other rhythms, including PVC/PJC/VT, and other physiological waveform gaps remain open.",

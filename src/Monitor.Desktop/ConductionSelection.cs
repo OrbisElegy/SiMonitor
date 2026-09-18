@@ -11,15 +11,16 @@ internal static class ConductionSelection
         4 or 16 or 18 => (3, 2),
         17 => (5, 4),
         5 or 6 or 19 or 20 or 21 => (4, 3),
-        7 or 8 or 11 or 12 or 13 or 14 or 15 or 22 or 23 => (1, 1),
+        7 or 8 or 11 or 12 or 13 or 14 or 15 or 22 or 23 or 24 => (1, 1),
         9 => (2, 1),
         10 => (4, 1),
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
-    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, 9 or 10 => AvConductionPattern.AtrialFlutterIllustration, 11 => AvConductionPattern.AtrialFibrillationCoarseIllustration, 12 => AvConductionPattern.AtrialFibrillationFineIllustration, 13 => AvConductionPattern.VentricularFlutterIllustration, 14 => AvConductionPattern.VentricularFibrillationCoarseIllustration, 15 => AvConductionPattern.VentricularFibrillationFineIllustration, 16 => AvConductionPattern.WenckebachThreeToTwoIllustration, 17 => AvConductionPattern.WenckebachFiveToFourIllustration, 18 => AvConductionPattern.MobitzTwoThreeToTwoIllustration, 19 => AvConductionPattern.MobitzTwoFourToThreeIllustration, 20 => AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration, 21 => AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration, 22 => AvConductionPattern.PrematureAtrialIllustration, 23 => AvConductionPattern.BlockedPrematureAtrialIllustration, _ => AvConductionPattern.FixedPr };
+    internal static AvConductionPattern Pattern(int index) => index switch { 6 => AvConductionPattern.WenckebachFourToThreeIllustration, 7 => AvConductionPattern.CompleteAvBlockJunctionalIllustration, 8 => AvConductionPattern.CompleteAvBlockVentricularIllustration, 9 or 10 => AvConductionPattern.AtrialFlutterIllustration, 11 => AvConductionPattern.AtrialFibrillationCoarseIllustration, 12 => AvConductionPattern.AtrialFibrillationFineIllustration, 13 => AvConductionPattern.VentricularFlutterIllustration, 14 => AvConductionPattern.VentricularFibrillationCoarseIllustration, 15 => AvConductionPattern.VentricularFibrillationFineIllustration, 16 => AvConductionPattern.WenckebachThreeToTwoIllustration, 17 => AvConductionPattern.WenckebachFiveToFourIllustration, 18 => AvConductionPattern.MobitzTwoThreeToTwoIllustration, 19 => AvConductionPattern.MobitzTwoFourToThreeIllustration, 20 => AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration, 21 => AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration, 22 => AvConductionPattern.PrematureAtrialIllustration, 23 => AvConductionPattern.BlockedPrematureAtrialIllustration, 24 => AvConductionPattern.AberrantPrematureAtrialIllustration, _ => AvConductionPattern.FixedPr };
     internal static string Summary(int atrial, int conducted, AvConductionPattern pattern) =>
         VentricularDisorganizationReference.IsPattern(pattern) ? "无组织性QRS／有效射血" :
         pattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? "房早未下传；窦性RR为800/800/1500ms；P′无对应PR/QRS" :
+        pattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "房早伴RBBB差异传导；窦性QRS80/QT320ms，房早QRS140/QT400ms" :
         pattern == AvConductionPattern.PrematureAtrialIllustration ? "房早均下传；PP/RR为800/800/500/1000ms" :
         AtrialFibrillationReference.IsPattern(pattern) ? "RR逐搏不规则（无固定传导比）" :
         pattern is AvConductionPattern.CompleteAvBlockJunctionalIllustration or AvConductionPattern.CompleteAvBlockVentricularIllustration ? "房室分离（无下传）" : $"传导 {atrial}:{conducted}";
@@ -46,6 +47,7 @@ internal static class ConductionSelection
         (4, 3, AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration) => 21,
         (1, 1, AvConductionPattern.PrematureAtrialIllustration) => 22,
         (1, 1, AvConductionPattern.BlockedPrematureAtrialIllustration) => 23,
+        (1, 1, AvConductionPattern.AberrantPrematureAtrialIllustration) => 24,
         _ => throw new ArgumentException("Invalid conduction selection."),
     };
 }

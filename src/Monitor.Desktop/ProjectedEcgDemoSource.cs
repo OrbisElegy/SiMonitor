@@ -16,6 +16,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal static ProjectedEcgDemoConfiguration BlockedPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.BlockedPrematureAtrialIllustration };
 
+    internal static ProjectedEcgDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
+    { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
+
     internal static ProjectedEcgDemoConfiguration JunctionalEscape { get; } = Default with
     {
         ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
@@ -70,7 +73,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         }
         if (PrematureAtrialReference.IsPattern(ConductionPattern))
         {
-            if (this != (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? BlockedPrematureAtrial : PrematureAtrial)) { throw new ArgumentException("PAC requires its authored schedule and morphology."); }
+            if (this != (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? BlockedPrematureAtrial : ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? AberrantPrematureAtrial : PrematureAtrial)) { throw new ArgumentException("PAC requires its authored schedule and morphology."); }
             return ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing;
         }
         if (ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration)
@@ -181,6 +184,8 @@ internal static class ProjectedEcgDemoSource
             ? LeftBundleBlockReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
+            : configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration
+            ? PrematureAtrialReference.CreateAberrantElectrodes()
             : PrematureAtrialReference.IsPattern(configuration.ConductionPattern)
             ? PrematureAtrialReference.CreateElectrodes(configuration.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration)
             : VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern)

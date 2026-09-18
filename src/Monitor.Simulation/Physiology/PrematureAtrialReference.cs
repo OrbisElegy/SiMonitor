@@ -7,13 +7,17 @@ namespace Monitor.Simulation.Physiology;
 // Conducted: coupling500/pause1000ms. Blocked:400/1100ms, P-prime on T.
 public static class PrematureAtrialReference
 {
-    public const string EvidenceId = "PrematureAtrialIllustrationDraft@2";
+    public const string EvidenceId = "PrematureAtrialIllustrationDraft@3";
     internal const long GroupDurationNs = 3_100_000_000;
     internal const long MinimumRrNs = 500_000_000;
     public static EcgCycleTiming Timing { get; } = new(MinimumRrNs, 100_000_000,
         160_000_000, 80_000_000, 320_000_000, 140_000_000);
     public static EcgCycleTiming BlockedTiming { get; } = Timing with { RrIntervalNs = 800_000_000 };
-    public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureAtrialIllustration or AvConductionPattern.BlockedPrematureAtrialIllustration;
+    // The aberrant beat is followed by1000ms, so its wider QT does not have to
+    // use the shortest preceding RR. Sinus beats retain Timing and QT320ms.
+    public static EcgCycleTiming AberrantTiming { get; } = RightBundleBlockReference.Timing with { RrIntervalNs = 1_000_000_000 };
+    public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureAtrialIllustration or AvConductionPattern.BlockedPrematureAtrialIllustration or AvConductionPattern.AberrantPrematureAtrialIllustration;
+    public static RegularPhysiologyPlan CreateAberrantPlan() => CreatePlan() with { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
     public static RegularPhysiologyPlan CreatePlan(bool blocked = false) => new(0, 800_000_000, 160_000_000,
         80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000,
         ConductionPattern: blocked ? AvConductionPattern.BlockedPrematureAtrialIllustration : AvConductionPattern.PrematureAtrialIllustration);
@@ -31,9 +35,23 @@ public static class PrematureAtrialReference
         }).ToArray());
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool blocked = false)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateAberrantElectrodes()
     {
-        var electrodes = CreateElectrodes(blocked);
+        var aberrant = RightBundleBlockReference.CreateElectrodes(AberrantTiming);
+        return Array.AsReadOnly(CreateElectrodes().Select((electrode, i) => electrode with
+        {
+            Bands = Array.AsReadOnly(electrode.Bands.Select(band => band.Trigger == PhysiologyCycleEventKind.VentricularElectrical
+                ? band with { VentricularCycles = new(4, 0b0111) } : band)
+                .Concat(aberrant[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical)
+                    .Select(band => band with { VentricularCycles = new(4, 0b1000) })).ToArray()),
+        }).ToArray());
+    }
+
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool blocked = false) => LeadII(CreateElectrodes(blocked));
+    public static IReadOnlyList<EventWaveformBand> CreateAberrantLeadIIBands() => LeadII(CreateAberrantElectrodes());
+
+    private static System.Collections.ObjectModel.ReadOnlyCollection<EventWaveformBand> LeadII(IReadOnlyList<ElectrodeWaveformPlan> electrodes)
+    {
         var ra = electrodes.Single(e => e.Electrode == EcgElectrode.RA);
         var ll = electrodes.Single(e => e.Electrode == EcgElectrode.LL);
         return Array.AsReadOnly(ll.Bands.Zip(ra.Bands).Select(pair => pair.First with

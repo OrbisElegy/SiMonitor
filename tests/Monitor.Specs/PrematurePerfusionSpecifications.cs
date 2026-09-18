@@ -6,7 +6,7 @@ namespace Monitor.Specs;
 
 internal static class PrematurePerfusionSpecifications
 {
-    public static Specification[] All => [new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery)];
+    public static Specification[] All => [new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
     private static void BeatPerfusionSharesGainsWithoutInventingEjection()
     {
         foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureVentricularReference.IsPattern))
@@ -30,7 +30,8 @@ internal static class PrematurePerfusionSpecifications
                     bool ectopic = count == 5 ? slot >= 3 : count == 8 ? slot % 4 == 3 : slot == (ulong)count - 1;
                     double gain = ectopic ? shortCoupled ? 0 : 0.2 : beat.CycleIndex > 0 && mode != AvConductionPattern.InterpolatedPvcIllustration && (slot == 0 || count == 8 && slot == 4) ? 1 : 0.8;
                     double age = time - beat.SimTimeNs;
-                    expected += 30000 * gain * (1 - Math.Exp(-Math.Min(age, 240_000_000) / tau)) * Math.Exp(-Math.Max(0, age - 240_000_000) / tau);
+                    long duration = ectopic ? 180_000_000 : 240_000_000;
+                    expected += 30000 * gain * (1 - Math.Exp(-Math.Min(age, duration) / tau)) * Math.Exp(-Math.Max(0, age - duration) / tau);
                 }
                 Check.That(Math.Abs((double)pressure.EvaluateAt(t) / FixedPointMath.Q32One - expected) < 0.01, "independent beat-weighted pressure sum including absent ectopic input");
             }
@@ -38,7 +39,7 @@ internal static class PrematurePerfusionSpecifications
             foreach (var beat in events.Take(2 * count))
             {
                 var weighted = EventWaveformComposition.Restore(new([band], [beat]));
-                var reference = EventWaveformComposition.Restore(new([band with { EjectionIllustration = null }], [beat]));
+                var reference = EventWaveformComposition.Restore(new([band with { EjectionIllustration = null, DurationNs = PrematureBeatPerfusion.DurationNs(mode, beat.CycleIndex, band.DurationNs) }], [beat]));
                 long t = beat.SimTimeNs + 200_000_000;
                 long expected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)reference.EvaluateAt(t) * PrematureBeatPerfusion.GainPermille(mode, beat.CycleIndex), 1000);
                 Check.That(weighted.EvaluateAt(t) == expected, "Pleth uses same beat strength and retains normal support");
@@ -86,7 +87,8 @@ internal static class PrematurePerfusionSpecifications
                         double age = time - (g * group + offsets[slot]);
                         if (age < 0) { continue; }
                         double gain = slot == 3 ? 0.4 : g > 0 && slot == 0 ? 1 : 0.8;
-                        expected += 30000 * gain * (1 - Math.Exp(-Math.Min(age, 240_000_000) / tau)) * Math.Exp(-Math.Max(0, age - 240_000_000) / tau);
+                        long duration = slot == 3 ? 180_000_000 : 240_000_000;
+                        expected += 30000 * gain * (1 - Math.Exp(-Math.Min(age, duration) / tau)) * Math.Exp(-Math.Max(0, age - duration) / tau);
                     }
                 }
                 Check.That(Math.Abs((double)pressure.EvaluateAt(t) / FixedPointMath.Q32One - expected) < 0.01, "independent PAC/PJC pressure sum retains runoff through omitted beat");
@@ -96,7 +98,7 @@ internal static class PrematurePerfusionSpecifications
             {
                 int gain = beat.CycleIndex % 4 == 3 ? 400 : beat.CycleIndex == 4 ? 1000 : 800;
                 var source = EventWaveformComposition.Restore(new([band], [beat]));
-                var reference = EventWaveformComposition.Restore(new([band with { EjectionIllustration = null }], [beat]));
+                var reference = EventWaveformComposition.Restore(new([band with { EjectionIllustration = null, DurationNs = PrematureBeatPerfusion.DurationNs(mode, beat.CycleIndex, band.DurationNs) }], [beat]));
                 long t = beat.SimTimeNs + 180_000_000;
                 Check.That(source.EvaluateAt(t) == FixedPointMath.RoundDivideTiesToEven((Int128)reference.EvaluateAt(t) * gain, 1000), "same weights drive Pleth independently of P timing or QRS shape");
             }
@@ -117,6 +119,42 @@ internal static class PrematurePerfusionSpecifications
         }
         try { VascularPressureSource.Create(PrematureAtrialReference.CreatePlan() with { ConductionPattern = AvConductionPattern.FixedPr }, new(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000, UsePrematureBeatPerfusion: true)); throw new InvalidOperationException("Unrelated rhythm accepted perfusion illustration."); }
         catch (EventWaveformException) { }
+    }
+
+    private static void BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints()
+    {
+        foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureBeatPerfusion.IsPattern))
+        {
+            int count = PrematureVentricularReference.IsPattern(mode) ? PrematureVentricularReference.BeatsPerGroup(mode) : 4;
+            for (ulong ordinal = 0; ordinal < (ulong)(2 * count); ordinal++)
+            {
+                ulong slot = ordinal % (ulong)count;
+                bool ectopic = count == 5 ? slot >= 3 : count == 8 ? slot % 4 == 3 : slot == (ulong)count - 1;
+                long expected = ectopic ? 300_000_000 : 400_000_000;
+                Check.That(PrematureBeatPerfusion.DurationNs(mode, ordinal, 400_000_000) == expected, "only original ectopic slots shorten; recovery and startup retain baseline");
+                var beat = new PhysiologyCycleEvent(1_000_000_000, PhysiologyCycleEventKind.VentricularMechanical, ordinal);
+                var band = new EventWaveformBand(beat.Kind, 80_000_000, 400_000_000, [0, 100 * FixedPointMath.Q32One, 200 * FixedPointMath.Q32One, 100 * FixedPointMath.Q32One], EjectionIllustration: mode);
+                var wave = EventWaveformComposition.Restore(new([band], [beat]));
+                long start = beat.SimTimeNs + band.DelayNs;
+                Check.That(wave.EvaluateAt(start - 1) == 0 && wave.EvaluateAt(start + expected) == 0, "transit delay retained and per-beat support half-open");
+                if (PrematureBeatPerfusion.GainPermille(mode, ordinal) != 0)
+                {
+                    Check.That(wave.EvaluateAt(start + expected - 1000) > 0, "tail persists until selected endpoint");
+                    long peak = wave.EvaluateAt(start + expected / 2);
+                    Check.That(peak == 200 * FixedPointMath.Q32One * PrematureBeatPerfusion.GainPermille(mode, ordinal) / 1000, "duration changes phase, not gain or peak");
+                    var mapped = EventWaveformComposition.Restore(new([band with { PhasePoints = [new(0, 0), new(200_000_000, 1), new(400_000_000, 4)] }], [beat]));
+                    Check.That(mapped.EvaluateAt(start + expected / 2) == peak / 2, "per-beat duration preserves authored phase-map landmark");
+                    Check.That(EventWaveformComposition.Restore(mapped.CaptureState()).EvaluateAt(start + expected / 2) == peak / 2, "phase-map recovery preserves local duration");
+                }
+            }
+            Check.That(PrematureBeatPerfusion.DurationNs(mode, 3, 1) == 1 && PrematureBeatPerfusion.DurationNs(mode, 3, long.MaxValue) > 0, "positive support and Int128 overflow safety");
+        }
+        var plan = PrematureAtrialReference.CreatePlan();
+        var pressure = VascularPressureSource.Create(plan, new(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000, Morphology: new(VascularPressureMorphologyKind.Arterial, 420_000_000, 4000), UsePrematureBeatPerfusion: true));
+        long endpoint = 2_340_000_000 + 80_000_000 + 315_000_000;
+        Check.That(Math.Abs(pressure.EvaluateAt(endpoint) - pressure.EvaluateAt(endpoint - 1)) < FixedPointMath.Q32One, "shortened morphology rejoins reservoir continuously at its own endpoint");
+        try { PrematureBeatPerfusion.DurationNs(AvConductionPattern.PrematureAtrialIllustration, 3, 0); throw new InvalidOperationException("Empty duration accepted."); }
+        catch (ArgumentOutOfRangeException) { }
     }
 
 }

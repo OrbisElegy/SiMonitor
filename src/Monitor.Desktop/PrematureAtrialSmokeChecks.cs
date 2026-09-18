@@ -128,10 +128,15 @@ internal static class PrematureAtrialSmokeChecks
                     if (selection == 28)
                     {
                         var junctionalBlocks = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.PrematureJunctional);
-                        foreach (int row in Enumerable.Range(1, 5))
+                        foreach (int row in new[] { 2, 3, 5 })
+                        {
+                            if (MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(junctionalBlocks, row)))
+                            { throw new InvalidOperationException("PVC perfusion still repeats the unweighted PJC source."); }
+                        }
+                        foreach (int row in new[] { 1, 4 })
                         {
                             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(junctionalBlocks, row)))
-                            { throw new InvalidOperationException("PVC changed ventricular mechanics or breathing relative to identical PJC ventricular timing."); }
+                            { throw new InvalidOperationException("PVC changed independent respiratory channels."); }
                         }
                     }
                     if (aberrant)

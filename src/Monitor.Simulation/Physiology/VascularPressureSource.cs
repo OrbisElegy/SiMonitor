@@ -27,9 +27,10 @@ public sealed class VascularPressureSource
         if (physiology is null || plan is null) { throw Invalid(); }
         try { _ = RegularPhysiologyTimeline.Start(physiology); }
         catch (ArgumentException) { throw Invalid(); }
-        Int128 ventricularPeriod = physiology.VentricularPeriodNs;
+        if (plan.UsePrematureBeatPerfusion && !PrematureVentricularReference.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
+        Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern) : physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
-        Int128 selectedPeriod = ventricularPeriod * physiology.MechanicalEveryCycles;
+        Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
         if (plan.ModelId != VascularPressurePlan.EvidenceId ||
             plan.TransitDelayNs < 0 || plan.EjectionDurationNs <= 0 || plan.EjectionDurationNs > ventricularPeriod ||
             plan.TimeConstantNs is < MinimumTimeConstantNs or > MaximumTimeConstantNs ||
@@ -108,13 +109,16 @@ public sealed class VascularPressureSource
         // exactly support wide, so ceil(support/selectedPeriod) bounds its events.
         long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)sourceTime - _supportNs + 1);
         long? morphologyAge = null;
+        int morphologyGain = 1000;
         RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, (Int128)sourceTime + 1,
             MaximumEjectionCount, item =>
             {
+                int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) : 1000;
+                if (gain == 0) { return; }
                 long age = sourceTime - item.SimTimeNs;
                 long coefficient = EjectionCoefficient(age);
-                pressure += (Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient;
-                if (_morphologyTable is not null && age < _morphologyPeriodNs) { morphologyAge = age; }
+                pressure += FixedPointMath.RoundDivideTiesToEven((Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient * gain, 1000);
+                if (_morphologyTable is not null && age < _morphologyPeriodNs) { morphologyAge = age; morphologyGain = gain; }
             }, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // Retain all weighted contributions in Int128/Q62, then round once to
@@ -125,6 +129,7 @@ public sealed class VascularPressureSource
             long pulse = elapsed < _plan.Morphology!.DurationNs
                 ? PeriodicLutLinear.Interpolate(_morphologyTable!,
                     (ulong)(((UInt128)elapsed << 64) / (ulong)_plan.Morphology.DurationNs)).Value : 0;
+            pulse = (long)FixedPointMath.RoundDivideTiesToEven((Int128)pulse * morphologyGain, 1000);
             long reference = (long)FixedPointMath.RoundDivideTiesToEven(
                 (Int128)_referenceOnsetQ32 * Decay(elapsed) +
                 (Int128)_plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(elapsed) * FixedPointMath.Q32One,

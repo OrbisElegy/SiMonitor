@@ -1,5 +1,5 @@
 {
-  "id": "PrematureBeatPerfusionIllustration@2",
+  "id": "PrematureBeatPerfusionIllustration@3",
   "references": [
     {
       "url": "https://pubmed.ncbi.nlm.nih.gov/2443582/",
@@ -38,14 +38,27 @@
     "The interpolated example has no potentiation. The first epoch beat is not incorrectly labeled as recovery; original polymorphic/multifocal slots and both recovery phases are preserved.",
     "Pressure retains existing reservoir/morphology modifiers and scales each beat's input and morphology pulse by the same gain. Zero input cannot restart morphology.",
     "The example requires reservoir sources and atomically rejects disabling them. Generic pressure plans keep the option disabled by default for compatibility.",
-    "PAC/PJC use the original four-slot index. A blocked PAC emits no ventricular event and has slot-3 weight zero; recovery remains slot 0 of the next group without compacting indices. Normally conducted and RBBB-aberrant PACs share weights, as do all three retrograde-P PJC positions; no unimplemented synchrony differences are inferred."
+    "PAC/PJC use the original four-slot index. A blocked PAC emits no ventricular event and has slot-3 weight zero; recovery remains slot 0 of the next group without compacting indices. Normally conducted and RBBB-aberrant PACs share weights, as do all three retrograde-P PJC positions; no unimplemented synchrony differences are inferred.",
+    "Each beat's ejection-input duration enters the RC kernel calculation. Finite pressure-morphology and Pleth support shorten proportionally; propagation delay and gain remain independent. Normal/recovery durations are retained. Zero ejection adds no new band while the existing reservoir continues decaying."
   ],
   "limitations": [
-    "Explicit beatwise strength examples exist for PVC/PAC/PJC. CVP atrial/ventricular mechanics and exact beatwise ejection durations remain incomplete.",
+    "Explicit beatwise strength examples exist for PVC/PAC/PJC. CVP atrial/ventricular mechanical morphology and clinically calibrated beatwise durations remain incomplete.",
     "No complete filling, contractility or valve model; no actual stroke-volume, feedback or anatomical ectopic-focus inference.",
     "Shared ABP/PA teaching strengths do not imply quantitatively identical left/right ventricular behavior.",
     "Short-coupling CVP component compression remains the previous simplification; beatwise atrial/ventricular mechanical morphology is incomplete.",
-    "Standard pressure/Pleth templates remain teaching basis functions; beatwise changes in upstroke, dicrotic notch and ejection duration remain incomplete.",
+    "Standard pressure/Pleth templates remain teaching basis functions with overall duration scaling only. Upstroke, dicrotic-notch and clinical beatwise duration variation remain incomplete.",
     "Windows visual validation requires manual review in addition to native automated regression checks."
-  ]
+  ],
+  "authoredDurationRatio": {
+    "normalAndRecovery": [
+      1,
+      1
+    ],
+    "premature": [
+      3,
+      4
+    ],
+    "rounding": "Integer nanoseconds are rounded down with a minimum of 1 ns; intermediate values use Int128.",
+    "meaning": "Applied to each channel's own baseline duration, without imposing the same absolute duration on ABP/PA/Pleth. The 75% factor is not a clinical formula."
+  }
 }

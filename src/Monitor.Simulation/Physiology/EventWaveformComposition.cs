@@ -119,10 +119,11 @@ public sealed class EventWaveformComposition
                 EventWaveformBand band = _bands[index];
                 if (!Accepts(band, item)) { continue; }
                 long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
-                if (elapsed < 0 || elapsed >= band.DurationNs) { continue; }
+                long duration = band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs;
+                if (elapsed < 0 || elapsed >= duration) { continue; }
                 // Equal adjacent table indices hold phase while time advances.
                 // Integer phase maps the finite support into one frozen LUT cycle.
-                ulong phase = PhaseAt(band, elapsed);
+                ulong phase = PhaseAt(band, elapsed, duration);
                 long value = PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
                 int gain = band.EjectionIllustration is { } perfusion ? PrematureBeatPerfusion.GainPermille(perfusion, item.CycleIndex) : band.ExpirationCycleGainsPermille is { } cycleGains
                     ? cycleGains[(int)(item.CycleIndex % (ulong)cycleGains.Count)]
@@ -143,10 +144,11 @@ public sealed class EventWaveformComposition
 
     private static EventWaveformException Invalid() => new("EventWaveform.InvalidState", "state");
 
-    private static ulong PhaseAt(EventWaveformBand band, long elapsed)
+    private static ulong PhaseAt(EventWaveformBand band, long elapsed, long duration)
     {
         if (band.PhasePoints is not { } points)
-        { return (ulong)(((UInt128)elapsed << 64) / (ulong)band.DurationNs); }
+        { return (ulong)(((UInt128)elapsed << 64) / (ulong)duration); }
+        elapsed = (long)((Int128)elapsed * band.DurationNs / duration);
         for (int index = 1; index < points.Count; index++)
         {
             var right = points[index];

@@ -14,14 +14,14 @@ internal static class PrematureAtrialSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true) })
+        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true), (33, false), (33, true) })
         {
             bool blocked = selection == 23, aberrant = selection == 24, junctional = selection is >= 25 and <= 27, ventricular = selection >= 28;
             int steps = selection >= 31 ? 40 : 30; // Include second PVC after the shared Pleth delay.
-            int pvcQrs = selection switch { 29 => 165, 30 => 365, _ => 565 };
-            int resumedQrs = selection switch { 29 => 440, 30 => 640, _ => junctional || ventricular ? 840 : 815 };
+            int pvcQrs = selection switch { 29 => 165, 30 => 365, 33 => 665, _ => 565 };
+            int resumedQrs = selection switch { 29 => 440, 30 => 640, 33 => 790, _ => junctional || ventricular ? 840 : 815 };
             int pStart = selection switch { 23 => 500, 25 => 545, 26 => 595, 27 => 565, _ => 525 };
-            var expectedEcg = ventricular ? ProjectedEcgDemoConfiguration.PrematureVentricular with { ConductionPattern = ConductionSelection.Pattern(selection) } : junctional ? ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(selection) } : aberrant ? ProjectedEcgDemoConfiguration.AberrantPrematureAtrial : blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
+            var expectedEcg = ventricular ? ProjectedEcgDemoConfiguration.Pvc(ConductionSelection.Pattern(selection)) : junctional ? ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(selection) } : aberrant ? ProjectedEcgDemoConfiguration.AberrantPrematureAtrial : blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
             var expectedPhysiology = ventricular ? PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = ConductionSelection.Pattern(selection) } : junctional ? PhysiologyDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(selection) } : aberrant ? PhysiologyDemoConfiguration.AberrantPrematureAtrial : blocked ? PhysiologyDemoConfiguration.BlockedPrematureAtrial : PhysiologyDemoConfiguration.PrematureAtrial;
             WaveformDemoWindow window = new(physiology: !projected, projected: projected);
             window.Show();
@@ -142,7 +142,7 @@ internal static class PrematureAtrialSmokeChecks
                 window.ConductionInput.SelectedIndex = 6; Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (projected ? window.EcgConfiguration != SecondDegreeBlockPreset.Ecg(0) : window.BreathConfiguration != SecondDegreeBlockPreset.Physiology(0))
                 { throw new InvalidOperationException("Leaving PAC retained incompatible fields."); }
-                foreach (int next in new[] { 22, 31, 32, 29, 30, 28, 25, 26, 27, 30, 24, 23, 26, 25, 22 })
+                foreach (int next in new[] { 22, 33, 31, 32, 29, 30, 28, 25, 26, 27, 33, 24, 23, 26, 25, 22 })
                 {
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;

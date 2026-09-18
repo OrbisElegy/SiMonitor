@@ -22,6 +22,12 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal static ProjectedEcgDemoConfiguration PrematureVentricular { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.PrematureVentricularIllustration };
 
+    internal static ProjectedEcgDemoConfiguration Pvc(AvConductionPattern pattern)
+    {
+        _ = PrematureVentricularReference.BeatsPerGroup(pattern);
+        return PrematureVentricular with { ConductionPattern = pattern, HeartRateBpm = pattern == AvConductionPattern.InterpolatedPvcIllustration ? 60 : 75 };
+    }
+
     internal static ProjectedEcgDemoConfiguration PrematureJunctional { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
 
@@ -79,7 +85,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         }
         if (PrematureVentricularReference.IsPattern(ConductionPattern))
         {
-            if (this != PrematureVentricular with { ConductionPattern = ConductionPattern }) { throw new ArgumentException("PVC requires its authored schedule and morphology."); }
+            if (this != Pvc(ConductionPattern)) { throw new ArgumentException("PVC requires its authored schedule and morphology."); }
             return PrematureVentricularReference.Timing;
         }
         if (PrematureJunctionalReference.IsPattern(ConductionPattern))

@@ -1,5 +1,5 @@
 {
-  "id": "PrematureVentricularIllustrationDraft@3",
+  "id": "PrematureVentricularIllustrationDraft@4",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -11,7 +11,8 @@
     "QRS duration usually exceeds 120 ms; T polarity is usually opposite to the dominant QRS deflection.",
     "The pause is often fully compensatory; coupling is measured from QRS onset.",
     "Bigeminy alternates sinus and premature beats; trigeminy has one premature beat after every two sinus beats (printed-page 477 terminology).",
-    "Different morphologies and coupling intervals in the same lead illustrate multifocal beats; different morphologies with fixed coupling are termed polymorphic (printed-page 477 terminology)."
+    "Different morphologies and coupling intervals in the same lead illustrate multifocal beats; different morphologies with fixed coupling are termed polymorphic (printed-page 477 terminology).",
+    "An interpolated premature beat lies between two adjacent normal sinus beats without a subsequent compensatory pause (printed-page 477 terminology)."
   ],
   "authored_choices": {
     "groupMs": 3200,
@@ -138,6 +139,45 @@
       "morphologyA": "Original ventricular tables: QRS 160 ms, QT 480 ms and T 220 ms.",
       "morphologyB": "Original ventricular electrode QRS/T potentials are inverted. QRS is linearly extended to 180 ms, T is delayed by 20 ms, and QT/T are 500/220 ms. This is an explicitly authored morphology, not anatomical calibration of another ectopic focus.",
       "mechanics": "A ventricular mechanical event follows each QRS by 80 ms. Morphology polarity does not change ejection direction or amplitude."
+    },
+    "interpolatedVariant": {
+      "baselineBpm": 60,
+      "groupMs": 3000,
+      "beatsPerGroup": 4,
+      "sinusPOffsetsMs": [
+        0,
+        1000,
+        2000
+      ],
+      "qrsOffsetsMs": [
+        160,
+        1160,
+        2160,
+        2660
+      ],
+      "nextSinusQrsMs": 3160,
+      "atrialMechanicalMs": [
+        80,
+        1080,
+        2080
+      ],
+      "ventricularMechanicalMs": [
+        240,
+        1240,
+        2240,
+        2740
+      ],
+      "couplingMs": 500,
+      "toNextSinusQrsMs": 500,
+      "pvcQrsQtTMs": [
+        160,
+        480,
+        220
+      ],
+      "minimumAtrialIntervalMs": 1000,
+      "minimumVentricularIntervalMs": 500,
+      "pOverlay": "The next sinus P at 3000-3100 ms independently overlaps the PVC T at 2920-3140 ms. QRS occurs at its original time of 3160 ms.",
+      "reason": "The authored rate is 60/min so that the full 480 ms PVC QT ends before the next sinus QRS, without shortening or truncating existing T. PR prolongation and concealed conduction are not modeled."
     }
   },
   "implementation": [
@@ -147,11 +187,12 @@
     "Twelve-lead and monitor lead II share a source. The QRS summary explicitly verifies sinus slot 0 only.",
     "Both demos load fixed examples and reset previous parameters, supporting direct switching and atomic rejection. Other physiological channels use actual ventricular/respiratory events.",
     "Group length drives event timing, morphology masks, pressure access and recovery. AV conduction ratios are not used to simulate bigeminy/trigeminy.",
-    "Slots 3/7 of the eight-slot group are PVCs without atrial events. The multifocal example delays only slot 7 by 100 ms; pressure and bounded lookback share this schedule. Reversed polarity is not treated as negative ejection."
+    "Slots 3/7 of the eight-slot group are PVCs without atrial events. The multifocal example delays only slot 7 by 100 ms; pressure and bounded lookback share this schedule. Reversed polarity is not treated as negative ejection.",
+    "The interpolated example uses a three-second group and four-beat index. The atrial clock remains at 1000 ms and the PVC is extra slot 3. Its baseline rate of 60/min and the other examples' 75/min are separately constrained by configuration factories and timeline validation."
   ],
   "limitations": [
     "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
-    "Monomorphic, bigeminy/trigeminy and dual-morphology fixed/variable-coupling examples are implemented. Couplets, interpolated beats, R-on-T and other polymorphic/multifocal variants are unimplemented.",
+    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling and interpolated examples are implemented. Couplets, R-on-T and remaining variants are unimplemented.",
     "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
     "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
     "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",

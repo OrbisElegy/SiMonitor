@@ -7,6 +7,7 @@ internal static class SecondDegreeBlockPreset
     internal static int FromSelection(int selection) => selection switch
     { 6 => 0, 16 => 1, 17 => 2, 18 => 3, 19 => 4, 1 => 5, 20 => 6, 21 => 7, _ => -1 };
     internal static bool RequiresReload(Monitor.Simulation.Physiology.AvConductionPattern pattern) => pattern is
+        Monitor.Simulation.Physiology.AvConductionPattern.PrematureVentricularIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalAfterQrsIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalOverlappingIllustration or

@@ -1,0 +1,73 @@
+{
+  "id": "PrematureVentricularIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "477"
+  },
+  "textbook_summary": [
+    "Premature broad abnormal QRS-T complexes occur without a preceding P wave or without a related P wave.",
+    "QRS duration usually exceeds 120 ms; T polarity is usually opposite to the dominant QRS deflection.",
+    "The pause is often fully compensatory; coupling is measured from QRS onset."
+  ],
+  "authored_choices": {
+    "groupMs": 3200,
+    "baselinePeriodMs": 800,
+    "sinusPOffsetsMs": [
+      0,
+      800,
+      1600
+    ],
+    "ventricularOffsetsMs": [
+      160,
+      960,
+      1760,
+      2260
+    ],
+    "nextSinusQrsMs": 3360,
+    "couplingMs": 500,
+    "postEctopicPauseMs": 1100,
+    "sinusQrsQtTMs": [
+      80,
+      320,
+      140
+    ],
+    "pvcQrsQtTMs": [
+      160,
+      480,
+      220
+    ],
+    "atrialMechanicalOffsetsMs": [
+      80,
+      880,
+      1680
+    ],
+    "ventricularMechanicalOffsetsMs": [
+      240,
+      1040,
+      1840,
+      2340
+    ],
+    "minimumAtrialIntervalMs": 800,
+    "minimumVentricularIntervalMs": 500,
+    "pulseSupportLimitMs": 420,
+    "morphology": "Reuses broad QRS and discordant T from VentricularEscapeTables only where the original ordinal modulo 4 equals 3. Reusing morphology does not reuse escape timing or locate the same ectopic focus.",
+    "sinusSlots": "The final slot of this fixed example emits no atrial electrical/mechanical events; the next sinus P occurs at 3200 ms. No sinus-node reset is inferred, and this does not assert that all PVCs lack independent P waves."
+  },
+  "implementation": [
+    "Ventricular bands use four-slot masks 7/8 to select sinus/PVC morphology respectively. Sinus P/QRS/T are preserved.",
+    "An independent 3200 ms indexed accessor supplies actual mechanical events to the timeline and pressure. No new atrial event kind is added.",
+    "Half-open intervals, exact budgets, original group*4+slot indexing and bounded-lookback recovery; no replay from the epoch.",
+    "Twelve-lead and monitor lead II share a source. The QRS summary explicitly verifies sinus slot 0 only.",
+    "Both demos load fixed examples and reset previous parameters, supporting direct switching and atomic rejection. Other physiological channels use actual ventricular/respiratory events."
+  ],
+  "limitations": [
+    "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
+    "Only a fixed-coupling monomorphic example with full compensation is provided. Bigeminy/trigeminy, couplets, polymorphic/multifocal beats, interpolated beats and R-on-T are unimplemented.",
+    "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
+    "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
+    "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",
+    "Windows visual behavior is not yet manually verified."
+  ]
+}

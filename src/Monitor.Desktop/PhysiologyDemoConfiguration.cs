@@ -21,6 +21,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
 
+    internal static PhysiologyDemoConfiguration PrematureVentricular { get; } = PrematureAtrial with
+    { ConductionPattern = AvConductionPattern.PrematureVentricularIllustration };
+
     internal static PhysiologyDemoConfiguration PrematureJunctional { get; } = Default with
     { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
 
@@ -84,7 +87,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         { throw new ArgumentException("Ventricular disorganization requires passive reservoir decay."); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
-        bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern);
+        bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || ConductionPattern == AvConductionPattern.PrematureVentricularIllustration;
         var timing = prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
         long offset = DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
         return new(0, fibrillation || prematureBeat ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,

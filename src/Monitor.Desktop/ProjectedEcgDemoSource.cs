@@ -19,6 +19,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal static ProjectedEcgDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
 
+    internal static ProjectedEcgDemoConfiguration PrematureVentricular { get; } = PrematureAtrial with
+    { ConductionPattern = AvConductionPattern.PrematureVentricularIllustration };
+
     internal static ProjectedEcgDemoConfiguration PrematureJunctional { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
 
@@ -73,6 +76,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         {
             if (this != BundleBlockPreset.Ecg(BundleBlock)) { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
             return BundleBlockReference.Timing(BundleBlock);
+        }
+        if (ConductionPattern == AvConductionPattern.PrematureVentricularIllustration)
+        {
+            if (this != PrematureVentricular) { throw new ArgumentException("PVC requires its authored schedule and morphology."); }
+            return PrematureVentricularReference.Timing;
         }
         if (PrematureJunctionalReference.IsPattern(ConductionPattern))
         {
@@ -192,6 +200,8 @@ internal static class ProjectedEcgDemoSource
             ? LeftBundleBlockReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
+            : configuration.ConductionPattern == AvConductionPattern.PrematureVentricularIllustration
+            ? PrematureVentricularReference.CreateElectrodes()
             : PrematureJunctionalReference.IsPattern(configuration.ConductionPattern)
             ? PrematureJunctionalReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration

@@ -1,5 +1,5 @@
 {
-  "id": "CheyneStokesIllustrationDraft@1",
+  "id": "CheyneStokesIllustrationDraft@2",
   "source": "Project-authored illustration of Cheyne-Stokes breathing with crescendo-decrescendo depth and central pauses.",
   "scope": "A fixed-parameter teaching example, not a complete respiratory-control or gas-exchange model.",
   "relativeDepthPermille": [
@@ -20,12 +20,22 @@
       "Each group spans 11 original respiratory cycles: nine crescendo-decrescendo breaths followed by two empty cycles. The sequence and pause duration are authored; respiratory rate does not vary with depth."
     ]
   },
-  "coupling": "Zero-depth slots emit no inspiration/expiration events. Resp and respiratory CVP components scale with depth; cardiac artifacts and events remain independent. CO2 only stops new expiratory waves; triggered tails and tubing delays continue. Active-phase concentration is not directly scaled by thoracic-impedance depth.",
+  "coupling": "Zero-depth slots emit no inspiration/expiration events. Resp and respiratory CVP components scale with depth; cardiac artifacts and events remain independent. CO2 above the inspired baseline follows a one-way, depth-driven reservoir response. The reservoir continues accumulating during apnea without new expiratory waves; existing tails and tubing delays continue.",
   "limitations": [
     "Does not represent tidal volume or physiological feedback.",
     "Does not change SpO2 or authoritative gas-exchange values.",
     "No automatic respiratory-rate, EtCO2 or apnea detection.",
     "Must not be combined with a manual respiratory-activity switching schedule.",
     "Windows behavior is not yet manually verified."
-  ]
+  ],
+  "co2Response": {
+    "equation": "x_next = (tau*x + T) / (tau + T*depth/500)",
+    "timeConstantSeconds": 20,
+    "referenceDepthPermille": 500,
+    "initialization": "exact periodic orbit over 11 slots; rational calculation at plan creation",
+    "quantization": "gain permille, ties to even; applied to original expiration cycleIndex",
+    "bounds": "reject coupled physical peak above 327 mmHg; preserve inspired baseline",
+    "evidence": "../../docs/cheyne-stokes-co2-coupling.md",
+    "status": "time constant, reference depth and discrete response are authored teaching choices, not clinically calibrated"
+  }
 }

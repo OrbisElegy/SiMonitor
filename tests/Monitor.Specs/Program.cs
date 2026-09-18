@@ -56,6 +56,7 @@ internal static class Program
             .. CapnogramDispersionSpecifications.All,
             .. RespirationSpecifications.All,
             .. RespiratoryPatternSpecifications.All,
+            .. RespiratoryCo2ResponseSpecifications.All,
             .. GroupedConductionSpecifications.All,
             .. RightBundleBlockSpecifications.All,
             .. LeftBundleBlockSpecifications.All,

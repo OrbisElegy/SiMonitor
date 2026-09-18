@@ -76,6 +76,13 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
                     Array.AsReadOnly(edge), Array.AsReadOnly(phases)),
             });
         }
+        if (physiology.RespiratoryPattern == RespiratoryPattern.CheyneStokesIllustration)
+        {
+            var gains = RespiratoryCo2Response.Create(physiology.BreathPeriodNs);
+            if ((Int128)BaselineMmHg * 100 * 1000 + (Int128)peakCounts * gains.Max() > 32_700_000)
+            { throw new EventWaveformException("Capnogram.Co2ResponseOutOfRange", "EndExpiratoryMmHg"); }
+            bands = Array.AsReadOnly(bands.Select(band => band with { ExpirationCycleGainsPermille = gains }).ToArray());
+        }
         if (physiology.ActivityAfterBreaths is { } limit)
         {
             ulong? resume = physiology.ActivityDurationBreaths is { } durationBreaths ? limit + durationBreaths : null;

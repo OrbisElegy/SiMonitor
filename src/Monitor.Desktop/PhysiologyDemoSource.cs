@@ -26,7 +26,6 @@ internal static class PhysiologyDemoSource
         bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern) || PrematureVentricularReference.IsPattern(plan.ConductionPattern);
         bool beatPerfusion = PrematureBeatPerfusion.IsPattern(plan.ConductionPattern);
         bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
-        long CvpDuration(long normal) => shortCoupled ? Math.Min(normal, 200_000_000) : normal;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
         long PulseDuration(long normal) => shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
@@ -59,7 +58,7 @@ internal static class PhysiologyDemoSource
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0),
              new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
-                 new(60_000_000, CvpDuration(240_000_000), 100), new(160_000_000, CvpDuration(320_000_000), 250),
-                 new(400_000_000, 160_000_000, 120), -100).CreateChannel(plan, ChannelId(6), 0)]);
+                 new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0)]);
     }
 }

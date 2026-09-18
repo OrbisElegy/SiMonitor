@@ -226,7 +226,7 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(PrematureJunctionalButton);
             conduction.Children.Add(new TextBlock { Text = "房早/交界性早搏射血教学配置：正常800、已下传早搏400、间歇后恢复1000；未下传房早不新增射血。权重不是搏出量，恢复增强为作者选值；差异传导及逆行P位置不自动推算强度。ABP/PA/Pleth共用逐搏配置；早搏射血及脉搏时限为各通道基准的75%，正常/恢复搏保持基准；固定作者参数，CVP逐搏形态仍待完善。" });
             conduction.Children.Add(PrematureVentricularButton);
-            conduction.Children.Add(new TextBlock { Text = "R-on-T长QT示意：仅室早前一搏QT延至640ms、T440ms，使联律500ms的室早R波落在前一T波上。局部复极与新QRS按电位叠加；作者波形，不预测不应期、折返或自动转为室速/室颤。短联律示意保留窦性QT320ms，室早联律200ms；短联律例采用室早无有效射血的教学配置，其他室早弱射血；正常/室早/恢复搏强度分别800/200/1000，短联律室早为0。恢复搏相对增强，插入性例不预设增强；正常脉搏时限保留，CVP仍为简化分量。不是由ECG推算搏出量。" });
+            conduction.Children.Add(new TextBlock { Text = "R-on-T长QT示意：仅室早前一搏QT延至640ms、T440ms，使联律500ms的室早R波落在前一T波上。局部复极与新QRS按电位叠加；作者波形，不预测不应期、折返或自动转为室速/室颤。短联律示意保留窦性QT320ms，室早联律200ms；短联律例采用室早无有效射血的教学配置，其他室早弱射血；正常/室早/恢复搏强度分别800/200/1000，短联律室早为0。恢复搏相对增强，插入性例不预设增强；正常脉搏时限保留；CVP保留原分量时限并允许有限叠加，仍无瓣膜/充盈模型。不是由ECG推算搏出量。" });
             conduction.Children.Add(new TextBlock { Text = "成对室早：三次窦性搏动后连续两次宽QRS，支持单形或双形态示意，无夹在其中的窦性搏动；首次联律500ms、两次室早相隔500ms，随后1400ms恢复窦性QRS。双形态例第二次采用反向电位及QRS180/QT500ms；固定教学时序，未模拟不应期、反复搏动或逐搏搏出量。" });
             conduction.Children.Add(new TextBlock { Text = "插入性室早：基础窦性60次/分，每3次窦性搏动后在原1000ms RR内插入一次室早，前后各500ms；窦性P和下一QRS仍按原时刻出现，无代偿间歇。下一P可与室早T叠加；不模拟隐匿传导或PR延长。" });
             conduction.Children.Add(new TextBlock { Text = "多形/多源室早：A/B两套作者形态交替；B为反向电位向量和更宽QRS180ms/QT500ms。固定联律例均500ms；不同联律例A500/B600ms，均保留完全代偿。仅教学形态示意，不定位真实异位灶；无逐搏搏出量推断。" });

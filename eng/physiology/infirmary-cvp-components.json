@@ -1,5 +1,5 @@
 {
-  "id": "InfirmaryCvpComponentsDraft@1",
+  "id": "InfirmaryCvpComponentsDraft@2",
   "upstream_commit": "0e0eccd2f6e0705b77641a024c20a35cbf9b90e1",
   "source_path": "II Library/Classes/Waveform.Dictionary.Plots.cs",
   "source_sha256": "b049ea71517bce7a004d2ce19e2a1f215e6b8388bf8d86e7babcf66592169c75",
@@ -203,6 +203,7 @@
   },
   "upstream_seeds_sha256": "ee92f9af183854d0d5b5ae4421fe9c49dede31c1b3f1f8b9871a4df31e146f4c",
   "modifications": "A: extract atrioventricular indices0..43, remove linear endpoint baseline, clamp negative detrending residue to zero, and normalize its maximum. V: extract ventricular indices36..86 and normalize0.81. Resample128 Q32 points. C/X/Y and breathing envelopes are new project-authored smoothstep unit shapes, not claimed to be upstream components.",
+  "overlap_policy": "Project-authored bounded superposition: default one active copy per component; explicit cap1..8 with absolute amplitude budget multiplied by ceil(duration/minimum trigger interval). Short-coupled R-on-T opts into2 and preserves x240/v320ms. Mechanical activation survives zero effective peripheral ejection. No valve, filling or stroke-volume calibration.",
   "project_tables": {
     "C": {
       "length": 128,

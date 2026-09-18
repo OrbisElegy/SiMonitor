@@ -447,6 +447,13 @@ internal static class WaveformDemoSmokeChecks
         List<WaveformEnvelope> blocks = [];
         for (int step = 1; step <= 33; step++)
         { blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes))); }
+        VerifyCvpSamplePixels(window, blocks, [2_816_000_000L, 2_952_000_000L,
+            3_344_000_000L, 3_480_000_000L, 3_920_000_000L], width, true);
+    }
+
+    internal static void VerifyCvpSamplePixels(WaveformDemoWindow window, IReadOnlyList<WaveformEnvelope> blocks,
+        long[] times, int width = 1000, bool checkSigns = false)
+    {
         Control trace = window.Trace;
         trace.Measure(new Size(width, 840));
         trace.Arrange(new Rect(0, 0, width, 840));
@@ -456,8 +463,7 @@ internal static class WaveformDemoSmokeChecks
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         // Visible native ticks in x, v, a, c, y respectively, outside the erase gap.
-        foreach (var (time, positive) in new[] { (2_816_000_000L, false), (2_952_000_000L, true),
-            (3_344_000_000L, true), (3_480_000_000L, true), (3_920_000_000L, false) })
+        foreach (long time in times)
         {
             var block = blocks.Single(item => time >= item.StartSimTimeNs && time < item.StartSimTimeNs + 200_000_000);
             var plane = block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(6));
@@ -465,7 +471,7 @@ internal static class WaveformDemoSmokeChecks
                 plane.OffsetDenominator != 100 || plane.SampleRateNumerator != 125 || plane.SampleRateDenominator != 1)
             { throw new InvalidOperationException("CVP lost centi-mmHg baseline or native pressure rate."); }
             int raw = plane.Samples[(int)((time - block.StartSimTimeNs) / 8_000_000)];
-            if (positive ? raw <= 0 : raw >= 0)
+            if (checkSigns && (time is 2_952_000_000L or 3_344_000_000L or 3_480_000_000L ? raw <= 0 : raw >= 0))
             { throw new InvalidOperationException("CVP cardiac waves or signed descents disappeared under respiratory pressure."); }
             int x = (int)Math.Round(time / (double)DemoSweepLayout.NanosecondsPerPixel);
             // Six mmHg baseline is y=775 on the declared -5..15 mmHg axis;

@@ -6,9 +6,9 @@ public sealed record CvpWaveComponent(long DelayNs, long DurationNs, int Magnitu
 // Independent event components, not a measured mean CVP or a rhythm classifier.
 public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
     CvpWaveComponent A, CvpWaveComponent C, CvpWaveComponent X,
-    CvpWaveComponent V, CvpWaveComponent Y, int RespiratoryDeltaCentiMmHg)
+    CvpWaveComponent V, CvpWaveComponent Y, int RespiratoryDeltaCentiMmHg, int MaximumComponentOverlap = 1)
 {
-    public const string EvidenceId = "InfirmaryCvpComponentsDraft@1";
+    public const string EvidenceId = "InfirmaryCvpComponentsDraft@2";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
@@ -16,18 +16,20 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         _ = RegularPhysiologyTimeline.Start(physiology);
         CvpWaveComponent[] components = [A, C, X, V, Y];
         long budget = Math.Abs((long)RespiratoryDeltaCentiMmHg);
-        if (BaselineCentiMmHg is < short.MinValue or > short.MaxValue) { throw Invalid(); }
+        if (MaximumComponentOverlap is < 1 or > 8 || BaselineCentiMmHg is < short.MinValue or > short.MaxValue) { throw Invalid(); }
         for (int index = 0; index < components.Length; index++)
         {
             var component = components[index];
             Int128 triggerPeriod = index == 0 ? physiology.AtrialPeriodNs : physiology.VentricularPeriodNs;
             if (component is null || component.DelayNs < 0 || component.DurationNs <= 0 ||
-                component.DurationNs > triggerPeriod || component.DelayNs > long.MaxValue - component.DurationNs ||
+                component.DelayNs > long.MaxValue - component.DurationNs ||
                 component.MagnitudeCentiMmHg is < 0 or > short.MaxValue) { throw Invalid(); }
-            budget += component.MagnitudeCentiMmHg;
+            Int128 overlaps = ((Int128)component.DurationNs + triggerPeriod - 1) / triggerPeriod;
+            if (overlaps > MaximumComponentOverlap) { throw Invalid(); }
+            budget += (long)overlaps * component.MagnitudeCentiMmHg;
         }
-        // Each component lasts at most one trigger period. This conservative
-        // absolute budget also bounds overlapping positive/negative components.
+        // Half-open support permits at most ceil(duration/minimum interval)
+        // simultaneous copies. Reserve their absolute sum before publication.
         if (budget > short.MaxValue) { throw Invalid(); }
         var tables = new[] { CvpComponentTables.A, CvpComponentTables.C, CvpComponentTables.Descent,
             CvpComponentTables.V, CvpComponentTables.Descent };

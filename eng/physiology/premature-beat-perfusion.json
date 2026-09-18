@@ -45,7 +45,7 @@
     "Explicit beatwise strength examples exist for PVC/PAC/PJC. CVP atrial/ventricular mechanical morphology and clinically calibrated beatwise durations remain incomplete.",
     "No complete filling, contractility or valve model; no actual stroke-volume, feedback or anatomical ectopic-focus inference.",
     "Shared ABP/PA teaching strengths do not imply quantitatively identical left/right ventricular behavior.",
-    "Short-coupling CVP component compression remains the previous simplification; beatwise atrial/ventricular mechanical morphology is incomplete.",
+    "Short-coupling CVP restores x/v support of 240/320 ms with bounded overlap. Valve/filling and beatwise atrial/ventricular mechanical morphology remain incomplete.",
     "Standard pressure/Pleth templates remain teaching basis functions with overall duration scaling only. Upstroke, dicrotic-notch and clinical beatwise duration variation remain incomplete.",
     "Windows visual validation requires manual review in addition to native automated regression checks."
   ],

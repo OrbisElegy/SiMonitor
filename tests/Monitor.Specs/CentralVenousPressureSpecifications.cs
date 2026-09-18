@@ -17,6 +17,8 @@ internal static class CentralVenousPressureSpecifications
         new(160_000_000, 320_000_000, 250), new(400_000_000, 160_000_000, 120), 0);
     public static Specification[] All =>
     [
+        new(nameof(CvpShortCouplingPreservesOverlappingComponents), CvpShortCouplingPreservesOverlappingComponents),
+        new(nameof(CvpOverlapBudgetRejectsBeforePublication), CvpOverlapBudgetRejectsBeforePublication),
         new(nameof(CvpComponentsFollowAtrialAndVentricularEvents), CvpComponentsFollowAtrialAndVentricularEvents),
         new(nameof(CvpAtrialSuppressionLeavesOtherWavesIntact), CvpAtrialSuppressionLeavesOtherWavesIntact),
         new(nameof(CvpRespiratoryPressureHasExplicitSignAndTiming), CvpRespiratoryPressureHasExplicitSignAndTiming),
@@ -24,6 +26,59 @@ internal static class CentralVenousPressureSpecifications
         new(nameof(CvpRejectsInvalidSupportAndAmplitudeBudget), CvpRejectsInvalidSupportAndAmplitudeBudget),
         new(nameof(CvpLateFailureAndCancellationPreserveState), CvpLateFailureAndCancellationPreserveState),
     ];
+
+    private static void CvpShortCouplingPreservesOverlappingComponents()
+    {
+        var timeline = PrematureVentricularReference.CreatePlan(AvConductionPattern.ShortCoupledRonTPvcIllustration);
+        var channel = (Plan with { MaximumComponentOverlap = 2 }).CreateChannel(timeline, Cvp, 0);
+        Check.That(channel.Bands[2].DurationNs == 240_000_000 && channel.Bands[3].DurationNs == 320_000_000,
+            "short coupling preserves normal x/v support");
+        var events = RegularPhysiologyTimeline.Start(timeline).AdvanceBefore(2_100_000_000, 100)
+            .Where(item => item.Kind == PhysiologyCycleEventKind.VentricularMechanical && item.SimTimeNs >= 1_840_000_000).ToArray();
+        Check.That(events.Length == 2 && PrematureBeatPerfusion.GainPermille(timeline.ConductionPattern, 3) == 0,
+            "zero effective ectopic ejection retains two mechanical activations");
+        var first = EventWaveformComposition.Restore(new([channel.Bands[3]], [events[0]]));
+        var second = EventWaveformComposition.Restore(new([channel.Bands[3]], [events[1]]));
+        var sum = EventWaveformComposition.Restore(new([channel.Bands[3]], events));
+        Check.That(first.EvaluateAt(2_256_000_000) > 0 && second.EvaluateAt(2_256_000_000) > 0,
+            "previous v tail and ectopic contribution coexist");
+        for (long time = 2_000_000_000; time < 2_600_000_000; time += 8_000_000)
+        { Check.That(sum.EvaluateAt(time) == first.EvaluateAt(time) + second.EvaluateAt(time), "overlap is an exact sum without truncation"); }
+        var uninterrupted = PhysiologySignalGenerator.Start(timeline, channel.Plane.ProfileId, 1, channel.Bands);
+        var split = PhysiologySignalGenerator.Start(timeline, channel.Plane.ProfileId, 1, channel.Bands);
+        var expected = uninterrupted.GenerateBefore(6_400_000_000, 800, 100);
+        var before = split.GenerateBefore(2_256_000_000, 282, 100);
+        split = PhysiologySignalGenerator.Restore(split.CaptureState());
+        var after = split.GenerateBefore(6_400_000_000, 800, 100);
+        Check.That(expected.SequenceEqual(before.Concat(after)), "restore inside overlapping tails preserves every acquired sample");
+    }
+
+    private static void CvpOverlapBudgetRejectsBeforePublication()
+    {
+        var timeline = PrematureVentricularReference.CreatePlan(AvConductionPattern.ShortCoupledRonTPvcIllustration);
+        var bounded = Plan with
+        {
+            MaximumComponentOverlap = 2,
+            A = Plan.A with { MagnitudeCentiMmHg = 0 },
+            C = Plan.C with { MagnitudeCentiMmHg = 0 },
+            X = Plan.X with { MagnitudeCentiMmHg = 0 },
+            Y = Plan.Y with { MagnitudeCentiMmHg = 0 },
+            V = Plan.V with { DurationNs = 400_000_000, MagnitudeCentiMmHg = 16000 }
+        };
+        var accepted = bounded.CreateChannel(timeline, Cvp, 0);
+        foreach (var invalid in new[] { Plan, bounded with { MaximumComponentOverlap = 0 },
+            bounded with { MaximumComponentOverlap = 9 }, bounded with { V = bounded.V with { DurationNs = 400_000_001 } },
+            bounded with { V = bounded.V with { MagnitudeCentiMmHg = 20000 } },
+            bounded with { RespiratoryDeltaCentiMmHg = 768 }, bounded with { V = bounded.V with { DelayNs = long.MaxValue } } })
+        {
+            bool rejected = false;
+            try { invalid.CreateChannel(timeline, Cvp, 0); }
+            catch (EventWaveformException exception) { rejected = exception.ReasonCode == "Cvp.InvalidPlan"; }
+            Check.That(rejected, "invalid overlap/support/absolute sum rejects before publication");
+        }
+        Check.That(accepted.Bands[3].DurationNs == 400_000_000, "failed plans preserve the accepted half-open support boundary");
+        _ = (bounded with { RespiratoryDeltaCentiMmHg = 767 }).CreateChannel(timeline, Cvp, 0);
+    }
 
     private static EventWaveformComposition Compose(CentralVenousPressurePlan plan, bool atrial = true)
     {

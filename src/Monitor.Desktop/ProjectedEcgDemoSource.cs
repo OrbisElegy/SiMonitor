@@ -77,9 +77,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
             if (this != BundleBlockPreset.Ecg(BundleBlock)) { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
             return BundleBlockReference.Timing(BundleBlock);
         }
-        if (ConductionPattern == AvConductionPattern.PrematureVentricularIllustration)
+        if (PrematureVentricularReference.IsPattern(ConductionPattern))
         {
-            if (this != PrematureVentricular) { throw new ArgumentException("PVC requires its authored schedule and morphology."); }
+            if (this != PrematureVentricular with { ConductionPattern = ConductionPattern }) { throw new ArgumentException("PVC requires its authored schedule and morphology."); }
             return PrematureVentricularReference.Timing;
         }
         if (PrematureJunctionalReference.IsPattern(ConductionPattern))
@@ -200,8 +200,8 @@ internal static class ProjectedEcgDemoSource
             ? LeftBundleBlockReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
-            : configuration.ConductionPattern == AvConductionPattern.PrematureVentricularIllustration
-            ? PrematureVentricularReference.CreateElectrodes()
+            : PrematureVentricularReference.IsPattern(configuration.ConductionPattern)
+            ? PrematureVentricularReference.CreateElectrodes(configuration.ConductionPattern)
             : PrematureJunctionalReference.IsPattern(configuration.ConductionPattern)
             ? PrematureJunctionalReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration

@@ -19,6 +19,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal static ProjectedEcgDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
 
+    internal static ProjectedEcgDemoConfiguration PrematureJunctional { get; } = PrematureAtrial with
+    { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
+
     internal static ProjectedEcgDemoConfiguration JunctionalEscape { get; } = Default with
     {
         ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
@@ -70,6 +73,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         {
             if (this != BundleBlockPreset.Ecg(BundleBlock)) { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
             return BundleBlockReference.Timing(BundleBlock);
+        }
+        if (ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration)
+        {
+            if (this != PrematureJunctional) { throw new ArgumentException("PJC requires its authored schedule and morphology."); }
+            return PrematureJunctionalReference.Timing;
         }
         if (PrematureAtrialReference.IsPattern(ConductionPattern))
         {
@@ -184,6 +192,8 @@ internal static class ProjectedEcgDemoSource
             ? LeftBundleBlockReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
+            : configuration.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration
+            ? PrematureJunctionalReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration
             ? PrematureAtrialReference.CreateAberrantElectrodes()
             : PrematureAtrialReference.IsPattern(configuration.ConductionPattern)

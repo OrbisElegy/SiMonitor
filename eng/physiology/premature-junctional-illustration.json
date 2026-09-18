@@ -1,0 +1,72 @@
+{
+  "id": "PrematureJunctionalIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "478"
+  },
+  "textbook_summary": [
+    "Premature QRS-T occurs without a preceding sinus P wave; QRS-T morphology is essentially the same as normally conducted sinus beats.",
+    "Retrograde P-prime is inverted in II/III/aVF and upright in aVR.",
+    "When P-prime precedes QRS, P-prime-to-R is < 120 ms. The textbook also describes post-QRS and overlapping forms, which this example does not cover.",
+    "The pause is usually fully compensatory."
+  ],
+  "authored_choices": {
+    "groupDurationMs": 3200,
+    "sinusPeriodMs": 800,
+    "sinusPOffsetsMs": [
+      0,
+      800,
+      1600
+    ],
+    "retrogradePPrimeOffsetMs": 2180,
+    "ventricularOffsetsMs": [
+      160,
+      960,
+      1760,
+      2260
+    ],
+    "nextSinusQrsMs": 3360,
+    "couplingMs": 500,
+    "postEctopicPauseMs": 1100,
+    "sinusPrMs": 160,
+    "retrogradePrMs": 80,
+    "pPrimeMs": 80,
+    "qrsMs": 80,
+    "qtMs": 320,
+    "tMs": 140,
+    "atrialMechanicalOffsetsMs": [
+      80,
+      880,
+      1680,
+      2260
+    ],
+    "ventricularMechanicalOffsetsMs": [
+      240,
+      1040,
+      1840,
+      2340
+    ],
+    "minimumAtrialIntervalMs": 580,
+    "minimumVentricularIntervalMs": 500,
+    "pulseSupportLimitMs": 420,
+    "pPrimeVector": "Reuses the PAC example's normalized P table and electrode vector [80,20,0,-100,80,60,20,-40,-60,-60], independently triggered by RetrogradeAtrialElectrical. This is not a renamed PAC schedule."
+  },
+  "implementation": [
+    "Uses the original group*4+slot index: a 3200 ms group with three sinus beats followed by one premature junctional beat.",
+    "Only the final slot emits retrograde P-prime, without sinus P. Ventricular excitation is not inferred by adding sinus PR to this P-prime.",
+    "This example emits no additional sinus excitation at 2400 ms. The returning sinus P occurs at 3200 ms, with a 1600 ms R-to-returning-R interval.",
+    "Bounded half-open interval counts and finite lookback. Pressure accessors reuse actual ventricular mechanical times without replaying from the epoch.",
+    "Independent respiration is retained. Mechanical amplitudes and shapes keep existing parameters; ventricular mechanics can be explicitly disabled.",
+    "Both demos provide fixed examples with atomic switching/rejection; twelve-lead and monitor lead II share the source."
+  ],
+  "limitations": [
+    "Fixed timing, amplitudes and intervals are authored choices, not traced textbook measurements or anatomical localization.",
+    "Only the retrograde-P-prime-before-QRS variant is covered. Post-QRS/overlapping P-prime, aberrancy and other pauses remain uncovered.",
+    "No sinus-node reset, concealed conduction, refractory behavior, reentry or first-escape triggering model.",
+    "No beatwise filling, stroke volume, pulse deficit or complete hemodynamic feedback.",
+    "Other PVC/VT/SVT, respiratory, perfusion and artifact gaps remain open; dynamic UI rulers remain deferred.",
+    "Windows visual behavior is not yet manually verified."
+  ]
+}

@@ -21,6 +21,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
 
+    internal static PhysiologyDemoConfiguration PrematureJunctional { get; } = Default with
+    { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
+
     internal static PhysiologyDemoConfiguration JunctionalEscape { get; } = Default with
     {
         ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
@@ -81,10 +84,10 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         { throw new ArgumentException("Ventricular disorganization requires passive reservoir decay."); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
-        bool prematureAtrial = PrematureAtrialReference.IsPattern(ConductionPattern);
-        var timing = prematureAtrial ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
+        bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration;
+        var timing = prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
         long offset = DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        return new(0, fibrillation || prematureAtrial ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
+        return new(0, fibrillation || prematureBeat ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
             offset + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
             ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, RespiratoryPattern, ConductedBeatsPerGroup, ConductionPattern);

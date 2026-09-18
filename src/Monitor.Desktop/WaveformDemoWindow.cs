@@ -33,7 +33,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
     internal TextBox IndependentVentricularOffsetInput { get; } = new() { Width = 75 };
     internal TextBox IndependentVentricularPeriodInput { get; } = new() { Width = 75 };
-    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）", "二度Ⅱ型3:2示意", "二度Ⅱ型4:3示意", "二度Ⅱ型4:3＋完全RBBB", "二度Ⅱ型4:3＋完全LBBB", "房性期前收缩（正常下传）", "房性期前收缩（未下传）", "房早伴RBBB差异传导" }, SelectedIndex = 0 };
+    internal ComboBox ConductionInput { get; } = new() { ItemsSource = new[] { "1:1", "2:1", "3:1", "4:1", "3:2（固定PR）", "4:3（固定PR）", "4:3（文氏示意）", "三度AVB：交界性逸搏示意", "三度AVB：室性逸搏示意", "房扑2:1示意", "房扑4:1示意", "房颤粗颤示意", "房颤细颤示意", "室扑示意", "室颤粗颤示意", "室颤细颤示意", "3:2（文氏示意）", "5:4（文氏示意）", "二度Ⅱ型3:2示意", "二度Ⅱ型4:3示意", "二度Ⅱ型4:3＋完全RBBB", "二度Ⅱ型4:3＋完全LBBB", "房性期前收缩（正常下传）", "房性期前收缩（未下传）", "房早伴RBBB差异传导", "交界性早搏（逆行P′在前）" }, SelectedIndex = 0 };
     internal TextBox HeartRateInput { get; } = new() { Text = "75", Width = 70, IsEnabled = false };
     internal TextBox PDurationInput { get; } = new() { Text = "100", Width = 65, IsEnabled = false };
     internal TextBox PrIntervalInput { get; } = new() { Text = "160", Width = 65, IsEnabled = false };
@@ -100,6 +100,7 @@ internal sealed class WaveformDemoWindow : Window
     internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）" }, SelectedIndex = 0 };
     internal Button BundleBlockButton { get; } = new() { Content = "载入束支阻滞示例（重置参数）" };
     internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
+    internal Button PrematureJunctionalButton { get; } = new() { Content = "载入交界性早搏示例（重置参数）" };
     internal Button AberrantPrematureAtrialButton { get; } = new() { Content = "载入差异传导房早示例（重置参数）" };
     internal Button BlockedPrematureAtrialButton { get; } = new() { Content = "载入未下传房早示例（重置参数）" };
     internal Button PrematureAtrialButton { get; } = new() { Content = "载入正常下传房早示例（重置参数）" };
@@ -221,6 +222,8 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(PrematureAtrialButton);
             conduction.Children.Add(BlockedPrematureAtrialButton);
             conduction.Children.Add(AberrantPrematureAtrialButton);
+            conduction.Children.Add(PrematureJunctionalButton);
+            conduction.Children.Add(new TextBlock { Text = "交界性早搏：逆行P′在提前QRS前80ms，II/III/aVF倒置、aVR直立，QRS80ms/QT320ms与窦性搏动相同；联律500ms加间歇1100ms等于2个基础RR。固定教学例，未模拟不应期或逐搏充盈/搏出量。" });
             conduction.Children.Add(new TextBlock { Text = "差异传导房早：联律500ms、间歇1000ms与正常下传例相同；仅房早这一搏采用RBBB的QRS140ms/QT400ms/T180ms及继发ST–T，其余窦性搏动仍为QRS80ms/QT320ms。保留P′和房室/机械事件时刻；不自动推断搏出量变化。" });
             conduction.Children.Add(new TextBlock { Text = "未下传房早：联律400ms的P′叠加于前一搏T波，不产生对应QRS–T或室性机械搏动；1100ms后恢复窦性P，长RR为1500ms。房性机械事件保留，既有压力尾波继续回落；不模拟逸搏触发。" });
             conduction.Children.Add(new TextBlock { Text = "正常下传房早：3个窦性搏动后出现不同形态的P′，联律500ms、随后间歇1000ms，两者之和小于正常PP的两倍（1600ms）；P′R160ms、窄QRS80ms、固定QT320ms。切入此模式会重置参数。电/机械事件同源；此按钮载入窄QRS例；不模拟逐搏充盈和搏出量变化。" });
@@ -437,6 +440,10 @@ internal sealed class WaveformDemoWindow : Window
             if (_closed || SecondDegreePresetInput.SelectedIndex is < 0 or > 7) { return; }
             Reset(UsesPulse, SecondDegreeBlockPreset.Ecg(SecondDegreePresetInput.SelectedIndex), SecondDegreeBlockPreset.Physiology(SecondDegreePresetInput.SelectedIndex));
         };
+        PrematureJunctionalButton.Click += (_, _) =>
+        {
+            if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.PrematureJunctional, PhysiologyDemoConfiguration.PrematureJunctional); }
+        };
         AberrantPrematureAtrialButton.Click += (_, _) =>
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, PhysiologyDemoConfiguration.AberrantPrematureAtrial); }
@@ -578,9 +585,14 @@ internal sealed class WaveformDemoWindow : Window
 
     private void Reset() => Reset(UsesPulse);
 
-    private bool TryLoadPrematureAtrialTransition(AvConductionPattern current)
+    private bool TryLoadPrematureBeatTransition(AvConductionPattern current)
     {
-        if (ConductionInput.SelectedIndex is not (22 or 23 or 24) || current == ConductionSelection.Pattern(ConductionInput.SelectedIndex)) { return false; }
+        if (ConductionInput.SelectedIndex is not (22 or 23 or 24 or 25) || current == ConductionSelection.Pattern(ConductionInput.SelectedIndex)) { return false; }
+        if (ConductionInput.SelectedIndex == 25)
+        {
+            Reset(UsesPulse, ProjectedEcgDemoConfiguration.PrematureJunctional, PhysiologyDemoConfiguration.PrematureJunctional);
+            return true;
+        }
         bool blocked = ConductionInput.SelectedIndex == 23;
         bool aberrant = ConductionInput.SelectedIndex == 24;
         Reset(UsesPulse, blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : aberrant ? ProjectedEcgDemoConfiguration.AberrantPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial,
@@ -600,12 +612,12 @@ internal sealed class WaveformDemoWindow : Window
     private void ApplyEcgConfiguration()
     {
         if (_closed || !_projected) { return; }
-        if (TryLoadPrematureAtrialTransition(EcgConfiguration.ConductionPattern)) { return; }
+        if (TryLoadPrematureBeatTransition(EcgConfiguration.ConductionPattern)) { return; }
         if (TryLoadSecondDegreeTransition(EcgConfiguration.ConductionPattern)) { return; }
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), 22 => ProjectedEcgDemoConfiguration.PrematureAtrial, 23 => ProjectedEcgDemoConfiguration.BlockedPrematureAtrial, 24 => ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => BundleBlockPreset.Ecg((EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex) }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
+            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), 22 => ProjectedEcgDemoConfiguration.PrematureAtrial, 23 => ProjectedEcgDemoConfiguration.BlockedPrematureAtrial, 24 => ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, 25 => ProjectedEcgDemoConfiguration.PrematureJunctional, >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => BundleBlockPreset.Ecg((EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex) }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
@@ -781,7 +793,7 @@ internal sealed class WaveformDemoWindow : Window
     private void ApplyBreathConfiguration()
     {
         if (_closed || !_physiology) { return; }
-        if (TryLoadPrematureAtrialTransition(BreathConfiguration.ConductionPattern)) { return; }
+        if (TryLoadPrematureBeatTransition(BreathConfiguration.ConductionPattern)) { return; }
         if (TryLoadSecondDegreeTransition(BreathConfiguration.ConductionPattern)) { return; }
         try
         {
@@ -988,12 +1000,12 @@ internal sealed class WaveformDemoWindow : Window
             string waveTiming = AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "无正常P；f波不规则；QRS80 ms；T140 ms" : configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration
                 ? "F周期200 ms（无正常P）；QRS80 ms；T140 ms"
                 : string.Create(CultureInfo.InvariantCulture, $"P/模板PR/QRS/T {timing.PDurationNs / 1_000_000m:0.###}/{configuration.PrIntervalMilliseconds}/{timing.QrsDurationNs / 1_000_000m:0.###}/{configuration.TDurationMilliseconds} ms");
-            string rateSummary = PrematureAtrialReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含房早，RR非等间距" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "长期平均室率75次/分（当前RR不固定）"
+            string rateSummary = configuration.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration ? "基础窦性75次/分；含交界性早搏，RR非等间距" : PrematureAtrialReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含房早，RR非等间距" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "长期平均室率75次/分（当前RR不固定）"
                 : string.Create(CultureInfo.InvariantCulture, $"基础周期率 {configuration.HeartRateBpm} 次/分");
             _activeEcgConfiguration.Text = VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern)
                 ? $"已应用：{ConductionInput.SelectedItem}；无独立 P/QRS/T；PR、QRS时限、QT及QTc不适用；无有效射血。"
                 : string.Create(CultureInfo.InvariantCulture,
-                $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern)}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
+                $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern)}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(configuration.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration ? "（P/PR为窦性搏动；逆行P′80ms，P′R80ms）" : "")}；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
                 (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}（含继发ST–T）" : "") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.Zones is not null ? "" : !infarction.HasActiveRegion ? "；阶段示意关闭" : $"；{(infarction.Components is null ? InfarctionStageInput.SelectedItem : "独立组合")}／{InfarctionTerritoryInput.SelectedItem}（仅自选模式使用勾选项）：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +

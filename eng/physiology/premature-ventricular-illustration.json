@@ -1,5 +1,5 @@
 {
-  "id": "PrematureVentricularIllustrationDraft@4",
+  "id": "PrematureVentricularIllustrationDraft@5",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -178,12 +178,48 @@
       "minimumVentricularIntervalMs": 500,
       "pOverlay": "The next sinus P at 3000-3100 ms independently overlaps the PVC T at 2920-3140 ms. QRS occurs at its original time of 3160 ms.",
       "reason": "The authored rate is 60/min so that the full 480 ms PVC QT ends before the next sinus QRS, without shortening or truncating existing T. PR prolongation and concealed conduction are not modeled."
+    },
+    "coupletVariant": {
+      "baselineBpm": 75,
+      "groupMs": 4000,
+      "beatsPerGroup": 5,
+      "sinusPOffsetsMs": [
+        0,
+        800,
+        1600
+      ],
+      "qrsOffsetsMs": [
+        160,
+        960,
+        1760,
+        2260,
+        2760
+      ],
+      "nextSinusQrsMs": 4160,
+      "ventricularMechanicalMs": [
+        240,
+        1040,
+        1840,
+        2340,
+        2840
+      ],
+      "normalMask": 7,
+      "ectopicMask": 24,
+      "couplingMs": 500,
+      "withinPairRrMs": 500,
+      "postPairPauseMs": 1400,
+      "pvcQrsQtTMs": [
+        160,
+        480,
+        220
+      ],
+      "reason": "Two identical broad QRS/discordant T complexes each retain the full 480 ms QT and return to baseline 20 ms before the second PVC. Intervals of 500/500/1400 ms are authored and do not establish general compensatory-pause rules, VT or refractory behavior. Neither PVC slot emits atrial events."
     }
   },
   "implementation": [
-    "Group lengths 2/3/4 serve monomorphic sequences. Eight-slot polymorphic/multifocal examples use exclusive normal/A/B masks 119/8/128. The original index is group*count+slot.",
-    "An independent 3200 ms indexed accessor supplies actual mechanical events to the timeline and pressure. No new atrial event kind is added.",
-    "Half-open intervals, exact budgets, original group*4+slot indexing and bounded-lookback recovery; no replay from the epoch.",
+    "Group lengths 2/3/4 serve existing monomorphic sequences. The five-slot couplet uses normal/PVC masks 7/24. Eight-slot polymorphic/multifocal examples use normal/A/B masks 119/8/128. The original index is group*count+slot.",
+    "Modes share a bounded indexed accessor supplying actual mechanical events to the timeline and pressure. No new atrial event kind is added.",
+    "Half-open intervals, exact budgets, original group*count+slot indexing and bounded-lookback recovery; no replay from the epoch.",
     "Twelve-lead and monitor lead II share a source. The QRS summary explicitly verifies sinus slot 0 only.",
     "Both demos load fixed examples and reset previous parameters, supporting direct switching and atomic rejection. Other physiological channels use actual ventricular/respiratory events.",
     "Group length drives event timing, morphology masks, pressure access and recovery. AV conduction ratios are not used to simulate bigeminy/trigeminy.",
@@ -192,10 +228,18 @@
   ],
   "limitations": [
     "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
-    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling and interpolated examples are implemented. Couplets, R-on-T and remaining variants are unimplemented.",
+    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling, interpolated and monomorphic couplet examples are implemented. Other couplet variants, R-on-T and remaining variants are unimplemented.",
     "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
     "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
     "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",
     "Windows behavior is not yet manually verified; native automated regression checks cover the implemented behavior."
+  ],
+  "references": [
+    {
+      "url": "https://www.ncbi.nlm.nih.gov/medgen/452515",
+      "summary": [
+        "A ventricular couplet consists of two consecutive PVCs with no intervening normal beat. The source does not supply this example's timing or hemodynamic parameters."
+      ]
+    }
   ]
 }

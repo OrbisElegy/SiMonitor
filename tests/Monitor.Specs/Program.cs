@@ -66,6 +66,7 @@ internal static class Program
             .. AberrantPrematureAtrialSpecifications.All,
             .. PrematureJunctionalSpecifications.All,
             .. RetrogradeJunctionalSpecifications.All,
+            .. PrematureVentricularSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,

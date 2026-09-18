@@ -14,9 +14,10 @@ internal static class PrematureAtrialSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true) })
+        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true) })
         {
             bool blocked = selection == 23, aberrant = selection == 24, junctional = selection is >= 25 and <= 27, ventricular = selection >= 28;
+            int steps = selection >= 31 ? 40 : 30; // Include second PVC after the shared Pleth delay.
             int pvcQrs = selection switch { 29 => 165, 30 => 365, _ => 565 };
             int resumedQrs = selection switch { 29 => 440, 30 => 640, _ => junctional || ventricular ? 840 : 815 };
             int pStart = selection switch { 23 => 500, 25 => 545, 26 => 595, 27 => 565, _ => 525 };
@@ -47,13 +48,13 @@ internal static class PrematureAtrialSmokeChecks
                 Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text))
                 { throw new InvalidOperationException("Loaded PAC cannot be reapplied."); }
-                for (int step = 0; step < 30; step++) { Click(window.StepButton); }
+                for (int step = 0; step < steps; step++) { Click(window.StepButton); }
                 List<byte[]> expected = [], recovered = [];
                 if (projected)
                 {
                     var source = ProjectedEcgDemoSource.Create(window.EcgConfiguration);
                     var trial = ProjectedEcgDemoSource.Create(window.EcgConfiguration);
-                    for (int step = 1; step <= 30; step++)
+                    for (int step = 1; step <= steps; step++)
                     {
                         expected.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100));
                         recovered.AddRange(trial.AdvanceTo(step * 200_000_000L, 50, 1, 100));
@@ -64,7 +65,7 @@ internal static class PrematureAtrialSmokeChecks
                 {
                     var source = PhysiologyDemoSource.Create(window.BreathConfiguration);
                     var trial = PhysiologyDemoSource.Create(window.BreathConfiguration);
-                    for (int step = 1; step <= 30; step++)
+                    for (int step = 1; step <= steps; step++)
                     {
                         expected.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100));
                         recovered.AddRange(trial.AdvanceTo(step * 200_000_000L, 50, 1, 100));
@@ -79,6 +80,18 @@ internal static class PrematureAtrialSmokeChecks
                 if ((ventricular ? samples.Skip(pvcQrs - 40).Take(40).Any(v => v != 0) || samples.Skip(pvcQrs).Take(40).Max(v => Math.Abs((int)v)) < 600 : blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
                     : Enumerable.Range(pStart, 20).Min(i => selection >= 26 ? samples[i] - samples[i - 525] : samples[i]) > -150 || samples.Skip(565).Take(20).Max() < 500) || samples.Skip(resumedQrs).Take(20).Max() < 500)
                 { throw new InvalidOperationException("PAC early P-prime or conducted/resumed QRS missing."); }
+                if (selection is 31 or 32)
+                {
+                    int second = selection == 31 ? 1365 : 1390;
+                    if (Math.Abs(samples[second + 18] + samples[581]) > 1 || Math.Abs(samples[581]) < 200)
+                    { throw new InvalidOperationException("Alternating PVC second QRS has wrong polarity, duration or coupling."); }
+                    if (projected)
+                    {
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, second + 18, [EcgLead.II, EcgLead.V1, EcgLead.V6]);
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, second + 100, [EcgLead.II, EcgLead.V1, EcgLead.V6]);
+                    }
+                    else { MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, second + 18); }
+                }
                 if (projected)
                 {
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, pStart, [EcgLead.II, EcgLead.AVR, EcgLead.V1]);
@@ -129,7 +142,7 @@ internal static class PrematureAtrialSmokeChecks
                 window.ConductionInput.SelectedIndex = 6; Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (projected ? window.EcgConfiguration != SecondDegreeBlockPreset.Ecg(0) : window.BreathConfiguration != SecondDegreeBlockPreset.Physiology(0))
                 { throw new InvalidOperationException("Leaving PAC retained incompatible fields."); }
-                foreach (int next in new[] { 22, 29, 30, 28, 25, 26, 27, 30, 24, 23, 26, 25, 22 })
+                foreach (int next in new[] { 22, 31, 32, 29, 30, 28, 25, 26, 27, 30, 24, 23, 26, 25, 22 })
                 {
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;

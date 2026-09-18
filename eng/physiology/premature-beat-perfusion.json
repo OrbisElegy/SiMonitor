@@ -39,6 +39,7 @@
     "Pressure retains existing reservoir/morphology modifiers and scales each beat's input and morphology pulse by the same gain. Zero input cannot restart morphology.",
     "The example requires reservoir sources and atomically rejects disabling them. Generic pressure plans keep the option disabled by default for compatibility.",
     "PAC/PJC use the original four-slot index. A blocked PAC emits no ventricular event and has slot-3 weight zero; recovery remains slot 0 of the next group without compacting indices. Normally conducted and RBBB-aberrant PACs share weights, as do all three retrograde-P PJC positions; no unimplemented synchrony differences are inferred.",
+    "All premature-beat demos use Pleth support of 512 ms for normal/recovery beats and 384 ms for premature beats. Removing the former 420 ms mode-wide compression preserves 12 ms overlap at 500 ms coupling. Pressure morphology still has separate duration constraints.",
     "Each beat's ejection-input duration enters the RC kernel calculation. Finite pressure-morphology and Pleth support shorten proportionally; propagation delay and gain remain independent. Normal/recovery durations are retained. Zero ejection adds no new band while the existing reservoir continues decaying."
   ],
   "limitations": [

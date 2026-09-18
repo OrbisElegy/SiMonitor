@@ -14,8 +14,11 @@ internal static class PrematureAtrialSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (bool projected in new[] { false, true })
+        foreach (var (blocked, projected) in new[] { (false, false), (false, true), (true, false), (true, true) })
         {
+            int selection = blocked ? 23 : 22;
+            var expectedEcg = blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
+            var expectedPhysiology = blocked ? PhysiologyDemoConfiguration.BlockedPrematureAtrial : PhysiologyDemoConfiguration.PrematureAtrial;
             WaveformDemoWindow window = new(physiology: !projected, projected: projected);
             window.Show();
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -29,13 +32,13 @@ internal static class PrematureAtrialSmokeChecks
                     if (prior == 3) { window.SecondDegreePresetInput.SelectedIndex = 0; Click(window.SecondDegreePresetButton); }
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;
-                    window.ConductionInput.SelectedIndex = 22;
+                    window.ConductionInput.SelectedIndex = selection;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton); window.Pulse(stale);
                     if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.BundleBlockInput.SelectedIndex != 0 ||
-                        (projected ? window.EcgConfiguration != ProjectedEcgDemoConfiguration.PrematureAtrial : window.BreathConfiguration != PhysiologyDemoConfiguration.PrematureAtrial))
+                        (projected ? window.EcgConfiguration != expectedEcg : window.BreathConfiguration != expectedPhysiology))
                     { throw new InvalidOperationException("PAC transition retained old rhythm, morphology or timer."); }
                 }
-                Click(window.PrematureAtrialButton);
+                Click(blocked ? window.BlockedPrematureAtrialButton : window.PrematureAtrialButton);
                 Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text))
                 { throw new InvalidOperationException("Loaded PAC cannot be reapplied."); }
@@ -68,20 +71,22 @@ internal static class PrematureAtrialSmokeChecks
                 var blocks = expected.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                 var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
                 var samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
-                if (samples.Skip(525).Take(20).Min() > -150 || samples.Skip(565).Take(20).Max() < 500 || samples.Skip(815).Take(20).Max() < 500)
+                if ((blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
+                    : samples.Skip(525).Take(20).Min() > -150 || samples.Skip(565).Take(20).Max() < 500) || samples.Skip(815).Take(20).Max() < 500)
                 { throw new InvalidOperationException("PAC early P-prime or conducted/resumed QRS missing."); }
                 if (projected)
                 {
-                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 525, [EcgLead.II, EcgLead.AVR, EcgLead.V1]);
-                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 565);
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, blocked ? 500 : 525, [EcgLead.II, EcgLead.AVR, EcgLead.V1]);
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : 565);
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 815);
                 }
                 else
                 {
-                    MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 565);
+                    MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : 565);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [303, 320, 355, 395, 420]);
-                    VerifyNegativeP(window, samples);
+
                 }
+                VerifyPPrime(window, samples, projected, blocked);
                 Click(window.HoldButton); Click(window.RunButton);
                 var ecg = window.EcgConfiguration; var physiology = window.BreathConfiguration;
                 var trace = window.Trace; var timer = window.ActiveTimer; long before = window.SimulationTimeNs;
@@ -91,27 +96,39 @@ internal static class PrematureAtrialSmokeChecks
                     string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text))
                 { throw new InvalidOperationException("PAC invalid edit changed accepted state."); }
                 Click(window.ResetButton);
-                if (window.ConductionInput.SelectedIndex != 22 || window.ActiveTimer is not null || window.BlockCount != 0)
+                if (window.ConductionInput.SelectedIndex != selection || window.ActiveTimer is not null || window.BlockCount != 0)
                 { throw new InvalidOperationException("PAC reset lost the selected source."); }
                 window.ConductionInput.SelectedIndex = 6; Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (projected ? window.EcgConfiguration != SecondDegreeBlockPreset.Ecg(0) : window.BreathConfiguration != SecondDegreeBlockPreset.Physiology(0))
                 { throw new InvalidOperationException("Leaving PAC retained incompatible fields."); }
+                foreach (int next in new[] { 22, 23, 22 })
+                {
+                    Click(window.StepButton); Click(window.RunButton);
+                    var stale = window.ActiveTimer;
+                    window.ConductionInput.SelectedIndex = next;
+                    Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton); window.Pulse(stale);
+                    if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null ||
+                        (projected ? window.EcgConfiguration.ConductionPattern : window.BreathConfiguration.ConductionPattern) != ConductionSelection.Pattern(next))
+                    { throw new InvalidOperationException("Direct conducted/blocked PAC transition retained old source or timer."); }
+                }
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: conducted PAC P-prime/QRS pixels, early mechanical pressure, wire recovery and atomic transitions");
+        Console.WriteLine("ok: conducted/blocked PAC P-prime and P/T overlap, selected QRS/mechanics, pressure, wire recovery and atomic transitions");
     }
 
-    private static void VerifyNegativeP(WaveformDemoWindow window, short[] samples)
+    private static void VerifyPPrime(WaveformDemoWindow window, short[] samples, bool projected, bool blocked)
     {
-        window.Trace.Measure(new Size(1044, 840)); window.Trace.Arrange(new Rect(0, 0, 1044, 840));
-        using RenderTargetBitmap image = new(new PixelSize(1044, 840), new Vector(96, 96)); image.Render(window.Trace);
+        int height = projected ? 12 * ProjectedEcgPlotLayout.RowHeight : 840;
+        window.Trace.Measure(new Size(1044, height)); window.Trace.Arrange(new Rect(0, 0, 1044, height));
+        using RenderTargetBitmap image = new(new PixelSize(1044, height), new Vector(96, 96)); image.Render(window.Trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock(); image.CopyPixels(buffer);
-        int peak = Enumerable.Range(525, 20).MinBy(i => samples[i]);
-        int x = (int)Math.Round(peak / 2.0), y = (int)Math.Round(60 - samples[peak] * 0.05);
+        int peak = Enumerable.Range(blocked ? 500 : 525, 20).MinBy(i => blocked ? samples[i] - samples[i - 400] : samples[i]);
+        int x = (int)Math.Round((projected ? 85 : 0) + peak / 2.0);
+        int y = (int)Math.Round((projected ? ProjectedEcgPlotLayout.RowHeight * 1.5 : 60) - samples[peak] * (projected ? 0.04 : 0.05));
         if (!Enumerable.Range(y - 1, 3).Any(row => Enumerable.Range(x - 1, 3).Any(column =>
             Marshal.ReadByte(buffer.Address + row * buffer.RowBytes + column * 4 + 1) > 100)))
-        { throw new InvalidOperationException("Native monitor lacks the negative P-prime pixels."); }
+        { throw new InvalidOperationException("Native trace lacks P-prime or its deformation of T."); }
     }
 }

@@ -22,7 +22,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -77,7 +77,7 @@ public sealed class RegularPhysiologyTimeline
                  plan.IndependentVentricularPeriodNs is not null || plan.MechanicalEveryCycles != 1 ||
                  plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             ((PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern) || PrematureVentricularReference.IsPattern(plan.ConductionPattern)) &&
-                (plan.HeartPeriodNs != 800_000_000 || plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
+                (plan.HeartPeriodNs != (plan.ConductionPattern == AvConductionPattern.InterpolatedPvcIllustration ? 1_000_000_000 : 800_000_000) || plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
                  plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
                  plan.VentricularElectricalOffsetNs != 160_000_000 || plan.VentricularMechanicalOffsetNs != 240_000_000 ||
                  plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.MechanicalEveryCycles != 1 ||

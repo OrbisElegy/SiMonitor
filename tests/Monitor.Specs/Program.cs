@@ -69,6 +69,7 @@ internal static class Program
             .. PrematureVentricularSpecifications.All,
             .. VentricularGroupedSpecifications.All,
             .. DiversePvcSpecifications.All,
+            .. InterpolatedPvcSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,

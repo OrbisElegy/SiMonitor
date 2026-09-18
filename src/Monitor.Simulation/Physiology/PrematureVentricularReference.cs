@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Simulation.Physiology;
 
-// One authored monomorphic PVC with full compensation, not a focus model.
+// Authored PVC schedules and morphologies, not a focus or conduction model.
 public static class PrematureVentricularReference
 {
-    public const string EvidenceId = "PrematureVentricularIllustrationDraft@3";
+    public const string EvidenceId = "PrematureVentricularIllustrationDraft@4";
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureVentricularIllustration or
         AvConductionPattern.VentricularBigeminyIllustration or AvConductionPattern.VentricularTrigeminyIllustration or
-        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration;
+        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration or AvConductionPattern.InterpolatedPvcIllustration;
     public static int BeatsPerGroup(AvConductionPattern pattern) => pattern switch
     {
-        AvConductionPattern.PrematureVentricularIllustration => 4,
+        AvConductionPattern.PrematureVentricularIllustration or AvConductionPattern.InterpolatedPvcIllustration => 4,
         AvConductionPattern.VentricularBigeminyIllustration => 2,
         AvConductionPattern.VentricularTrigeminyIllustration => 3,
         AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration => 8,
@@ -20,7 +20,7 @@ public static class PrematureVentricularReference
     public static RegularPhysiologyPlan CreatePlan(AvConductionPattern pattern = AvConductionPattern.PrematureVentricularIllustration)
     {
         _ = BeatsPerGroup(pattern);
-        return PrematureAtrialReference.CreatePlan() with { ConductionPattern = pattern };
+        return PrematureAtrialReference.CreatePlan() with { ConductionPattern = pattern, HeartPeriodNs = pattern == AvConductionPattern.InterpolatedPvcIllustration ? 1_000_000_000 : 800_000_000 };
     }
 
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(AvConductionPattern pattern = AvConductionPattern.PrematureVentricularIllustration)
@@ -64,10 +64,12 @@ public static class PrematureVentricularReference
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
         int countPerGroup = BeatsPerGroup(plan.ConductionPattern);
-        long groupDurationNs = countPerGroup * 800_000_000L;
+        bool interpolated = plan.ConductionPattern == AvConductionPattern.InterpolatedPvcIllustration;
+        long groupDurationNs = interpolated ? 3_000_000_000 : countPerGroup * 800_000_000L;
         bool Ectopic(int slot) => countPerGroup == 8 ? slot % 4 == 3 : slot == countPerGroup - 1;
-        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (Ectopic(slot)
-            ? (slot - 1) * 800_000_000L + (plan.ConductionPattern == AvConductionPattern.MultifocalPvcIllustration && slot == 7 ? 600_000_000 : 500_000_000)
+        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (interpolated
+            ? (slot == 3 ? 2_500_000_000 : slot * 1_000_000_000L)
+            : Ectopic(slot) ? (slot - 1) * 800_000_000L + (plan.ConductionPattern == AvConductionPattern.MultifocalPvcIllustration && slot == 7 ? 600_000_000 : 500_000_000)
             : slot * 800_000_000L);
         bool Selected(int slot) => !Ectopic(slot) || kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;

@@ -4,13 +4,13 @@ namespace Monitor.Simulation.Physiology;
 // Authored PVC schedules and morphologies, not a focus or conduction model.
 public static class PrematureVentricularReference
 {
-    public const string EvidenceId = "PrematureVentricularIllustrationDraft@6";
+    public const string EvidenceId = "PrematureVentricularIllustrationDraft@7";
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureVentricularIllustration or
         AvConductionPattern.VentricularBigeminyIllustration or AvConductionPattern.VentricularTrigeminyIllustration or
-        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration;
+        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration or AvConductionPattern.RonTLongQtPvcIllustration;
     public static int BeatsPerGroup(AvConductionPattern pattern) => pattern switch
     {
-        AvConductionPattern.PrematureVentricularIllustration or AvConductionPattern.InterpolatedPvcIllustration => 4,
+        AvConductionPattern.PrematureVentricularIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.RonTLongQtPvcIllustration => 4,
         AvConductionPattern.VentricularBigeminyIllustration => 2,
         AvConductionPattern.VentricularTrigeminyIllustration => 3,
         AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration => 5,
@@ -31,11 +31,14 @@ public static class PrematureVentricularReference
         bool couplet = count == 5;
         ulong ectopic = diverse ? 8UL : couplet ? 24UL : 1UL << (count - 1);
         ulong sinus = couplet ? 7UL : diverse ? 0b01110111UL : ectopic - 1;
+        bool ronT = pattern == AvConductionPattern.RonTLongQtPvcIllustration;
+        var prolonged = ronT ? TextbookElectrodeReference.CreateElectrodes(timing: Timing with { RrIntervalNs = 800_000_000, QtIntervalNs = 640_000_000, TDurationNs = 440_000_000 }) : null;
         var ventricular = CompleteAvBlockVentricularReference.CreateElectrodes();
         return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((e, i) => e with
         {
             Bands = Array.AsReadOnly(e.Bands.Select(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical
-                ? b with { VentricularCycles = new(count, sinus) } : b)
+                ? b with { VentricularCycles = new(count, ronT && b.DelayNs > 0 ? 3UL : sinus) } : b)
+                .Concat(ronT ? prolonged![i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical && b.DelayNs > 0).Select(b => b with { VentricularCycles = new(4, 4) }) : [])
                 .Concat(ventricular[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical)
                     .Select(b => b with { VentricularCycles = new(count, ectopic) }))
                 .Concat(diverse ? ventricular[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(b => SecondMorphology(b, count, couplet ? 16UL : 128UL)) : []).ToArray()),

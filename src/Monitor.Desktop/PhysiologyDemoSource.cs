@@ -34,6 +34,7 @@ internal static class PhysiologyDemoSource
                 VentricularDisorganizationReference.IsPattern(plan.ConductionPattern) ? VentricularDisorganizationReference.CreateLeadIIBands(plan.ConductionPattern) :
                 plan.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration ? RightBundleBlockReference.CreateLeadIIBands() :
                 plan.ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration ? LeftBundleBlockReference.CreateLeadIIBands() :
+                plan.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? PrematureAtrialReference.CreateAberrantLeadIIBands() :
                 prematureAtrial ? PrematureAtrialReference.CreateLeadIIBands(blockedAtrial) :
                 fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration) :
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :

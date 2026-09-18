@@ -18,6 +18,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration BlockedPrematureAtrial { get; } = PrematureAtrial with
     { ConductionPattern = AvConductionPattern.BlockedPrematureAtrialIllustration };
 
+    internal static PhysiologyDemoConfiguration AberrantPrematureAtrial { get; } = PrematureAtrial with
+    { ConductionPattern = AvConductionPattern.AberrantPrematureAtrialIllustration };
+
     internal static PhysiologyDemoConfiguration JunctionalEscape { get; } = Default with
     {
         ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,

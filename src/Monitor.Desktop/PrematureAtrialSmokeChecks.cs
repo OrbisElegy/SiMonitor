@@ -14,11 +14,11 @@ internal static class PrematureAtrialSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (var (blocked, projected) in new[] { (false, false), (false, true), (true, false), (true, true) })
+        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true) })
         {
-            int selection = blocked ? 23 : 22;
-            var expectedEcg = blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
-            var expectedPhysiology = blocked ? PhysiologyDemoConfiguration.BlockedPrematureAtrial : PhysiologyDemoConfiguration.PrematureAtrial;
+            bool blocked = selection == 23, aberrant = selection == 24;
+            var expectedEcg = aberrant ? ProjectedEcgDemoConfiguration.AberrantPrematureAtrial : blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
+            var expectedPhysiology = aberrant ? PhysiologyDemoConfiguration.AberrantPrematureAtrial : blocked ? PhysiologyDemoConfiguration.BlockedPrematureAtrial : PhysiologyDemoConfiguration.PrematureAtrial;
             WaveformDemoWindow window = new(physiology: !projected, projected: projected);
             window.Show();
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -38,7 +38,7 @@ internal static class PrematureAtrialSmokeChecks
                         (projected ? window.EcgConfiguration != expectedEcg : window.BreathConfiguration != expectedPhysiology))
                     { throw new InvalidOperationException("PAC transition retained old rhythm, morphology or timer."); }
                 }
-                Click(blocked ? window.BlockedPrematureAtrialButton : window.PrematureAtrialButton);
+                Click(aberrant ? window.AberrantPrematureAtrialButton : blocked ? window.BlockedPrematureAtrialButton : window.PrematureAtrialButton);
                 Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text))
                 { throw new InvalidOperationException("Loaded PAC cannot be reapplied."); }
@@ -79,11 +79,25 @@ internal static class PrematureAtrialSmokeChecks
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, blocked ? 500 : 525, [EcgLead.II, EcgLead.AVR, EcgLead.V1]);
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : 565);
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 815);
+                    if (aberrant)
+                    {
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 587, [EcgLead.V1, EcgLead.V2, EcgLead.V6]);
+                        EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 648, [EcgLead.V1, EcgLead.V2, EcgLead.V6]);
+                    }
                 }
                 else
                 {
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : 565);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [303, 320, 355, 395, 420]);
+                    if (aberrant)
+                    {
+                        var narrow = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.PrematureAtrial);
+                        foreach (int row in Enumerable.Range(1, 6))
+                        {
+                            if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(narrow, row)))
+                            { throw new InvalidOperationException("Aberrant PAC changed non-ECG physiology."); }
+                        }
+                    }
 
                 }
                 VerifyPPrime(window, samples, projected, blocked);
@@ -101,7 +115,7 @@ internal static class PrematureAtrialSmokeChecks
                 window.ConductionInput.SelectedIndex = 6; Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (projected ? window.EcgConfiguration != SecondDegreeBlockPreset.Ecg(0) : window.BreathConfiguration != SecondDegreeBlockPreset.Physiology(0))
                 { throw new InvalidOperationException("Leaving PAC retained incompatible fields."); }
-                foreach (int next in new[] { 22, 23, 22 })
+                foreach (int next in new[] { 22, 24, 23, 24, 22 })
                 {
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;
@@ -109,12 +123,12 @@ internal static class PrematureAtrialSmokeChecks
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton); window.Pulse(stale);
                     if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null ||
                         (projected ? window.EcgConfiguration.ConductionPattern : window.BreathConfiguration.ConductionPattern) != ConductionSelection.Pattern(next))
-                    { throw new InvalidOperationException("Direct conducted/blocked PAC transition retained old source or timer."); }
+                    { throw new InvalidOperationException("Direct conducted/blocked/aberrant PAC transition retained old source or timer."); }
                 }
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: conducted/blocked PAC P-prime and P/T overlap, selected QRS/mechanics, pressure, wire recovery and atomic transitions");
+        Console.WriteLine("ok: conducted/blocked/aberrant PAC P-prime and P/T overlap, selected QRS/mechanics, pressure, wire recovery and atomic transitions");
     }
 
     private static void VerifyPPrime(WaveformDemoWindow window, short[] samples, bool projected, bool blocked)

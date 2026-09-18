@@ -43,8 +43,16 @@ internal static class RespiratoryPatternSmokeChecks
             if (expected.Count == 0 || expected.Count != actual.Count || expected.Zip(actual).Any(p => !p.First.SequenceEqual(p.Second)))
             { throw new InvalidOperationException("Pattern recovery changed wire bytes."); }
             VerifyPixels(window, blocks);
+            var gasSamples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(4)).Samples).ToArray();
+            var peaks = Enumerable.Range(1, 9).Select(cycle => gasSamples[cycle * 100]).ToArray();
+            if (peaks.Distinct().Count() < 7 || peaks[0] <= peaks[6] || peaks[4] <= peaks[6])
+            { throw new InvalidOperationException("Cheyne-Stokes CO2 remains fixed or lacks delayed ventilation response."); }
             Click(window.HoldButton); Click(window.RunButton);
             var trace = window.Trace; var timer = window.ActiveTimer; long time = window.SimulationTimeNs;
+            window.Co2EndInput.Text = "327"; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
+            { throw new InvalidOperationException("Coupled CO2 overflow changed accepted state."); }
+            window.Co2EndInput.Text = "40";
             window.RespiratoryActivityInput.SelectedIndex = 1; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time)
             { throw new InvalidOperationException("Conflicting activity changed pattern state."); }
@@ -68,7 +76,7 @@ internal static class RespiratoryPatternSmokeChecks
         image.Render(trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock(); image.CopyPixels(buffer);
-        (int, long, int)[] points = early ? [(1, 4_400_000_000, 1000), (1, 5_400_000_000, 800)] : [(1, 7_400_000_000, 400), (1, 8_400_000_000, 200), (1, 9_400_000_000, 0), (1, 11_400_000_000, 200), (4, 10_000_000_000, 0), (4, 11_900_000_000, -1)];
+        (int, long, int)[] points = early ? [(1, 4_400_000_000, 1000), (1, 5_400_000_000, 800), (4, 1_000_000_000, -1), (4, 5_000_000_000, -1), (4, 6_000_000_000, -1)] : [(1, 7_400_000_000, 400), (1, 8_400_000_000, 200), (1, 9_400_000_000, 0), (1, 11_400_000_000, 200), (4, 10_000_000_000, 0), (4, 11_900_000_000, -1)];
         foreach (var (row, time, expected) in points)
         {
             var plane = blocks.Single(b => time >= b.StartSimTimeNs && time < b.StartSimTimeNs + 200_000_000).Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(row));

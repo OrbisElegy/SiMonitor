@@ -10,7 +10,7 @@ public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIn
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -46,6 +46,16 @@ public sealed class EventWaveformComposition
             long[] table = band.TableQ32.ToArray();
             if (table[0] != 0 || table.Any(value => value < short.MinValue * FixedPointMath.Q32One ||
                 value > short.MaxValue * FixedPointMath.Q32One)) { throw Invalid(); }
+            int[]? gains = null;
+            if (band.ExpirationCycleGainsPermille is { } cycleGains)
+            {
+                if (band.Trigger != PhysiologyCycleEventKind.ExpirationStart || band.DepthPattern != RespiratoryPattern.Regular ||
+                    cycleGains.Count is < 1 or > 64) { throw Invalid(); }
+                gains = cycleGains.ToArray();
+                if (gains.Any(g => g is < 0 or > 10_000) || table.Any(value =>
+                    (Int128)value * gains.Max() < (Int128)short.MinValue * FixedPointMath.Q32One * 1000 ||
+                    (Int128)value * gains.Max() > (Int128)short.MaxValue * FixedPointMath.Q32One * 1000)) { throw Invalid(); }
+            }
             EventWaveformPhasePoint[]? points = null;
             if (band.PhasePoints is { } map)
             {
@@ -64,7 +74,8 @@ public sealed class EventWaveformComposition
             _bands[index] = band with
             {
                 TableQ32 = Array.AsReadOnly(table),
-                PhasePoints = points is null ? null : Array.AsReadOnly(points)
+                PhasePoints = points is null ? null : Array.AsReadOnly(points),
+                ExpirationCycleGainsPermille = gains is null ? null : Array.AsReadOnly(gains)
             };
             _tables[index] = table;
         }
@@ -105,8 +116,10 @@ public sealed class EventWaveformComposition
                 // Integer phase maps the finite support into one frozen LUT cycle.
                 ulong phase = PhaseAt(band, elapsed);
                 long value = PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
-                sum += band.DepthPattern == RespiratoryPattern.Regular ? value : FixedPointMath.RoundDivideTiesToEven(
-                    (Int128)value * RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex), 1000);
+                int gain = band.ExpirationCycleGainsPermille is { } cycleGains
+                    ? cycleGains[(int)(item.CycleIndex % (ulong)cycleGains.Count)]
+                    : RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex);
+                sum += gain == 1000 ? value : FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

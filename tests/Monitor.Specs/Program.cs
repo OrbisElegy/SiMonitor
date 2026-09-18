@@ -62,6 +62,7 @@ internal static class Program
             .. LeftBundleBlockSpecifications.All,
             .. BundleBlockSpecifications.All,
             .. PrematureAtrialSpecifications.All,
+            .. BlockedPrematureAtrialSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,

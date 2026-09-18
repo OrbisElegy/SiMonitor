@@ -3,24 +3,26 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Authored conducted PAC: three sinus beats then an early ectopic P-prime.
-// 800/800/500/1000 ms PP intervals; 500+1000 < 2*800 ms.
+// Authored PAC: three sinus beats then an early ectopic P-prime.
+// Conducted: coupling500/pause1000ms. Blocked:400/1100ms, P-prime on T.
 public static class PrematureAtrialReference
 {
-    public const string EvidenceId = "PrematureAtrialIllustrationDraft@1";
+    public const string EvidenceId = "PrematureAtrialIllustrationDraft@2";
     internal const long GroupDurationNs = 3_100_000_000;
     internal const long MinimumRrNs = 500_000_000;
     public static EcgCycleTiming Timing { get; } = new(MinimumRrNs, 100_000_000,
         160_000_000, 80_000_000, 320_000_000, 140_000_000);
-    public static RegularPhysiologyPlan CreatePlan() => new(0, 800_000_000, 160_000_000,
+    public static EcgCycleTiming BlockedTiming { get; } = Timing with { RrIntervalNs = 800_000_000 };
+    public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureAtrialIllustration or AvConductionPattern.BlockedPrematureAtrialIllustration;
+    public static RegularPhysiologyPlan CreatePlan(bool blocked = false) => new(0, 800_000_000, 160_000_000,
         80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000,
-        ConductionPattern: AvConductionPattern.PrematureAtrialIllustration);
+        ConductionPattern: blocked ? AvConductionPattern.BlockedPrematureAtrialIllustration : AvConductionPattern.PrematureAtrialIllustration);
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool blocked = false)
     {
         int[] amplitudes = [80, 20, 0, -100, 80, 60, 20, -40, -60, -60];
         long peak = TextbookEcgTables.P.Max();
-        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((electrode, i) => electrode with
+        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: blocked ? BlockedTiming : Timing).Select((electrode, i) => electrode with
         {
             Bands = Array.AsReadOnly(electrode.Bands.Append(new EventWaveformBand(
                 PhysiologyCycleEventKind.PrematureAtrialElectrical, 0, 80_000_000,
@@ -29,9 +31,9 @@ public static class PrematureAtrialReference
         }).ToArray());
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool blocked = false)
     {
-        var electrodes = CreateElectrodes();
+        var electrodes = CreateElectrodes(blocked);
         var ra = electrodes.Single(e => e.Electrode == EcgElectrode.RA);
         var ll = electrodes.Single(e => e.Electrode == EcgElectrode.LL);
         return Array.AsReadOnly(ll.Bands.Zip(ra.Bands).Select(pair => pair.First with
@@ -45,9 +47,18 @@ public static class PrematureAtrialReference
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (slot == 3 ? 2_100_000_000 : slot * 800_000_000L);
-        bool Selected(int slot) => kind == PhysiologyCycleEventKind.AtrialElectrical ? slot != 3 :
-            kind != PhysiologyCycleEventKind.PrematureAtrialElectrical || slot == 3;
+        bool blocked = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
+        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (slot == 3 ? (blocked ? 2_000_000_000 : 2_100_000_000) : slot * 800_000_000L);
+        bool Selected(int slot)
+        {
+            if (blocked && slot == 3 && kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical) { return false; }
+            return kind switch
+            {
+                PhysiologyCycleEventKind.AtrialElectrical => slot != 3,
+                PhysiologyCycleEventKind.PrematureAtrialElectrical => slot == 3,
+                _ => true,
+            };
+        }
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;
         for (int slot = 0; slot < 4; slot++)
         {

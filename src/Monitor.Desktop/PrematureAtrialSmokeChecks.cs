@@ -125,6 +125,10 @@ internal static class PrematureAtrialSmokeChecks
                 {
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : ventricular ? pvcQrs : 565);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [303, 320, 355, 395, 420]);
+                    if (selection == 37)
+                    {
+                        WaveformDemoSmokeChecks.VerifyCvpSamplePixels(window, blocks, [2_200_000_000L, 2_256_000_000L, 2_312_000_000L]);
+                    }
                     if (selection == 28)
                     {
                         var junctionalBlocks = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.PrematureJunctional);

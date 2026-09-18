@@ -24,8 +24,10 @@ internal static class PhysiologyDemoSource
         bool flutter = plan.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern) || PrematureVentricularReference.IsPattern(plan.ConductionPattern);
+        bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
+        long CvpDuration(long normal) => shortCoupled ? Math.Min(normal, 200_000_000) : normal;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
-        long PulseDuration(long normal) => prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        long PulseDuration(long normal) => shortCoupled ? Math.Min(normal, 120_000_000) : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
@@ -46,17 +48,17 @@ internal static class PhysiologyDemoSource
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 new PlethPulsePlan(80_000_000, PulseDuration(512_000_000), 1000).CreateBands(), 250, 0),
              configuration.UseVascularReservoir
-                ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
+                ? new VascularPressurePlan(80_000_000, shortCoupled ? 160_000_000 : 240_000_000, 2_900_000_000, 8000, 1000, 30000,
                     Morphology: new(VascularPressureMorphologyKind.Arterial, PulseDuration(600_000_000), 4000)).CreateChannel(plan, ChannelId(3), 0)
                 : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
              configuration.UseVascularReservoir
-                ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
+                ? new VascularPressurePlan(40_000_000, shortCoupled ? 160_000_000 : 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, PulseDuration(640_000_000), 1500)).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0),
              new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
-                 new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
+                 new(60_000_000, CvpDuration(240_000_000), 100), new(160_000_000, CvpDuration(320_000_000), 250),
                  new(400_000_000, 160_000_000, 120), -100).CreateChannel(plan, ChannelId(6), 0)]);
     }
 }

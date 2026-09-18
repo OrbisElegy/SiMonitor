@@ -14,11 +14,11 @@ internal static class PrematureAtrialSmokeChecks
 {
     internal static void Verify()
     {
-        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true), (33, false), (33, true), (34, false), (34, true), (35, false), (35, true), (36, false), (36, true) })
+        foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true), (33, false), (33, true), (34, false), (34, true), (35, false), (35, true), (36, false), (36, true), (37, false), (37, true) })
         {
             bool blocked = selection == 23, aberrant = selection == 24, junctional = selection is >= 25 and <= 27, ventricular = selection >= 28;
             int steps = selection >= 31 ? 40 : 30; // Include second PVC after the shared Pleth delay.
-            int pvcQrs = selection switch { 29 => 165, 30 => 365, 33 => 665, _ => 565 };
+            int pvcQrs = selection switch { 29 => 165, 30 => 365, 33 => 665, 37 => 490, _ => 565 };
             int resumedQrs = selection switch { 29 => 440, 30 => 640, 33 => 790, 34 or 35 => 1040, _ => junctional || ventricular ? 840 : 815 };
             int pStart = selection switch { 23 => 500, 25 => 545, 26 => 595, 27 => 565, _ => 525 };
             var expectedEcg = ventricular ? ProjectedEcgDemoConfiguration.Pvc(ConductionSelection.Pattern(selection)) : junctional ? ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(selection) } : aberrant ? ProjectedEcgDemoConfiguration.AberrantPrematureAtrial : blocked ? ProjectedEcgDemoConfiguration.BlockedPrematureAtrial : ProjectedEcgDemoConfiguration.PrematureAtrial;
@@ -77,15 +77,15 @@ internal static class PrematureAtrialSmokeChecks
                 var blocks = expected.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                 var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
                 var samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
-                if ((ventricular ? (selection != 36 && samples.Skip(pvcQrs - 40).Take(40).Any(v => v != 0)) || samples.Skip(pvcQrs).Take(40).Max(v => Math.Abs((int)v)) < 600 : blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
+                if ((ventricular ? (selection is not (36 or 37) && samples.Skip(pvcQrs - 40).Take(40).Any(v => v != 0)) || samples.Skip(pvcQrs).Take(40).Max(v => Math.Abs((int)v)) < 600 : blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
                     : Enumerable.Range(pStart, 20).Min(i => selection >= 26 ? samples[i] - samples[i - 525] : samples[i]) > -150 || samples.Skip(565).Take(20).Max() < 500) || samples.Skip(resumedQrs).Take(20).Max() < 500)
                 { throw new InvalidOperationException("PAC early P-prime or conducted/resumed QRS missing."); }
-                if (selection == 36)
+                if (selection is 36 or 37)
                 {
-                    if (samples.Skip(535).Take(30).Max(v => Math.Abs((int)v)) < 100)
+                    if (samples.Skip(selection == 37 ? 485 : 535).Take(selection == 37 ? 5 : 30).Max(v => Math.Abs((int)v)) < (selection == 37 ? 1 : 100))
                     { throw new InvalidOperationException("R-on-T lost prolonged preceding T before premature QRS."); }
-                    if (projected) { EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 581, [EcgLead.II, EcgLead.V1, EcgLead.V6]); }
-                    else { MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 581); }
+                    if (projected) { EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, selection == 37 ? 515 : 581, [EcgLead.II, EcgLead.V1, EcgLead.V6]); }
+                    else { MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, selection == 37 ? 515 : 581); }
                 }
                 if (selection == 34)
                 {
@@ -160,7 +160,7 @@ internal static class PrematureAtrialSmokeChecks
                 window.ConductionInput.SelectedIndex = 6; Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                 if (projected ? window.EcgConfiguration != SecondDegreeBlockPreset.Ecg(0) : window.BreathConfiguration != SecondDegreeBlockPreset.Physiology(0))
                 { throw new InvalidOperationException("Leaving PAC retained incompatible fields."); }
-                foreach (int next in new[] { 22, 36, 35, 34, 33, 31, 32, 29, 30, 28, 25, 26, 27, 34, 24, 23, 26, 25, 22 })
+                foreach (int next in new[] { 22, 37, 36, 35, 34, 33, 31, 32, 29, 30, 28, 25, 26, 27, 34, 24, 23, 26, 25, 22 })
                 {
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;

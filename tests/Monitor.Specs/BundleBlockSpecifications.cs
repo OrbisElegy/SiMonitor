@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Simulation.Physiology;
+
+namespace Monitor.Specs;
+
+internal static class BundleBlockSpecifications
+{
+    public static Specification[] All =>
+    [
+        new(nameof(StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII), StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII),
+        new(nameof(IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt), IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt),
+    ];
+
+    private static void StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII()
+    {
+        foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft })
+        {
+            var plan = BundleBlockReference.CreatePlan(mode);
+            var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(6_400_000_000, 100);
+            var ventricular = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).ToArray();
+            Check.That(ventricular.Select(e => e.SimTimeNs).SequenceEqual(Enumerable.Range(0, 8).Select(i => i * 800_000_000L + 160_000_000)), "1:1 including previously dropped fourth/eighth slots");
+            Check.That(events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).Select(e => e.SimTimeNs)
+                .SequenceEqual(ventricular.Select(e => e.SimTimeNs + 80_000_000)), "mechanical timing remains independent of QRS width");
+            var electrodes = BundleBlockReference.CreateElectrodes(mode);
+            var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
+            var samples = source.GenerateBefore(6_400_000_000, 1600, 100);
+            var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, BundleBlockReference.CreateLeadIIBands(mode)).GenerateBefore(6_400_000_000, 1600, 100);
+            Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitor II and projected II share all beats including secondary ST/T");
+            Check.That(samples.All(s => Math.Abs(s.MicrovoltValues[0] + s.MicrovoltValues[2] - s.MicrovoltValues[1]) <= 1), "Einthoven identity retained");
+            Check.That(samples.Skip(600).Take(200).Zip(samples.Take(200)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "fourth beat is present and identical to first");
+            source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
+            source.GenerateBefore(232_000_000, 58, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            Check.That(source.GenerateBefore(3_200_000_000, 742, 100).Zip(restored.GenerateBefore(3_200_000_000, 742, 100))
+                .All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "restore within QRS preserves full fourth beat");
+            var reference = BundleBlockReference.CreateElectrodes(mode == EcgBundleBlockIllustration.CompleteLeft ? mode : EcgBundleBlockIllustration.CompleteRight);
+            Check.That(electrodes.Zip(reference).All(p => p.First.Bands[0].TableQ32.SequenceEqual(p.Second.Bands[0].TableQ32)), "P unchanged");
+            if (mode != EcgBundleBlockIllustration.IncompleteRight)
+            {
+                var old = mode == EcgBundleBlockIllustration.CompleteRight ? RightBundleBlockReference.CreateElectrodes() : LeftBundleBlockReference.CreateElectrodes();
+                var oldPlan = mode == EcgBundleBlockIllustration.CompleteRight ? RightBundleBlockReference.CreatePlan() : LeftBundleBlockReference.CreatePlan();
+                var oldBeat = ElectrodeSignalGenerator.Start(oldPlan, "AcqECGMonitor250@1", 1, old).GenerateBefore(800_000_000, 200, 100);
+                Check.That(samples.Take(200).Zip(oldBeat).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "existing complete BBB morphology byte stable");
+            }
+        }
+        foreach (var invalid in new[] { EcgBundleBlockIllustration.Reference, (EcgBundleBlockIllustration)(-1), (EcgBundleBlockIllustration)4 })
+        {
+            try { BundleBlockReference.CreateElectrodes(invalid); }
+            catch (EventWaveformException e) when (e.ReasonCode == "EcgBundleBlock.InvalidMode") { continue; }
+            throw new InvalidOperationException("Unknown bundle illustration accepted.");
+        }
+    }
+
+    private static void IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt()
+    {
+        const EcgBundleBlockIllustration mode = EcgBundleBlockIllustration.IncompleteRight;
+        var timing = BundleBlockReference.Timing(mode);
+        var electrodes = BundleBlockReference.CreateElectrodes(mode);
+        Check.That(timing.QrsDurationNs == 110_000_000 && timing.StDurationNs == 110_000_000 && timing.QtIntervalNs == 400_000_000, "110ms QRS, ST occupies remaining QT support");
+        Check.That(electrodes.All(e => e.Bands[1].DurationNs == 110_000_000), "all electrodes use same shorter QRS");
+        var samples = ElectrodeSignalGenerator.Start(BundleBlockReference.CreatePlan(mode), "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
+        int V(int index, EcgLead lead) => samples[index].MicrovoltValues[(int)lead];
+        foreach (var lead in new[] { EcgLead.V1, EcgLead.V2 })
+        {
+            Check.That(V(44, lead) > 100 && V(49, lead) < -300 && V(57, lead) > 800, "incomplete rsR-prime retains early r/S and dominant late R-prime");
+            Check.That(V(70, lead) < -40 && V(120, lead) < -150, "post-QRS ST and T negative without QRS tail");
+        }
+        foreach (var lead in new[] { EcgLead.I, EcgLead.V5, EcgLead.V6 })
+        {
+            Check.That(V(45, lead) > 700 && Enumerable.Range(51, 15).All(i => V(i, lead) < -20), "lateral R and delayed terminal S preserved");
+            Check.That(V(120, lead) > 100, "lateral T upright");
+        }
+        Check.That(samples.Skip(140).All(s => s.MicrovoltValues.All(v => v == 0)), "QT ends at560ms without residual ventricular signal");
+    }
+}

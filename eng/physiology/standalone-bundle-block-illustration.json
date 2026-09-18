@@ -1,0 +1,49 @@
+{
+  "id": "StandaloneBundleBlockIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "488-489"
+  },
+  "textbook_summary": [
+    "RBBB retains relatively normal initial depolarization with delayed terminal rightward forces, rsR-prime in V1/V2, broad lateral S waves and secondary ST-T changes.",
+    "Complete RBBB has QRS >= 120 ms; similar morphology with QRS < 120 ms is described as incomplete RBBB in the textbook.",
+    "LBBB changes initial depolarization direction, with absent lateral q waves, broad notched R waves, right-precordial QS/rS and secondary ST-T changes.",
+    "Bundle branch block alone does not require dropped AV conduction."
+  ],
+  "authored_choices": {
+    "atrialPeriodMs": 800,
+    "prMs": 160,
+    "conduction": "1:1 FixedPr conduction without dropped beats.",
+    "mechanicalDelayMs": 80,
+    "completeRight": {
+      "qrsMs": 140,
+      "qtMs": 400,
+      "tMs": 180,
+      "morphology": "Reuses the existing electrode tables and ST/T from right-bundle-block-illustration.json unchanged."
+    },
+    "incompleteRight": {
+      "qrsMs": 110,
+      "qtMs": 400,
+      "tMs": 180,
+      "morphology": "Uses the complete RBBB normalized QRS table with support shortened to 110 ms. ST extends to T onset; QT and T remain unchanged. Amplitudes and 110 ms are authored choices, not measured textbook recordings."
+    },
+    "completeLeft": {
+      "qrsMs": 160,
+      "qtMs": 420,
+      "tMs": 180,
+      "morphology": "Reuses the existing electrode tables and ST/T from left-bundle-block-illustration.json unchanged."
+    }
+  },
+  "implementation": [
+    "BundleBlockReference morphology options are independent of AvConductionPattern. The existing 4:3 Mobitz II combination and its samples are preserved."
+  ],
+  "limitations": [
+    "Three fixed adult teaching examples, not bundle-conduction electrophysiology or anatomical models.",
+    "Incomplete RBBB directly reuses morphology and does not cover all terminal-force, ST/T or axis variants.",
+    "Incomplete LBBB, fascicular block, intermittent block and other rhythm combinations remain unimplemented.",
+    "No dyssynchrony, stroke-volume or automatic diagnostic inference. Existing mechanical-disable/perfusion settings remain independent.",
+    "Windows visual behavior is not yet manually verified."
+  ]
+}

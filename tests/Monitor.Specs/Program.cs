@@ -60,6 +60,7 @@ internal static class Program
             .. GroupedConductionSpecifications.All,
             .. RightBundleBlockSpecifications.All,
             .. LeftBundleBlockSpecifications.All,
+            .. BundleBlockSpecifications.All,
             .. JunctionalEscapeSpecifications.All,
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,

@@ -97,6 +97,8 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button VentricularDisorganizationButton { get; } = new() { Content = "载入室扑／室颤示例（重置参数）" };
     internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）", "二度Ⅱ型4:3＋完全RBBB", "二度Ⅱ型4:3＋完全LBBB" }, SelectedIndex = 0 };
+    internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）" }, SelectedIndex = 0 };
+    internal Button BundleBlockButton { get; } = new() { Content = "载入束支阻滞示例（重置参数）" };
     internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
     internal Button FibrillationButton { get; } = new() { Content = "载入房颤粗颤示例（重置参数）" };
     internal Button FlutterButton { get; } = new() { Content = "载入房扑4:1示例（重置参数）" };
@@ -207,6 +209,9 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(VentricularEscapeButton);
             conduction.Children.Add(SecondDegreePresetInput);
             conduction.Children.Add(SecondDegreePresetButton);
+            conduction.Children.Add(BundleBlockInput);
+            conduction.Children.Add(BundleBlockButton);
+            conduction.Children.Add(new TextBlock { Text = "独立束支模板：窦性75次/分、1:1房室传导、PR160ms；完全RBBB / 不完全RBBB / 完全LBBB的QRS分别为140 / 110 / 160ms。保留继发ST–T，固定形态/时限；不从QRS宽度推断射血量。使用载入按钮可清除此前节律/形态设置。" });
             conduction.Children.Add(new TextBlock { Text = "从室扑/室颤、房扑/房颤或逸搏切换至二度阻滞并应用时，将加载完整示例并重置参数。也可使用载入按钮。Ⅱ型示例PR恒定160ms：窄QRS80ms，完全RBBB为140ms；完全LBBB为160ms，宽切迹R与右胸QS/rS，伴继发性ST–T改变。2:1比例本身不区分Ⅰ/Ⅱ型。" });
             conduction.Children.Add(FlutterButton);
             conduction.Children.Add(FibrillationButton);
@@ -412,6 +417,12 @@ internal sealed class WaveformDemoWindow : Window
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration), PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration)); }
         };
+        BundleBlockButton.Click += (_, _) =>
+        {
+            if (_closed || BundleBlockInput.SelectedIndex is < 0 or > 3) { return; }
+            var mode = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex;
+            Reset(UsesPulse, BundleBlockPreset.Ecg(mode), BundleBlockPreset.Physiology(mode));
+        };
         SecondDegreePresetButton.Click += (_, _) =>
         {
             if (_closed || SecondDegreePresetInput.SelectedIndex is < 0 or > 7) { return; }
@@ -562,7 +573,7 @@ internal sealed class WaveformDemoWindow : Window
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => ProjectedEcgDemoConfiguration.Default }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
+            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => BundleBlockPreset.Ecg((EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex) }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
@@ -703,7 +714,7 @@ internal sealed class WaveformDemoWindow : Window
             }
             EcgTContourPlan? contour = TContourInput.SelectedIndex == 0 ? null : new(TContourLeadInput.SelectedIndex == 6 ? 63 : TContourLeadInput.SelectedIndex > 6 ? 1 : 1 << TContourLeadInput.SelectedIndex,
                 (EcgTContourShape)TContourInput.SelectedIndex, contourPeak, TContourLeadInput.SelectedIndex > 6 ? (EcgTContourTarget)(TContourLeadInput.SelectedIndex - 6) : EcgTContourTarget.Chest, crossing, secondPeak);
-            configuration = configuration with { ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            configuration = configuration with { BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgTContour.InvalidSecondPeak")
@@ -715,6 +726,11 @@ internal sealed class WaveformDemoWindow : Window
         catch (EventWaveformException error) when (error.ReasonCode == "EcgVentricular.ConflictingModes")
         {
             EcgConfigurationStatus.Text = "未应用：心室示例不能与手动 T/ST、融合、梗死或三区域编辑同时使用。请关闭这些设置后应用；当前数据与扫屏状态保持。";
+        }
+        catch (EventWaveformException error) when (error.ReasonCode is "EcgBundleBlock.ConflictingModes" or "EcgBundleBlock.InvalidMode")
+        {
+            var status = _projected ? EcgConfigurationStatus : BreathConfigurationStatus;
+            status.Text = "未应用：独立束支模板需1:1房室活动、固定形态/时限且无独立心室时钟；请使用载入按钮重置，或选择参考以关闭模板。当前数据与扫屏状态保持。";
         }
         catch (ArgumentException)
         {
@@ -798,10 +814,15 @@ internal sealed class WaveformDemoWindow : Window
                 independentPeriod = parsedPeriod;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex)));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex));
         }
         catch (EventWaveformException error) when (error.ReasonCode is "Capnogram.Co2ResponseOutOfRange" or "Capnogram.InvalidCo2Response")
         { BreathConfigurationStatus.Text = "未应用：潮式深度耦合后的CO₂超过支持范围（0～327 mmHg）；请降低参考呼气末值或检查呼吸周期。当前数据与扫屏状态保持。"; }
+        catch (EventWaveformException error) when (error.ReasonCode is "EcgBundleBlock.ConflictingModes" or "EcgBundleBlock.InvalidMode")
+        {
+            var status = _projected ? EcgConfigurationStatus : BreathConfigurationStatus;
+            status.Text = "未应用：独立束支模板需1:1房室活动、固定形态/时限且无独立心室时钟；请使用载入按钮重置，或选择参考以关闭模板。当前数据与扫屏状态保持。";
+        }
         catch (ArgumentException)
         {
             BreathConfigurationStatus.Text = "未应用：可用“载入二度阻滞示例（重置参数）”清除旧参数；成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
@@ -824,6 +845,7 @@ internal sealed class WaveformDemoWindow : Window
         EcgConfiguration = configuration;
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
+        BundleBlockInput.SelectedIndex = (int)(_projected ? configuration.BundleBlock : breathConfiguration.BundleBlock);
         if (_physiology)
         {
             ConductionInput.SelectedIndex = ConductionSelection.Index(breathConfiguration.VentricularConductionRatio, breathConfiguration.ConductedBeatsPerGroup, breathConfiguration.ConductionPattern);
@@ -861,6 +883,8 @@ internal sealed class WaveformDemoWindow : Window
                 ? $"已应用：{ConductionInput.SelectedItem}；无独立P/QRS/T或有效射血；Pleth无搏动，RC压力衰减。呼吸周期{breathConfiguration.BreathPeriodMilliseconds} ms，吸气{breathConfiguration.InspirationMilliseconds} ms；Resp/CO₂仍依独立呼吸设置生成，不模拟气体交换反馈。"
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用：{RespiratoryPatternInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；首次 QRS 偏移 {breathConfiguration.IndependentVentricularOffsetMilliseconds ?? (breathConfiguration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration || AtrialFibrillationReference.IsPattern(breathConfiguration.ConductionPattern) ? 80 : 160)} ms；独立心室周期 {breathConfiguration.IndependentVentricularPeriodMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "未启用"} ms；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}、每 {breathConfiguration.MechanicalEveryCycles} 个室性周期一次（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即；停止持续周期数 {MechanicalDurationCyclesInput.Text}，空为不恢复）；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(breathConfiguration.VentricularConductionRatio, breathConfiguration.ConductedBeatsPerGroup, breathConfiguration.ConductionPattern)}；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/参考呼气末 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+            if (breathConfiguration.BundleBlock != EcgBundleBlockIllustration.Reference)
+            { _activeBreathConfiguration.Text += $"；{BundleBlockInput.SelectedItem}，QRS {BundleBlockReference.Timing(breathConfiguration.BundleBlock).QrsDurationNs / 1_000_000} ms"; }
             BreathConfigurationStatus.Text = "";
         }
         if (_projected)
@@ -937,6 +961,7 @@ internal sealed class WaveformDemoWindow : Window
                 ? $"已应用：{ConductionInput.SelectedItem}；无独立 P/QRS/T；PR、QRS时限、QT及QTc不适用；无有效射血。"
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern)}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms") +
+                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}（含继发ST–T）" : "") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.Zones is not null ? "" : !infarction.HasActiveRegion ? "；阶段示意关闭" : $"；{(infarction.Components is null ? InfarctionStageInput.SelectedItem : "独立组合")}／{InfarctionTerritoryInput.SelectedItem}（仅自选模式使用勾选项）：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +
                 (configuration.Zones is not null ? $"；三区域：缺血={IschemiaZoneInput.SelectedItem}，损伤={InjuryZoneInput.SelectedItem}，坏死={NecrosisZoneInput.SelectedItem}；缺血区域复极延长 {RepolarizationDelayInput.Text} ms（区域关闭时不生效）；使用组合 Q/ST/T 值，阶段及其他手动 ST/T/融合暂不生效" : "") +
@@ -948,8 +973,8 @@ internal sealed class WaveformDemoWindow : Window
                 (configuration.TContour is { } tc ? $"；{TContourLeadInput.SelectedItem} {TContourInput.SelectedItem} 峰幅{tc.PeakMicrovolts} μV" + (tc.Shape is not (EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive) ? "" : $"，第二瓣{tc.SecondPeakMicrovolts ?? tc.PeakMicrovolts} μV，过零{(tc.CrossingPositionPermille ?? 500) / 10m:0.#}%") : "") +
                 (configuration.Ventricular != EcgVentricularIllustration.Reference ? $"；{VentricularInput.SelectedItem}（非特异）" : "") +
                 (configuration.Atrial != EcgAtrialIllustration.Reference ? $"；{AtrialInput.SelectedItem}（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
-                (configuration.TContour is not null || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
-                (configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +
+                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.TContour is not null || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
+                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +
                 (configuration.TContour is not null || configuration.Zones is not null ? "" : tWave.PeakPositionPermille is null ? "；T 峰参考 62.5%" : $"；手动 T 峰 {TPeakInput.Text}%") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
                 (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :

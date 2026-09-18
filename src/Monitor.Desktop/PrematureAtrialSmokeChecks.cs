@@ -123,6 +123,13 @@ internal static class PrematureAtrialSmokeChecks
                 }
                 else
                 {
+                    var plethSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
+                    var plethBand = new PlethPulsePlan(80_000_000, 512_000_000, 1250).CreateBands()[0] with
+                    { EjectionIllustration = expectedPhysiology.ConductionPattern };
+                    var plethSource = PhysiologySignalGenerator.Start(expectedPhysiology.ResolvePlan(), "AcqPleth125@1", 1, [plethBand]);
+                    if (!plethSamples.SequenceEqual(plethSource.GenerateBefore(plethSamples.Length * 8_000_000L, plethSamples.Length, 200).Select(sample => sample.NormalizedValue)))
+                    { throw new InvalidOperationException("Premature demo compressed normal Pleth support or lost overlapping tails."); }
+                    MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, plethIndex: 100);
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : ventricular ? pvcQrs : 565);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [303, 320, 355, 395, 420]);
                     if (selection == 37)

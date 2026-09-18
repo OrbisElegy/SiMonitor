@@ -6,7 +6,51 @@ namespace Monitor.Specs;
 
 internal static class PrematurePerfusionSpecifications
 {
-    public static Specification[] All => [new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    public static Specification[] All => [new(nameof(PlethFullSupportSurvivesPrematureOverlap), PlethFullSupportSurvivesPrematureOverlap), new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    private static void PlethFullSupportSurvivesPrematureOverlap()
+    {
+        foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureBeatPerfusion.IsPattern))
+        {
+            var plan = PrematureVentricularReference.IsPattern(mode) ? PrematureVentricularReference.CreatePlan(mode) :
+                PrematureJunctionalReference.IsPattern(mode) ? PrematureJunctionalReference.CreatePlan() with { ConductionPattern = mode } :
+                PrematureAtrialReference.CreatePlan() with { ConductionPattern = mode };
+            var band = new PlethPulsePlan(80_000_000, 512_000_000, 1250).CreateBands()[0] with { EjectionIllustration = mode };
+            var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(8_000_000_000, 200)
+                .Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).ToArray();
+            var combined = EventWaveformComposition.Restore(new([band], events));
+            var isolated = events.Select(e => EventWaveformComposition.Restore(new([band], [e]))).ToArray();
+            for (long time = 0; time < 8_000_000_000; time += 8_000_000)
+            {
+                long sum = isolated.Sum(wave => wave.EvaluateAt(time));
+                Check.That(combined.EvaluateAt(time) == sum && sum >= 0 && sum < 2500 * FixedPointMath.Q32One,
+                    "full Pleth contributions sum without clipping or truncating prior tails");
+            }
+            Check.That(isolated[0].EvaluateAt(800_000_000) > 0 && isolated[0].EvaluateAt(832_000_000) == 0,
+                "startup normal pulse retains512ms half-open support after80ms transit");
+            for (int i = 1; i < events.Length; i++)
+            {
+                long overlapTime = events[i].SimTimeNs + 88_000_000;
+                if (events[i].SimTimeNs - events[i - 1].SimTimeNs == 500_000_000 &&
+                    PrematureBeatPerfusion.GainPermille(mode, events[i - 1].CycleIndex) >= 800)
+                {
+                    Check.That(isolated[i - 1].EvaluateAt(overlapTime) > 0 && isolated[i].EvaluateAt(overlapTime) > 0,
+                    "native tick inside12ms overlap retains both previous normal tail and new premature pulse");
+                }
+            }
+            var source = PhysiologySignalGenerator.Start(plan, "AcqPleth125@1", 1, [band]);
+            var expected = source.GenerateBefore(8_000_000_000, 1000, 200);
+            var split = PhysiologySignalGenerator.Start(plan, "AcqPleth125@1", 1, [band]);
+            var prefix = split.GenerateBefore(824_000_000, 103, 200);
+            string checkpoint = System.Text.Json.JsonSerializer.Serialize(split.CaptureState());
+            try { split.GenerateBefore(8_000_000_000, 1, 200); throw new InvalidOperationException("Sample limit ignored."); }
+            catch (PhysiologySignalException) { }
+            Check.That(checkpoint == System.Text.Json.JsonSerializer.Serialize(split.CaptureState()), "failed generation preserves overlapping tail state");
+            split = PhysiologySignalGenerator.Restore(split.CaptureState());
+            Check.That(expected.SequenceEqual(prefix.Concat(split.GenerateBefore(8_000_000_000, 1000, 200))),
+                "native acquisition and recovery preserve full support and original beat gains");
+        }
+    }
+
     private static void BeatPerfusionSharesGainsWithoutInventingEjection()
     {
         foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureVentricularReference.IsPattern))

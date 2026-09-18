@@ -131,7 +131,7 @@ internal static class PrematureAtrialSmokeChecks
                         foreach (int row in new[] { 2, 3, 5 })
                         {
                             if (MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(junctionalBlocks, row)))
-                            { throw new InvalidOperationException("PVC perfusion still repeats the unweighted PJC source."); }
+                            { throw new InvalidOperationException("PVC and PJC lost their distinct authored ectopic strengths."); }
                         }
                         foreach (int row in new[] { 1, 4 })
                         {

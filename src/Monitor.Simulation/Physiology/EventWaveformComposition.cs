@@ -46,7 +46,7 @@ public sealed class EventWaveformComposition
                 band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
             if (band.EjectionIllustration is { } perfusion &&
-                (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureVentricularReference.IsPattern(perfusion))) { throw Invalid(); }
+                (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureBeatPerfusion.IsPattern(perfusion))) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
             if (band.VentricularCycles is { } cycles &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || cycles.Length is < 1 or > 64 ||

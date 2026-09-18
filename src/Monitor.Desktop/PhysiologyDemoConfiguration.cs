@@ -12,6 +12,9 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
+    internal static PhysiologyDemoConfiguration PrematureAtrial { get; } = Default with
+    { ConductionPattern = AvConductionPattern.PrematureAtrialIllustration };
+
     internal static PhysiologyDemoConfiguration JunctionalEscape { get; } = Default with
     {
         ConductionPattern = AvConductionPattern.CompleteAvBlockJunctionalIllustration,
@@ -72,9 +75,10 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         { throw new ArgumentException("Ventricular disorganization requires passive reservoir decay."); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
-        var timing = fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
+        bool prematureAtrial = ConductionPattern == AvConductionPattern.PrematureAtrialIllustration;
+        var timing = prematureAtrial ? PrematureAtrialReference.Timing : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
         long offset = DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        return new(0, fibrillation ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
+        return new(0, fibrillation || prematureAtrial ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
             offset + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
             ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, RespiratoryPattern, ConductedBeatsPerGroup, ConductionPattern);

@@ -1,5 +1,5 @@
 {
-  "id": "PrematureBeatPerfusionIllustration@1",
+  "id": "PrematureBeatPerfusionIllustration@2",
   "references": [
     {
       "url": "https://pubmed.ncbi.nlm.nih.gov/2443582/",
@@ -12,6 +12,12 @@
       "summary": [
         "Clinical observations include PVCs without a measurable arterial ejection wave; this does not mean that all R-on-T beats lack ejection."
       ]
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4618025/",
+      "summary": [
+        "Animal experiments include PAC ejection changes. They support variable ejection qualitatively, not the example weight of 400 or calibration to humans."
+      ]
     }
   ],
   "authoredGainsPermille": {
@@ -20,7 +26,9 @@
     "postPause": 1000,
     "shortCoupledPvc": 0,
     "initialBeat": 800,
-    "interpolatedRecovery": 800
+    "interpolatedRecovery": 800,
+    "conductedPacOrPjc": 400,
+    "blockedPac": 0
   },
   "semantics": "Strength weights are neither stroke volume in milliliters nor clinically measured percentages. Pressure drive and Pleth share the original beat ordinal. Ineffective peripheral ejection at short coupling is specific to this teaching example.",
   "implementation": [
@@ -29,10 +37,11 @@
     "Normal, weak-PVC and recovery Pleth gains correspond to 1000, 250 and 1250 counts. Both consecutive PVCs use 200; these values do not establish exact couplet stroke volumes.",
     "The interpolated example has no potentiation. The first epoch beat is not incorrectly labeled as recovery; original polymorphic/multifocal slots and both recovery phases are preserved.",
     "Pressure retains existing reservoir/morphology modifiers and scales each beat's input and morphology pulse by the same gain. Zero input cannot restart morphology.",
-    "The example requires reservoir sources and atomically rejects disabling them. Generic pressure plans keep the option disabled by default for compatibility."
+    "The example requires reservoir sources and atomically rejects disabling them. Generic pressure plans keep the option disabled by default for compatibility.",
+    "PAC/PJC use the original four-slot index. A blocked PAC emits no ventricular event and has slot-3 weight zero; recovery remains slot 0 of the next group without compacting indices. Normally conducted and RBBB-aberrant PACs share weights, as do all three retrograde-P PJC positions; no unimplemented synchrony differences are inferred."
   ],
   "limitations": [
-    "This revision covers PVCs only; beatwise PAC/PJC perfusion is not integrated.",
+    "Explicit beatwise strength examples exist for PVC/PAC/PJC. CVP atrial/ventricular mechanics and exact beatwise ejection durations remain incomplete.",
     "No complete filling, contractility or valve model; no actual stroke-volume, feedback or anatomical ectopic-focus inference.",
     "Shared ABP/PA teaching strengths do not imply quantitatively identical left/right ventricular behavior.",
     "Short-coupling CVP component compression remains the previous simplification; beatwise atrial/ventricular mechanical morphology is incomplete.",

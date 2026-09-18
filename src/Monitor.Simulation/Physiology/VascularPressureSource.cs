@@ -27,7 +27,7 @@ public sealed class VascularPressureSource
         if (physiology is null || plan is null) { throw Invalid(); }
         try { _ = RegularPhysiologyTimeline.Start(physiology); }
         catch (ArgumentException) { throw Invalid(); }
-        if (plan.UsePrematureBeatPerfusion && !PrematureVentricularReference.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
+        if (plan.UsePrematureBeatPerfusion && !PrematureBeatPerfusion.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
         Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern) : physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
         Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;

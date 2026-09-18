@@ -20,7 +20,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         for (int index = 0; index < components.Length; index++)
         {
             var component = components[index];
-            Int128 triggerPeriod = index == 0 ? physiology.HeartPeriodNs : physiology.VentricularPeriodNs;
+            Int128 triggerPeriod = index == 0 ? physiology.AtrialPeriodNs : physiology.VentricularPeriodNs;
             if (component is null || component.DelayNs < 0 || component.DurationNs <= 0 ||
                 component.DurationNs > triggerPeriod || component.DelayNs > long.MaxValue - component.DurationNs ||
                 component.MagnitudeCentiMmHg is < 0 or > short.MaxValue) { throw Invalid(); }

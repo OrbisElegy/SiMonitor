@@ -12,6 +12,7 @@ public enum PhysiologyCycleEventKind
     // A tiled source segment, not one coordinated atrial depolarization.
     AtrialFibrillationSegment,
     VentricularDisorganizationSegment,
+    PrematureAtrialElectrical,
 }
 
 // Local source activity, not a detected apnea classification or device fault.
@@ -20,7 +21,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -43,7 +44,8 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
 {
     // Irregular sources expose a conservative interval for pulse support and
     // indexed pressure bounds. Their event times come from their own visitor.
-    internal Int128 VentricularPeriodNs => AtrialFibrillationReference.IsPattern(ConductionPattern)
+    internal Int128 AtrialPeriodNs => ConductionPattern == AvConductionPattern.PrematureAtrialIllustration ? PrematureAtrialReference.MinimumRrNs : HeartPeriodNs;
+    internal Int128 VentricularPeriodNs => ConductionPattern == AvConductionPattern.PrematureAtrialIllustration ? PrematureAtrialReference.MinimumRrNs : AtrialFibrillationReference.IsPattern(ConductionPattern)
         ? AtrialFibrillationReference.MinimumRrNs : IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * (ConductedBeatsPerGroup > 1 ? 1 : VentricularConductionRatio);
 }
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
@@ -72,6 +74,12 @@ public sealed class RegularPhysiologyTimeline
                 (plan.HeartPeriodNs != 800_000_000 || plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
                  plan.CardiacActivity != CardiacActivity.VentricularOnly || plan.VentricularMechanicalEnabled ||
                  plan.IndependentVentricularPeriodNs is not null || plan.MechanicalEveryCycles != 1 ||
+                 plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
+            (plan.ConductionPattern == AvConductionPattern.PrematureAtrialIllustration &&
+                (plan.HeartPeriodNs != 800_000_000 || plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
+                 plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                 plan.VentricularElectricalOffsetNs != 160_000_000 || plan.VentricularMechanicalOffsetNs != 240_000_000 ||
+                 plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.MechanicalEveryCycles != 1 ||
                  plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             (AtrialFibrillationReference.IsPattern(plan.ConductionPattern) &&
                 (plan.HeartPeriodNs != AtrialFibrillationReference.GridNs || plan.VentricularConductionRatio != 1 ||
@@ -156,6 +164,8 @@ public sealed class RegularPhysiologyTimeline
             if (AtrialFibrillationReference.IsPattern(_plan.ConductionPattern))
             { Add(PhysiologyCycleEventKind.AtrialFibrillationSegment, AtrialFibrillationReference.SegmentDurationNs, 0); }
             else { Add(PhysiologyCycleEventKind.AtrialElectrical, _plan.HeartPeriodNs, 0); }
+            if (_plan.ConductionPattern == AvConductionPattern.PrematureAtrialIllustration)
+            { Add(PhysiologyCycleEventKind.PrematureAtrialElectrical, _plan.HeartPeriodNs, 0); }
             // Flutter mechanics are not modelled; do not emit normal atrial
             // contractions at the electrical flutter frequency.
             if (_plan.ConductionPattern != AvConductionPattern.AtrialFlutterIllustration && !AtrialFibrillationReference.IsPattern(_plan.ConductionPattern))
@@ -212,6 +222,13 @@ public sealed class RegularPhysiologyTimeline
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.ConductionPattern == AvConductionPattern.PrematureAtrialIllustration &&
+            kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.PrematureAtrialElectrical or
+                PhysiologyCycleEventKind.AtrialMechanical or PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
+        {
+            PrematureAtrialReference.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
+            return;
+        }
         if (AtrialFibrillationReference.IsPattern(plan.ConductionPattern) &&
             kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
         {

@@ -1,0 +1,65 @@
+{
+  "id": "PrematureAtrialIllustrationDraft@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "477-478"
+  },
+  "textbook_summary": [
+    "Premature ectopic P-prime waves differ in morphology from sinus P waves.",
+    "The normally conducted example has P-prime-to-R > 120 ms and narrow QRS complexes.",
+    "The pause is usually incompletely compensatory: the interval between surrounding sinus P waves is less than twice the normal PP interval."
+  ],
+  "authored_choices": {
+    "normalSinusPeriodMs": 800,
+    "groupDurationMs": 3100,
+    "atrialOffsetsMs": [
+      0,
+      800,
+      1600,
+      2100
+    ],
+    "ectopicSlot": 3,
+    "couplingMs": 500,
+    "postEctopicPauseMs": 1000,
+    "sinusToResumedSinusMs": 1500,
+    "prMs": 160,
+    "pMs": 100,
+    "pPrimeMs": 80,
+    "qrsMs": 80,
+    "qtMs": 320,
+    "tMs": 140,
+    "pPrimeElectrodeAmplitudesMicrovolts": [
+      80,
+      20,
+      0,
+      -100,
+      80,
+      60,
+      20,
+      -40,
+      -60,
+      -60
+    ],
+    "pPrimeShape": "Reuses the normalized rounded P table with 80 ms duration and explicit electrode amplitudes, inverted in II/III/aVF and positive in aVR. No specific ectopic focus is localized.",
+    "atrialMechanicalDelayMs": 80,
+    "ventricularMechanicalDelayFromQrsMs": 80,
+    "pulseSupportLimitMs": 420
+  },
+  "implementation": [
+    "Normal and ectopic P use distinct event kinds. The sinus grid resets after the premature atrial beat according to the selected pause. Periodic repetition is not a random incidence model.",
+    "Direct beat indexing and exact half-open interval counts; the timeline and pressure use the same mechanical-event accessor.",
+    "Short-term recovery reconstructs bounded lookback without replaying from the epoch or indirectly producing premature atrial beats through temporary heart-rate changes.",
+    "Source support and pressure-reference bounds use the minimum PP/RR of 500 ms. Normal and premature atrial beats share QRS/T morphology.",
+    "Twelve-lead and monitor lead II share one source. Both demos load fixed examples and clear previous rhythm/morphology settings."
+  ],
+  "limitations": [
+    "Intervals, QT, the P-prime electrode vector and one premature atrial beat after every three sinus beats are authored choices, not traced textbook recordings or calibrated electrophysiological parameters.",
+    "Blocked premature atrial beats, intraventricular aberrancy, other ectopic P-prime shapes and different coupling intervals are unimplemented.",
+    "Mechanical events occur early, but CVP/Pleth/ejection inputs retain existing shapes and amplitudes without beatwise filling/stroke-volume feedback. Ventricular mechanical events may be explicitly disabled.",
+    "No automatic diagnosis or RR/QTc detection; fixed QT does not adapt to short/long intervals.",
+    "Other rhythms, including PVC/PJC/VT, and other physiological waveform gaps remain open.",
+    "Windows visual behavior is not yet manually verified."
+  ]
+}

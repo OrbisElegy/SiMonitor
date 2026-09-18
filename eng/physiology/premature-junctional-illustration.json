@@ -1,5 +1,5 @@
 {
-  "id": "PrematureJunctionalIllustrationDraft@1",
+  "id": "PrematureJunctionalIllustrationDraft@2",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -9,7 +9,7 @@
   "textbook_summary": [
     "Premature QRS-T occurs without a preceding sinus P wave; QRS-T morphology is essentially the same as normally conducted sinus beats.",
     "Retrograde P-prime is inverted in II/III/aVF and upright in aVR.",
-    "When P-prime precedes QRS, P-prime-to-R is < 120 ms. The textbook also describes post-QRS and overlapping forms, which this example does not cover.",
+    "Retrograde P-prime may precede QRS with P-prime-to-R < 120 ms, follow QRS with R-to-P-prime < 200 ms, or overlap QRS. A fixed example is provided for each position.",
     "The pause is usually fully compensatory."
   ],
   "authored_choices": {
@@ -51,7 +51,26 @@
     "minimumAtrialIntervalMs": 580,
     "minimumVentricularIntervalMs": 500,
     "pulseSupportLimitMs": 420,
-    "pPrimeVector": "Reuses the PAC example's normalized P table and electrode vector [80,20,0,-100,80,60,20,-40,-60,-60], independently triggered by RetrogradeAtrialElectrical. This is not a renamed PAC schedule."
+    "pPrimeVector": "Reuses the PAC example's normalized P table and electrode vector [80,20,0,-100,80,60,20,-40,-60,-60], independently triggered by RetrogradeAtrialElectrical. This is not a renamed PAC schedule.",
+    "positionVariants": {
+      "before": {
+        "retrogradePStartMs": 2180,
+        "atrialMechanicalMs": 2260,
+        "minimumAtrialIntervalMs": 580
+      },
+      "after": {
+        "retrogradePStartMs": 2380,
+        "qrsOnsetToPPrimeMs": 120,
+        "atrialMechanicalMs": 2460,
+        "minimumAtrialIntervalMs": 780
+      },
+      "overlapping": {
+        "retrogradePStartMs": 2260,
+        "atrialMechanicalMs": 2340,
+        "minimumAtrialIntervalMs": 660
+      },
+      "shared": "P-prime duration of 80 ms, ventricular timing/morphology, coupling of 500 ms, pause of 1100 ms and group duration of 3200 ms are preserved. Overlap is additive; P-prime is not deleted and QRS tables are not modified."
+    }
   },
   "implementation": [
     "Uses the original group*4+slot index: a 3200 ms group with three sinus beats followed by one premature junctional beat.",
@@ -59,11 +78,12 @@
     "This example emits no additional sinus excitation at 2400 ms. The returning sinus P occurs at 3200 ms, with a 1600 ms R-to-returning-R interval.",
     "Bounded half-open interval counts and finite lookback. Pressure accessors reuse actual ventricular mechanical times without replaying from the epoch.",
     "Independent respiration is retained. Mechanical amplitudes and shapes keep existing parameters; ventricular mechanics can be explicitly disabled.",
-    "Both demos provide fixed examples with atomic switching/rejection; twelve-lead and monitor lead II share the source."
+    "Both demos provide fixed examples with atomic switching/rejection; twelve-lead and monitor lead II share the source.",
+    "Post-QRS/overlapping variants shift only the final slot's RetrogradeAtrialElectrical and AtrialMechanical events. QRS, ventricular mechanics and pressure are identical. AtrialPeriodNs bounds CVP support by each variant's actual minimum atrial interval."
   ],
   "limitations": [
     "Fixed timing, amplitudes and intervals are authored choices, not traced textbook measurements or anatomical localization.",
-    "Only the retrograde-P-prime-before-QRS variant is covered. Post-QRS/overlapping P-prime, aberrancy and other pauses remain uncovered.",
+    "One fixed example is provided for each of the three P-prime positions. Other R-to-P-prime/P-prime-to-R intervals, aberrancy and compensatory pauses remain uncovered.",
     "No sinus-node reset, concealed conduction, refractory behavior, reentry or first-escape triggering model.",
     "No beatwise filling, stroke volume, pulse deficit or complete hemodynamic feedback.",
     "Other PVC/VT/SVT, respiratory, perfusion and artifact gaps remain open; dynamic UI rulers remain deferred.",

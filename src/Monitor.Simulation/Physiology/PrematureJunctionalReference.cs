@@ -1,15 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Simulation.Physiology;
 
-// Authored PJC with retrograde P-prime before QRS. No automatic focus or
+// Authored PJC with retrograde P-prime before, after or within QRS. No automatic focus or
 // refractoriness model: the group explicitly selects one compensatory pause.
 public static class PrematureJunctionalReference
 {
-    public const string EvidenceId = "PrematureJunctionalIllustrationDraft@1";
+    public const string EvidenceId = "PrematureJunctionalIllustrationDraft@2";
     internal const long GroupDurationNs = 3_200_000_000;
     public static EcgCycleTiming Timing => PrematureAtrialReference.Timing;
-    public static RegularPhysiologyPlan CreatePlan() => PrematureAtrialReference.CreatePlan() with
-    { ConductionPattern = AvConductionPattern.PrematureJunctionalIllustration };
+    public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureJunctionalIllustration or
+        AvConductionPattern.PrematureJunctionalAfterQrsIllustration or AvConductionPattern.PrematureJunctionalOverlappingIllustration;
+    public static long RetrogradeOffsetNs(AvConductionPattern pattern) => pattern switch
+    {
+        AvConductionPattern.PrematureJunctionalIllustration => 2_180_000_000,
+        AvConductionPattern.PrematureJunctionalAfterQrsIllustration => 2_380_000_000,
+        AvConductionPattern.PrematureJunctionalOverlappingIllustration => 2_260_000_000,
+        _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidJunctionalPattern", nameof(pattern)),
+    };
+    internal static long MinimumAtrialIntervalNs(AvConductionPattern pattern) => RetrogradeOffsetNs(pattern) - 1_600_000_000;
+    public static RegularPhysiologyPlan CreatePlan(AvConductionPattern pattern = AvConductionPattern.PrematureJunctionalIllustration)
+    {
+        _ = RetrogradeOffsetNs(pattern);
+        return PrematureAtrialReference.CreatePlan() with { ConductionPattern = pattern };
+    }
 
     // The existing ectopic vector gives inferior negative / aVR positive P.
     // Reuse only its shape: retrograde atrial activation has its own event time.
@@ -29,7 +42,7 @@ public static class PrematureJunctionalReference
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
         Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (slot == 3
-            ? (kind is PhysiologyCycleEventKind.RetrogradeAtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical ? 2_180_000_000 : 2_100_000_000)
+            ? (kind is PhysiologyCycleEventKind.RetrogradeAtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical ? RetrogradeOffsetNs(plan.ConductionPattern) : 2_100_000_000)
             : slot * 800_000_000L);
         bool Selected(int slot)
         {

@@ -74,9 +74,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
             if (this != BundleBlockPreset.Ecg(BundleBlock)) { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
             return BundleBlockReference.Timing(BundleBlock);
         }
-        if (ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration)
+        if (PrematureJunctionalReference.IsPattern(ConductionPattern))
         {
-            if (this != PrematureJunctional) { throw new ArgumentException("PJC requires its authored schedule and morphology."); }
+            if (this != PrematureJunctional with { ConductionPattern = ConductionPattern }) { throw new ArgumentException("PJC requires its authored schedule and morphology."); }
             return PrematureJunctionalReference.Timing;
         }
         if (PrematureAtrialReference.IsPattern(ConductionPattern))
@@ -192,7 +192,7 @@ internal static class ProjectedEcgDemoSource
             ? LeftBundleBlockReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration
             ? RightBundleBlockReference.CreateElectrodes()
-            : configuration.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration
+            : PrematureJunctionalReference.IsPattern(configuration.ConductionPattern)
             ? PrematureJunctionalReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration
             ? PrematureAtrialReference.CreateAberrantElectrodes()

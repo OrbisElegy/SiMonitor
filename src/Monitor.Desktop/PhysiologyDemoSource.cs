@@ -23,7 +23,7 @@ internal static class PhysiologyDemoSource
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool flutter = plan.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
-        bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || plan.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration;
+        bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern);
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
         long PulseDuration(long normal) => prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
@@ -34,7 +34,7 @@ internal static class PhysiologyDemoSource
                 VentricularDisorganizationReference.IsPattern(plan.ConductionPattern) ? VentricularDisorganizationReference.CreateLeadIIBands(plan.ConductionPattern) :
                 plan.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration ? RightBundleBlockReference.CreateLeadIIBands() :
                 plan.ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration ? LeftBundleBlockReference.CreateLeadIIBands() :
-                plan.ConductionPattern == AvConductionPattern.PrematureJunctionalIllustration ? PrematureJunctionalReference.CreateLeadIIBands() :
+                PrematureJunctionalReference.IsPattern(plan.ConductionPattern) ? PrematureJunctionalReference.CreateLeadIIBands() :
                 plan.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? PrematureAtrialReference.CreateAberrantLeadIIBands() :
                 prematureBeat ? PrematureAtrialReference.CreateLeadIIBands(blockedAtrial) :
                 fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration) :

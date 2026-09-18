@@ -4,14 +4,16 @@ namespace Monitor.Simulation.Physiology;
 // One authored monomorphic PVC with full compensation, not a focus model.
 public static class PrematureVentricularReference
 {
-    public const string EvidenceId = "PrematureVentricularIllustrationDraft@2";
+    public const string EvidenceId = "PrematureVentricularIllustrationDraft@3";
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureVentricularIllustration or
-        AvConductionPattern.VentricularBigeminyIllustration or AvConductionPattern.VentricularTrigeminyIllustration;
+        AvConductionPattern.VentricularBigeminyIllustration or AvConductionPattern.VentricularTrigeminyIllustration or
+        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration;
     public static int BeatsPerGroup(AvConductionPattern pattern) => pattern switch
     {
         AvConductionPattern.PrematureVentricularIllustration => 4,
         AvConductionPattern.VentricularBigeminyIllustration => 2,
         AvConductionPattern.VentricularTrigeminyIllustration => 3,
+        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration => 8,
         _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPvcPattern", nameof(pattern)),
     };
     public static EcgCycleTiming Timing => PrematureAtrialReference.Timing;
@@ -24,16 +26,29 @@ public static class PrematureVentricularReference
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(AvConductionPattern pattern = AvConductionPattern.PrematureVentricularIllustration)
     {
         int count = BeatsPerGroup(pattern);
-        ulong ectopic = 1UL << (count - 1);
+        bool diverse = count == 8;
+        ulong ectopic = diverse ? 8UL : 1UL << (count - 1);
+        ulong sinus = diverse ? 0b01110111UL : ectopic - 1;
         var ventricular = CompleteAvBlockVentricularReference.CreateElectrodes();
         return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((e, i) => e with
         {
             Bands = Array.AsReadOnly(e.Bands.Select(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical
-                ? b with { VentricularCycles = new(count, ectopic - 1) } : b)
+                ? b with { VentricularCycles = new(count, sinus) } : b)
                 .Concat(ventricular[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical)
-                    .Select(b => b with { VentricularCycles = new(count, ectopic) })).ToArray()),
+                    .Select(b => b with { VentricularCycles = new(count, ectopic) }))
+                .Concat(diverse ? ventricular[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(SecondMorphology) : []).ToArray()),
         }).ToArray());
     }
+
+    // Authored second ventricular vector: opposite polarity, QRS180/QT500.
+    // This deliberately illustrative transform is not an anatomical focus model.
+    private static EventWaveformBand SecondMorphology(EventWaveformBand band) => band with
+    {
+        VentricularCycles = new(8, 128),
+        DurationNs = band.DelayNs == 0 ? 180_000_000 : band.DurationNs,
+        DelayNs = band.DelayNs == 0 ? 0 : band.DelayNs + 20_000_000,
+        TableQ32 = Array.AsReadOnly(band.TableQ32.Select(v => checked(-v)).ToArray()),
+    };
 
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(AvConductionPattern pattern = AvConductionPattern.PrematureVentricularIllustration)
     {
@@ -50,8 +65,11 @@ public static class PrematureVentricularReference
     {
         int countPerGroup = BeatsPerGroup(plan.ConductionPattern);
         long groupDurationNs = countPerGroup * 800_000_000L;
-        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (slot == countPerGroup - 1 ? (countPerGroup - 2) * 800_000_000L + 500_000_000 : slot * 800_000_000L);
-        bool Selected(int slot) => slot != countPerGroup - 1 || kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
+        bool Ectopic(int slot) => countPerGroup == 8 ? slot % 4 == 3 : slot == countPerGroup - 1;
+        Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (Ectopic(slot)
+            ? (slot - 1) * 800_000_000L + (plan.ConductionPattern == AvConductionPattern.MultifocalPvcIllustration && slot == 7 ? 600_000_000 : 500_000_000)
+            : slot * 800_000_000L);
+        bool Selected(int slot) => !Ectopic(slot) || kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;
         for (int slot = 0; slot < countPerGroup; slot++)
         {

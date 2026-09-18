@@ -10,6 +10,8 @@ internal static class SecondDegreeBlockPreset
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureVentricularIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.VentricularBigeminyIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.VentricularTrigeminyIllustration or
+        Monitor.Simulation.Physiology.AvConductionPattern.PolymorphicPvcIllustration or
+        Monitor.Simulation.Physiology.AvConductionPattern.MultifocalPvcIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalAfterQrsIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalOverlappingIllustration or

@@ -1,5 +1,5 @@
 {
-  "id": "PrematureVentricularIllustrationDraft@2",
+  "id": "PrematureVentricularIllustrationDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -10,7 +10,8 @@
     "Premature broad abnormal QRS-T complexes occur without a preceding P wave or without a related P wave.",
     "QRS duration usually exceeds 120 ms; T polarity is usually opposite to the dominant QRS deflection.",
     "The pause is often fully compensatory; coupling is measured from QRS onset.",
-    "Bigeminy alternates sinus and premature beats; trigeminy has one premature beat after every two sinus beats (printed-page 477 terminology)."
+    "Bigeminy alternates sinus and premature beats; trigeminy has one premature beat after every two sinus beats (printed-page 477 terminology).",
+    "Different morphologies and coupling intervals in the same lead illustrate multifocal beats; different morphologies with fixed coupling are termed polymorphic (printed-page 477 terminology)."
   ],
   "authored_choices": {
     "groupMs": 3200,
@@ -96,22 +97,64 @@
         "minimumAtrialIntervalMs": 800
       },
       "shared": "Coupling is 500 ms and the compensatory pause is 1100 ms. The final slot has no atrial events; morphology/amplitude match the original monomorphic example."
+    },
+    "diverseVariants": {
+      "cycleMs": 6400,
+      "beatsPerGroup": 8,
+      "normalMask": 119,
+      "firstPvcMask": 8,
+      "secondPvcMask": 128,
+      "sinusPOffsetsMs": [
+        0,
+        800,
+        1600,
+        3200,
+        4000,
+        4800
+      ],
+      "firstPvcQrsMs": 2260,
+      "polymorphicSecondQrsMs": 5460,
+      "multifocalSecondQrsMs": 5560,
+      "couplingMs": {
+        "polymorphic": [
+          500,
+          500
+        ],
+        "multifocal": [
+          500,
+          600
+        ]
+      },
+      "postEctopicPauseMs": {
+        "polymorphic": [
+          1100,
+          1100
+        ],
+        "multifocal": [
+          1100,
+          1000
+        ]
+      },
+      "morphologyA": "Original ventricular tables: QRS 160 ms, QT 480 ms and T 220 ms.",
+      "morphologyB": "Original ventricular electrode QRS/T potentials are inverted. QRS is linearly extended to 180 ms, T is delayed by 20 ms, and QT/T are 500/220 ms. This is an explicitly authored morphology, not anatomical calibration of another ectopic focus.",
+      "mechanics": "A ventricular mechanical event follows each QRS by 80 ms. Morphology polarity does not change ejection direction or amplitude."
     }
   },
   "implementation": [
-    "Normal/PVC morphology is selected by group length 2/3/4 and the final-slot mask. Sinus P/QRS/T are preserved; the original index is group*count+slot.",
+    "Group lengths 2/3/4 serve monomorphic sequences. Eight-slot polymorphic/multifocal examples use exclusive normal/A/B masks 119/8/128. The original index is group*count+slot.",
     "An independent 3200 ms indexed accessor supplies actual mechanical events to the timeline and pressure. No new atrial event kind is added.",
     "Half-open intervals, exact budgets, original group*4+slot indexing and bounded-lookback recovery; no replay from the epoch.",
     "Twelve-lead and monitor lead II share a source. The QRS summary explicitly verifies sinus slot 0 only.",
     "Both demos load fixed examples and reset previous parameters, supporting direct switching and atomic rejection. Other physiological channels use actual ventricular/respiratory events.",
-    "Group length drives event timing, morphology masks, pressure access and recovery. AV conduction ratios are not used to simulate bigeminy/trigeminy."
+    "Group length drives event timing, morphology masks, pressure access and recovery. AV conduction ratios are not used to simulate bigeminy/trigeminy.",
+    "Slots 3/7 of the eight-slot group are PVCs without atrial events. The multifocal example delays only slot 7 by 100 ms; pressure and bounded lookback share this schedule. Reversed polarity is not treated as negative ejection."
   ],
   "limitations": [
     "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
-    "The original monomorphic example and fixed bigeminy/trigeminy sequences are implemented. Couplets, polymorphic/multifocal beats, interpolated beats and R-on-T are unimplemented.",
+    "Monomorphic, bigeminy/trigeminy and dual-morphology fixed/variable-coupling examples are implemented. Couplets, interpolated beats, R-on-T and other polymorphic/multifocal variants are unimplemented.",
     "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
     "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
     "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",
-    "Windows visual behavior is not yet manually verified."
+    "Windows behavior is not yet manually verified; native automated regression checks cover the implemented behavior."
   ]
 }

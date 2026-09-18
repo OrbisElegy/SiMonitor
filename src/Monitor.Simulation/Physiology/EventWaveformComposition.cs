@@ -12,7 +12,7 @@ public readonly record struct VentricularCyclePattern(int Length, ulong Included
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -45,6 +45,8 @@ public sealed class EventWaveformComposition
                 (band.TriggerCycleResume is { } resume && (band.TriggerCycleLimit is null || resume <= band.TriggerCycleLimit.Value)) ||
                 band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
+            if (band.EjectionIllustration is { } perfusion &&
+                (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureVentricularReference.IsPattern(perfusion))) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
             if (band.VentricularCycles is { } cycles &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || cycles.Length is < 1 or > 64 ||
@@ -122,7 +124,7 @@ public sealed class EventWaveformComposition
                 // Integer phase maps the finite support into one frozen LUT cycle.
                 ulong phase = PhaseAt(band, elapsed);
                 long value = PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
-                int gain = band.ExpirationCycleGainsPermille is { } cycleGains
+                int gain = band.EjectionIllustration is { } perfusion ? PrematureBeatPerfusion.GainPermille(perfusion, item.CycleIndex) : band.ExpirationCycleGainsPermille is { } cycleGains
                     ? cycleGains[(int)(item.CycleIndex % (ulong)cycleGains.Count)]
                     : RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex);
                 sum += gain == 1000 ? value : FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);

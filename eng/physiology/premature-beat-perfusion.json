@@ -1,0 +1,42 @@
+{
+  "id": "PrematureBeatPerfusionIllustration@1",
+  "references": [
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/2443582/",
+      "summary": [
+        "PVC stroke volume is associated with coupling and filling; post-extrasystolic potentiation may occur. The source does not supply the implementation weights."
+      ]
+    },
+    {
+      "url": "https://www.heartrhythmjournal.com/article/S1547-5271%2818%2931263-3/abstract",
+      "summary": [
+        "Clinical observations include PVCs without a measurable arterial ejection wave; this does not mean that all R-on-T beats lack ejection."
+      ]
+    }
+  ],
+  "authoredGainsPermille": {
+    "ordinary": 800,
+    "pvc": 200,
+    "postPause": 1000,
+    "shortCoupledPvc": 0,
+    "initialBeat": 800,
+    "interpolatedRecovery": 800
+  },
+  "semantics": "Strength weights are neither stroke volume in milliliters nor clinically measured percentages. Pressure drive and Pleth share the original beat ordinal. Ineffective peripheral ejection at short coupling is specific to this teaching example.",
+  "implementation": [
+    "Original electrical/mechanical events remain. Zero ejection only omits new pressure input and Pleth contributions; existing tails and reservoir decay continue.",
+    "Effective ejection intervals in the short-coupled example are at least 800 ms, restoring ABP/PA ejection durations of 240/200 ms and normal pulse duration. Pressure event budgets still conservatively use the original minimum mechanical interval of 200 ms.",
+    "Normal, weak-PVC and recovery Pleth gains correspond to 1000, 250 and 1250 counts. Both consecutive PVCs use 200; these values do not establish exact couplet stroke volumes.",
+    "The interpolated example has no potentiation. The first epoch beat is not incorrectly labeled as recovery; original polymorphic/multifocal slots and both recovery phases are preserved.",
+    "Pressure retains existing reservoir/morphology modifiers and scales each beat's input and morphology pulse by the same gain. Zero input cannot restart morphology.",
+    "The example requires reservoir sources and atomically rejects disabling them. Generic pressure plans keep the option disabled by default for compatibility."
+  ],
+  "limitations": [
+    "This revision covers PVCs only; beatwise PAC/PJC perfusion is not integrated.",
+    "No complete filling, contractility or valve model; no actual stroke-volume, feedback or anatomical ectopic-focus inference.",
+    "Shared ABP/PA teaching strengths do not imply quantitatively identical left/right ventricular behavior.",
+    "Short-coupling CVP component compression remains the previous simplification; beatwise atrial/ventricular mechanical morphology is incomplete.",
+    "Standard pressure/Pleth templates remain teaching basis functions; beatwise changes in upstroke, dicrotic notch and ejection duration remain incomplete.",
+    "Windows visual validation requires manual review in addition to native automated regression checks."
+  ]
+}

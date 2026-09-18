@@ -57,6 +57,7 @@ public sealed class PhysiologySignalGenerator
         else
         {
             _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
+            if (_bands.Any(b => b.EjectionIllustration is { } mode && mode != state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));
         }
     }

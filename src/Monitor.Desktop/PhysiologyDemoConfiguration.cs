@@ -83,8 +83,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             (ActivityAfterBreaths is { } breaths && (breaths is < 1 or > 100 || RespiratoryActivity == RespiratoryActivity.Breathing)) ||
             (ActivityDurationBreaths is { } duration && (duration is < 1 or > 100 || ActivityAfterBreaths is null)))
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
-        if (VentricularDisorganizationReference.IsPattern(ConductionPattern) && !UseVascularReservoir)
-        { throw new ArgumentException("Ventricular disorganization requires passive reservoir decay."); }
+        if ((VentricularDisorganizationReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern)) && !UseVascularReservoir)
+        { throw new ArgumentException("This rhythm illustration requires the vascular reservoir source."); }
         bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern);

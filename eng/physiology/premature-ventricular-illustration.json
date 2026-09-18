@@ -1,5 +1,5 @@
 {
-  "id": "PrematureVentricularIllustrationDraft@7",
+  "id": "PrematureVentricularIllustrationDraft@8",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -247,6 +247,38 @@
       "postEctopicPauseMs": 1100,
       "composition": "Only slot 2's repolarization band is extended. Its QRS and other sinus P/QRS/T remain unchanged; the long T and PVC QRS add as potentials. This is a teaching signal combination, not a tissue-repolarization reset or vulnerable-period model.",
       "mechanics": "Retains the original monomorphic PVC mechanical timing, ejection and pressure; no automatic VT/VF generation."
+    },
+    "shortCoupledRonTVariant": {
+      "groupMs": 3200,
+      "sinusQtTMs": [
+        320,
+        140
+      ],
+      "qrsOffsetsMs": [
+        160,
+        960,
+        1760,
+        1960
+      ],
+      "nextSinusQrsMs": 3360,
+      "couplingMs": 200,
+      "postEctopicPauseMs": 1400,
+      "precedingTSupportMs": [
+        1940,
+        2080
+      ],
+      "pvcRPeakLeadIIMs": 2060,
+      "pvcQrsQtTMs": [
+        160,
+        480,
+        220
+      ],
+      "minimumVentricularIntervalMs": 200,
+      "pulseSupportMs": 120,
+      "abpAndPaEjectionMs": 160,
+      "cvpMaximumComponentDurationMs": 200,
+      "mechanics": "Triggered 80 ms after QRS. All beats in the short-coupled mode share the same short ejection/pulse parameters, without beatwise filling, low-amplitude PVC, post-extrasystolic potentiation or stroke-volume feedback.",
+      "composition": "The original sinus T and early PVC add as potentials. QT is not prolonged; no refractory period is inferred and VT/VF is not triggered automatically."
     }
   },
   "implementation": [
@@ -261,7 +293,7 @@
   ],
   "limitations": [
     "Specific durations, amplitudes and one PVC after every three sinus beats are authored parameters, not traced textbook measurements.",
-    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling, interpolated and monomorphic/dual-morphology couplet examples are implemented, along with long-QT R-on-T. Normal-QT short-coupled R-on-T, other couplet and remaining variants are unimplemented.",
+    "Fixed monomorphic, bigeminy/trigeminy, dual-morphology fixed/variable-coupling, interpolated and monomorphic/dual-morphology couplet examples are implemented. Fixed R-on-T examples with long QT and with normal QT plus short coupling are implemented. Other coupling, couplet and remaining variants are unimplemented.",
     "No automatic ectopic-focus, retrograde-conduction, fusion, concealed-conduction, refractory or sinus-node mechanism.",
     "Mechanical events occur early without modeling beatwise filling/stroke volume, PVC pulse deficit or post-extrasystolic potentiation. Ventricular mechanics can be explicitly disabled.",
     "VT/SVT and other ECG, respiratory, perfusion and artifact work remain open; dynamic UI rulers are deferred.",

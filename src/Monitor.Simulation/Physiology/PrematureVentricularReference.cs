@@ -4,19 +4,24 @@ namespace Monitor.Simulation.Physiology;
 // Authored PVC schedules and morphologies, not a focus or conduction model.
 public static class PrematureVentricularReference
 {
-    public const string EvidenceId = "PrematureVentricularIllustrationDraft@7";
+    public const string EvidenceId = "PrematureVentricularIllustrationDraft@8";
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.PrematureVentricularIllustration or
         AvConductionPattern.VentricularBigeminyIllustration or AvConductionPattern.VentricularTrigeminyIllustration or
-        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration or AvConductionPattern.RonTLongQtPvcIllustration;
+        AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration or AvConductionPattern.RonTLongQtPvcIllustration or AvConductionPattern.ShortCoupledRonTPvcIllustration;
     public static int BeatsPerGroup(AvConductionPattern pattern) => pattern switch
     {
-        AvConductionPattern.PrematureVentricularIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.RonTLongQtPvcIllustration => 4,
+        AvConductionPattern.PrematureVentricularIllustration or AvConductionPattern.InterpolatedPvcIllustration or AvConductionPattern.RonTLongQtPvcIllustration or AvConductionPattern.ShortCoupledRonTPvcIllustration => 4,
         AvConductionPattern.VentricularBigeminyIllustration => 2,
         AvConductionPattern.VentricularTrigeminyIllustration => 3,
         AvConductionPattern.VentricularCoupletIllustration or AvConductionPattern.PolymorphicVentricularCoupletIllustration => 5,
         AvConductionPattern.PolymorphicPvcIllustration or AvConductionPattern.MultifocalPvcIllustration => 8,
         _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPvcPattern", nameof(pattern)),
     };
+    public static long MinimumRrNs(AvConductionPattern pattern)
+    {
+        _ = BeatsPerGroup(pattern);
+        return pattern == AvConductionPattern.ShortCoupledRonTPvcIllustration ? 200_000_000 : 500_000_000;
+    }
     public static EcgCycleTiming Timing => PrematureAtrialReference.Timing;
     public static RegularPhysiologyPlan CreatePlan(AvConductionPattern pattern = AvConductionPattern.PrematureVentricularIllustration)
     {
@@ -76,7 +81,7 @@ public static class PrematureVentricularReference
         Int128 Start(int slot) => (Int128)plan.EpochAnchorSimTimeNs + offset + (interpolated
             ? (slot == 3 ? 2_500_000_000 : slot * 1_000_000_000L)
             : couplet && Ectopic(slot) ? 2_100_000_000 + (slot - 3) * 500_000_000L
-            : Ectopic(slot) ? (slot - 1) * 800_000_000L + (plan.ConductionPattern == AvConductionPattern.MultifocalPvcIllustration && slot == 7 ? 600_000_000 : 500_000_000)
+            : Ectopic(slot) ? (slot - 1) * 800_000_000L + (plan.ConductionPattern == AvConductionPattern.MultifocalPvcIllustration && slot == 7 ? 600_000_000 : MinimumRrNs(plan.ConductionPattern))
             : slot * 800_000_000L);
         bool Selected(int slot) => !Ectopic(slot) || kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;

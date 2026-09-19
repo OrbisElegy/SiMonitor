@@ -21,7 +21,7 @@ internal static class PhysiologyDemoSource
     {
         configuration ??= PhysiologyDemoConfiguration.Default;
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
-        bool flutter = plan.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
+        bool flutter = AtrialFlutterReference.IsPattern(plan.ConductionPattern);
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern) || PrematureVentricularReference.IsPattern(plan.ConductionPattern);
         bool beatPerfusion = PrematureBeatPerfusion.IsPattern(plan.ConductionPattern);

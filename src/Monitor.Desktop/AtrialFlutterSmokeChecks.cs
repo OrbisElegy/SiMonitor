@@ -17,14 +17,16 @@ internal static class AtrialFlutterSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (int ratio in new[] { 4, 3, 2 })
+                foreach (int variant in new[] { 4, 3, 2, 0 })
                 {
+                    bool variable = variant == 0;
+                    int ratio = variable ? 2 : variant;
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;
                     Click(window.FlutterButton); window.Pulse(stale);
                     if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("Flutter preset failed atomic reset."); }
-                    int selection = ratio == 2 ? 9 : ratio == 3 ? 38 : 10;
+                    int selection = variable ? 39 : ratio == 2 ? 9 : ratio == 3 ? 38 : 10;
                     window.ConductionInput.SelectedIndex = selection;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                     if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text) ||
@@ -60,6 +62,13 @@ internal static class AtrialFlutterSmokeChecks
                     var samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
                     if (!samples.Skip(20).Take(20).Any(v => v > 500) || !samples.Skip(ratio * 50 + 20).Take(20).Any(v => v > 500))
                     { throw new InvalidOperationException("Flutter ventricular RR did not follow selected ratio."); }
+                    if (variable)
+                    {
+                        if (samples.Skip(220).Take(20).Any(v => v > 500) || !samples.Skip(270).Take(20).Any(v => v > 500))
+                        { throw new InvalidOperationException("Variable flutter reverted to fixed2:1 ventricular timing."); }
+                        if (projected) { EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 270); }
+                        else { MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 270); }
+                    }
                     Click(window.HoldButton); Click(window.RunButton);
                     var held = window.Trace; var timer = window.ActiveTimer;
                     long before = window.SimulationTimeNs;
@@ -89,6 +98,6 @@ internal static class AtrialFlutterSmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: flutter 2:1/3:1/4:1 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
+        Console.WriteLine("ok: flutter fixed2:1/3:1/4:1 and variable2/3/4 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
     }
 }

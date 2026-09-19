@@ -41,6 +41,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         IndependentVentricularOffsetMilliseconds = 400,
     };
 
+    internal static PhysiologyDemoConfiguration VariableFlutter => Flutter(2) with { ConductionPattern = AvConductionPattern.VariableAtrialFlutterIllustration };
+
     internal static PhysiologyDemoConfiguration Flutter(int ratio) => Default with
     { VentricularConductionRatio = ratio, ConductionPattern = AvConductionPattern.AtrialFlutterIllustration };
 
@@ -85,7 +87,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         { throw new ArgumentException("PhysiologyDemo.InvalidConfiguration"); }
         if ((VentricularDisorganizationReference.IsPattern(ConductionPattern) || PrematureBeatPerfusion.IsPattern(ConductionPattern)) && !UseVascularReservoir)
         { throw new ArgumentException("This rhythm illustration requires the vascular reservoir source."); }
-        bool flutter = ConductionPattern == AvConductionPattern.AtrialFlutterIllustration;
+        bool flutter = AtrialFlutterReference.IsPattern(ConductionPattern);
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern);
         var timing = prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;

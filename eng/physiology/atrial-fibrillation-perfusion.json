@@ -1,0 +1,52 @@
+{
+  "id": "AtrialFibrillationPerfusionIllustration@1",
+  "references": [
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/3249036/",
+      "summary": [
+        "Measured association between short preceding RR and stroke/filling volume; not universal RR-to-volume calibration."
+      ]
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1760769/",
+      "summary": [
+        "Beatwise performance depends on cycle length, preload, afterload and contractility."
+      ]
+    }
+  ],
+  "authored_choices": {
+    "firstBeatGainPermille": 800,
+    "precedingRrBands": [
+      {
+        "belowNs": 600000000,
+        "gainPermille": 400
+      },
+      {
+        "belowNs": 900000000,
+        "gainPermille": 800
+      },
+      {
+        "otherwiseGainPermille": 1000
+      }
+    ],
+    "plethAmplitudeCounts": 1250,
+    "plethNominalDurationNs": 512000000,
+    "abpMorphologyDurationNs": 600000000,
+    "paMorphologyDurationNs": 640000000,
+    "pressureMaximumPulseOverlap": 2,
+    "durationScaling": "none; preserve channel baseline ejection and morphology durations"
+  },
+  "invariants": [
+    "Coarse and fine AF share events and gain",
+    "Gain uses original electrical/mechanical ordinal and immediately preceding electrical RR, never accumulated ejection history",
+    "Pressure input, morphology and reference use matching beat strength",
+    "No random state, epoch scan, added beats or forced zero-gain beats",
+    "Opt-in flags default false and reject unrelated rhythms or simultaneous premature weighting"
+  ],
+  "limitations": [
+    "Not a physiological stroke-volume or filling model; thresholds/weights are authored",
+    "No pulse-deficit or beat-detection implementation",
+    "No AF aberrancy, CVP filling, independent right-heart or optical SpO2 calibration",
+    "Same ABP/PA gain is a simplified coupled teaching choice, not validated biventricular haemodynamics"
+  ]
+}

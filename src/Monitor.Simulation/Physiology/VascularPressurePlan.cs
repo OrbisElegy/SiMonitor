@@ -12,7 +12,7 @@ namespace Monitor.Simulation.Physiology;
 public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs,
     long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg,
     int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1",
-    VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false)
+    VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false)
 {
     public const string EvidenceId = "VascularPressureRcIllustration@1";
 

@@ -44,6 +44,8 @@ public sealed class ElectrodeSignalGenerator
             state.Timeline.Plan.EpochAnchorSimTimeNs != _clock.EpochAnchorSimTimeNs)
         { throw Invalid(); }
         _electrodes = ElectrodeWaveformComposition.Restore(new(state.Electrodes, [], state.Placement)).CaptureState().Electrodes;
+        if (_electrodes.SelectMany(e => e.Bands).Any(b => b.AfBeatSelection is not null) &&
+            !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
         _placement = state.Placement;
         _lookbackNs = _electrodes.SelectMany(item => item.Bands).Max(band => checked(band.DelayNs + band.DurationNs));
     }
@@ -81,12 +83,12 @@ public sealed class ElectrodeSignalGenerator
 
         RegularPhysiologyState timeline = _timeline.CaptureState();
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
-        RegularPhysiologyTimeline trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
+        var trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
-        ElectrodeWaveformComposition composition = ElectrodeWaveformComposition.Restore(new(_electrodes, events, _placement));
-        SignalSampleClock trialClock = SignalSampleClock.Restore(_clock.CaptureState());
+        var composition = ElectrodeWaveformComposition.Restore(new(_electrodes, events, _placement));
+        var trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
-        ElectrodeSignalSample[] output = new ElectrodeSignalSample[ticks.Count];
+        var output = new ElectrodeSignalSample[ticks.Count];
         for (int index = 0; index < ticks.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();

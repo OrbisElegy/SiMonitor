@@ -17,6 +17,8 @@ internal static class AuthoredQrsSummary
         if (state.Electrodes.SelectMany(e => e.Bands).Any(b =>
             b.Trigger == PhysiologyCycleEventKind.VentricularElectrical && b.DelayNs == 0 && b.DurationNs < 2_000_000))
         { return "QRS 形态核验不可用：QRS 分量短于 2 ms，1 ms 网格不足；波形配置仍可应用。"; }
+        if (state.Electrodes.SelectMany(e => e.Bands).Any(b => b.AfBeatSelection is not null))
+        { return "QRS源形态核验：当前房颤含80ms普通QRS及140ms差异传导QRS，单一形态摘要不适用；请核对对应搏动。"; }
         var measurements = AuthoredQrsMeasurements.Project(state.Electrodes, state.Placement);
         return (PrematureVentricularReference.IsPattern(state.Timeline.Plan.ConductionPattern) ? "当前含两种QRS；以下仅核验窦性槽0，不代表室早各型宽QRS。\n" : "") + (state.Timeline.Plan.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "当前含两种QRS；以下仅核验窦性槽0，不代表房早的140ms宽QRS。\n" : "") + "QRS 源形态核验（1 ms 网格，隔离 QRS 分量；不含 P/ST/T/u，不是屏幕或采集信号测量）：\n" +
             string.Join("\n", measurements.Select((m, index) => Format(ProjectedEcgDemoSource.LeadNames[index], m))) +

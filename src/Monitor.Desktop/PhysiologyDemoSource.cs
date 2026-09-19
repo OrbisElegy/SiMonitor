@@ -41,7 +41,7 @@ internal static class PhysiologyDemoSource
                 PrematureJunctionalReference.IsPattern(plan.ConductionPattern) ? PrematureJunctionalReference.CreateLeadIIBands() :
                 plan.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? PrematureAtrialReference.CreateAberrantLeadIIBands() :
                 prematureBeat ? PrematureAtrialReference.CreateLeadIIBands(blockedAtrial) :
-                fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration) :
+                fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration, configuration.IllustrateAfAberrancy) :
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :
                 plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),

@@ -81,6 +81,7 @@ internal static class Program
             .. AtrialFibrillationSpecifications.All,
             .. AtrialFibrillationPerfusionSpecifications.All,
             .. AtrialFibrillationDeficitSpecifications.All,
+            .. AtrialFibrillationAberrancySpecifications.All,
             .. VentricularDisorganizationSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,

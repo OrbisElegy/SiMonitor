@@ -18,6 +18,15 @@ public static class AtrialFibrillationReference
         80_000_000, 160_000_000, 3_750_000_000, 1_875_000_000,
         ConductionPattern: fine ? AvConductionPattern.AtrialFibrillationFineIllustration : AvConductionPattern.AtrialFibrillationCoarseIllustration);
 
+    // Authored selector, not a bundle refractory-period model.
+    public static bool IsLongShortBeat(ulong ordinal)
+    {
+        if (ordinal < 2) { return false; }
+        long previous = Jitter(ordinal - 1);
+        return GridNs + Jitter(ordinal) - previous < 600_000_000 &&
+            GridNs + previous - Jitter(ordinal - 2) >= 900_000_000;
+    }
+
     // Stateless integer mixing of beat identity. No mutable PRNG or origin scan;
     // every event and pressure reconstruction uses exactly the same timestamps.
     internal static long Jitter(ulong beat)
@@ -38,8 +47,8 @@ public static class AtrialFibrillationReference
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
         Int128 start = (Int128)plan.EpochAnchorSimTimeNs + offset;
-        Int128 first = Int128.Max(0, ((Int128)inclusive - start - MaximumJitterNs + GridNs - 1) / GridNs);
-        Int128 end = Int128.Max(0, (exclusive - start + GridNs - 1) / GridNs);
+        var first = Int128.Max(0, ((Int128)inclusive - start - MaximumJitterNs + GridNs - 1) / GridNs);
+        var end = Int128.Max(0, (exclusive - start + GridNs - 1) / GridNs);
         if (end - first > (Int128)maximumEvents + 2) { throw Limit(); }
         int count = 0;
         for (Int128 index = first; index < end; index++)
@@ -58,7 +67,8 @@ public static class AtrialFibrillationReference
         PhysiologyTimelineException Limit() => new("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents));
     }
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fine = false) =>
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fine = false, bool aberrancy = false) =>
+        aberrancy ? CreateAberrantElectrodes(fine) :
         Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((electrode, i) => electrode with
         {
             Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index == 0
@@ -69,9 +79,24 @@ public static class AtrialFibrillationReference
                 : band).ToArray()),
         }).ToArray());
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fine = false)
+    private static System.Collections.ObjectModel.ReadOnlyCollection<ElectrodeWaveformPlan> CreateAberrantElectrodes(bool fine)
     {
-        var electrodes = CreateElectrodes(fine);
+        // Factory P/PR only constructs bands; P is discarded. The actual
+        // ventricular QT400ms fits even the shortest AF RR440ms.
+        var wide = RightBundleBlockReference.CreateElectrodes(RightBundleBlockReference.Timing with
+        { PDurationNs = 40_000_000, PrIntervalNs = 80_000_000 });
+        return Array.AsReadOnly(CreateElectrodes(fine).Select((electrode, i) => electrode with
+        {
+            Bands = Array.AsReadOnly(electrode.Bands.Select(band => band.Trigger == PhysiologyCycleEventKind.VentricularElectrical
+                ? band with { AfBeatSelection = AtrialFibrillationBeatSelection.Ordinary } : band)
+                .Concat(wide[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical)
+                    .Select(band => band with { AfBeatSelection = AtrialFibrillationBeatSelection.LongShort })).ToArray()),
+        }).ToArray());
+    }
+
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fine = false, bool aberrancy = false)
+    {
+        var electrodes = CreateElectrodes(fine, aberrancy);
         var ra = electrodes.Single(e => e.Electrode == EcgElectrode.RA);
         var ll = electrodes.Single(e => e.Electrode == EcgElectrode.LL);
         return Array.AsReadOnly(ll.Bands.Zip(ra.Bands).Select(pair => pair.First with

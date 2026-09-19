@@ -51,18 +51,18 @@ internal static class EcgLimbPlacementSmokeChecks
         Console.WriteLine("ok: native limb electrode swaps and standard restoration, signed lead pixels and atomic configuration lifecycle");
     }
 
-    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int firstSample = 40, IReadOnlyList<EcgLead>? selectedLeads = null)
+    internal static void VerifyPixels(WaveformDemoWindow window, WaveformEnvelope[] blocks, int firstSample = 40, IReadOnlyList<EcgLead>? selectedLeads = null, int width = 1044)
     {
-        window.Trace.Measure(new Size(1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
-        window.Trace.Arrange(new Rect(0, 0, 1044, (12 * ProjectedEcgPlotLayout.RowHeight)));
-        using RenderTargetBitmap image = new(new PixelSize(1044, (12 * ProjectedEcgPlotLayout.RowHeight)), new Vector(96, 96));
+        window.Trace.Measure(new Size(width, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        window.Trace.Arrange(new Rect(0, 0, width, (12 * ProjectedEcgPlotLayout.RowHeight)));
+        using RenderTargetBitmap image = new(new PixelSize(width, (12 * ProjectedEcgPlotLayout.RowHeight)), new Vector(96, 96));
         image.Render(window.Trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         foreach (EcgLead lead in selectedLeads ?? new[] { EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V3, EcgLead.V5 })
         {
-            var samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
+            short[] samples = blocks.SelectMany(block => block.Planes.Single(plane => plane.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
             int peak = Enumerable.Range(firstSample, 20).MaxBy(i => Math.Abs((int)samples[i]));
             int x = (int)Math.Round(85 + peak / 2.0);
             int y = (int)Math.Round((int)lead * ProjectedEcgPlotLayout.RowHeight + ProjectedEcgPlotLayout.RowHeight / 2 - samples[peak] * 0.04);

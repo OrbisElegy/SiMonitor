@@ -28,6 +28,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox MechanicalDurationCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal TextBox MechanicalAfterCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal CheckBox VentricularMechanicalInput { get; } = new() { Content = "生成室性机械事件", IsChecked = true };
+    internal CheckBox AfAberrancyInput { get; } = new() { Content = "房颤Ashman型差异传导示例", IsChecked = false };
     internal CheckBox AfPulseDeficitInput { get; } = new() { Content = "房颤脉搏短绌示例（体循环）", IsChecked = false };
     internal CheckBox VascularReservoirInput { get; } = new() { Content = "血管储压模型（教学）", IsChecked = true };
     internal TextBlock VascularPressureModeStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
@@ -240,13 +241,15 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(new TextBlock { Text = "正常下传房早：3个窦性搏动后出现不同形态的P′，联律500ms、随后间歇1000ms，两者之和小于正常PP的两倍（1600ms）；P′R160ms、窄QRS80ms、固定QT320ms。切入此模式会重置参数。电/机械事件同源；此按钮载入窄QRS例；不模拟逐搏充盈和搏出量变化。" });
             conduction.Children.Add(VentricularDisorganizationButton);
             conduction.Children.Add(new TextBlock { Text = "室扑／室颤：无独立P/QRS/T，无有效射血；Pleth无搏动，RC压力衰减。呼吸与CO₂仍为独立设置，不自动模拟呼吸停止或气体交换改变。可在列表切换室扑、粗室颤、细室颤。" });
-            conduction.Children.Add(new TextBlock { Text = "房颤示例：无正常P，f波不规则且V1明显；可切换粗/细颤。RR逐搏不规则，440–1160ms，长期平均室率75；QRS80ms、固定QT300ms。此例无正常房性机械收缩，生理波形demo可另选体循环脉搏短绌教学例；室内差异传导仍未模拟。" });
+            conduction.Children.Add(new TextBlock { Text = "房颤示例：无正常P，f波不规则且V1明显；可切换粗/细颤。RR逐搏不规则，440–1160ms，长期平均室率75；QRS80ms、固定QT300ms。此例无正常房性机械收缩，可另选Ashman型差异传导；生理波形demo可独立选择体循环脉搏短绌教学例。" });
             conduction.Children.Add(new TextBlock { Text = "房扑示例：房率300，连续F波，选2:1/3:1/4:1对应室率150/100/75；QRS80ms、QT300ms。12导联使用固定形态/时限；未模拟房扑机械收缩，CVP不生成正常a波。" });
             conduction.Children.Add(new TextBlock { Text = "室性逸搏示例：房率75、室率30，宽大切迹QRS160ms/反向T，固定QT480ms；可改室周期1500–3000ms及首次偏移。12导联保留此例形态/时限；不代表逸搏起源定位。" });
             conduction.Children.Add(new TextBlock { Text = "交界性逸搏示例：房率75、室率50，正常80ms QRS，无固定PR；可改独立室周期1000–1500ms及首次偏移。12导联需保留参考形态和固定时限。此示例从已建立的逸搏开始。" });
             conduction.Children.Add(new TextBlock { Text = "固定PR与文氏示意分开：文氏3:2、4:3、5:4的PR附加延迟分别为0/80、0/80/120、0/80/120/140 ms；每组最后一次P不下传，下一组复位。需房室活动、无独立心室周期，机械比例1且清空机械日程；成组传导的QT采用最短RR下界（房性周期）约束；文氏末次机械事件须在同一房性周期内。" });
             conduction.Children.Add(new TextBlock { Text = "心脏源活动" });
             conduction.Children.Add(CardiacActivityInput);
+            conduction.Children.Add(AfAberrancyInput);
+            ToolTip.SetTip(AfAberrancyInput, "仅粗／细房颤可用：指定长–短RR后的单搏采用RBBB样QRS140ms/QT400ms，其余QRS80ms/QT300ms。保持f波和射血设置；约运行13–15秒观察首个宽QRS。教学阈值不是自动诊断或不应期模型。");
             ToolTip.SetTip(CardiacActivityInput, "仅心室模式关闭房性电／机械事件；心室沿原周期与偏移运行。基础周期率不是测得的心房率；不代表已验证的逸搏或房颤预设。");
             conduction.Children.Add(new TextBlock { Text = "独立心室周期（ms，可空）" });
             conduction.Children.Add(IndependentVentricularPeriodInput);
@@ -782,7 +785,8 @@ internal sealed class WaveformDemoWindow : Window
             }
             EcgTContourPlan? contour = TContourInput.SelectedIndex == 0 ? null : new(TContourLeadInput.SelectedIndex == 6 ? 63 : TContourLeadInput.SelectedIndex > 6 ? 1 : 1 << TContourLeadInput.SelectedIndex,
                 (EcgTContourShape)TContourInput.SelectedIndex, contourPeak, TContourLeadInput.SelectedIndex > 6 ? (EcgTContourTarget)(TContourLeadInput.SelectedIndex - 6) : EcgTContourTarget.Chest, crossing, secondPeak);
-            configuration = configuration with { BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            if (AfAberrancyInput.IsChecked is not { } afAberrancy) { throw new ArgumentException("Explicit AF aberrancy selection required."); }
+            configuration = configuration with { IllustrateAfAberrancy = afAberrancy, BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgTContour.InvalidSecondPeak")
@@ -863,6 +867,7 @@ internal sealed class WaveformDemoWindow : Window
             { throw new ArgumentException("Explicit vascular pressure model selection required."); }
             if (AfPulseDeficitInput.IsChecked is not { } afPulseDeficit)
             { throw new ArgumentException("Explicit AF pulse-deficit selection required."); }
+            if (AfAberrancyInput.IsChecked is not { } afAberrancy) { throw new ArgumentException("Explicit AF aberrancy selection required."); }
             int? mechanicalAfter = null;
             if (!string.IsNullOrWhiteSpace(MechanicalAfterCyclesInput.Text))
             {
@@ -885,7 +890,7 @@ internal sealed class WaveformDemoWindow : Window
                 independentPeriod = parsedPeriod;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit, afAberrancy));
         }
         catch (EventWaveformException error) when (error.ReasonCode is "Capnogram.Co2ResponseOutOfRange" or "Capnogram.InvalidCo2Response")
         { BreathConfigurationStatus.Text = "未应用：潮式深度耦合后的CO₂超过支持范围（0～327 mmHg）；请降低参考呼气末值或检查呼吸周期。当前数据与扫屏状态保持。"; }
@@ -918,6 +923,7 @@ internal sealed class WaveformDemoWindow : Window
         EcgConfiguration = configuration;
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
+        AfAberrancyInput.IsChecked = _projected ? configuration.IllustrateAfAberrancy : breathConfiguration.IllustrateAfAberrancy;
         BundleBlockInput.SelectedIndex = (int)(_projected ? configuration.BundleBlock : breathConfiguration.BundleBlock);
         if (_physiology)
         {
@@ -1030,7 +1036,7 @@ internal sealed class WaveformDemoWindow : Window
             TPeakInput.Text = tWave.PeakPositionPermille is { } peak ? (peak / 10m).ToString("0.#", CultureInfo.InvariantCulture) : "";
             for (int index = 0; index < TScaleInputs.Length; index++)
             { TScaleInputs[index].Text = (tWave.ChestScales[index] / 1000m).ToString("0.###", CultureInfo.InvariantCulture); }
-            string waveTiming = AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "无正常P；f波不规则；QRS80 ms；T140 ms" : AtrialFlutterReference.IsPattern(configuration.ConductionPattern)
+            string waveTiming = AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? (configuration.IllustrateAfAberrancy ? "无正常P；f波不规则；普通QRS80/QT300 ms，差异传导QRS140/QT400 ms" : "无正常P；f波不规则；QRS80 ms；T140 ms") : AtrialFlutterReference.IsPattern(configuration.ConductionPattern)
                 ? "F周期200 ms（无正常P）；QRS80 ms；T140 ms"
                 : string.Create(CultureInfo.InvariantCulture, $"P/模板PR/QRS/T {timing.PDurationNs / 1_000_000m:0.###}/{configuration.PrIntervalMilliseconds}/{timing.QrsDurationNs / 1_000_000m:0.###}/{configuration.TDurationMilliseconds} ms");
             string rateSummary = configuration.ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? "房率300次/分；平均室率100次/分，RR400/600/800ms" : PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? $"基础窦性{configuration.HeartRateBpm}次/分；含室早，RR非等间距" : PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含交界性早搏，RR非等间距" : PrematureAtrialReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含房早，RR非等间距" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "长期平均室率75次/分（当前RR不固定）"

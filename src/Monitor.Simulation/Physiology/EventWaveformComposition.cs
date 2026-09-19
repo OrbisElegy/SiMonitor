@@ -4,6 +4,8 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
+public enum AtrialFibrillationBeatSelection { Ordinary, LongShort }
+
 public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex);
 // Local morphology selection by original ventricular beat ordinal; not a wire event.
 public readonly record struct VentricularCyclePattern(int Length, ulong IncludedSlots);
@@ -12,7 +14,7 @@ public readonly record struct VentricularCyclePattern(int Length, ulong Included
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null, AtrialFibrillationBeatSelection? AfBeatSelection = null);
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -47,6 +49,8 @@ public sealed class EventWaveformComposition
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
             if (band.EjectionIllustration is { } perfusion &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureBeatPerfusion.IsPattern(perfusion))) { throw Invalid(); }
+            if (band.AfBeatSelection is { } af && (!Enum.IsDefined(af) ||
+                band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || band.VentricularCycles is not null)) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
             if (band.VentricularCycles is { } cycles &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || cycles.Length is < 1 or > 64 ||
@@ -138,6 +142,7 @@ public sealed class EventWaveformComposition
     }
 
     private static bool Accepts(EventWaveformBand band, PhysiologyCycleEvent item) => band.Trigger == item.Kind &&
+        (band.AfBeatSelection is not { } af || AtrialFibrillationReference.IsLongShortBeat(item.CycleIndex) == (af == AtrialFibrillationBeatSelection.LongShort)) &&
         (band.VentricularCycles is not { } cycles || (cycles.IncludedSlots & (1UL << (int)(item.CycleIndex % (ulong)cycles.Length))) != 0) &&
         (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value ||
          (band.TriggerCycleResume is { } resume && item.CycleIndex >= resume));

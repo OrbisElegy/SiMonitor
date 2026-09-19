@@ -79,6 +79,7 @@ internal static class Program
             .. VentricularEscapeSpecifications.All,
             .. AtrialFlutterSpecifications.All,
             .. AtrialFibrillationSpecifications.All,
+            .. AtrialFibrillationPerfusionSpecifications.All,
             .. VentricularDisorganizationSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,

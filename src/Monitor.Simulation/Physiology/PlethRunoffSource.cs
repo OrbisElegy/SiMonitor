@@ -6,7 +6,7 @@ namespace Monitor.Simulation.Physiology;
 // Relative optical-pulse illustration, not oxygen saturation or arterial pressure.
 public sealed record PlethRunoffPlan(long TransitDelayNs, long PulseDurationNs, int AmplitudeCounts,
     long TailTimeConstantNs = 400_000_000, bool IncludeNotch = false, bool UsePrematureBeatPerfusion = false,
-    string ModelId = "PlethSmoothRunoff@1");
+    string ModelId = "PlethSmoothRunoff@1", bool UseAtrialFibrillationPerfusion = false);
 
 // Immutable bounded reconstruction: no accumulated integration and no epoch scan.
 public sealed class PlethRunoffSource
@@ -28,6 +28,8 @@ public sealed class PlethRunoffSource
             plan.PulseDurationNs <= 0 || plan.AmplitudeCounts is < 0 or > short.MaxValue ||
             plan.TailTimeConstantNs is < 100_000_000 or > 2_000_000_000 ||
             plan.UsePrematureBeatPerfusion && !PrematureBeatPerfusion.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
+        if (plan.UseAtrialFibrillationPerfusion && (plan.UsePrematureBeatPerfusion ||
+            !AtrialFibrillationReference.IsPattern(physiology.ConductionPattern))) { throw Invalid(); }
         _physiology = physiology; _plan = plan;
         _table = (plan.IncludeNotch ? PlethPulseTables.Notched : PlethPulseTables.Plain).Select(value => checked(value * plan.AmplitudeCounts)).ToArray();
         _joinIndex = plan.IncludeNotch ? 72 : 88;
@@ -66,7 +68,8 @@ public sealed class PlethRunoffSource
         Int128 sum = 0;
         RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, source + 1, MaximumHistoryEvents, beat =>
         {
-            int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) : 1000;
+            int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
+                _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) : 1000;
             if (gain == 0) { return; }
             long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
             long join = (long)((Int128)duration * _joinIndex / 128);

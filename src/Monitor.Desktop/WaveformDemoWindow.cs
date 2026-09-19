@@ -923,6 +923,8 @@ internal sealed class WaveformDemoWindow : Window
             VascularPressureModeStatus.Text = breathConfiguration.UseVascularReservoir
                 ? "已应用血管储压模型：ABP／PA 保留各自的上升支、切迹与下降支；停搏波尾结束后分别衰减至 10／5 mmHg，恢复后从残余压力逐搏充盈。形态与储压组合为教学近似，CVP 仍使用原有分量模型。"
                 : "已应用固定基线形态模板：无新机械事件时 ABP／PA 波尾结束后保持 80／10 mmHg；启用血管储压模型可观察压力衰减与恢复。";
+            if (AtrialFibrillationReference.IsPattern(breathConfiguration.ConductionPattern))
+            { VascularPressureModeStatus.Text += " 房颤示例中 Pleth、ABP、PA 使用共享的逐搏强弱变化；强度为教学设定，不代表真实搏出量测量。"; }
             MechanicalEveryCyclesInput.SelectedIndex = breathConfiguration.MechanicalEveryCycles - 1;
             MechanicalAfterCyclesInput.Text = breathConfiguration.MechanicalAfterCycles?.ToString(CultureInfo.InvariantCulture) ?? "";
             MechanicalDurationCyclesInput.Text = breathConfiguration.MechanicalDurationCycles?.ToString(CultureInfo.InvariantCulture) ?? "";

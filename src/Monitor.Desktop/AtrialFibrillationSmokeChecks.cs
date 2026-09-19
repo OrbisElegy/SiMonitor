@@ -57,14 +57,22 @@ internal static class AtrialFibrillationSmokeChecks
                         VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                     }
                     var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
-                    var samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
+                    short[] samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
                     if (!samples.Skip(20).Take(20).Any(v => v > 500) || !samples.Skip(303).Take(20).Any(v => v > 500))
                     { throw new InvalidOperationException("Fibrillation ventricular RR did not follow irregular beat times."); }
                     if (samples.Skip(220).Take(20).Any(value => value > 500) || !samples.Skip(502).Take(18).Any(value => value > 500))
                     { throw new InvalidOperationException("AF QRS still follows a regular 800ms grid."); }
                     if (!projected)
                     {
-                        var pleth = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
+                        short[] pleth = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
+                        var perfusionPlan = window.BreathConfiguration.ResolvePlan();
+                        var source = PhysiologySignalGenerator.Start(perfusionPlan, "AcqPleth125@1", 1, [],
+                            plethRunoff: new(80_000_000, 512_000_000, 1250, UseAtrialFibrillationPerfusion: true));
+                        if (!pleth.SequenceEqual(source.GenerateBefore(pleth.Length * 8_000_000L, pleth.Length, 200).Select(s => s.NormalizedValue)))
+                        { throw new InvalidOperationException("AF demo lost shared beat gains or full Pleth support."); }
+                        var checkpoint = PhysiologyDemoSource.Create(window.BreathConfiguration).CaptureState();
+                        if (checkpoint.Channels.Count(c => c.Generator.VascularPressure?.UseAtrialFibrillationPerfusion == true) != 2)
+                        { throw new InvalidOperationException("AF ABP/PA did not select the shared perfusion model."); }
                         if (pleth.Skip(155).Take(9).Zip(pleth.Skip(156)).Any(pair => pair.Second > pair.First) ||
                             pleth[155] <= 0 || pleth.Skip(185).Take(20).Max() <= pleth[164])
                         { throw new InvalidOperationException("AF pleth did not follow irregular ventricular mechanics."); }
@@ -73,6 +81,12 @@ internal static class AtrialFibrillationSmokeChecks
                     var held = window.Trace; var timer = window.ActiveTimer;
                     long before = window.SimulationTimeNs;
                     var ecg = window.EcgConfiguration; var physiology = window.BreathConfiguration;
+                    if (!projected)
+                    {
+                        window.VascularReservoirInput.IsChecked = false;
+                        Click(window.ApplyBreathButton); Unchanged();
+                        window.VascularReservoirInput.IsChecked = true;
+                    }
                     window.IndependentVentricularPeriodInput.Text = "1200";
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton); Unchanged();
                     window.IndependentVentricularPeriodInput.Text = "";

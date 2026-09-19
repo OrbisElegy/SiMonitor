@@ -28,6 +28,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox MechanicalDurationCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal TextBox MechanicalAfterCyclesInput { get; } = new() { Text = "", Width = 65 };
     internal CheckBox VentricularMechanicalInput { get; } = new() { Content = "生成室性机械事件", IsChecked = true };
+    internal CheckBox AfPulseDeficitInput { get; } = new() { Content = "房颤脉搏短绌示例（体循环）", IsChecked = false };
     internal CheckBox VascularReservoirInput { get; } = new() { Content = "血管储压模型（教学）", IsChecked = true };
     internal TextBlock VascularPressureModeStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     internal ComboBox CardiacActivityInput { get; } = new() { ItemsSource = new[] { "心房与心室事件", "仅心房事件", "无心脏事件", "仅心室事件" }, SelectedIndex = 0 };
@@ -239,7 +240,7 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(new TextBlock { Text = "正常下传房早：3个窦性搏动后出现不同形态的P′，联律500ms、随后间歇1000ms，两者之和小于正常PP的两倍（1600ms）；P′R160ms、窄QRS80ms、固定QT320ms。切入此模式会重置参数。电/机械事件同源；此按钮载入窄QRS例；不模拟逐搏充盈和搏出量变化。" });
             conduction.Children.Add(VentricularDisorganizationButton);
             conduction.Children.Add(new TextBlock { Text = "室扑／室颤：无独立P/QRS/T，无有效射血；Pleth无搏动，RC压力衰减。呼吸与CO₂仍为独立设置，不自动模拟呼吸停止或气体交换改变。可在列表切换室扑、粗室颤、细室颤。" });
-            conduction.Children.Add(new TextBlock { Text = "房颤示例：无正常P，f波不规则且V1明显；可切换粗/细颤。RR逐搏不规则，440–1160ms，长期平均室率75；QRS80ms、固定QT300ms。此例无正常房性机械收缩，不模拟脉搏短绌或室内差异传导。" });
+            conduction.Children.Add(new TextBlock { Text = "房颤示例：无正常P，f波不规则且V1明显；可切换粗/细颤。RR逐搏不规则，440–1160ms，长期平均室率75；QRS80ms、固定QT300ms。此例无正常房性机械收缩，生理波形demo可另选体循环脉搏短绌教学例；室内差异传导仍未模拟。" });
             conduction.Children.Add(new TextBlock { Text = "房扑示例：房率300，连续F波，选2:1/3:1/4:1对应室率150/100/75；QRS80ms、QT300ms。12导联使用固定形态/时限；未模拟房扑机械收缩，CVP不生成正常a波。" });
             conduction.Children.Add(new TextBlock { Text = "室性逸搏示例：房率75、室率30，宽大切迹QRS160ms/反向T，固定QT480ms；可改室周期1500–3000ms及首次偏移。12导联保留此例形态/时限；不代表逸搏起源定位。" });
             conduction.Children.Add(new TextBlock { Text = "交界性逸搏示例：房率75、室率50，正常80ms QRS，无固定PR；可改独立室周期1000–1500ms及首次偏移。12导联需保留参考形态和固定时限。此示例从已建立的逸搏开始。" });
@@ -263,6 +264,8 @@ internal sealed class WaveformDemoWindow : Window
                 conduction.Children.Add(new TextBlock { Text = "机械停止持续周期数（可空）" });
                 conduction.Children.Add(MechanicalDurationCyclesInput);
                 conduction.Children.Add(VascularReservoirInput);
+                conduction.Children.Add(AfPulseDeficitInput);
+                ToolTip.SetTip(AfPulseDeficitInput, "仅粗／细房颤可用。指定长–短RR组合保留QRS，但不新增ABP／Pleth脉搏；旧尾部继续，PA／CVP不随之消失。作者教学设定，不是自动判断；运行约15秒可观察首个缺脉搏。应用后重新开始。");
                 ToolTip.SetTip(VascularReservoirInput, "ABP／PA 保留各自的上升支、切迹与下降支，并加入血管储压：无射血时压力衰减，恢复后从残余压力逐搏充盈。取消后使用固定基线形态模板。应用后从源时间零重新开始。");
             }
             panel.Children.Add(conduction);
@@ -858,6 +861,8 @@ internal sealed class WaveformDemoWindow : Window
             { throw new ArgumentException("Explicit ventricular mechanical selection required."); }
             if (VascularReservoirInput.IsChecked is not { } vascularReservoir)
             { throw new ArgumentException("Explicit vascular pressure model selection required."); }
+            if (AfPulseDeficitInput.IsChecked is not { } afPulseDeficit)
+            { throw new ArgumentException("Explicit AF pulse-deficit selection required."); }
             int? mechanicalAfter = null;
             if (!string.IsNullOrWhiteSpace(MechanicalAfterCyclesInput.Text))
             {
@@ -880,7 +885,7 @@ internal sealed class WaveformDemoWindow : Window
                 independentPeriod = parsedPeriod;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit));
         }
         catch (EventWaveformException error) when (error.ReasonCode is "Capnogram.Co2ResponseOutOfRange" or "Capnogram.InvalidCo2Response")
         { BreathConfigurationStatus.Text = "未应用：潮式深度耦合后的CO₂超过支持范围（0～327 mmHg）；请降低参考呼气末值或检查呼吸周期。当前数据与扫屏状态保持。"; }
@@ -889,6 +894,8 @@ internal sealed class WaveformDemoWindow : Window
             var status = _projected ? EcgConfigurationStatus : BreathConfigurationStatus;
             status.Text = "未应用：独立束支模板需1:1房室活动、固定形态/时限且无独立心室时钟；请使用载入按钮重置，或选择参考以关闭模板。当前数据与扫屏状态保持。";
         }
+        catch (ArgumentException error) when (error.Message == "AF pulse deficit requires an AF rhythm.")
+        { BreathConfigurationStatus.Text = "未应用：脉搏短绌示例仅适用于粗／细房颤；请关闭该选项或载入房颤。当前数据与扫屏状态保持。"; }
         catch (ArgumentException)
         {
             BreathConfigurationStatus.Text = "未应用：可用“载入二度阻滞示例（重置参数）”清除旧参数；成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
@@ -920,11 +927,14 @@ internal sealed class WaveformDemoWindow : Window
             CardiacActivityInput.SelectedIndex = (int)breathConfiguration.CardiacActivity;
             VentricularMechanicalInput.IsChecked = breathConfiguration.VentricularMechanicalEnabled;
             VascularReservoirInput.IsChecked = breathConfiguration.UseVascularReservoir;
+            AfPulseDeficitInput.IsChecked = breathConfiguration.IllustrateAfSystemicPulseDeficit;
             VascularPressureModeStatus.Text = breathConfiguration.UseVascularReservoir
                 ? "已应用血管储压模型：ABP／PA 保留各自的上升支、切迹与下降支；停搏波尾结束后分别衰减至 10／5 mmHg，恢复后从残余压力逐搏充盈。形态与储压组合为教学近似，CVP 仍使用原有分量模型。"
                 : "已应用固定基线形态模板：无新机械事件时 ABP／PA 波尾结束后保持 80／10 mmHg；启用血管储压模型可观察压力衰减与恢复。";
             if (AtrialFibrillationReference.IsPattern(breathConfiguration.ConductionPattern))
             { VascularPressureModeStatus.Text += " 房颤示例中 Pleth、ABP、PA 使用共享的逐搏强弱变化；强度为教学设定，不代表真实搏出量测量。"; }
+            if (breathConfiguration.IllustrateAfSystemicPulseDeficit)
+            { VascularPressureModeStatus.Text += " 已启用体循环脉搏短绌教学例：部分QRS无新ABP／Pleth脉搏，PA／CVP保持各自示例。"; }
             MechanicalEveryCyclesInput.SelectedIndex = breathConfiguration.MechanicalEveryCycles - 1;
             MechanicalAfterCyclesInput.Text = breathConfiguration.MechanicalAfterCycles?.ToString(CultureInfo.InvariantCulture) ?? "";
             MechanicalDurationCyclesInput.Text = breathConfiguration.MechanicalDurationCycles?.ToString(CultureInfo.InvariantCulture) ?? "";

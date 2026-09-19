@@ -4,7 +4,7 @@ namespace Monitor.Simulation.Physiology;
 // Explicit teaching strengths, not inferred stroke volumes or a filling model.
 public static class PrematureBeatPerfusion
 {
-    public const string EvidenceId = "PrematureBeatPerfusionIllustration@3";
+    public const string EvidenceId = "PrematureBeatPerfusionIllustration@4";
     public static bool IsPattern(AvConductionPattern pattern) => PrematureVentricularReference.IsPattern(pattern) ||
         PrematureAtrialReference.IsPattern(pattern) || PrematureJunctionalReference.IsPattern(pattern);
 

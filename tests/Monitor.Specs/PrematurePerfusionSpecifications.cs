@@ -6,7 +6,49 @@ namespace Monitor.Specs;
 
 internal static class PrematurePerfusionSpecifications
 {
-    public static Specification[] All => [new(nameof(PlethFullSupportSurvivesPrematureOverlap), PlethFullSupportSurvivesPrematureOverlap), new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    public static Specification[] All => [new(nameof(WeakBeatMorphologyUsesMatchingReferenceInput), WeakBeatMorphologyUsesMatchingReferenceInput), new(nameof(PlethFullSupportSurvivesPrematureOverlap), PlethFullSupportSurvivesPrematureOverlap), new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    private static void WeakBeatMorphologyUsesMatchingReferenceInput()
+    {
+        foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureVentricularReference.IsPattern)
+            .Where(mode => mode != AvConductionPattern.ShortCoupledRonTPvcIllustration))
+        {
+            var physiology = PrematureVentricularReference.CreatePlan(mode);
+            foreach (bool pulmonary in new[] { false, true })
+            {
+                var plan = pulmonary ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000, UsePrematureBeatPerfusion: true) :
+                    new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000, UsePrematureBeatPerfusion: true);
+                var raw = VascularPressureSource.Create(physiology, plan);
+                var zeroShape = VascularPressureSource.Create(physiology, plan with
+                { Morphology = new(pulmonary ? VascularPressureMorphologyKind.PulmonaryArtery : VascularPressureMorphologyKind.Arterial, 420_000_000, 0) });
+                var events = RegularPhysiologyTimeline.Start(physiology).AdvanceBefore(8_000_000_000, 200)
+                    .Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical && PrematureBeatPerfusion.GainPermille(mode, e.CycleIndex) == 200);
+                foreach (var beat in events)
+                {
+                    for (long age = 0; age <= 400_000_000; age += 8_000_000)
+                    {
+                        long time = beat.SimTimeNs + plan.TransitDelayNs + age;
+                        // Independent continuous-time reference. With these parameters
+                        // the weak input equilibrium is below the nominal onset pressure,
+                        // so the reference only decays and is clamped to that onset.
+                        double period = 500_000_000, tau = plan.TimeConstantNs;
+                        double onset = plan.EjectionEquilibriumCentiMmHg *
+                            (Math.Exp(-(period - plan.EjectionDurationNs) / tau) - Math.Exp(-period / tau)) /
+                            (1 - Math.Exp(-period / tau));
+                        Check.That(plan.EjectionEquilibriumCentiMmHg * 0.2 < onset, "weak input cannot raise the reference above its onset");
+                        Check.That(zeroShape.EvaluateAt(time) == raw.EvaluateAt(time),
+                            "zero-height weak-beat shape must not depress the reservoir through a full-strength denominator");
+                    }
+                }
+                var shapedPlan = plan with { Morphology = new(pulmonary ? VascularPressureMorphologyKind.PulmonaryArtery : VascularPressureMorphologyKind.Arterial, 420_000_000, pulmonary ? 1500 : 4000) };
+                var source = PhysiologySignalGenerator.Start(physiology, "AcqPressure125@1", 1, [], shapedPlan);
+                source.GenerateBefore(2_560_000_000, 320, 200);
+                var restored = PhysiologySignalGenerator.Restore(source.CaptureState());
+                Check.That(source.GenerateBefore(8_000_000_000, 1000, 200).SequenceEqual(restored.GenerateBefore(8_000_000_000, 1000, 200)),
+                    "weighted morphology recovery preserves actual pressure samples");
+            }
+        }
+    }
+
     private static void PlethFullSupportSurvivesPrematureOverlap()
     {
         foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureBeatPerfusion.IsPattern))

@@ -138,9 +138,13 @@ public sealed class VascularPressureSource
                 ? PeriodicLutLinear.Interpolate(_morphologyTable!,
                     (ulong)(((UInt128)elapsed << 64) / (ulong)morphologyDuration)).Value : 0;
             pulse = (long)FixedPointMath.RoundDivideTiesToEven((Int128)pulse * morphologyGain, 1000);
+            // The contour and its reference must describe the same ejection.
+            // An unweighted reference artificially suppresses a weak beat.
+            Int128 referenceInput = FixedPointMath.RoundDivideTiesToEven(
+                (Int128)_plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(elapsed, morphologyEjectionDuration) * morphologyGain, 1000);
             long reference = (long)FixedPointMath.RoundDivideTiesToEven(
                 (Int128)_referenceOnsetQ32 * Decay(elapsed) +
-                (Int128)_plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(elapsed, morphologyEjectionDuration) * FixedPointMath.Q32One,
+                referenceInput * FixedPointMath.Q32One,
                 FixedPointMath.Q62One);
             // Enforce the nominal minimum against sub-Q32 endpoint rounding.
             reference = Math.Max(_referenceOnsetQ32, reference);

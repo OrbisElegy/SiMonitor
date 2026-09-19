@@ -1,5 +1,5 @@
 {
-  "id": "PrematureBeatPerfusionIllustration@3",
+  "id": "PrematureBeatPerfusionIllustration@4",
   "references": [
     {
       "url": "https://pubmed.ncbi.nlm.nih.gov/2443582/",
@@ -32,6 +32,7 @@
   },
   "semantics": "Strength weights are neither stroke volume in milliliters nor clinically measured percentages. Pressure drive and Pleth share the original beat ordinal. Ineffective peripheral ejection at short coupling is specific to this teaching example.",
   "implementation": [
+    "Pressure morphology normalization uses the current beat's gain and ejection duration for the reference input. This avoids extra attenuation from a reduced input divided by a full-ejection denominator. Nominal reference starting pressure and amplitude bounds are preserved; zero effective ejection remains skipped.",
     "Original electrical/mechanical events remain. Zero ejection only omits new pressure input and Pleth contributions; existing tails and reservoir decay continue.",
     "Effective ejection intervals in the short-coupled example are at least 800 ms, restoring ABP/PA ejection durations of 240/200 ms and normal pulse duration. Pressure event budgets still conservatively use the original minimum mechanical interval of 200 ms.",
     "Normal, weak-PVC and recovery Pleth gains correspond to 1000, 250 and 1250 counts. Both consecutive PVCs use 200; these values do not establish exact couplet stroke volumes.",

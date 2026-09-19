@@ -15,6 +15,7 @@ internal static class PlethPulseSpecifications
     private static readonly Guid Pleth = Guid.Parse("22222222-2222-4222-8222-222222222222");
     public static Specification[] All =>
     [
+        new(nameof(PlethShoulderSurvivesDurationGainAndNativeSampling), PlethShoulderSurvivesDurationGainAndNativeSampling),
         new(nameof(PlethNeedsMechanicalEventsAndExplicitTransit), PlethNeedsMechanicalEventsAndExplicitTransit),
         new(nameof(PlethHasFastRiseOptionalNotchAndIndependentAmplitude), PlethHasFastRiseOptionalNotchAndIndependentAmplitude),
         new(nameof(PlethNativeDelayAndGroupRestorePreserveSamples), PlethNativeDelayAndGroupRestorePreserveSamples),
@@ -39,7 +40,7 @@ internal static class PlethPulseSpecifications
             { Check.That(present.EvaluateAt(time) == 0, "pulse support follows mechanical time plus caller transit"); }
             Check.That(present.EvaluateAt(time) == delayed.EvaluateAt(time + 80_000_000), "transit changes arrival without changing morphology");
         }
-        Check.That(present.EvaluateAt(416_000_000) == 1000 * FixedPointMath.Q32One,
+        Check.That(present.EvaluateAt(480_000_000) == 1000 * FixedPointMath.Q32One,
             "peak occurs after independent electromechanical and transit delays");
     }
 
@@ -53,14 +54,36 @@ internal static class PlethPulseSpecifications
         for (long time = 320_000_000; time <= 832_000_000; time += 8_000_000)
         {
             long value = plain.EvaluateAt(time);
-            Check.That(value >= 0 && (time <= 416_000_000 ? value >= previous : value <= previous),
-                "plain pulse has a short 96ms rise and a longer 416ms monotonic decay");
+            Check.That(value >= 0 && (time <= 480_000_000 ? value >= previous : value <= previous),
+                "plain pulse has a rounded160ms rise and352ms descending shoulder/tail");
             Check.That(Math.Abs(value - 2 * half.EvaluateAt(time)) <= 1 && absent.EvaluateAt(time) == 0,
                 "explicit relative amplitude scales raw pulse without an SpO2 dependency");
             previous = value;
         }
         Check.That(notch.EvaluateAt(544_000_000) < notch.EvaluateAt(608_000_000) &&
             notch.EvaluateAt(608_000_000) < notch.EvaluateAt(416_000_000), "optional notch has a smaller secondary peak");
+    }
+
+    private static void PlethShoulderSurvivesDurationGainAndNativeSampling()
+    {
+        foreach (long duration in new[] { 320_000_000L, 384_000_000L, 512_000_000L, 640_000_000L })
+        {
+            var wave = Composition(Pulse with { DurationNs = duration });
+            long At(int phase) => wave.EvaluateAt(320_000_000 + duration * phase / 128);
+            long earlySlope = (At(48) - At(64)) / 16;
+            long shoulderSlope = (At(72) - At(88)) / 16;
+            long lateSlope = (At(96) - At(112)) / 16;
+            Check.That(shoulderSlope > 0 && earlySlope > 5 * shoulderSlope && lateSlope > 5 * shoulderSlope,
+                "descending shoulder slows substantially without reversal or a rectangular plateau");
+            Check.That(At(0) == 0 && At(40) == 1000 * FixedPointMath.Q32One && At(128) == 0,
+                "rounded peak keeps amplitude and half-open support over different pulse durations");
+            var samples = PhysiologySignalGenerator.Start(Timeline, "AcqPleth125@1", 1,
+                (Pulse with { DurationNs = duration }).CreateBands()).GenerateBefore(1_000_000_000, 125, 100);
+            short[] shoulder = samples.Where(sample => sample.Tick.SimTimeNs >= 320_000_000 + duration * 72 / 128 &&
+                sample.Tick.SimTimeNs <= 320_000_000 + duration * 88 / 128).Select(sample => sample.NormalizedValue).ToArray();
+            Check.That(shoulder.Length >= 5 && shoulder.All(value => value is >= 439 and <= 481),
+                "shoulder remains represented by multiple native125Hz samples");
+        }
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 32,
@@ -87,7 +110,7 @@ internal static class PlethPulseSpecifications
         var source = PhysiologySignalGenerator.Start(Timeline, "AcqPleth125@1", 1, Pulse.CreateBands())
             .GenerateBefore(2_000_000_000, 250, 100);
         var decoded = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).SelectMany(block => block.Planes.Single(plane => plane.ChannelId == Pleth).Samples);
-        Check.That(decoded.SequenceEqual(source.Select(sample => sample.NormalizedValue)) && source[52].NormalizedValue == 1000,
+        Check.That(decoded.SequenceEqual(source.Select(sample => sample.NormalizedValue)) && source[60].NormalizedValue == 1000,
             "published 125Hz raw counts exactly match mechanical source samples");
     }
 

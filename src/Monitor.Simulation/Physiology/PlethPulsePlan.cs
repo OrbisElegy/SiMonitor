@@ -6,7 +6,7 @@ namespace Monitor.Simulation.Physiology;
 public sealed record PlethPulsePlan(long TransitDelayNs, long DurationNs,
     int AmplitudeCounts, bool IncludeNotch = false)
 {
-    public const string EvidenceId = "PlethPulseIllustrationDraft@1";
+    public const string EvidenceId = "PlethPulseIllustrationDraft@2";
 
     public IReadOnlyList<EventWaveformBand> CreateBands()
     {

@@ -68,8 +68,8 @@ internal static class ConductionRatioSmokeChecks
                         { throw new InvalidOperationException("Grouped dropped QRS remained."); }
                         if (!projected)
                         {
-                            var pleth = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(2)).Samples).ToArray();
-                            if (!pleth.Skip(140).Take(40).Any(v => v > 0) || pleth.Skip(conducted * 100 + 40).Take(40).Any(v => v != 0))
+                            short[] pleth = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(2)).Samples).ToArray();
+                            if (!pleth.Skip(140).Take(40).Any(v => v > 0) || pleth.Skip(conducted * 100 + 40).Take(39).Zip(pleth.Skip(conducted * 100 + 41)).Any(pair => pair.Second > pair.First))
                             { throw new InvalidOperationException("Grouped mechanical pulses did not follow conduction."); }
                         }
                     }

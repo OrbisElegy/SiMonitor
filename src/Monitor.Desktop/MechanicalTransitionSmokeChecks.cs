@@ -44,12 +44,13 @@ internal static class MechanicalTransitionSmokeChecks
             }
             foreach (int row in new[] { 2, 3, 5 })
             {
-                var pulse = MechanicalUncouplingSmokeChecks.Samples(actual, row);
+                short[] pulse = MechanicalUncouplingSmokeChecks.Samples(actual, row);
                 if (!pulse.Take(125).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row).Take(125)) ||
-                    !pulse.Skip(100).Take(4).Any(value => value > 0) || pulse.Skip(125).Any(value => value != 0))
+                    !pulse.Skip(100).Take(4).Any(value => value > 0) || (row == 2 ? pulse.Skip(125).Zip(pulse.Skip(126)).Any(pair => pair.Second > pair.First) : pulse.Skip(125).Any(value => value != 0)))
                 { throw new InvalidOperationException("Mechanical cutoff lost its first pulse tail or retained later pulses."); }
             }
             MechanicalUncouplingSmokeChecks.VerifyPixels(window, actual);
+            MechanicalUncouplingSmokeChecks.VerifyPixels(window, actual, plethIndex: 150);
             VerifyPressureTail(window, actual);
             Click(window.HoldButton); Click(window.RunButton);
             var held = window.Trace;
@@ -94,7 +95,7 @@ internal static class MechanicalTransitionSmokeChecks
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
-        var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, 5);
+        short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, 5);
         foreach (int index in sampleIndices ?? [105, 150])
         {
             int y = (int)Math.Round(710 - (10 + samples[index] / 100.0) * 2.5);

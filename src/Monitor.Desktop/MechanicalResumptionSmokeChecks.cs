@@ -40,11 +40,18 @@ internal static class MechanicalResumptionSmokeChecks
             }
             foreach (int row in new[] { 2, 3, 5 })
             {
-                var pulse = MechanicalUncouplingSmokeChecks.Samples(actual, row);
-                var reference = MechanicalUncouplingSmokeChecks.Samples(normal, row);
+                short[] pulse = MechanicalUncouplingSmokeChecks.Samples(actual, row);
+                short[] reference = MechanicalUncouplingSmokeChecks.Samples(normal, row);
                 int resumed = row == 5 ? 235 : 240;
-                if (!pulse.Take(125).SequenceEqual(reference.Take(125)) || pulse.Skip(140).Take(60).Any(value => value != 0) ||
-                    !pulse.Skip(resumed).SequenceEqual(reference.Skip(resumed)) || !pulse.Skip(resumed).Take(64).Any(value => value > 0))
+                bool gapValid = row == 2
+                    ? !pulse.Skip(140).Take(59).Zip(pulse.Skip(141)).Any(pair => pair.Second > pair.First)
+                    : !pulse.Skip(140).Take(60).Any(value => value != 0);
+                bool resumedValid = row == 2
+                    ? !pulse.Skip(resumed).Zip(reference.Skip(resumed)).Any(pair => pair.First > pair.Second) &&
+                      pulse.Skip(resumed).Take(64).Max() > pulse[resumed]
+                    : pulse.Skip(resumed).SequenceEqual(reference.Skip(resumed));
+                if (!pulse.Take(125).SequenceEqual(reference.Take(125)) || !gapValid || !resumedValid ||
+                    !pulse.Skip(resumed).Take(64).Any(value => value > 0))
                 { throw new InvalidOperationException("Mechanical recovery lost its first tail, gap or original resumed pulse timing."); }
             }
             MechanicalTransitionSmokeChecks.VerifyPressureTail(window, actual, [150, 260]);
@@ -67,8 +74,9 @@ internal static class MechanicalResumptionSmokeChecks
             { throw new InvalidOperationException("Reset lost the accepted mechanical recovery schedule."); }
             window.MechanicalDurationCyclesInput.Text = "";
             Click(window.ApplyBreathButton);
+            short[] suppressed = MechanicalUncouplingSmokeChecks.Samples(MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration), 2);
             if (window.BreathConfiguration.MechanicalDurationCycles is not null ||
-                MechanicalUncouplingSmokeChecks.Samples(MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration), 2).Skip(125).Any(value => value != 0))
+                suppressed.Skip(125).Zip(suppressed.Skip(126)).Any(pair => pair.Second > pair.First))
             { throw new InvalidOperationException("Clearing duration did not restore permanent suppression."); }
 
             void VerifyUnchanged()

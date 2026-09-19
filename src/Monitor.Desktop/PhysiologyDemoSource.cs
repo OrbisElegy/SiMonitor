@@ -46,7 +46,7 @@ internal static class PhysiologyDemoSource
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                new PlethPulsePlan(80_000_000, beatPerfusion ? 512_000_000 : PulseDuration(512_000_000), beatPerfusion ? 1250 : 1000).CreateBands().Select(b => b with { EjectionIllustration = beatPerfusion ? plan.ConductionPattern : null }).ToArray(), 250, 0),
+                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: new(80_000_000, beatPerfusion ? 512_000_000 : PulseDuration(512_000_000), beatPerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion)),
              configuration.UseVascularReservoir
                 ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
                     Morphology: new(VascularPressureMorphologyKind.Arterial, beatPerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: beatPerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion).CreateChannel(plan, ChannelId(3), 0)

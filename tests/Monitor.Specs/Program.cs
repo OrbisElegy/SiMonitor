@@ -45,6 +45,7 @@ internal static class Program
             .. PtAndUWaveSpecifications.All,
             .. EcgQtCorrectionSpecifications.All,
             .. PlethPulseSpecifications.All,
+            .. PlethRunoffSpecifications.All,
             .. ArterialPulseSpecifications.All,
             .. VascularPressureSpecifications.All,
             .. VascularPressureMorphologySpecifications.All,

@@ -30,6 +30,7 @@ public sealed class VascularPressureSource
         if (plan.UsePrematureBeatPerfusion && !PrematureBeatPerfusion.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
         if (plan.UseAtrialFibrillationPerfusion && (plan.UsePrematureBeatPerfusion ||
             !AtrialFibrillationReference.IsPattern(physiology.ConductionPattern))) { throw Invalid(); }
+        if (plan.IllustrateAfSystemicPulseDeficit && !plan.UseAtrialFibrillationPerfusion) { throw Invalid(); }
         Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern) : physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
         Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
@@ -120,7 +121,7 @@ public sealed class VascularPressureSource
             MaximumEjectionCount, item =>
             {
                 int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
-                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) : 1000;
+                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) : 1000;
                 if (gain == 0) { return; }
                 long age = sourceTime - item.SimTimeNs;
                 long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;

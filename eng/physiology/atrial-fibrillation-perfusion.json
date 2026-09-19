@@ -1,5 +1,5 @@
 {
-  "id": "AtrialFibrillationPerfusionIllustration@1",
+  "id": "AtrialFibrillationPerfusionIllustration@2",
   "references": [
     {
       "url": "https://pubmed.ncbi.nlm.nih.gov/3249036/",
@@ -11,6 +11,12 @@
       "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1760769/",
       "summary": [
         "Beatwise performance depends on cycle length, preload, afterload and contractility."
+      ]
+    },
+    {
+      "url": "https://www.jacc.org/doi/10.1016/S0735-1097%2897%2900254-4",
+      "summary": [
+        "Primary haemodynamic study reports absent aortic valve opening with very short cycles or short cycles after long cycles; it does not establish our thresholds or a mandatory RV response."
       ]
     }
   ],
@@ -34,19 +40,40 @@
     "abpMorphologyDurationNs": 600000000,
     "paMorphologyDurationNs": 640000000,
     "pressureMaximumPulseOverlap": 2,
-    "durationScaling": "none; preserve channel baseline ejection and morphology durations"
+    "durationScaling": "none; preserve channel baseline ejection and morphology durations",
+    "optionalSystemicPulseDeficit": {
+      "enabledByDefault": false,
+      "precedingRrBelowNs": 600000000,
+      "preprecedingRrAtLeastNs": 900000000,
+      "gainPermille": 0,
+      "channels": [
+        "Pleth",
+        "ABP"
+      ],
+      "preservedChannels": [
+        "ECG",
+        "PA",
+        "CVP",
+        "Resp",
+        "CO2"
+      ],
+      "firstSelectedOrdinal": 16,
+      "firstSystemicArrivalNs": 13126000000,
+      "startup": "ordinals0/1 keep ordinary gains"
+    }
   },
   "invariants": [
     "Coarse and fine AF share events and gain",
     "Gain uses original electrical/mechanical ordinal and immediately preceding electrical RR, never accumulated ejection history",
     "Pressure input, morphology and reference use matching beat strength",
-    "No random state, epoch scan, added beats or forced zero-gain beats",
+    "No random state, epoch scan or added beats; zero gain only in explicitly opted-in systemic example",
     "Opt-in flags default false and reject unrelated rhythms or simultaneous premature weighting"
   ],
   "limitations": [
     "Not a physiological stroke-volume or filling model; thresholds/weights are authored",
-    "No pulse-deficit or beat-detection implementation",
+    "One authored systemic pulse-deficit example; no pulse detection, quantitative pulse-deficit reporting or general filling/valve model",
     "No AF aberrancy, CVP filling, independent right-heart or optical SpO2 calibration",
-    "Same ABP/PA gain is a simplified coupled teaching choice, not validated biventricular haemodynamics"
+    "Same ABP/PA gain is a simplified coupled teaching choice, not validated biventricular haemodynamics",
+    "Preserving PA/CVP when selecting a systemic deficit does not assert that real RV/venous haemodynamics are invariant."
   ]
 }

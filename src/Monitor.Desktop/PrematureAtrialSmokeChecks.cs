@@ -76,7 +76,7 @@ internal static class PrematureAtrialSmokeChecks
                 { throw new InvalidOperationException("PAC checkpoint changed wire images across P-prime and sinus reset."); }
                 var blocks = expected.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                 var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
-                var samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
+                short[] samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
                 if ((ventricular ? (selection is not (36 or 37) && samples.Skip(pvcQrs - 40).Take(40).Any(v => v != 0)) || samples.Skip(pvcQrs).Take(40).Max(v => Math.Abs((int)v)) < 600 : blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
                     : Enumerable.Range(pStart, 20).Min(i => selection >= 26 ? samples[i] - samples[i - 525] : samples[i]) > -150 || samples.Skip(565).Take(20).Max() < 500) || samples.Skip(resumedQrs).Take(20).Max() < 500)
                 { throw new InvalidOperationException("PAC early P-prime or conducted/resumed QRS missing."); }
@@ -123,10 +123,9 @@ internal static class PrematureAtrialSmokeChecks
                 }
                 else
                 {
-                    var plethSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
-                    var plethBand = new PlethPulsePlan(80_000_000, 512_000_000, 1250).CreateBands()[0] with
-                    { EjectionIllustration = expectedPhysiology.ConductionPattern };
-                    var plethSource = PhysiologySignalGenerator.Start(expectedPhysiology.ResolvePlan(), "AcqPleth125@1", 1, [plethBand]);
+                    short[] plethSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
+                    var plethSource = PhysiologySignalGenerator.Start(expectedPhysiology.ResolvePlan(), "AcqPleth125@1", 1, [],
+                        plethRunoff: new(80_000_000, 512_000_000, 1250, UsePrematureBeatPerfusion: true));
                     if (!plethSamples.SequenceEqual(plethSource.GenerateBefore(plethSamples.Length * 8_000_000L, plethSamples.Length, 200).Select(sample => sample.NormalizedValue)))
                     { throw new InvalidOperationException("Premature demo compressed normal Pleth support or lost overlapping tails."); }
                     foreach (int row in new[] { 3, 5 })

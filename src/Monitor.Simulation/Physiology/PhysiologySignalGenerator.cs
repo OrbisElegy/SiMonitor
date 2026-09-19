@@ -6,7 +6,7 @@ namespace Monitor.Simulation.Physiology;
 
 public sealed record PhysiologySignalState(RegularPhysiologyState Timeline,
     SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands,
-    VascularPressurePlan? VascularPressure = null);
+    VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null);
 public readonly record struct PhysiologySignalSample(SignalSampleTick Tick, long ValueQ32, short NormalizedValue);
 public sealed class PhysiologySignalException(string reason, string parameter) : ArgumentException(reason, parameter)
 {
@@ -22,6 +22,8 @@ public sealed class PhysiologySignalGenerator
     private readonly long _lookbackNs;
     private readonly VascularPressurePlan? _vascularPressurePlan;
     private readonly VascularPressureSource? _vascularPressure;
+    private readonly PlethRunoffPlan? _plethRunoffPlan;
+    internal PlethRunoffSource? PlethRunoff { get; }
 
     private PhysiologySignalGenerator(PhysiologySignalGenerator source)
     {
@@ -31,6 +33,8 @@ public sealed class PhysiologySignalGenerator
         _lookbackNs = source._lookbackNs;
         _vascularPressurePlan = source._vascularPressurePlan;
         _vascularPressure = source._vascularPressure;
+        _plethRunoffPlan = source._plethRunoffPlan;
+        PlethRunoff = source.PlethRunoff;
     }
 
     // Only immutable, already owned source definitions are shared.
@@ -44,7 +48,14 @@ public sealed class PhysiologySignalGenerator
         if (state.Timeline.CursorSimTimeNs != _clock.CursorSimTimeNs ||
             state.Timeline.Plan.EpochAnchorSimTimeNs != _clock.EpochAnchorSimTimeNs)
         { throw Invalid(); }
-        if (state.VascularPressure is { } pressure)
+        if (state.PlethRunoff is { } runoff)
+        {
+            if (state.VascularPressure is not null || state.Bands is null || state.Bands.Count != 0) { throw Invalid(); }
+            PlethRunoff = PlethRunoffSource.Create(state.Timeline.Plan, runoff);
+            _plethRunoffPlan = runoff;
+            _bands = Array.Empty<EventWaveformBand>();
+        }
+        else if (state.VascularPressure is { } pressure)
         {
             // Pressure is an independent source, not an offset added to a second
             // copy of the old pressure morphology. Its history is reconstructible
@@ -63,11 +74,11 @@ public sealed class PhysiologySignalGenerator
     }
 
     public static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId,
-        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null)
+        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         return Restore(new(RegularPhysiologyTimeline.Start(plan).CaptureState(),
-            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands, vascularPressure));
+            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands, vascularPressure, plethRunoff));
     }
 
     public static PhysiologySignalGenerator Restore(PhysiologySignalState state)
@@ -77,7 +88,7 @@ public sealed class PhysiologySignalGenerator
         catch (OverflowException) { throw Invalid(); }
     }
 
-    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands, _vascularPressurePlan);
+    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands, _vascularPressurePlan, _plethRunoffPlan);
 
     internal VascularPressureSource? VascularPressure => _vascularPressure;
 
@@ -99,7 +110,7 @@ public sealed class PhysiologySignalGenerator
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
         RegularPhysiologyTimeline trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
-        EventWaveformComposition? composition = _vascularPressure is null ? EventWaveformComposition.Restore(new(_bands, events)) : null;
+        EventWaveformComposition? composition = _vascularPressure is null && PlethRunoff is null ? EventWaveformComposition.Restore(new(_bands, events)) : null;
         SignalSampleClock trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
         PhysiologySignalSample[] output = new PhysiologySignalSample[ticks.Count];
@@ -108,6 +119,7 @@ public sealed class PhysiologySignalGenerator
             cancellationToken.ThrowIfCancellationRequested();
             long value = _vascularPressure is { } pressure
                 ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
+                : PlethRunoff is { } runoff ? runoff.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
                 : composition!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
             short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
             output[index] = new(ticks[index], value, normalized);

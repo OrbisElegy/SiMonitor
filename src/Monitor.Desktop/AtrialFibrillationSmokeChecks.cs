@@ -65,7 +65,8 @@ internal static class AtrialFibrillationSmokeChecks
                     if (!projected)
                     {
                         var pleth = MechanicalUncouplingSmokeChecks.Samples(blocks, 2);
-                        if (pleth.Skip(155).Take(10).Any(value => value != 0) || !pleth.Skip(185).Take(20).Any(value => value > 0))
+                        if (pleth.Skip(155).Take(9).Zip(pleth.Skip(156)).Any(pair => pair.Second > pair.First) ||
+                            pleth[155] <= 0 || pleth.Skip(185).Take(20).Max() <= pleth[164])
                         { throw new InvalidOperationException("AF pleth did not follow irregular ventricular mechanics."); }
                     }
                     Click(window.HoldButton); Click(window.RunButton);

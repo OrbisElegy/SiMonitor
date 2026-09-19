@@ -34,10 +34,12 @@ internal static class MechanicalStrideSmokeChecks
                 }
                 foreach (int row in new[] { 2, 3, 5 })
                 {
-                    var samples = MechanicalUncouplingSmokeChecks.Samples(actual, row);
+                    short[] samples = MechanicalUncouplingSmokeChecks.Samples(actual, row);
                     for (int cycle = 0; cycle < 5; cycle++)
                     {
-                        bool pulse = samples.Skip(cycle * 100 + 40).Take(50).Any(value => value > 0);
+                        bool pulse = row == 2
+                            ? samples.Skip(cycle * 100 + 40).Take(49).Zip(samples.Skip(cycle * 100 + 41)).Any(pair => pair.Second > pair.First)
+                            : samples.Skip(cycle * 100 + 40).Take(50).Any(value => value > 0);
                         if (pulse != (cycle % stride == 0))
                         { throw new InvalidOperationException("Pleth/pressure pulse count does not follow the mechanical stride."); }
                     }
@@ -63,8 +65,9 @@ internal static class MechanicalStrideSmokeChecks
             window.MechanicalDurationCyclesInput.Text = "2";
             Click(window.ApplyBreathButton);
             var scheduled = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
-            var pulseSamples = MechanicalUncouplingSmokeChecks.Samples(scheduled, 2);
-            if (pulseSamples.Skip(140).Take(250).Any(value => value != 0) || !pulseSamples.Skip(440).Take(50).Any(value => value > 0))
+            short[] pulseSamples = MechanicalUncouplingSmokeChecks.Samples(scheduled, 2);
+            if (pulseSamples.Skip(140).Take(249).Zip(pulseSamples.Skip(141)).Any(pair => pair.Second > pair.First) ||
+                pulseSamples[140] <= 0 || pulseSamples.Skip(440).Take(50).Max() <= pulseSamples[439])
             { throw new InvalidOperationException("Recovery restarted the stride instead of retaining original eligible cycle4."); }
         }
         finally { window.Close(); }

@@ -13,12 +13,7 @@ public static class AtrialFibrillationPerfusion
         if (ordinal == 0) { return 800; }
         long precedingRr = AtrialFibrillationReference.GridNs + AtrialFibrillationReference.Jitter(ordinal) -
             AtrialFibrillationReference.Jitter(ordinal - 1);
-        if (systemicPulseDeficit && ordinal >= 2 && precedingRr < 600_000_000)
-        {
-            long preprecedingRr = AtrialFibrillationReference.GridNs + AtrialFibrillationReference.Jitter(ordinal - 1) -
-                AtrialFibrillationReference.Jitter(ordinal - 2);
-            if (preprecedingRr >= 900_000_000) { return 0; }
-        }
+        if (systemicPulseDeficit && AtrialFibrillationReference.IsLongShortBeat(ordinal)) { return 0; }
         return precedingRr < 600_000_000 ? 400 : precedingRr < 900_000_000 ? 800 : 1000;
     }
 }

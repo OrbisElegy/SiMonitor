@@ -69,6 +69,7 @@ public sealed class PhysiologySignalGenerator
         {
             _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
             if (_bands.Any(b => b.EjectionIllustration is { } mode && mode != state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
+            if (_bands.Any(b => b.AfBeatSelection is not null) && !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));
         }
     }
@@ -108,12 +109,12 @@ public sealed class PhysiologySignalGenerator
 
         RegularPhysiologyState timeline = _timeline.CaptureState();
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
-        RegularPhysiologyTimeline trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
+        var trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
         EventWaveformComposition? composition = _vascularPressure is null && PlethRunoff is null ? EventWaveformComposition.Restore(new(_bands, events)) : null;
-        SignalSampleClock trialClock = SignalSampleClock.Restore(_clock.CaptureState());
+        var trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
-        PhysiologySignalSample[] output = new PhysiologySignalSample[ticks.Count];
+        var output = new PhysiologySignalSample[ticks.Count];
         for (int index = 0; index < ticks.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();

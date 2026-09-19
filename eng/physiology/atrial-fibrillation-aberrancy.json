@@ -1,0 +1,48 @@
+{
+  "id": "AtrialFibrillationAberrancyIllustration@1",
+  "references": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3669876/",
+      "summary": [
+        "Primary case describes long-short AF-associated RBBB-form aberrancy without a fully compensatory pause."
+      ]
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5725753/",
+      "summary": [
+        "Primary case illustrates variability of aberrancy with long-cycle duration; no universal fixed threshold is inferred."
+      ]
+    }
+  ],
+  "authored_choices": {
+    "selection": "original precedingRR<600ms and preprecedingRR>=900ms; first ordinals0/1 ordinary",
+    "firstOrdinal": 16,
+    "firstQrsNs": 12966000000,
+    "ordinaryQrsQtNs": [
+      80000000,
+      300000000
+    ],
+    "aberrantQrsQtNs": [
+      140000000,
+      400000000
+    ],
+    "aberrantTNs": 180000000,
+    "morphology": "existing RightBundleBlockReference ventricular bands only; omit normal P",
+    "minimumActualRrNs": 440000000,
+    "factoryTiming": "factory800ms RR/P40/PR80 are structural band-building inputs, not new events; only ventricular bands are copied"
+  },
+  "invariants": [
+    "Complementary ordinary/long-short selection; no doubled normal QRS/ST/T",
+    "Independent f bands persist through wide beats",
+    "Same ventricular electrical/mechanical events; no added PVC, compensatory pause or changed perfusion",
+    "Independent opt-in from systemic pulse deficit; sharing authored long-short selector does not imply clinical equivalence",
+    "Source rejects selector on unrelated rhythms, nonventricular triggers, invalid enum or simultaneous cyclic masks",
+    "Bounded original ordinal queries and restorable source state"
+  ],
+  "limitations": [
+    "One fixed RBBB-like teaching example, not an AV-node/bundle refractory model",
+    "No graded widening, LBBB-form aberrancy, concealed conduction, sustained aberrancy or automatic diagnosis",
+    "No inferred filling, mechanical dyssynchrony or ejection reduction",
+    "QT400ms is authored and fits shortest440ms RR; not patient QT calibration"
+  ]
+}

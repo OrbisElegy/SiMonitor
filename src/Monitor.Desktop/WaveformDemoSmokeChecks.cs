@@ -26,6 +26,7 @@ internal static class WaveformDemoSmokeChecks
         AtrialFlutterSmokeChecks.Verify();
         AtrialFibrillationSmokeChecks.Verify();
         AtrialFibrillationDeficitSmokeChecks.Verify();
+        AtrialFibrillationAberrancySmokeChecks.Verify();
         VentricularDisorganizationSmokeChecks.Verify();
         CardiacActivitySmokeChecks.Verify();
         IndependentVentricularSmokeChecks.Verify();

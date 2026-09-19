@@ -17,14 +17,14 @@ internal static class AtrialFlutterSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (int ratio in new[] { 4, 2 })
+                foreach (int ratio in new[] { 4, 3, 2 })
                 {
                     Click(window.StepButton); Click(window.RunButton);
                     var stale = window.ActiveTimer;
                     Click(window.FlutterButton); window.Pulse(stale);
                     if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("Flutter preset failed atomic reset."); }
-                    int selection = ratio == 2 ? 9 : 10;
+                    int selection = ratio == 2 ? 9 : ratio == 3 ? 38 : 10;
                     window.ConductionInput.SelectedIndex = selection;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                     if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text) ||
@@ -89,6 +89,6 @@ internal static class AtrialFlutterSmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: flutter 2:1/4:1 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
+        Console.WriteLine("ok: flutter 2:1/3:1/4:1 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
     }
 }

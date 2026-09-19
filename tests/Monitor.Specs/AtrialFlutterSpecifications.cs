@@ -7,19 +7,50 @@ internal static class AtrialFlutterSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(FlutterThreeToOnePreservesVentricularPerfusionAndRecovery), FlutterThreeToOnePreservesVentricularPerfusionAndRecovery),
         new(nameof(FlutterHasContinuousFAndConductedVentricles), FlutterHasContinuousFAndConductedVentricles),
         new(nameof(FlutterRestoresProjectionAndRejectsConflicts), FlutterRestoresProjectionAndRejectsConflicts),
     ];
+    private static void FlutterThreeToOnePreservesVentricularPerfusionAndRecovery()
+    {
+        var plan = AtrialFlutterReference.CreatePlan(3);
+        var regular = plan with { HeartPeriodNs = 600_000_000, VentricularConductionRatio = 1, ConductionPattern = AvConductionPattern.FixedPr };
+        var pressure = new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
+            Morphology: new(VascularPressureMorphologyKind.Arterial, 520_000_000, 4000));
+        var flutterPressure = VascularPressureSource.Create(plan, pressure);
+        var regularPressure = VascularPressureSource.Create(regular, pressure);
+        for (long time = 0; time < 4_800_000_000; time += 8_000_000)
+        { Check.That(flutterPressure.EvaluateAt(time) == regularPressure.EvaluateAt(time), "3:1 perfusion follows100/min ventricles, not300/min F waves"); }
+        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, AtrialFlutterReference.CreateElectrodes(3));
+        source.GenerateBefore(680_000_000, 170, 100);
+        var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+        var expected = source.GenerateBefore(2_400_000_000, 430, 100);
+        Check.That(expected.Zip(restored.GenerateBefore(2_400_000_000, 430, 100)).All(pair => pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
+            "3:1 restore exactly at the next conducted QRS retains all leads");
+        var timeline = RegularPhysiologyTimeline.Start(plan);
+        var before = timeline.CaptureState();
+        try { timeline.AdvanceBefore(600_000_000, 1); throw new InvalidOperationException("Insufficient event budget accepted."); }
+        catch (PhysiologyTimelineException) { Check.That(timeline.CaptureState() == before, "3:1 event rejection remains atomic"); }
+        var events = timeline.AdvanceBefore(600_000_000, 100);
+        Check.That(events.Count(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical) == 3 &&
+            events.Count(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical) == 1, "three F activations produce one mechanical beat");
+        foreach (int invalid in new[] { 0, 1, 5, int.MaxValue })
+        {
+            try { AtrialFlutterReference.CreateElectrodes(invalid); throw new InvalidOperationException("Unsupported flutter ratio accepted."); }
+            catch (ArgumentOutOfRangeException) { }
+        }
+    }
+
     private static void FlutterHasContinuousFAndConductedVentricles()
     {
-        foreach (int ratio in new[] { 2, 4 })
+        foreach (int ratio in new[] { 2, 3, 4 })
         {
             var plan = AtrialFlutterReference.CreatePlan(ratio);
-            var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(1_600_000_000, 100);
-            Check.That(events.Count(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical) == 8 &&
+            var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(2_400_000_000, 100);
+            Check.That(events.Count(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical) == 12 &&
                 events.All(e => e.Kind != PhysiologyCycleEventKind.AtrialMechanical), "300/min F without invented normal atrial contractions");
             var qrs = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).ToArray();
-            Check.That(qrs.Length == 8 / ratio && qrs.Select(e => e.SimTimeNs).SequenceEqual(Enumerable.Range(0, 8 / ratio).Select(i => 80_000_000L + i * ratio * 200_000_000L)), "fixed 2:1/4:1 conduction");
+            Check.That(qrs.Length == 12 / ratio && qrs.Select(e => e.SimTimeNs).SequenceEqual(Enumerable.Range(0, 12 / ratio).Select(i => 80_000_000L + i * ratio * 200_000_000L)), "fixed 2:1/3:1/4:1 conduction");
             Check.That(qrs.Zip(events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical)).All(p => p.Second.SimTimeNs - p.First.SimTimeNs == 80_000_000), "ventricular mechanics follows QRS, not every F");
             var electrodes = AtrialFlutterReference.CreateElectrodes(ratio);
             Check.That(electrodes.All(e => e.Bands.Count(b => b.Trigger == PhysiologyCycleEventKind.AtrialElectrical) == 1 && e.Bands[0].DurationNs == 200_000_000 && e.Bands[1].DurationNs == 80_000_000), "replace P with full-cycle F and retain narrow QRS");
@@ -66,7 +97,7 @@ internal static class AtrialFlutterSpecifications
             catch (EventWaveformException) { continue; }
             throw new InvalidOperationException("Pulse longer than ventricular RR accepted.");
         }
-        foreach (var invalid in new[] { plan with { HeartPeriodNs = 800_000_000 }, plan with { VentricularConductionRatio = 1 }, plan with { VentricularConductionRatio = 3 }, plan with { IndependentVentricularPeriodNs = 800_000_000 }, plan with { CardiacActivity = CardiacActivity.AtrialOnly }, plan with { VentricularElectricalOffsetNs = 100_000_000 } })
+        foreach (var invalid in new[] { plan with { HeartPeriodNs = 800_000_000 }, plan with { VentricularConductionRatio = 1 }, plan with { VentricularConductionRatio = 5 }, plan with { IndependentVentricularPeriodNs = 800_000_000 }, plan with { CardiacActivity = CardiacActivity.AtrialOnly }, plan with { VentricularElectricalOffsetNs = 100_000_000 } })
         {
             try { RegularPhysiologyTimeline.Start(invalid); }
             catch (PhysiologyTimelineException) { continue; }

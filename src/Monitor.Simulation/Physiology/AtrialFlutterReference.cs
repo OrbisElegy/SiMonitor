@@ -5,10 +5,10 @@ namespace Monitor.Simulation.Physiology;
 
 public static class AtrialFlutterReference
 {
-    public const string EvidenceId = "AtrialFlutterIllustrationDraft@1";
+    public const string EvidenceId = "AtrialFlutterIllustrationDraft@2";
     public static EcgCycleTiming Timing(int ratio)
     {
-        if (ratio is not (2 or 4)) { throw new ArgumentOutOfRangeException(nameof(ratio)); }
+        if (ratio is not (2 or 3 or 4)) { throw new ArgumentOutOfRangeException(nameof(ratio)); }
         // P/PR here are construction placeholders; the P band is replaced in full.
         return new(ratio * 200_000_000L, 40_000_000, 80_000_000, 80_000_000, 300_000_000, 140_000_000);
     }

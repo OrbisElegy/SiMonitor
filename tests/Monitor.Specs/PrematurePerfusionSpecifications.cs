@@ -6,7 +6,83 @@ namespace Monitor.Specs;
 
 internal static class PrematurePerfusionSpecifications
 {
-    public static Specification[] All => [new(nameof(WeakBeatMorphologyUsesMatchingReferenceInput), WeakBeatMorphologyUsesMatchingReferenceInput), new(nameof(PlethFullSupportSurvivesPrematureOverlap), PlethFullSupportSurvivesPrematureOverlap), new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    public static Specification[] All => [new(nameof(PressureTailsOverlapWithoutNormalBeatCompression), PressureTailsOverlapWithoutNormalBeatCompression), new(nameof(PressureOverlapBudgetRejectsUnsafePlans), PressureOverlapBudgetRejectsUnsafePlans), new(nameof(WeakBeatMorphologyUsesMatchingReferenceInput), WeakBeatMorphologyUsesMatchingReferenceInput), new(nameof(PlethFullSupportSurvivesPrematureOverlap), PlethFullSupportSurvivesPrematureOverlap), new(nameof(BeatPerfusionSharesGainsWithoutInventingEjection), BeatPerfusionSharesGainsWithoutInventingEjection), new(nameof(SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), SupraventricularPerfusionPreservesBlockedSlotsAndRecovery), new(nameof(BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints), BeatDurationsPreserveNormalSupportAndHalfOpenEndpoints)];
+    private static void PressureTailsOverlapWithoutNormalBeatCompression()
+    {
+        foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureBeatPerfusion.IsPattern))
+        {
+            var physiology = PrematureVentricularReference.IsPattern(mode) ? PrematureVentricularReference.CreatePlan(mode) :
+                PrematureAtrialReference.CreatePlan() with { ConductionPattern = mode };
+            foreach (bool pulmonary in new[] { false, true })
+            {
+                long support = pulmonary ? 640_000_000 : 600_000_000;
+                var plan = pulmonary ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000, UsePrematureBeatPerfusion: true) :
+                    new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000, UsePrematureBeatPerfusion: true);
+                var shape = new VascularPressureMorphologyPlan(pulmonary ? VascularPressureMorphologyKind.PulmonaryArtery : VascularPressureMorphologyKind.Arterial,
+                    support, pulmonary ? 1500 : 4000, MaximumPulseOverlap: 2);
+                var shapedPlan = plan with { Morphology = shape };
+                var raw = VascularPressureSource.Create(physiology, plan);
+                var shaped = VascularPressureSource.Create(physiology, shapedPlan);
+                var seedTimeline = PrematureAtrialReference.CreatePlan() with { ConductionPattern = AvConductionPattern.FixedPr };
+                var seed = pulmonary ? new PulmonaryArteryPulsePlan(plan.TransitDelayNs, support, 0, 15).CreateChannel(seedTimeline, Guid.Parse("44444444-4444-4444-8444-444444444444"), 0) :
+                    new ArterialPulsePlan(plan.TransitDelayNs, support, 0, 40).CreateChannel(seedTimeline, Guid.Parse("44444444-4444-4444-8444-444444444444"), 0);
+                var events = RegularPhysiologyTimeline.Start(physiology).AdvanceBefore(8_000_000_000, 200)
+                    .Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).ToArray();
+                var pulses = EventWaveformComposition.Restore(new(seed.Bands.Select(b => b with { EjectionIllustration = mode }).ToArray(), events));
+                double period = PrematureBeatPerfusion.MinimumEjectingIntervalNs(mode), tau = plan.TimeConstantNs;
+                double onset = plan.EjectionEquilibriumCentiMmHg * (Math.Exp(-(period - plan.EjectionDurationNs) / tau) - Math.Exp(-period / tau)) / (1 - Math.Exp(-period / tau));
+                for (long time = 0; time < 8_000_000_000; time += 32_000_000)
+                {
+                    var active = events.Where(e => time >= e.SimTimeNs + plan.TransitDelayNs &&
+                        time - plan.TransitDelayNs - e.SimTimeNs < period && PrematureBeatPerfusion.GainPermille(mode, e.CycleIndex) != 0).ToArray();
+                    double reference = onset;
+                    if (active.Length != 0)
+                    {
+                        var beat = active[^1];
+                        double age = time - plan.TransitDelayNs - beat.SimTimeNs;
+                        double duration = PrematureBeatPerfusion.DurationNs(mode, beat.CycleIndex, plan.EjectionDurationNs);
+                        double input = plan.EjectionEquilibriumCentiMmHg * PrematureBeatPerfusion.GainPermille(mode, beat.CycleIndex) / 1000.0 *
+                            (1 - Math.Exp(-Math.Min(age, duration) / tau)) * Math.Exp(-Math.Max(0, age - duration) / tau);
+                        reference = Math.Max(onset, onset * Math.Exp(-age / tau) + input);
+                    }
+                    double expected = plan.AsymptoticPressureCentiMmHg + ((double)raw.EvaluateAt(time) / FixedPointMath.Q32One - plan.AsymptoticPressureCentiMmHg) *
+                        (onset + (double)pulses.EvaluateAt(time) / FixedPointMath.Q32One) / reference;
+                    Check.That(Math.Abs((double)shaped.EvaluateAt(time) / FixedPointMath.Q32One - expected) < 0.02,
+                        "full ABP/PA tails sum independently while reference follows latest effective ejection");
+                }
+                foreach (var beat in events.Skip(1).Take(5))
+                {
+                    long onsetTime = beat.SimTimeNs + plan.TransitDelayNs;
+                    Check.That(Math.Abs(shaped.EvaluateAt(onsetTime) - shaped.EvaluateAt(onsetTime - 1)) < FixedPointMath.Q32One,
+                        "new ejection does not truncate the previous contour or jump the pressure");
+                }
+                var generator = PhysiologySignalGenerator.Start(physiology, "AcqPressure125@1", 1, [], shapedPlan);
+                generator.GenerateBefore(2_560_000_000, 320, 200);
+                var recovered = PhysiologySignalGenerator.Restore(generator.CaptureState());
+                Check.That(generator.GenerateBefore(8_000_000_000, 1000, 200).SequenceEqual(recovered.GenerateBefore(8_000_000_000, 1000, 200)),
+                    "overlapping pressure contours survive native acquisition recovery");
+            }
+        }
+    }
+
+    private static void PressureOverlapBudgetRejectsUnsafePlans()
+    {
+        var physiology = PrematureVentricularReference.CreatePlan();
+        var plan = new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
+            Morphology: new(VascularPressureMorphologyKind.Arterial, 1_000_000_000, 4000, MaximumPulseOverlap: 2), UsePrematureBeatPerfusion: true);
+        var accepted = VascularPressureSource.Create(physiology, plan);
+        long before = accepted.EvaluateAt(2_960_000_000);
+        foreach (var shape in new[] { plan.Morphology! with { MaximumPulseOverlap = 1 }, plan.Morphology! with { MaximumPulseOverlap = 0 },
+            plan.Morphology! with { MaximumPulseOverlap = 9 }, plan.Morphology! with { DurationNs = 1_000_000_001 },
+            plan.Morphology! with { DurationNs = long.MaxValue }, plan.Morphology! with { PulseHeightCentiMmHg = 30000 } })
+        {
+            bool rejected = false;
+            try { VascularPressureSource.Create(physiology, plan with { Morphology = shape }); }
+            catch (EventWaveformException exception) { rejected = exception.ReasonCode == "VascularPressure.InvalidPlan"; }
+            Check.That(rejected && accepted.EvaluateAt(2_960_000_000) == before, "overlap/support/amplitude bounds reject without changing accepted output");
+        }
+    }
+
     private static void WeakBeatMorphologyUsesMatchingReferenceInput()
     {
         foreach (var mode in Enum.GetValues<AvConductionPattern>().Where(PrematureVentricularReference.IsPattern)

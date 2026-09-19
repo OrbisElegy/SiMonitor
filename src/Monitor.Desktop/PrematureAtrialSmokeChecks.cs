@@ -129,6 +129,17 @@ internal static class PrematureAtrialSmokeChecks
                     var plethSource = PhysiologySignalGenerator.Start(expectedPhysiology.ResolvePlan(), "AcqPleth125@1", 1, [plethBand]);
                     if (!plethSamples.SequenceEqual(plethSource.GenerateBefore(plethSamples.Length * 8_000_000L, plethSamples.Length, 200).Select(sample => sample.NormalizedValue)))
                     { throw new InvalidOperationException("Premature demo compressed normal Pleth support or lost overlapping tails."); }
+                    foreach (int row in new[] { 3, 5 })
+                    {
+                        var pressure = row == 3 ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
+                            Morphology: new(VascularPressureMorphologyKind.Arterial, 600_000_000, 4000, MaximumPulseOverlap: 2), UsePrematureBeatPerfusion: true) :
+                            new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
+                            Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, 640_000_000, 1500, MaximumPulseOverlap: 2), UsePrematureBeatPerfusion: true);
+                        var source = PhysiologySignalGenerator.Start(expectedPhysiology.ResolvePlan(), "AcqPressure125@1", 1, [], pressure);
+                        if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).Take(400).SequenceEqual(
+                            source.GenerateBefore(3_200_000_000, 400, 200).Select(sample => sample.NormalizedValue)))
+                        { throw new InvalidOperationException("Premature demo compressed normal pressure contours or discarded previous tails."); }
+                    }
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, plethIndex: 100);
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, blocked ? 440 : ventricular ? pvcQrs : 565);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [303, 320, 355, 395, 420]);

@@ -1,5 +1,5 @@
 {
-  "id": "VascularPressureMorphologyRatio@1",
+  "id": "VascularPressureMorphologyRatio@2",
   "source": "Project-authored empirical combination of the existing RC reservoir and independent pressure contours",
   "research": "docs/vascular-pressure-runoff-research.md",
   "qualification": "Unqualified teaching source preserving legacy contour appearance; no valve/reflection dynamics, independent right-heart source, wedge-pressure model, CVP mean response or pressure numerics",
@@ -12,9 +12,9 @@
     "nominal_period": "HeartPeriodNs * VentricularConductionRatio, excluding MechanicalEveryCycles",
     "reference_excess_at_onset": "S0 = E * (a(T-D) - a(T)) / (1 - a(T))",
     "reference_excess_within_cycle": "Sref(u) = max(S0, S0 * a(u) + E * g * k_D(u)); g is the selected beat gain (1 by default), D its ejection duration; premature illustration@4 fixes the previously unweighted reference input",
-    "desired_contour": "M(u) = S0 + existing finite pressure LUT pulse; zero LUT excursion after its configured duration",
+    "desired_contour": "M(t) = S0 + sum of active beat-weighted finite LUT pulses; latest effective ejection selects reference",
     "output": "P_infinity + (RC(t) - P_infinity) * M(u) / Sref(u)",
-    "support": "One nominal period following each accepted mechanical event, after transit; raw RC elsewhere",
+    "support": "Reference lasts one minimum effective interval; each contour retains its own full support across later events. MaximumPulseOverlap defaults1, allowed1..8, reserves ceil(duration/min effective interval) pulse heights. Duration must fit bounded RC history. Beyond reference support use S0, preserving active tails.",
     "gates": "Shared ventricular mechanical selection, including activity, conduction, suppression, resumption and original-index stride",
     "bounds": "Reference onset excess >= 1 centi-mmHg; conservative full-output int16 amplitude budget including 1 centi-mmHg rounding reserve validated before generation",
     "arithmetic": "Integer-ns timing, Q32.32 pressure, Q2.62 decay, Int128 intermediates, nearest ties to even",

@@ -57,7 +57,8 @@ public sealed class VascularPressureSource
         {
             if (morphology.ModelId != VascularPressureMorphologyPlan.EvidenceId ||
                 !Enum.IsDefined(morphology.Kind) || morphology.DurationNs <= 0 ||
-                morphology.DurationNs > ventricularPeriod ||
+                morphology.MaximumPulseOverlap is < 1 or > 8 || morphology.DurationNs > support ||
+                ((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod > morphology.MaximumPulseOverlap ||
                 morphology.PulseHeightCentiMmHg is < 0 or > short.MaxValue ||
                 plan.EjectionEquilibriumCentiMmHg == 0)
             { throw Invalid(); }
@@ -77,7 +78,8 @@ public sealed class VascularPressureSource
             Int128 firstOnsetAbove = (firstOnsetNumerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
             Int128 maximumAbove = Int128.Max(_referenceOnsetQ32, firstOnsetAbove);
             Int128 maximumShape = _referenceOnsetQ32 +
-                (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One;
+                (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One *
+                (((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod);
             // A subset of periodic inputs cannot exceed the complete reference
             // multiplied by max(1, first-onset excess/reference onset). The
             // explicit initial pressure decays until the first possible event.
@@ -110,7 +112,7 @@ public sealed class VascularPressureSource
         long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)sourceTime - _supportNs + 1);
         long? morphologyAge = null;
         int morphologyGain = 1000;
-        long morphologyDuration = _plan.Morphology?.DurationNs ?? 1;
+        long pulse = 0;
         long morphologyEjectionDuration = _plan.EjectionDurationNs;
         RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, (Int128)sourceTime + 1,
             MaximumEjectionCount, item =>
@@ -121,23 +123,29 @@ public sealed class VascularPressureSource
                 long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;
                 long coefficient = EjectionCoefficient(age, duration);
                 pressure += FixedPointMath.RoundDivideTiesToEven((Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient * gain, 1000);
+                if (_morphologyTable is not null)
+                {
+                    long morphologyDuration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.Morphology!.DurationNs) : _plan.Morphology!.DurationNs;
+                    if (age < morphologyDuration)
+                    {
+                        long contribution = PeriodicLutLinear.Interpolate(_morphologyTable,
+                            (ulong)(((UInt128)age << 64) / (ulong)morphologyDuration)).Value;
+                        pulse += (long)FixedPointMath.RoundDivideTiesToEven((Int128)contribution * gain, 1000);
+                    }
+                }
                 if (_morphologyTable is not null && age < _morphologyPeriodNs)
                 {
                     morphologyAge = age; morphologyGain = gain;
                     morphologyEjectionDuration = duration;
-                    morphologyDuration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.Morphology!.DurationNs) : _plan.Morphology!.DurationNs;
                 }
             }, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // Retain all weighted contributions in Int128/Q62, then round once to
         // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.
         Int128 result = FixedPointMath.RoundDivideTiesToEven(pressure, 1L << 30);
-        if (morphologyAge is { } elapsed)
+        if (morphologyAge is not null || pulse != 0)
         {
-            long pulse = elapsed < morphologyDuration
-                ? PeriodicLutLinear.Interpolate(_morphologyTable!,
-                    (ulong)(((UInt128)elapsed << 64) / (ulong)morphologyDuration)).Value : 0;
-            pulse = (long)FixedPointMath.RoundDivideTiesToEven((Int128)pulse * morphologyGain, 1000);
+            long elapsed = morphologyAge ?? _morphologyPeriodNs;
             // The contour and its reference must describe the same ejection.
             // An unweighted reference artificially suppresses a weak beat.
             Int128 referenceInput = FixedPointMath.RoundDivideTiesToEven(

@@ -1,10 +1,67 @@
 {
-  "id": "PlethPulseIllustrationDraft@1",
+  "id": "PlethPulseIllustrationDraft@2",
   "source": "Project-authored relative Pleth pulse illustration; no upstream points copied",
   "unit": "relative raw counts, not optical intensity or blood flow",
   "qualification": "Not a validated physiological preset or PPG optical model; landmark positions and notch depth are project choices",
   "tables": {
-    "Plain": {"length": 128, "landmarks": [[0, 0], [24, 1], [128, 0]]},
-    "Notched": {"length": 128, "landmarks": [[0, 0], [24, 1], [56, 0.35], [72, 0.5], [128, 0]]}
-  }
+    "Plain": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          40,
+          1
+        ],
+        [
+          72,
+          0.48
+        ],
+        [
+          88,
+          0.44
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "Notched": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          24,
+          1
+        ],
+        [
+          56,
+          0.35
+        ],
+        [
+          72,
+          0.5
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    }
+  },
+  "references": [
+    {
+      "url": "https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2019.00198/full",
+      "summary": [
+        "Primary measurement study documents site-dependent PPG peak, notch and reflection features; not the source of these numeric landmarks."
+      ]
+    }
+  ],
+  "default_revision": "Rounded peak and gently descending shoulder with C1 smoothstep joins and authored timing/amplitudes. A separate Notched variant is available; no universal sinusoid or optical SpO2 calibration claimed."
 }

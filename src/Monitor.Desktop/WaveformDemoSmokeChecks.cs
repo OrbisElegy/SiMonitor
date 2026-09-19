@@ -329,11 +329,12 @@ internal static class WaveformDemoSmokeChecks
             { throw new InvalidOperationException("Event source did not produce its first shared block."); }
             Click(window.StepButton);
             Click(window.StepButton);
+            Click(window.StepButton); // Include the entire descending shoulder past600ms.
             VerifyMechanicalPulsePixels(window);
             VerifyMechanicalPulsePixels(window, 700);
             Click(window.HoldButton);
             Control held = window.Trace;
-            for (int step = 0; step < 20; step++) { Click(window.StepButton); }
+            for (int step = 0; step < 19; step++) { Click(window.StepButton); }
             if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 23)
             { throw new InvalidOperationException("Continuous event output lost held view or bounded retention."); }
             Click(window.HoldButton);
@@ -361,9 +362,9 @@ internal static class WaveformDemoSmokeChecks
         Control trace = window.Trace;
         trace.Measure(new Size(width, 840));
         trace.Arrange(new Rect(0, 0, width, 840));
-        if (window.SimulationTimeNs != 2_600_000_000 || window.LiveFrontierNs != 600_000_000 || trace.Height != 840)
+        if (window.SimulationTimeNs != 2_800_000_000 || window.LiveFrontierNs != 800_000_000 || trace.Height != 840)
         { throw new InvalidOperationException("Seven-channel display did not wait for the shared acquired frontier."); }
-        var blocks = PhysiologyDemoSource.Create(window.BreathConfiguration).AdvanceTo(2_600_000_000, 650, 13, 100)
+        var blocks = PhysiologyDemoSource.Create(window.BreathConfiguration).AdvanceTo(2_800_000_000, 700, 14, 100)
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
         using RenderTargetBitmap image = new(new PixelSize(width, 840), new Vector(96, 96));
         image.Render(trace);
@@ -371,7 +372,7 @@ internal static class WaveformDemoSmokeChecks
         using ILockedFramebuffer buffer = pixels.Lock();
         image.CopyPixels(buffer);
         // Use explicit row bindings: wire UUID order is ECG, Pleth, Resp, ABP, CO2, PA, CVP.
-        foreach (var (row, time) in new[] { (0, 196_000_000L), (1, 416_000_000L), (2, 312_000_000L), (2, 416_000_000L), (3, 312_000_000L), (3, 424_000_000L), (4, 310_000_000L), (5, 272_000_000L), (5, 400_000_000L) })
+        foreach (var (row, time) in new[] { (0, 196_000_000L), (1, 416_000_000L), (2, 312_000_000L), (2, 480_000_000L), (2, 608_000_000L), (2, 640_000_000L), (2, 672_000_000L), (3, 312_000_000L), (3, 424_000_000L), (4, 310_000_000L), (5, 272_000_000L), (5, 400_000_000L) })
         {
             var block = blocks.Single(item => time >= item.StartSimTimeNs && time < item.StartSimTimeNs + 200_000_000);
             var plane = block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(row));
@@ -385,7 +386,7 @@ internal static class WaveformDemoSmokeChecks
             if (row == 5 && (value != (time == 272_000_000 ? 0 : 1500) || plane.ScaleNumerator != 1 ||
                 plane.ScaleDenominator != 100 || plane.OffsetNumerator != 10 || plane.OffsetDenominator != 1))
             { throw new InvalidOperationException("PA wire scale, baseline or independent arrival/peak changed."); }
-            if (row == 2 && value != (time == 416_000_000 ? 1000 : 0))
+            if (row == 2 && value != (time switch { 480_000_000 => 1000, 608_000_000 => 480, 640_000_000 => 460, 672_000_000 => 440, _ => 0 }))
             { throw new InvalidOperationException("Mechanical transit or pulse peak changed unexpectedly."); }
             bool Colored(int line)
             {

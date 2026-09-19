@@ -26,6 +26,7 @@ internal static class SecondDegreeBlockPreset
         Monitor.Simulation.Physiology.AvConductionPattern.CompleteAvBlockJunctionalIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.CompleteAvBlockVentricularIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.AtrialFlutterIllustration or
+        Monitor.Simulation.Physiology.AvConductionPattern.VariableAtrialFlutterIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.AtrialFibrillationCoarseIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.AtrialFibrillationFineIllustration or
         Monitor.Simulation.Physiology.AvConductionPattern.VentricularFlutterIllustration or

@@ -1,5 +1,5 @@
 {
-  "id": "AtrialFlutterIllustrationDraft@2",
+  "id": "AtrialFlutterIllustrationDraft@3",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -33,7 +33,24 @@
       50,
       100,
       100
-    ]
+    ],
+    "variableConduction": {
+      "groupMs": 1800,
+      "ventricularSlotsMs": [
+        0,
+        400,
+        1000
+      ],
+      "rrMs": [
+        400,
+        600,
+        800
+      ],
+      "qrsOffsetMs": 80,
+      "mechanicalOffsetMs": 160,
+      "minimumRrMs": 400,
+      "ventricularOrdinals": "group*3+slot"
+    }
   },
   "tables": {
     "Cycle": {
@@ -58,19 +75,26 @@
       ]
     }
   },
-  "scope": "A single regular flutter example. Electrode amplitudes, F-wave contour and timing are authored choices, not anatomical localization. F waves continuously overlap QRS/T.",
+  "scope": "Teaching examples of fixed-ratio and repeating variable-conduction flutter. Electrode amplitudes, F-wave contours, timing and variable sequences are authored choices, not anatomical localization. F waves continuously overlap QRS/T.",
   "limitations": [
-    "Fixed 300/min with 2:1, 3:1 or 4:1 conduction; no variable-conduction or impure-flutter patterns.",
+    "Fixed 300/min examples with 2:1, 3:1 or 4:1 conduction and a repeating 2/3/4 variable sequence. Other variable-conduction and impure-flutter patterns remain unimplemented.",
     "Flutter mechanical contraction is not modeled; normal AtrialMechanical events and the normal CVP a wave are suppressed.",
-    "The 2:1 physiology demo shortens pulse/pressure morphology support to 320 ms while retaining existing ejection and RC parameters; these are not calibrated hemodynamics.",
+    "The 2:1 and variable-conduction physiology demos shorten pulse and pressure morphology support to 320 ms while retaining existing ejection and RC parameters; these are not calibrated hemodynamics.",
     "QT is fixed at 300 ms, without beatwise QT feedback or clinical detection.",
-    "The 3:1 example has a ventricular rate of 100/min and retains the 160 ms mechanical offset, 80 ms QRS, 300 ms QT and continuous F waves. These do not establish calibrated flutter filling or ejection."
+    "The 3:1 example has a ventricular rate of 100/min and retains the 160 ms mechanical offset, 80 ms QRS, 300 ms QT and continuous F waves. These do not establish calibrated flutter filling or ejection.",
+    "The variable example rejects conflicts with independent ventricular periods, mechanical stride or timed suppression. It is not an AV-node refractory or beatwise filling model; pressure/Pleth use existing teaching parameters for the minimum 400 ms interval."
   ],
   "references": [
     {
       "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6429540/",
       "summary": [
         "Primary case report explicitly records3:1 flutter; supports ratio availability, not this authored300/min timing or electrode amplitudes."
+      ]
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8294030/",
+      "summary": [
+        "Original case reports variable conduction; exact repeating2/3/4 sequence below is authored, not a reproduction of the patient."
       ]
     }
   ]

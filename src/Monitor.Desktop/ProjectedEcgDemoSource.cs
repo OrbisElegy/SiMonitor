@@ -47,6 +47,8 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         TDurationMilliseconds = 220,
     };
 
+    internal static ProjectedEcgDemoConfiguration VariableFlutter => Flutter(2) with { ConductionPattern = AvConductionPattern.VariableAtrialFlutterIllustration };
+
     internal static ProjectedEcgDemoConfiguration Flutter(int ratio) => Default with
     {
         HeartRateBpm = 300,
@@ -70,7 +72,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal long ResolveAtrialPeriodNs()
     {
-        if (ConductionPattern == AvConductionPattern.AtrialFlutterIllustration) { return 200_000_000; }
+        if (AtrialFlutterReference.IsPattern(ConductionPattern)) { return 200_000_000; }
         if (HeartRateBpm is < 30 or > 200) { throw new ArgumentException("Invalid base rate."); }
         return (long)Monitor.Simulation.Determinism.FixedPointMath.RoundDivideTiesToEven(60_000_000_000, HeartRateBpm);
     }
@@ -125,10 +127,10 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
             { throw new ArgumentException("AF illustration requires the authored irregular schedule and morphology."); }
             return AtrialFibrillationReference.Timing;
         }
-        if (ConductionPattern == AvConductionPattern.AtrialFlutterIllustration)
+        if (AtrialFlutterReference.IsPattern(ConductionPattern))
         {
-            if (this != Flutter(VentricularConductionRatio))
-            { throw new ArgumentException("Flutter illustration requires its authored morphology/timing; select 2:1 or 4:1."); }
+            if (this != (ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? VariableFlutter : Flutter(VentricularConductionRatio)))
+            { throw new ArgumentException("Flutter illustration requires its authored morphology/timing; select a supported fixed or variable flutter example."); }
             return AtrialFlutterReference.Timing(VentricularConductionRatio);
         }
         if (ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration)
@@ -218,7 +220,7 @@ internal static class ProjectedEcgDemoSource
             ? VentricularDisorganizationReference.CreateElectrodes(configuration.ConductionPattern)
             : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern)
             ? AtrialFibrillationReference.CreateElectrodes(configuration.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration)
-            : configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration
+            : AtrialFlutterReference.IsPattern(configuration.ConductionPattern)
             ? AtrialFlutterReference.CreateElectrodes(configuration.VentricularConductionRatio)
             : configuration.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
             ? CompleteAvBlockVentricularReference.CreateElectrodes()

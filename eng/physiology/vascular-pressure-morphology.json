@@ -11,7 +11,7 @@
     "reservoir": "VascularPressureRcIllustration@1, unchanged input intensity, duration and decay kernel",
     "nominal_period": "HeartPeriodNs * VentricularConductionRatio, excluding MechanicalEveryCycles",
     "reference_excess_at_onset": "S0 = E * (a(T-D) - a(T)) / (1 - a(T))",
-    "reference_excess_within_cycle": "Sref(u) = S0 * a(u) + E * k(u), where k is the finite-ejection response",
+    "reference_excess_within_cycle": "Sref(u) = max(S0, S0 * a(u) + E * g * k_D(u)); g is the selected beat gain (1 by default), D its ejection duration; premature illustration@4 fixes the previously unweighted reference input",
     "desired_contour": "M(u) = S0 + existing finite pressure LUT pulse; zero LUT excursion after its configured duration",
     "output": "P_infinity + (RC(t) - P_infinity) * M(u) / Sref(u)",
     "support": "One nominal period following each accepted mechanical event, after transit; raw RC elsewhere",

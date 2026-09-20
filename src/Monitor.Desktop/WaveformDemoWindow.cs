@@ -83,6 +83,8 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
+    internal CheckBox HypokalemiaInput { get; } = new() { Content = "低钾样复极示例" };
+    internal Button HypokalemiaButton { get; } = new() { Content = "载入低钾样复极（重置参数）" };
     internal CheckBox HyperkalemiaInput { get; } = new() { Content = "高钾样复极示例" };
     internal Button HyperkalemiaButton { get; } = new() { Content = "载入高钾样复极（重置参数）" };
     internal ComboBox TContourInput { get; } = new() { ItemsSource = new[] { "参考T / 原编辑", "正负双向T", "负正双向T", "双峰T", "对称倒置T（冠状T形态）", "高尖T", "高耸T", "单相正向T（可低平）", "普通倒置T" }, SelectedIndex = 0, Width = 160 };
@@ -312,6 +314,9 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(new TextBlock { Text = $"C{index + 1} T 倍率" });
                 settings.Children.Add(TScaleInputs[index]);
             }
+            settings.Children.Add(HypokalemiaInput);
+            settings.Children.Add(HypokalemiaButton);
+            settings.Children.Add(new TextBlock { Text = "低钾样复极：60次/分、ST压低、低平T和增高u；QT400ms，QT-u650ms（u不计入QT）。本例T/u分开；载入重置其他编辑，不对应血钾浓度。" });
             settings.Children.Add(HyperkalemiaInput);
             settings.Children.Add(HyperkalemiaButton);
             settings.Children.Add(new TextBlock { Text = "高钾样复极：固定75次/分、QT300/T120ms、弥漫高尖T，保留P及窄QRS；不对应血钾浓度。载入清除其他形态设置；取消勾选可返回参考编辑。" });
@@ -449,6 +454,11 @@ internal sealed class WaveformDemoWindow : Window
         VentricularDisorganizationButton.Click += (_, _) =>
         {
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration), PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration)); }
+        };
+        HypokalemiaButton.Click += (_, _) =>
+        {
+            if (_closed || !_projected) { return; }
+            Reset(UsesPulse, ProjectedEcgDemoConfiguration.Hypokalemia);
         };
         HyperkalemiaButton.Click += (_, _) =>
         {
@@ -654,7 +664,7 @@ internal sealed class WaveformDemoWindow : Window
         try
         {
             ProjectedEcgDemoConfiguration configuration;
-            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 38 => ProjectedEcgDemoConfiguration.Flutter(3), 39 => ProjectedEcgDemoConfiguration.VariableFlutter, 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), 22 => ProjectedEcgDemoConfiguration.PrematureAtrial, 23 => ProjectedEcgDemoConfiguration.BlockedPrematureAtrial, 24 => ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, >= 28 and <= 37 => ProjectedEcgDemoConfiguration.Pvc(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), >= 25 and <= 27 => ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex) }, >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => HyperkalemiaInput.IsChecked == true ? ProjectedEcgDemoConfiguration.Hyperkalemia : BundleBlockPreset.Ecg((EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex) }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
+            if (QtMethod.SelectedIndex == 0) { configuration = (ConductionInput.SelectedIndex switch { 8 => ProjectedEcgDemoConfiguration.VentricularEscape, 9 => ProjectedEcgDemoConfiguration.Flutter(2), 10 => ProjectedEcgDemoConfiguration.Flutter(4), 38 => ProjectedEcgDemoConfiguration.Flutter(3), 39 => ProjectedEcgDemoConfiguration.VariableFlutter, 11 => ProjectedEcgDemoConfiguration.Fibrillation(), 12 => ProjectedEcgDemoConfiguration.Fibrillation(true), 20 => SecondDegreeBlockPreset.Ecg(6), 21 => SecondDegreeBlockPreset.Ecg(7), 22 => ProjectedEcgDemoConfiguration.PrematureAtrial, 23 => ProjectedEcgDemoConfiguration.BlockedPrematureAtrial, 24 => ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, >= 28 and <= 37 => ProjectedEcgDemoConfiguration.Pvc(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), >= 25 and <= 27 => ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex) }, >= 13 and <= 15 => ProjectedEcgDemoConfiguration.Disorganized(ConductionSelection.Pattern(ConductionInput.SelectedIndex)), _ => HypokalemiaInput.IsChecked == true ? ProjectedEcgDemoConfiguration.Hypokalemia : HyperkalemiaInput.IsChecked == true ? ProjectedEcgDemoConfiguration.Hyperkalemia : BundleBlockPreset.Ecg((EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex) }) with { VentricularConductionRatio = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial }; }
             else
             {
                 if (!int.TryParse(HeartRateInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out int hr) ||
@@ -796,9 +806,11 @@ internal sealed class WaveformDemoWindow : Window
             EcgTContourPlan? contour = TContourInput.SelectedIndex == 0 ? null : new(TContourLeadInput.SelectedIndex == 6 ? 63 : TContourLeadInput.SelectedIndex > 6 ? 1 : 1 << TContourLeadInput.SelectedIndex,
                 (EcgTContourShape)TContourInput.SelectedIndex, contourPeak, TContourLeadInput.SelectedIndex > 6 ? (EcgTContourTarget)(TContourLeadInput.SelectedIndex - 6) : EcgTContourTarget.Chest, crossing, secondPeak);
             if (AfAberrancyInput.IsChecked is not { } afAberrancy) { throw new ArgumentException("Explicit AF aberrancy selection required."); }
-            configuration = configuration with { HyperkalemiaRepolarization = HyperkalemiaInput.IsChecked == true, IllustrateAfAberrancy = afAberrancy, BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            configuration = configuration with { HypokalemiaRepolarization = HypokalemiaInput.IsChecked == true, HyperkalemiaRepolarization = HyperkalemiaInput.IsChecked == true, IllustrateAfAberrancy = afAberrancy, BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
+        catch (EventWaveformException error) when (error.ReasonCode == "Hypokalemia.ConflictingModes")
+        { EcgConfigurationStatus.Text = "未应用：低钾样复极示例使用固定参数，不可叠加高钾或其他形态编辑；请使用载入按钮重置。当前状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "Hyperkalemia.ConflictingModes")
         { EcgConfigurationStatus.Text = "未应用：高钾样复极示例使用固定参数，需清除其他节律和形态编辑；请使用载入按钮重置。当前状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "EcgTContour.InvalidSecondPeak")
@@ -1032,6 +1044,7 @@ internal sealed class WaveformDemoWindow : Window
             FusionJInput.Text = fusion.JMicrovolts.ToString(CultureInfo.InvariantCulture);
             FusionPeakInput.Text = fusion.PeakMicrovolts.ToString(CultureInfo.InvariantCulture);
             FusionPositionInput.Text = (fusion.PeakPositionPermille / 10m).ToString("0.#", CultureInfo.InvariantCulture);
+            HypokalemiaInput.IsChecked = configuration.HypokalemiaRepolarization;
             HyperkalemiaInput.IsChecked = configuration.HyperkalemiaRepolarization;
             TContourInput.SelectedIndex = configuration.TContour is { } contour ? (int)contour.Shape : 0;
             TContourLeadInput.SelectedIndex = configuration.TContour is { } contourTarget ? contourTarget.Target != EcgTContourTarget.Chest ? (int)contourTarget.Target + 6 : contourTarget.ChestMask == 63 ? 6 : Enumerable.Range(0, 6).Single(i => contourTarget.ChestMask == 1 << i) : 0;
@@ -1058,6 +1071,7 @@ internal sealed class WaveformDemoWindow : Window
                 ? $"已应用：{ConductionInput.SelectedItem}；无独立 P/QRS/T；PR、QRS时限、QT及QTc不适用；无有效射血。"
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern)}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "（P/PR为窦性搏动；逆行P′80ms，位置见传导摘要）" : "")}{(PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? "（以上时限为窦性搏动；室早无相关P，具体时限见传导摘要，T220ms）" : "")}；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
+                (configuration.HypokalemiaRepolarization ? "；低钾样ST压低／低平T／增高u；模板u延迟30ms、时限220ms，QT-u650ms（不计入QT）" : "") +
                 (configuration.HyperkalemiaRepolarization ? "；高钾样弥漫高尖T／短QT教学例（非浓度或诊断模型）" : "") +
                 (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}（含继发ST–T）" : "") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
@@ -1071,11 +1085,11 @@ internal sealed class WaveformDemoWindow : Window
                 (configuration.TContour is { } tc ? $"；{TContourLeadInput.SelectedItem} {TContourInput.SelectedItem} 峰幅{tc.PeakMicrovolts} μV" + (tc.Shape is not (EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive) ? "" : $"，第二瓣{tc.SecondPeakMicrovolts ?? tc.PeakMicrovolts} μV，过零{(tc.CrossingPositionPermille ?? 500) / 10m:0.#}%") : "") +
                 (configuration.Ventricular != EcgVentricularIllustration.Reference ? $"；{VentricularInput.SelectedItem}（非特异）" : "") +
                 (configuration.Atrial != EcgAtrialIllustration.Reference ? $"；{AtrialInput.SelectedItem}（非特异）" : configuration.ChestP is { } p ? $"；手动 C1 P 双分量 {p.EarlyMicrovolts}/{p.LateMicrovolts} μV" : "；P 参考形态") +
-                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.TContour is not null || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
-                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +
-                (configuration.TContour is not null || configuration.Zones is not null ? "" : tWave.PeakPositionPermille is null ? "；T 峰参考 62.5%" : $"；手动 T 峰 {TPeakInput.Text}%") +
+                (configuration.HypokalemiaRepolarization || configuration.HyperkalemiaRepolarization || configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.TContour is not null || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.TWave is null ? "；T 参考倍率" : "；手动 C1–C6 T 倍率 " + string.Join("/", TScaleInputs.Select(input => input.Text))) +
+                (configuration.HypokalemiaRepolarization || configuration.HyperkalemiaRepolarization || configuration.BundleBlock != EcgBundleBlockIllustration.Reference || configuration.Zones is not null || configuration.Ventricular != EcgVentricularIllustration.Reference ? "" : configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? "；J/ST 附加电位关闭" : $"；手动胸前电极 J/ST 末端/中段弓起 {configuration.ChestJMicrovolts}/{configuration.ChestStEndMicrovolts}/{configuration.ChestStArchMicrovolts} μV") +
+                (configuration.HyperkalemiaRepolarization || configuration.TContour is not null || configuration.Zones is not null ? "" : tWave.PeakPositionPermille is null ? "；T 峰参考 62.5%" : $"；手动 T 峰 {TPeakInput.Text}%") +
                 (configuration.MethodId is null ? "" : $"；QTc {configuration.QtcMilliseconds} ms") +
-                (u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
+                (configuration.HypokalemiaRepolarization ? "" : u.ChestAmplitudes.All(value => value == 0) ? "；u 波关闭" :
                     $"；u 延迟/时限 {u.DelayMilliseconds}/{u.DurationMilliseconds} ms，V1–V6 幅度 {string.Join("/", u.ChestAmplitudes)} μV");
             EcgConfigurationStatus.Text = "";
         }

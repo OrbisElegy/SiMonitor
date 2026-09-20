@@ -1,0 +1,59 @@
+{
+  "id": "HyperkalemiaRepolarizationIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "493-494"
+  },
+  "textbook_summary": [
+    "Peaked narrow-base T and shortened QT example only; figure includes other unimplemented conduction variants."
+  ],
+  "textbook_figures": [
+    "5-1-98"
+  ],
+  "references": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2390954/",
+      "summary": [
+        "Peaked/symmetric T morphology and poor diagnostic sensitivity; not calibration for these amplitudes, durations or potassium concentrations."
+      ]
+    }
+  ],
+  "timing_ms": {
+    "RR": 800,
+    "P": 100,
+    "PR": 160,
+    "QRS": 80,
+    "QT": 300,
+    "T": 120
+  },
+  "electrode_T_peaks_microvolt": {
+    "RA": -400,
+    "LA": 100,
+    "RL": 0,
+    "LL": 300,
+    "C1": 300,
+    "C2": 600,
+    "C3": 1000,
+    "C4": 1200,
+    "C5": 1000,
+    "C6": 700
+  },
+  "authored_choices": {
+    "notes": [
+      "Reuses PeakedUpright Q32 table; exact amplitudes and timings authored. Zero-sum limb drive preserves Wilson reference."
+    ]
+  },
+  "unimplemented": [
+    "Potassium concentration or diagnosis model",
+    "P/PR/QRS affected high-potassium variants",
+    "QRS-T fusion",
+    "Hypokalemia",
+    "Perfusion or automatic disease evolution"
+  ],
+  "verification": [
+    "HyperkalemiaRepolarizationSpecifications",
+    "HyperkalemiaSmokeChecks"
+  ]
+}

@@ -9,6 +9,7 @@ internal static class HypokalemiaRepolarizationSpecifications
     [
         new(nameof(HypokalemiaPreservesQtAndSeparatesProminentU), HypokalemiaPreservesQtAndSeparatesProminentU),
         new(nameof(HypokalemiaRestoresAcrossTAndU), HypokalemiaRestoresAcrossTAndU),
+        new(nameof(HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints), HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints),
     ];
     private static void HypokalemiaPreservesQtAndSeparatesProminentU()
     {
@@ -37,16 +38,48 @@ internal static class HypokalemiaRepolarizationSpecifications
         var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateLeadIIBands()).GenerateBefore(1_000_000_000, 250, 100);
         Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitor II includes shared ST/T/U components");
     }
+    private static void HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints()
+    {
+        var plan = HypokalemiaRepolarizationReference.CreatePlan();
+        var separate = HypokalemiaRepolarizationReference.CreateElectrodes();
+        var fused = HypokalemiaRepolarizationReference.CreateElectrodes(true);
+        for (int i = 0; i < 10; i++)
+        {
+            Check.That(separate[i].Bands.Count == fused[i].Bands.Count, "fusion preserves component count");
+            for (int j = 0; j < separate[i].Bands.Count - 1; j++)
+            {
+                var a = separate[i].Bands[j]; var b = fused[i].Bands[j];
+                Check.That(a.DelayNs == b.DelayNs && a.DurationNs == b.DurationNs && a.TableQ32.SequenceEqual(b.TableQ32), "P/QRS/ST/intrinsicT unchanged");
+            }
+            var u = fused[i].Bands[^1];
+            Check.That(u.DelayNs == 300_000_000 && u.DurationNs == 350_000_000 && u.DelayNs + u.DurationNs == HypokalemiaRepolarizationReference.QuIntervalNs, "U overlap keeps QU endpoint outside latentQT");
+        }
+        var samples = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, fused).GenerateBefore(1_000_000_000, 250, 100);
+        var baseline = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, separate).GenerateBefore(1_000_000_000, 250, 100);
+        Check.That(samples.Take(115).Zip(baseline).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "no changes before U starts460ms");
+        foreach (int lead in new[] { 1, 7, 8, 9 })
+        {
+            Check.That(samples.Where(s => s.Tick.SimTimeNs is >= 520_000_000 and < 600_000_000).All(s => s.MicrovoltValues[lead] > 20), "fusion fills former T/U baseline gap with continuous positive signal");
+            Check.That(samples.Where(s => s.Tick.SimTimeNs >= 812_000_000).All(s => s.MicrovoltValues[lead] == 0), "fused U ends before next beat");
+        }
+        var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateLeadIIBands(true)).GenerateBefore(1_000_000_000, 250, 100);
+        Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitorII shares fusedT/U");
+        Check.That(samples.All(s => Math.Abs(s.MicrovoltValues[0] + s.MicrovoltValues[2] - s.MicrovoltValues[1]) <= 1), "limb identities survive overlap");
+        try { new EcgUWavePlan(-100_000_000, 350_000_000, new long[10]).Validate(HypokalemiaRepolarizationReference.Timing); }
+        catch (EventWaveformException e) when (e.ReasonCode == "EcgUWave.InvalidPlan") { return; }
+        throw new InvalidOperationException("General U API unexpectedly permits overlap");
+    }
     private static void HypokalemiaRestoresAcrossTAndU()
     {
-        foreach (long boundary in new[] { 450_000_000L, 578_000_000, 650_000_000, 810_000_000 })
-        {
-            var source = ElectrodeSignalGenerator.Start(HypokalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateElectrodes());
-            source.GenerateBefore(boundary, 250, 100);
-            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-            var a = source.GenerateBefore(2_000_000_000, 500, 100);
-            var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-            Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "T/U gap, U and next cycle restore exactly");
-        }
+        foreach (bool fuse in new[] { false, true })
+            foreach (long boundary in new[] { 450_000_000L, 578_000_000, 650_000_000, 810_000_000 })
+            {
+                var source = ElectrodeSignalGenerator.Start(HypokalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateElectrodes(fuse));
+                source.GenerateBefore(boundary, 250, 100);
+                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                var a = source.GenerateBefore(2_000_000_000, 500, 100);
+                var b = restored.GenerateBefore(2_000_000_000, 500, 100);
+                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "T/U gap, U and next cycle restore exactly");
+            }
     }
 }

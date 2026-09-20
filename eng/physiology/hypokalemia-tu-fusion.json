@@ -1,0 +1,43 @@
+{
+  "id": "HypokalemiaTuFusionIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "494"
+  },
+  "textbook_summary": [
+    "T/U overlap and obscured small T are supported; exact amplitude/timing is authored, not extracted or clinically calibrated."
+  ],
+  "textbook_figures": [
+    "5-1-100",
+    "5-1-101"
+  ],
+  "references": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7287199/",
+      "summary": []
+    }
+  ],
+  "timing_ms": {
+    "source_QT": 400,
+    "U_start_from_QRS": 300,
+    "U_duration": 350,
+    "QU": 650
+  },
+  "composition": "Existing smooth U stretched/shifted over existing T; fixed source timing; no alteration of P/QRS/ST/T or U coefficients; zero-sum limbs retain identities.",
+  "constraints": [
+    "Only named low-K example; general EcgUWavePlan still rejects negative delay; source QT not a measured fused-wave endpoint."
+  ],
+  "limitations": [
+    "One fused morphology only",
+    "No potassium concentration or severity model",
+    "No cellular mechanism or automated QT determination",
+    "No automatic disease evolution"
+  ],
+  "verification": [
+    "HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints",
+    "HypokalemiaRestoresAcrossTAndU",
+    "HypokalemiaSmokeChecks"
+  ]
+}

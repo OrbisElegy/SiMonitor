@@ -10,10 +10,59 @@ internal static class RespiratoryPatternSpecifications
         1_000_000_000, 400_000_000, RespiratoryPattern: RespiratoryPattern.CheyneStokesIllustration);
     public static Specification[] All =>
     [
+        new(nameof(IntermittentBreathsSharePausesAndGasRecovery), IntermittentBreathsSharePausesAndGasRecovery),
         new(nameof(PatternDepthAndCentralPauseShareEvents), PatternDepthAndCentralPauseShareEvents),
         new(nameof(PatternRecoveryAndCardiacIndependence), PatternRecoveryAndCardiacIndependence),
         new(nameof(PatternValidationAndEventBudgetsAreAtomic), PatternValidationAndEventBudgetsAreAtomic),
     ];
+    private static void IntermittentBreathsSharePausesAndGasRecovery()
+    {
+        var plan = Plan with { RespiratoryPattern = RespiratoryPattern.IntermittentIllustration };
+        int[] depths = [1000, 1000, 1000, 0, 0, 1000, 1000, 0, 0, 0];
+        var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(21_000_000_000, 300);
+        var resp = EventWaveformComposition.Restore(new(new RespirationPlan(-1000).CreateChannel(plan, Guid.NewGuid(), 0).Bands, events));
+        var channel = new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40).CreateChannel(plan, Guid.NewGuid(), 0);
+        var gas = EventWaveformComposition.Restore(new(channel.Bands, events));
+        for (int slot = 0; slot < 20; slot++)
+        {
+            Check.That(resp.EvaluateAt(slot * 1_000_000_000L + 400_000_000) == -depths[slot % 10] * FixedPointMath.Q32One, "equal-depth groups and abrupt pauses share original slots");
+            Check.That(events.Count(e => e.CycleIndex == (ulong)slot && e.Kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart) == (depths[slot % 10] == 0 ? 0 : 2), "no fictitious expiration during pause");
+        }
+        Check.That(gas.EvaluateAt(4_000_000_000) == 0 && gas.EvaluateAt(6_000_000_000) > gas.EvaluateAt(3_000_000_000), "gas clears in apnea; first returning expiration has accumulated CO2");
+        double x = 1;
+        for (int lap = 0; lap < 2000; lap++)
+            foreach (int depth in depths) { x = (20 * x + 1) / (20 + depth / 1000.0); }
+        for (int slot = 0; slot < 10; slot++)
+        {
+            x = (20 * x + 1) / (20 + depths[slot] / 1000.0);
+            Check.That(Math.Abs(channel.Bands[0].ExpirationCycleGainsPermille![slot] - x * 1000) <= 0.500001, "bounded gas solution matches independent recurrence");
+        }
+        foreach (bool co2 in new[] { false, true })
+        {
+            var bands = co2 ? channel.Bands : new RespirationPlan(1000).CreateChannel(plan, Guid.NewGuid(), 0).Bands;
+            var source = PhysiologySignalGenerator.Start(plan, co2 ? "AcqCO2_100@1" : "AcqResp125@1", 1, bands);
+            source.GenerateBefore(4_600_000_000, 1000, 100);
+            var restored = PhysiologySignalGenerator.Restore(source.CaptureState());
+            Check.That(source.GenerateBefore(21_000_000_000, 3000, 300).SequenceEqual(restored.GenerateBefore(21_000_000_000, 3000, 300)), "intermittent pause and repeated groups restore exactly");
+        }
+        var regularEvents = RegularPhysiologyTimeline.Start(plan with { RespiratoryPattern = RespiratoryPattern.Regular }).AdvanceBefore(21_000_000_000, 300);
+        Check.That(events.Where(e => e.Kind < PhysiologyCycleEventKind.InspirationStart).SequenceEqual(regularEvents.Where(e => e.Kind < PhysiologyCycleEventKind.InspirationStart)), "intermittent breathing preserves cardiac events");
+        var late = EventWaveformComposition.Restore(new(channel.Bands, [new(400_000_000, PhysiologyCycleEventKind.ExpirationStart, ulong.MaxValue)]));
+        var phase = EventWaveformComposition.Restore(new(channel.Bands, [new(400_000_000, PhysiologyCycleEventKind.ExpirationStart, ulong.MaxValue % 10)]));
+        Check.That(late.EvaluateAt(1_000_000_000) == phase.EvaluateAt(1_000_000_000), "late original ordinals use bounded phase lookup");
+        foreach (var invalid in new[] { plan with { RespiratoryActivity = RespiratoryActivity.EffortOnly }, plan with { RespiratoryActivity = RespiratoryActivity.Absent, ActivityAfterBreaths = 2 } })
+        {
+            try { RegularPhysiologyTimeline.Start(invalid); }
+            catch (PhysiologyTimelineException) { continue; }
+            throw new InvalidOperationException("Conflicting intermittent activity accepted");
+        }
+        var timeline = RegularPhysiologyTimeline.Start(plan with { CardiacActivity = CardiacActivity.Absent });
+        var before = timeline.CaptureState();
+        try { timeline.AdvanceBefore(10_000_000_000, 9); throw new InvalidOperationException("Budget accepted"); }
+        catch (PhysiologyTimelineException e) { Check.That(e.ReasonCode == "PhysiologyTimeline.EventLimitExceeded" && before == timeline.CaptureState(), "intermittent event budget failure is atomic"); }
+        Check.That(timeline.AdvanceBefore(10_000_000_000, 10).Count == 10, "silent slots consume no budget");
+        Check.That(timeline.AdvanceBefore(20_000_000_000, 10).Count == 10, "prefix budget remains exact across repeats");
+    }
     private static void PatternDepthAndCentralPauseShareEvents()
     {
         var plan = Plan;

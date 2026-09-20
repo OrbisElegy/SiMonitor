@@ -41,8 +41,8 @@ internal static class RespiratoryPatternSmokeChecks
             if (source.AdvanceTo(14_600_000_000, 50, 1, 100).Zip(restored.AdvanceTo(14_600_000_000, 50, 1, 100)).Any(p => !p.First.SequenceEqual(p.Second)))
             { throw new InvalidOperationException("Pattern recovery changed wire bytes."); }
             VerifyPixels(window, blocks);
-            var gasSamples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(4)).Samples).ToArray();
-            var peaks = Enumerable.Range(1, 9).Select(cycle => gasSamples[cycle * 100]).ToArray();
+            short[] gasSamples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(4)).Samples).ToArray();
+            short[] peaks = Enumerable.Range(1, 9).Select(cycle => gasSamples[cycle * 100]).ToArray();
             if (peaks.Distinct().Count() < 7 || peaks[0] <= peaks[6] || peaks[4] <= peaks[6])
             { throw new InvalidOperationException("Cheyne-Stokes CO2 remains fixed or lacks delayed ventilation response."); }
             Click(window.HoldButton); Click(window.RunButton);
@@ -59,6 +59,19 @@ internal static class RespiratoryPatternSmokeChecks
             { throw new InvalidOperationException("Reset lost accepted breathing pattern."); }
             window.RespiratoryPatternInput.SelectedIndex = -1; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != config) { throw new InvalidOperationException("Invalid pattern accepted."); }
+            window.RespiratoryPatternInput.SelectedIndex = 2; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration.RespiratoryPattern != RespiratoryPattern.IntermittentIllustration || window.SimulationTimeNs != 0)
+            { throw new InvalidOperationException("Intermittent pattern did not apply."); }
+            var intermittent = PhysiologyDemoSource.Create(window.BreathConfiguration);
+            var intermittentBlocks = new List<WaveformEnvelope>();
+            for (int step = 1; step <= 42; step++)
+            {
+                Click(window.StepButton);
+                intermittentBlocks.AddRange(intermittent.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
+            }
+            VerifyPixels(window, intermittentBlocks, intermittent: true);
+            Click(window.ResetButton);
+            if (window.RespiratoryPatternInput.SelectedIndex != 2) { throw new InvalidOperationException("Intermittent reset lost pattern."); }
             window.RespiratoryPatternInput.SelectedIndex = 0; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration.RespiratoryPattern != RespiratoryPattern.Regular)
             { throw new InvalidOperationException("Pattern did not clear."); }
@@ -66,7 +79,7 @@ internal static class RespiratoryPatternSmokeChecks
         finally { window.Close(); }
         Console.WriteLine("ok: native crescendo/decrescendo depth, central pause, gas resumption, pixels and atomic pattern lifecycle");
     }
-    private static void VerifyPixels(WaveformDemoWindow window, List<WaveformEnvelope> blocks, bool early = false)
+    private static void VerifyPixels(WaveformDemoWindow window, List<WaveformEnvelope> blocks, bool early = false, bool intermittent = false)
     {
         var trace = window.Trace;
         trace.Measure(new Size(1000, 840)); trace.Arrange(new Rect(0, 0, 1000, 840));
@@ -74,7 +87,7 @@ internal static class RespiratoryPatternSmokeChecks
         image.Render(trace);
         using WriteableBitmap pixels = new(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using ILockedFramebuffer buffer = pixels.Lock(); image.CopyPixels(buffer);
-        (int, long, int)[] points = early ? [(1, 4_400_000_000, 1000), (1, 5_400_000_000, 800), (4, 1_000_000_000, -1), (4, 5_000_000_000, -1), (4, 6_000_000_000, -1)] : [(1, 7_400_000_000, 400), (1, 8_400_000_000, 200), (1, 9_400_000_000, 0), (1, 11_400_000_000, 200), (4, 10_000_000_000, 0), (4, 11_900_000_000, -1)];
+        (int, long, int)[] points = intermittent ? [(1, 2_400_000_000, 1000), (1, 3_400_000_000, 0), (1, 4_400_000_000, 0), (1, 5_400_000_000, 1000), (4, 4_000_000_000, 0), (4, 6_000_000_000, -1)] : early ? [(1, 4_400_000_000, 1000), (1, 5_400_000_000, 800), (4, 1_000_000_000, -1), (4, 5_000_000_000, -1), (4, 6_000_000_000, -1)] : [(1, 7_400_000_000, 400), (1, 8_400_000_000, 200), (1, 9_400_000_000, 0), (1, 11_400_000_000, 200), (4, 10_000_000_000, 0), (4, 11_900_000_000, -1)];
         foreach (var (row, time, expected) in points)
         {
             var plane = blocks.Single(b => time >= b.StartSimTimeNs && time < b.StartSimTimeNs + 200_000_000).Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(row));

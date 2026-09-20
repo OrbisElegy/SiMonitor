@@ -285,13 +285,13 @@ public sealed class RegularPhysiologyTimeline
             // Retain original cycle indices, including after a skipped range.
             begin = (begin + cycleStride - 1) / cycleStride * cycleStride;
             if (begin >= finish) { return; }
-            bool patternedBreath = plan.RespiratoryPattern == RespiratoryPattern.CheyneStokesIllustration &&
+            bool patternedBreath = plan.RespiratoryPattern != RespiratoryPattern.Regular &&
                 kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart;
             bool groupedConduction = plan.ConductedBeatsPerGroup > 1 &&
                 kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical;
             Int128 ConductedBefore(Int128 slot) => slot / plan.VentricularConductionRatio * plan.ConductedBeatsPerGroup +
                 Int128.Min(slot % plan.VentricularConductionRatio, plan.ConductedBeatsPerGroup);
-            Int128 selected = groupedConduction ? ConductedBefore(finish) - ConductedBefore(begin) : patternedBreath ? RespiratoryPatternDepth.ActiveBefore(finish) - RespiratoryPatternDepth.ActiveBefore(begin) : (finish - 1 - begin) / cycleStride + 1;
+            Int128 selected = groupedConduction ? ConductedBefore(finish) - ConductedBefore(begin) : patternedBreath ? RespiratoryPatternDepth.ActiveBefore(plan.RespiratoryPattern, finish) - RespiratoryPatternDepth.ActiveBefore(plan.RespiratoryPattern, begin) : (finish - 1 - begin) / cycleStride + 1;
             if (selected > remaining)
             { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
             remaining -= (int)selected;

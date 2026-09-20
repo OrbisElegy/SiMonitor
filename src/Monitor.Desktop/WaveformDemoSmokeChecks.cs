@@ -22,6 +22,7 @@ internal static class WaveformDemoSmokeChecks
         SecondDegreeBlockSmokeChecks.Verify();
         BundleBlockSmokeChecks.Verify();
         HyperkalemiaSmokeChecks.Verify();
+        HypokalemiaSmokeChecks.Verify();
         PrematureAtrialSmokeChecks.Verify();
         JunctionalEscapeSmokeChecks.Verify();
         AtrialFlutterSmokeChecks.Verify();

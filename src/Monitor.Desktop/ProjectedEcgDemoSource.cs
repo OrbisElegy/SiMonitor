@@ -6,9 +6,12 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
+
+    internal static ProjectedEcgDemoConfiguration Hyperkalemia { get; } = Default with
+    { HyperkalemiaRepolarization = true, TDurationMilliseconds = 120 };
 
     internal static ProjectedEcgDemoConfiguration PrematureAtrial { get; } = Default with
     { TDurationMilliseconds = 140, ConductionPattern = AvConductionPattern.PrematureAtrialIllustration };
@@ -79,6 +82,12 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (HyperkalemiaRepolarization)
+        {
+            if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard } != Hyperkalemia)
+            { throw new EventWaveformException("Hyperkalemia.ConflictingModes", "configuration"); }
+            return HyperkalemiaRepolarizationReference.Timing;
+        }
         if (IllustrateAfAberrancy && !AtrialFibrillationReference.IsPattern(ConductionPattern))
         { throw new ArgumentException("AF aberrancy requires an AF rhythm."); }
         if (!Enum.IsDefined(BundleBlock)) { throw new EventWaveformException("EcgBundleBlock.InvalidMode", "BundleBlock"); }
@@ -204,7 +213,9 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.BundleBlock != EcgBundleBlockIllustration.Reference
+        var electrodes = configuration.HyperkalemiaRepolarization
+            ? HyperkalemiaRepolarizationReference.CreateElectrodes()
+            : configuration.BundleBlock != EcgBundleBlockIllustration.Reference
             ? BundleBlockReference.CreateElectrodes(configuration.BundleBlock)
             : configuration.ConductionPattern == AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration
             ? LeftBundleBlockReference.CreateElectrodes()

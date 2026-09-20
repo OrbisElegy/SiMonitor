@@ -126,7 +126,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ExpiratoryPauseInput { get; } = new() { Text = "0", Width = 75 };
     internal TextBox InspiratoryPauseInput { get; } = new() { Text = "0", Width = 75 };
     internal TextBox RespCardiacArtifactInput { get; } = new() { Text = "0", Width = 75 };
-    internal ComboBox RespiratoryPatternInput { get; } = new() { ItemsSource = new[] { "规则呼吸", "潮式呼吸教学示例" }, SelectedIndex = 0, Width = 180 };
+    internal ComboBox RespiratoryPatternInput { get; } = new() { ItemsSource = new[] { "规则呼吸", "潮式呼吸教学示例", "间停呼吸教学示例" }, SelectedIndex = 0, Width = 180 };
     internal TextBox RespAmplitudeInput { get; } = new() { Text = "1000", Width = 75 };
     internal TextBox Co2PlateauInput { get; } = new() { Text = "", Width = 75 };
     internal TextBox Co2BaselineInput { get; } = new() { Text = "0", Width = 65 };
@@ -191,7 +191,7 @@ internal sealed class WaveformDemoWindow : Window
         {
             panel.Children.Add(new TextBlock { Text = "第四行 ABP（红）：125 Hz / 80 ms；固定压力尺度 0–160 mmHg。按实际样本的比例与偏移换算压力，未计算 SYS/DIA/MAP。" });
             panel.Children.Add(new TextBlock { Text = "第五行 CO₂（白）：100 Hz / 2 s；固定尺度 0–80 mmHg。由呼气事件驱动，下一吸气触发下降，管路滞后另计；未计算 EtCO₂ 或 RR-CO₂。" });
-            panel.Children.Add(new TextBlock { Text = "潮式呼吸：深度序列驱动CO₂储库响应；深呼吸后浓度滞后下降，浅呼吸/暂停时储库回升。无呼气时无新呼气末值；输入呼气末及平台值在潮式模式中为参考值。Resp计数幅度仅为信号标度，不直接当作潮气量。" });
+            panel.Children.Add(new TextBlock { Text = "潮式／间停示例：深度序列驱动CO₂储库响应；深呼吸后浓度滞后下降，浅呼吸/暂停时储库回升。无呼气时无新呼气末值；输入呼气末及平台值在潮式／间停模式中为参考值。Resp计数幅度仅为信号标度，不直接当作潮气量。" });
             panel.Children.Add(new TextBlock { Text = "第六行 PA（紫红）：125 Hz / 80 ms；固定尺度 0–40 mmHg。使用独立肺动脉压参数，未计算 PAP SYS/DIA/MEAN。" });
             panel.Children.Add(new TextBlock { Text = "第七行 CVP（橙）：125 Hz / 80 ms；固定尺度 −5–15 mmHg。a/c/v 波与 x/y 下降，基线 6 mmHg，吸气压力变化 −1 mmHg；未计算平均 CVP。" });
             panel.Children.Add(new TextBlock { Text = "Pleth、ABP、PA 由机械搏动触发；示意电机械延迟 80 ms，传播延迟 Pleth/ABP 80 ms、PA 40 ms，处理延迟另计。七通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
@@ -408,7 +408,7 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(new TextBlock { Text = "Resp 相对幅度（可负）" });
             settings.Children.Add(RespAmplitudeInput);
             settings.Children.Add(RespiratoryPatternInput);
-            settings.Children.Add(new TextBlock { Text = "潮式示例：9次渐强渐弱呼吸＋2个周期暂停，循环；需正常呼吸活动并清空活动日程。深度为相对通气示意，CO₂浓度通过储库响应滞后变化；Resp计数幅度仅控制信号标度。" });
+            settings.Children.Add(new TextBlock { Text = "潮式：9次渐强渐弱＋2周期暂停；间停：3次呼吸＋2周期暂停、2次呼吸＋3周期暂停，循环（非完整共济失调模型）；需正常呼吸活动并清空活动日程。深度为相对通气示意，CO₂浓度通过储库响应滞后变化；Resp计数幅度仅控制信号标度。" });
             settings.Children.Add(new TextBlock { Text = "Resp 心源伪差幅度（可负）" });
             settings.Children.Add(RespCardiacArtifactInput);
             settings.Children.Add(new TextBlock { Text = "CO₂ 平台起始（mmHg，留空参考）" });
@@ -893,7 +893,7 @@ internal sealed class WaveformDemoWindow : Window
                 (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit, afAberrancy));
         }
         catch (EventWaveformException error) when (error.ReasonCode is "Capnogram.Co2ResponseOutOfRange" or "Capnogram.InvalidCo2Response")
-        { BreathConfigurationStatus.Text = "未应用：潮式深度耦合后的CO₂超过支持范围（0～327 mmHg）；请降低参考呼气末值或检查呼吸周期。当前数据与扫屏状态保持。"; }
+        { BreathConfigurationStatus.Text = "未应用：呼吸模式耦合后的CO₂超过支持范围（0～327 mmHg）；请降低参考呼气末值或检查呼吸周期。当前数据与扫屏状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode is "EcgBundleBlock.ConflictingModes" or "EcgBundleBlock.InvalidMode")
         {
             var status = _projected ? EcgConfigurationStatus : BreathConfigurationStatus;
@@ -903,7 +903,7 @@ internal sealed class WaveformDemoWindow : Window
         { BreathConfigurationStatus.Text = "未应用：脉搏短绌示例仅适用于粗／细房颤；请关闭该选项或载入房颤。当前数据与扫屏状态保持。"; }
         catch (ArgumentException)
         {
-            BreathConfigurationStatus.Text = "未应用：可用“载入二度阻滞示例（重置参数）”清除旧参数；成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
+            BreathConfigurationStatus.Text = "未应用：可用“载入二度阻滞示例（重置参数）”清除旧参数；成组下传需房室活动、无独立心室周期、机械比例1且清空机械日程；潮式／间停示例须使用正常呼吸活动并清空活动先完成/持续次数；起始偏移需独立心室周期，且 ≥0、偏移＋80 ms < 心室周期；请检查参数范围；独立心室周期须为 800～3200 ms 或留空，设置时比例须为 1:1；机械搏动比例须为每 1～4 个室性周期一次；机械停止持续周期须为 1～100 或留空，且需先设置机械完成周期；机械先完成周期须为 1～100 或留空，需关闭室性机械事件并选择含心室事件的模式；先完成次数须为 1～100 或留空，且不能用于正常呼吸；恢复所需周期数须为 1～100 或留空，并先设置完成次数；Resp 心源伪差幅度为 −200～200；吸气／呼气末停顿须 ≥0 且短于各自总时长；基线 ≤ 平台起始 ≤ 呼气末目标，各时长须为正，下降不超过吸气，死腔＋上升须短于呼气。平台精确到 0.01 mmHg 或留空，管路滞后为 0～5000 ms，展宽步长为 0～500 ms。当前状态保持。";
         }
     }
 

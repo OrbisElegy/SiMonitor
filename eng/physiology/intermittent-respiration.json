@@ -1,0 +1,37 @@
+{
+  "id": "IntermittentRespirationIllustration@1",
+  "status": "authored partial teaching illustration",
+  "terminology_review": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2117832/",
+  "model_scope": "Fixed grouped-breath illustration; does not implement irregular timing/depth and variable pauses required for a Biot/ataxic model.",
+  "depth_permille": [
+    1000,
+    1000,
+    1000,
+    0,
+    0,
+    1000,
+    1000,
+    0,
+    0,
+    0
+  ],
+  "co2": {
+    "reference_depth_permille": 1000,
+    "time_constant_seconds": 20,
+    "method": "Exact periodic backward-Euler orbit; bounded construction-only BigInteger; ties-to-even gains",
+    "limitations": "One-way authored response, no gas feedback, no new expiration in apnea"
+  },
+  "unchanged": "Regular and Cheyne waveform paths; cardiac event clocks; signal amplitude is not tidal volume",
+  "verification": [
+    "IntermittentBreathsSharePausesAndGasRecovery",
+    "RespiratoryPatternSmokeChecks"
+  ],
+  "references": [
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/13748504/",
+      "summary": [
+        "Original report describes grouped breaths followed by apnea; does not establish this sequence, CO2 model or a Biot diagnosis."
+      ]
+    }
+  ]
+}

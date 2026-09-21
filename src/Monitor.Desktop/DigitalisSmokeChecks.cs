@@ -35,7 +35,7 @@ internal static class DigitalisSmokeChecks
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
                 }
-                foreach (int sample in new[] { 70, 100 })
+                foreach (int sample in new[] { 50, 60, 70, 100 })
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), sample, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V4, EcgLead.V6]);
                 var restored = ElectrodeWaveformGroup.Restore(source.CaptureState());
                 var a = source.AdvanceTo(6_200_000_000, 50, 1, 100);

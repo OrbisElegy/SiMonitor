@@ -9,6 +9,7 @@ internal static class DigitalisSpecifications
     [
         new(nameof(DigitalisCompoundScoopsStAndEndsInNarrowUprightT), DigitalisCompoundScoopsStAndEndsInNarrowUprightT),
         new(nameof(DigitalisVariantsChangeOnlyPostStContour), DigitalisVariantsChangeOnlyPostStContour),
+        new(nameof(DigitalisJoinsRDescentToStWithoutRebound), DigitalisJoinsRDescentToStWithoutRebound),
         new(nameof(DigitalisRestoresAcrossCompoundJoins), DigitalisRestoresAcrossCompoundJoins),
     ];
     private static void DigitalisCompoundScoopsStAndEndsInNarrowUprightT()
@@ -18,15 +19,14 @@ internal static class DigitalisSpecifications
         var ordinary = TextbookElectrodeReference.CreateElectrodes(timing: DigitalisEffectReference.Timing);
         for (int i = 0; i < 10; i++)
         {
-            Check.That(source[i].Bands.Count == 3, "compound replaces T instead of duplicating it");
-            for (int j = 0; j < 2; j++)
-                Check.That(source[i].Bands[j].TableQ32.SequenceEqual(ordinary[i].Bands[j].TableQ32) && source[i].Bands[j].DelayNs == ordinary[i].Bands[j].DelayNs && source[i].Bands[j].DurationNs == ordinary[i].Bands[j].DurationNs, "P/QRS components unchanged");
+            Check.That(source[i].Bands.Count == 2, "single QRS-ST-T compound without duplicated S recovery");
+            Check.That(source[i].Bands[0].TableQ32.SequenceEqual(ordinary[i].Bands[0].TableQ32) && source[i].Bands[0].DelayNs == ordinary[i].Bands[0].DelayNs && source[i].Bands[0].DurationNs == ordinary[i].Bands[0].DurationNs, "P component unchanged");
         }
         var samples = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, source).GenerateBefore(1_000_000_000, 250, 100);
         var normal = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, ordinary).GenerateBefore(1_000_000_000, 250, 100);
-        Check.That(samples.Take(55).Zip(normal).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "no effect before smooth terminal-QRS onset");
-        var ii = samples.Select(s => s.MicrovoltValues[1]).ToArray();
-        Check.That(ii[60] < -30 && ii[78] < -120 && ii[90] > ii[78] && ii[90] < 0, "ST descends into rounded trough then rises");
+        Check.That(samples.Take(48).Zip(normal).All(p => p.First.MicrovoltValues.Zip(p.Second.MicrovoltValues).All(v => Math.Abs(v.First - v.Second) <= 1)), "P and early QRS preserved before R descent");
+        short[] ii = samples.Select(s => s.MicrovoltValues[1]).ToArray();
+        Check.That(ii[60] < 0 && ii[78] < -120 && ii[90] > ii[78] && ii[90] < 0, "ST descends into rounded trough then rises");
         Check.That(ii[110] >= 69 && ii[115] < ii[110] && ii[115] > 0, "low narrow upright terminal T");
         Check.That(samples.Skip(120).All(s => s.MicrovoltValues.All(v => v == 0)), "QT320ms ends at480ms, no latent ordinary T");
         Check.That(Enumerable.Range(61, 60).Max(i => Math.Abs(ii[i] - ii[i - 1])) < 20, "smooth composite through ST/T joins");
@@ -59,10 +59,32 @@ internal static class DigitalisSpecifications
         catch (EventWaveformException e) when (e.ReasonCode == "Digitalis.InvalidShape") { return; }
         throw new InvalidOperationException("Invalid digitalis shape accepted");
     }
+    private static void DigitalisJoinsRDescentToStWithoutRebound()
+    {
+        foreach (var shape in Enum.GetValues<DigitalisTShape>())
+        {
+            var samples = ElectrodeSignalGenerator.Start(DigitalisEffectReference.CreatePlan(), "AcqECGMonitor250@1", 1,
+                DigitalisEffectReference.CreateElectrodes(shape)).GenerateBefore(1_000_000_000, 250, 100);
+            var reference = ElectrodeSignalGenerator.Start(DigitalisEffectReference.CreatePlan(), "AcqECGMonitor250@1", 1,
+                TextbookElectrodeReference.CreateElectrodes(timing: DigitalisEffectReference.Timing)).GenerateBefore(1_000_000_000, 250, 100);
+            foreach (int lead in new[] { 6, 7, 8 })
+            {
+                Check.That(samples.Take(55).Zip(reference).All(p => Math.Abs(p.First.MicrovoltValues[lead] - p.Second.MicrovoltValues[lead]) <= 1), "anterior rS descent retained before ST begins");
+                int gain = lead switch { 6 => 300, 7 => 600, _ => 1000 };
+                Check.That(Math.Abs(samples[60].MicrovoltValues[lead] + 50 * gain / 1000) <= 1 &&
+                    Math.Abs(samples[78].MicrovoltValues[lead] + 180 * gain / 1000) <= 1, "anterior J and ST trough retained");
+            }
+            foreach (int lead in new[] { 0, 1, 9, 10, 11 })
+            {
+                short[] descent = samples.Where(s => s.Tick.SimTimeNs is >= 200_000_000 and <= 308_000_000).Select(s => s.MicrovoltValues[lead]).ToArray();
+                Check.That(descent.Zip(descent.Skip(1)).All(p => p.Second <= p.First + 1), "R descent must join the ST trough without S recovery and a second downswing");
+            }
+        }
+    }
     private static void DigitalisRestoresAcrossCompoundJoins()
     {
         foreach (var shape in Enum.GetValues<DigitalisTShape>())
-            foreach (long boundary in new[] { 218_000_000L, 238_000_000, 310_000_000, 374_000_000, 438_000_000, 478_000_000 })
+            foreach (long boundary in new[] { 190_000_000L, 194_000_000, 218_000_000, 238_000_000, 310_000_000, 374_000_000, 438_000_000, 478_000_000 })
             {
                 var source = ElectrodeSignalGenerator.Start(DigitalisEffectReference.CreatePlan(), "AcqECGMonitor250@1", 1, DigitalisEffectReference.CreateElectrodes(shape));
                 source.GenerateBefore(boundary, 250, 100);

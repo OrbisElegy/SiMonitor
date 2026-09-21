@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using Monitor.Simulation.Determinism;
-
 namespace Monitor.Simulation.Physiology;
 
 public enum DigitalisTShape { FishHook, LowT, InvertedT }
@@ -17,23 +15,30 @@ public static class DigitalisEffectReference
         Timing.PrIntervalNs, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000);
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(DigitalisTShape shape = DigitalisTShape.FishHook)
     {
-        var table = shape switch
+        IReadOnlyList<long>[] tables = shape switch
         {
-            DigitalisTShape.FishHook => DigitalisEffectTables.Compound,
-            DigitalisTShape.LowT => DigitalisEffectTables.LowT,
-            DigitalisTShape.InvertedT => DigitalisEffectTables.InvertedT,
+            DigitalisTShape.FishHook => [DigitalisJoinedTables.Compound_RA, DigitalisJoinedTables.Compound_LA,
+                DigitalisJoinedTables.Compound_RL, DigitalisJoinedTables.Compound_LL, DigitalisJoinedTables.Compound_C1,
+                DigitalisJoinedTables.Compound_C2, DigitalisJoinedTables.Compound_C3, DigitalisJoinedTables.Compound_C4,
+                DigitalisJoinedTables.Compound_C5, DigitalisJoinedTables.Compound_C6],
+            DigitalisTShape.LowT => [DigitalisJoinedTables.LowT_RA, DigitalisJoinedTables.LowT_LA,
+                DigitalisJoinedTables.LowT_RL, DigitalisJoinedTables.LowT_LL, DigitalisJoinedTables.LowT_C1,
+                DigitalisJoinedTables.LowT_C2, DigitalisJoinedTables.LowT_C3, DigitalisJoinedTables.LowT_C4,
+                DigitalisJoinedTables.LowT_C5, DigitalisJoinedTables.LowT_C6],
+            DigitalisTShape.InvertedT => [DigitalisJoinedTables.InvertedT_RA, DigitalisJoinedTables.InvertedT_LA,
+                DigitalisJoinedTables.InvertedT_RL, DigitalisJoinedTables.InvertedT_LL, DigitalisJoinedTables.InvertedT_C1,
+                DigitalisJoinedTables.InvertedT_C2, DigitalisJoinedTables.InvertedT_C3, DigitalisJoinedTables.InvertedT_C4,
+                DigitalisJoinedTables.InvertedT_C5, DigitalisJoinedTables.InvertedT_C6],
             _ => throw new EventWaveformException("Digitalis.InvalidShape", nameof(shape)),
         };
-        int[] weights = [-400, 100, 0, 300, 300, 600, 1000, 1200, 1000, 700];
         var source = TextbookElectrodeReference.CreateElectrodes(timing: Timing);
-        var phases = Array.AsReadOnly(new EventWaveformPhasePoint[]
-        { new(0, 0), new(20_000_000, 32), new(90_000_000, 64), new(220_000_000, 96), new(260_000_000, 128) });
+        // QRS and repolarization share a single authored contour: adding ST
+        // to an intact S recovery creates an unintended second downturn.
         var result = source.Select((e, i) => e with
         {
-            Bands = Array.AsReadOnly(new[] { e.Bands[0], e.Bands[1],
-                new EventWaveformBand(PhysiologyCycleEventKind.VentricularElectrical, 60_000_000, 260_000_000,
-                    Array.AsReadOnly(table.Select(v =>
-                        (long)FixedPointMath.RoundDivideTiesToEven((Int128)v * weights[i], 1000)).ToArray()), phases) })
+            Bands = Array.AsReadOnly(new[] { e.Bands[0],
+                new EventWaveformBand(PhysiologyCycleEventKind.VentricularElectrical, 0,
+                    Timing.QtIntervalNs, tables[i]) })
         }).ToArray();
         return ElectrodeWaveformComposition.Restore(new(result, [])).CaptureState().Electrodes;
     }

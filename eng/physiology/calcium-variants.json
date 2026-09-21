@@ -1,0 +1,40 @@
+{
+  "id": "CalciumRepolarizationVariantsIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "495"
+  },
+  "textbook_summary": [
+    "High calcium may eliminate ST; low calcium T may be low or inverted."
+  ],
+  "textbook_figures": [
+    "5-1-102",
+    "5-1-103"
+  ],
+  "authored_choices": {
+    "high_absent_ST_QT_T_ms": [
+      0,
+      260,
+      180
+    ],
+    "low_ST_QT_T_ms": [
+      260,
+      460,
+      120
+    ],
+    "low_flat_T_gain": "1/4",
+    "low_inverted_T_gain": "-1"
+  },
+  "limitations": [
+    "Fixed amplitude/timing choices, not concentration calibration",
+    "Inversion applied before electrode projection; opposite aVR polarity retained",
+    "No automatic progression, arrhythmia or perfusion inference"
+  ],
+  "verification": [
+    "CalciumVariantsPreserveDepolarizationAndExplicitRepolarization",
+    "CalciumRecoveryAndInvalidModeAreDeterministic",
+    "CalciumSmokeChecks"
+  ]
+}

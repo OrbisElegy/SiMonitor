@@ -15,7 +15,7 @@ internal static class CalciumSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
-            foreach (var mode in new[] { CalciumIllustration.High, CalciumIllustration.Low })
+            foreach (var mode in Enum.GetValues<CalciumIllustration>().Where(m => m != CalciumIllustration.Reference))
             {
                 Click(window.HypokalemiaButton); Click(window.StepButton); Click(window.RunButton);
                 var oldTimer = window.ActiveTimer;
@@ -33,7 +33,7 @@ internal static class CalciumSmokeChecks
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
                 }
-                EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), mode == CalciumIllustration.High ? 90 : 135, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V4, EcgLead.V6]);
+                EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), mode == CalciumIllustration.High ? 90 : mode == CalciumIllustration.HighAbsentSt ? 80 : 135, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V4, EcgLead.V6]);
                 var restored = ElectrodeWaveformGroup.Restore(source.CaptureState());
                 var a = source.AdvanceTo(6_200_000_000, 50, 1, 100);
                 var b = restored.AdvanceTo(6_200_000_000, 50, 1, 100);
@@ -53,7 +53,7 @@ internal static class CalciumSmokeChecks
                     catch (EventWaveformException e) when (e.ReasonCode == "Calcium.ConflictingModes") { continue; }
                     throw new InvalidOperationException("Conflicting calcium mode accepted.");
                 }
-                window.CalciumInput.SelectedIndex = mode == CalciumIllustration.High ? 2 : 1; Click(window.ApplyEcgButton);
+                window.CalciumInput.SelectedIndex = (int)mode % 5 + 1; Click(window.ApplyEcgButton);
                 if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.CalciumPreset((CalciumIllustration)window.CalciumInput.SelectedIndex))
                 { throw new InvalidOperationException("Calcium high/low switch failed."); }
                 window.CalciumInput.SelectedIndex = 0; Click(window.ApplyEcgButton);

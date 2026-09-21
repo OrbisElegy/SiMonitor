@@ -1,0 +1,31 @@
+{
+  "id": "HypokalemiaInvertedTIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "494"
+  },
+  "textbook_summary": [
+    "Textbook describes flat or inverted T with ST depression and prominent U; overlap is permitted as an authored combination."
+  ],
+  "textbook_figures": [
+    "5-1-100"
+  ],
+  "authored_choices": {
+    "notes": [
+      "Negate only the existing low-amplitude T electrode vector before projection. P/QRS/ST/U coefficients, support and optional U overlap remain unchanged. Resulting limb leads stay electrically consistent; aVR reverses oppositely."
+    ]
+  },
+  "limitations": [
+    "Not a serum-potassium model or anatomical calibration",
+    "Net overlapping T-U voltage may cross baseline or become positive despite inverted intrinsic T",
+    "No new QT endpoint detector or automatic progression",
+    "Other low-K P/QRS/rhythm variants remain open"
+  ],
+  "verification": [
+    "HypokalemiaInvertsOnlyIntrinsicTWithIndependentU",
+    "HypokalemiaRestoresAcrossTAndU",
+    "HypokalemiaSmokeChecks"
+  ]
+}

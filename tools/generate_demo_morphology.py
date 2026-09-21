@@ -226,6 +226,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    high_k_fusion = json.loads((root / 'eng/physiology/hyperkalemia-fusion.json').read_text())
     high_k_qrs = json.loads((root / 'eng/physiology/hyperkalemia-qrs-voltage.json').read_text())
     pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(), parse_float=Fraction)
     arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
@@ -304,6 +305,8 @@ def main():
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PlethPulseTables.cs': render(
             'Monitor.Simulation.Physiology', 'PlethPulseTables', pleth['tables']),
+        root / 'src/Monitor.Simulation/Physiology/HyperkalemiaFusionTables.cs': render(
+            'Monitor.Simulation.Physiology', 'HyperkalemiaFusionTables', high_k_fusion['tables']),
         root / 'src/Monitor.Simulation/Physiology/HyperkalemiaQrsTables.cs': render(
             'Monitor.Simulation.Physiology', 'HyperkalemiaQrsTables', hyperkalemia_qrs_shapes(high_k_qrs, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/TextbookElectrodeQrsTables.cs': render(

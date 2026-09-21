@@ -1,0 +1,85 @@
+{
+  "id": "HyperkalemiaFusionIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "493-494"
+  },
+  "textbook_summary": [
+    "Broad QRS and T merge with no separately identifiable ST interval; P absent. No serum concentration mapping."
+  ],
+  "textbook_figures": [
+    "5-1-98"
+  ],
+  "references": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10008419/",
+      "summary": []
+    }
+  ],
+  "authored_choices": {
+    "RR_ms": 1000,
+    "first_compound_offset_ms": 240,
+    "compound_duration_ms": 720,
+    "electrode_weights_permille": [
+      -400,
+      100,
+      0,
+      300,
+      300,
+      600,
+      1000,
+      1200,
+      1000,
+      700
+    ]
+  },
+  "tables": {
+    "Compound": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          20,
+          900
+        ],
+        [
+          42,
+          -650
+        ],
+        [
+          82,
+          1000
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "Weights": {
+      "values_q32": [
+        -1717986918400,
+        429496729600,
+        0,
+        1288490188800,
+        1288490188800,
+        2576980377600,
+        4294967296000,
+        5153960755200,
+        4294967296000,
+        3006477107200
+      ]
+    }
+  },
+  "limitations": [
+    "Authored fixed morphology, not a digitized patient ECG",
+    "One common contour and explicit electrode vector, not anatomical calibration",
+    "No measured QRS/T/QT partition within fused contour",
+    "No automatic progression, concentration, VT/VF inference or pump failure model"
+  ]
+}

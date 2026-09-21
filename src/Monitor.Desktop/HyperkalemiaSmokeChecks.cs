@@ -15,15 +15,16 @@ internal static class HyperkalemiaSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
-            foreach (var (conduction, absentP) in new[] { (false, false), (true, false), (true, true) })
+            foreach (var (conduction, absentP, fusion) in new[] { (false, false, false), (true, false, false), (true, true, false), (true, true, true) })
             {
                 Click(window.VentricularDisorganizationButton);
                 Click(window.StepButton); Click(window.RunButton);
                 var oldTimer = window.ActiveTimer;
+                window.HyperkalemiaFusionInput.IsChecked = fusion;
                 window.HyperkalemiaConductionInput.IsChecked = conduction;
                 window.HyperkalemiaAbsentPInput.IsChecked = absentP;
                 Click(window.HyperkalemiaButton); window.Pulse(oldTimer);
-                var config = absentP ? ProjectedEcgDemoConfiguration.HyperkalemiaWithoutP : conduction ? ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction : ProjectedEcgDemoConfiguration.Hyperkalemia;
+                var config = fusion ? ProjectedEcgDemoConfiguration.HyperkalemiaWithFusion : absentP ? ProjectedEcgDemoConfiguration.HyperkalemiaWithoutP : conduction ? ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction : ProjectedEcgDemoConfiguration.Hyperkalemia;
                 if (window.EcgConfiguration != config || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.BlockCount != 0)
                 { throw new InvalidOperationException("Hyperkalemia loader retained disorganized source/timer."); }
                 Click(window.ApplyEcgButton);
@@ -36,11 +37,11 @@ internal static class HyperkalemiaSmokeChecks
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
                 }
-                EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), conduction ? 140 : 90, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V2, EcgLead.V4, EcgLead.V6]);
+                EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), fusion ? 165 : conduction ? 140 : 90, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V2, EcgLead.V4, EcgLead.V6]);
                 if (conduction)
                 {
                     EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 70, [EcgLead.II, EcgLead.V1, EcgLead.V5]);
-                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 85, [EcgLead.II, EcgLead.V1, EcgLead.V5]);
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), fusion ? 110 : 85, [EcgLead.II, EcgLead.V1, EcgLead.V5]);
                 }
                 if (absentP)
                 {
@@ -49,6 +50,17 @@ internal static class HyperkalemiaSmokeChecks
                         { throw new InvalidOperationException("Absent-P preset still produces P samples."); }
                     try { ProjectedEcgDemoSource.Create(config with { CardiacActivity = CardiacActivity.AtrialAndVentricular }); throw new InvalidOperationException("Atrial activity accepted in absent-P preset."); }
                     catch (EventWaveformException e) when (e.ReasonCode == "Hyperkalemia.ConflictingModes") { }
+                }
+                if (fusion)
+                {
+                    if (window.QrsDurationInput.IsEnabled || window.TDurationInput.IsEnabled || window.QtMethod.IsEnabled)
+                    { throw new InvalidOperationException("Fusion exposes independent QRS/T/QTc measurements."); }
+                    foreach (var invalid in new[] { config with { HyperkalemiaAbsentP = false }, config with { HyperkalemiaConduction = false }, ProjectedEcgDemoConfiguration.Default with { HyperkalemiaFusion = true } })
+                    {
+                        try { ProjectedEcgDemoSource.Create(invalid); }
+                        catch (EventWaveformException e) when (e.ReasonCode == "Hyperkalemia.ConflictingModes") { continue; }
+                        throw new InvalidOperationException("Orphan fusion configuration accepted.");
+                    }
                 }
                 var restored = ElectrodeWaveformGroup.Restore(source.CaptureState());
                 var a = source.AdvanceTo(6_200_000_000, 50, 1, 100);
@@ -61,9 +73,9 @@ internal static class HyperkalemiaSmokeChecks
                 if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
                 { throw new InvalidOperationException("Conflicting hyperkalemia edit changed accepted state."); }
                 Click(window.ResetButton);
-                if (window.HyperkalemiaAbsentPInput.IsChecked != absentP || window.HyperkalemiaConductionInput.IsChecked != conduction || window.HyperkalemiaInput.IsChecked != true || window.TContourInput.SelectedIndex != 0)
+                if (window.HyperkalemiaFusionInput.IsChecked != fusion || window.HyperkalemiaAbsentPInput.IsChecked != absentP || window.HyperkalemiaConductionInput.IsChecked != conduction || window.HyperkalemiaInput.IsChecked != true || window.TContourInput.SelectedIndex != 0)
                 { throw new InvalidOperationException("Hyperkalemia reset lost accepted state."); }
-                if (absentP)
+                if (absentP && !fusion)
                 {
                     window.HyperkalemiaAbsentPInput.IsChecked = false; Click(window.ApplyEcgButton);
                     if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction)
@@ -84,6 +96,18 @@ internal static class HyperkalemiaSmokeChecks
                     if (window.EcgConfiguration != config || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
                     { throw new InvalidOperationException("Orphan high-K conduction accepted."); }
                 }
+                if (fusion)
+                {
+                    window.HyperkalemiaFusionInput.IsChecked = false; Click(window.ApplyEcgButton);
+                    // Restore the high-K flag after the intentional orphan test.
+                    window.HyperkalemiaInput.IsChecked = true; Click(window.ApplyEcgButton);
+                    if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.HyperkalemiaWithoutP)
+                    { throw new InvalidOperationException("Leaving fusion did not restore absent-P source."); }
+                    window.HyperkalemiaFusionInput.IsChecked = true; Click(window.ApplyEcgButton);
+                    if (window.EcgConfiguration != config)
+                    { throw new InvalidOperationException("Returning to fusion did not restore compound source."); }
+                }
+                window.HyperkalemiaFusionInput.IsChecked = false;
                 window.HyperkalemiaAbsentPInput.IsChecked = false;
                 window.HyperkalemiaConductionInput.IsChecked = false;
                 window.HyperkalemiaInput.IsChecked = false; Click(window.ApplyEcgButton);
@@ -92,6 +116,6 @@ internal static class HyperkalemiaSmokeChecks
             }
         }
         finally { window.Close(); }
-        Console.WriteLine("ok: native high-K repolarization and low-P/long-PR/wide-QRS/ST-depression examples, signed pixels, wire recovery and atomic preset lifecycle");
+        Console.WriteLine("ok: native high-K repolarization and low-P/long-PR/wide-QRS/ST-depression and fused QRS-T examples, signed pixels, wire recovery and atomic preset lifecycle");
     }
 }

@@ -9,6 +9,7 @@ internal static class HypokalemiaRepolarizationSpecifications
     [
         new(nameof(HypokalemiaPreservesQtAndSeparatesProminentU), HypokalemiaPreservesQtAndSeparatesProminentU),
         new(nameof(HypokalemiaInvertsOnlyIntrinsicTWithIndependentU), HypokalemiaInvertsOnlyIntrinsicTWithIndependentU),
+        new(nameof(HypokalemiaConductionAugmentsPAndWidensQrsOnly), HypokalemiaConductionAugmentsPAndWidensQrsOnly),
         new(nameof(HypokalemiaRestoresAcrossTAndU), HypokalemiaRestoresAcrossTAndU),
         new(nameof(HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints), HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints),
     ];
@@ -98,18 +99,44 @@ internal static class HypokalemiaRepolarizationSpecifications
             Check.That(bSamples.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "shared monitorII parity");
         }
     }
+    private static void HypokalemiaConductionAugmentsPAndWidensQrsOnly()
+    {
+        foreach (bool fuse in new[] { false, true })
+            foreach (bool invert in new[] { false, true })
+            {
+                var plan = HypokalemiaRepolarizationReference.CreatePlan();
+                var ordinary = HypokalemiaRepolarizationReference.CreateElectrodes(fuse, invert);
+                var wide = HypokalemiaRepolarizationReference.CreateElectrodes(fuse, invert, true);
+                for (int i = 0; i < 10; i++)
+                {
+                    Check.That(wide[i].Bands[1].DurationNs == 120_000_000 && wide[i].Bands[1].TableQ32.SequenceEqual(ordinary[i].Bands[1].TableQ32), "QRS topology retained at120ms");
+                    Check.That(wide[i].Bands[0].DurationNs == ordinary[i].Bands[0].DurationNs, "P duration preserved");
+                }
+                var a = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, ordinary).GenerateBefore(1_000_000_000, 250, 100);
+                var b = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, wide).GenerateBefore(1_000_000_000, 250, 100);
+                for (int j = 0; j < 25; j++)
+                    for (int lead = 0; lead < 12; lead++)
+                        Check.That(Math.Abs(b[j].MicrovoltValues[lead] * 2 - a[j].MicrovoltValues[lead] * 3) <= 3, "projected P gain1.5");
+                Check.That(b.Where(v => v.Tick.SimTimeNs >= 280_000_000).Zip(a.Where(v => v.Tick.SimTimeNs >= 280_000_000)).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "ST after new J, T and U unchanged");
+                Check.That(b.Skip(60).Take(9).Zip(a.Skip(60)).Any(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.MicrovoltValues[1]) > 50), "late QRS occupies former early ST interval");
+                Check.That(b.All(v => Math.Abs(v.MicrovoltValues[0] + v.MicrovoltValues[2] - v.MicrovoltValues[1]) <= 1), "limb identity preserved");
+                var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateLeadIIBands(fuse, invert, true)).GenerateBefore(1_000_000_000, 250, 100);
+                Check.That(b.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitorII uses same wide source");
+            }
+    }
     private static void HypokalemiaRestoresAcrossTAndU()
     {
         foreach (bool fuse in new[] { false, true })
             foreach (bool invert in new[] { false, true })
-                foreach (long boundary in new[] { 450_000_000L, 578_000_000, 650_000_000, 810_000_000 })
-                {
-                    var source = ElectrodeSignalGenerator.Start(HypokalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateElectrodes(fuse, invert));
-                    source.GenerateBefore(boundary, 250, 100);
-                    var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                    var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                    var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                    Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "T/U gap, U and next cycle restore exactly");
-                }
+                foreach (bool conduction in new[] { false, true })
+                    foreach (long boundary in new[] { 238_000_000L, 278_000_000, 450_000_000, 578_000_000, 650_000_000, 810_000_000 })
+                    {
+                        var source = ElectrodeSignalGenerator.Start(HypokalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateElectrodes(fuse, invert, conduction));
+                        source.GenerateBefore(boundary, 250, 100);
+                        var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                        var a = source.GenerateBefore(2_000_000_000, 500, 100);
+                        var b = restored.GenerateBefore(2_000_000_000, 500, 100);
+                        Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "T/U gap, U and next cycle restore exactly");
+                    }
     }
 }

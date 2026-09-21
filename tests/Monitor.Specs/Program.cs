@@ -86,6 +86,7 @@ internal static class Program
             .. HyperkalemiaConductionSpecifications.All,
             .. HyperkalemiaFusionSpecifications.All,
             .. HypokalemiaRepolarizationSpecifications.All,
+            .. CalciumSpecifications.All,
             .. VentricularDisorganizationSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,

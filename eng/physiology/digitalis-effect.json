@@ -1,0 +1,74 @@
+{
+  "id": "DigitalisEffectIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "495"
+  },
+  "textbook_summary": [
+    "Downward-scooped ST depression, initially negative then narrow upright terminal T and shortened QT; digitalis effect is not a toxicity inference."
+  ],
+  "textbook_figures": [
+    "5-1-104"
+  ],
+  "authored_choices": {
+    "RR_ms": 1000,
+    "P_ms": 100,
+    "PR_ms": 160,
+    "QRS_ms": 80,
+    "QT_ms": 320,
+    "ST_T_start_from_QRS_ms": 60,
+    "phase_offsets_ms": [
+      0,
+      20,
+      90,
+      220,
+      260
+    ],
+    "electrode_weights_permille": [
+      -400,
+      100,
+      0,
+      300,
+      300,
+      600,
+      1000,
+      1200,
+      1000,
+      700
+    ]
+  },
+  "tables": {
+    "Compound": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          32,
+          -50
+        ],
+        [
+          64,
+          -180
+        ],
+        [
+          96,
+          100
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    }
+  },
+  "limitations": [
+    "One fixed contour and electrode vector, not a digitized patient ECG",
+    "No drug dose, concentration, toxicity or arrhythmia model",
+    "Other digitalis T variants and other drug effects remain open"
+  ]
+}

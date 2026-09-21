@@ -88,6 +88,7 @@ internal static class Program
             .. HypokalemiaRepolarizationSpecifications.All,
             .. CalciumSpecifications.All,
             .. DigitalisSpecifications.All,
+            .. QuinidineSpecifications.All,
             .. VentricularDisorganizationSpecifications.All,
             .. InspiratoryPauseSpecifications.All,
             .. ExpiratoryPauseSpecifications.All,

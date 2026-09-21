@@ -23,7 +23,14 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         if (mode == QuinidineIllustration.Reference && notchedP)
         { throw new EventWaveformException("Quinidine.ConflictingModes", nameof(notchedP)); }
         return mode == QuinidineIllustration.Reference ? Default : Default with
-        { Quinidine = mode, QuinidineNotchedP = notchedP, HeartRateBpm = 60, PDurationMilliseconds = 120, PrIntervalMilliseconds = 200 };
+        {
+            Quinidine = mode,
+            QuinidineNotchedP = notchedP,
+            HeartRateBpm = 60,
+            PDurationMilliseconds = 120,
+            PrIntervalMilliseconds = 200,
+            QrsDurationMilliseconds = (int)(QuinidineEffectReference.ResolveTiming(mode).QrsDurationNs / 1_000_000)
+        };
     }
 
     internal static ProjectedEcgDemoConfiguration Digitalis { get; } = Default with
@@ -130,7 +137,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         {
             if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard } != QuinidinePreset(Quinidine, QuinidineNotchedP))
             { throw new EventWaveformException("Quinidine.ConflictingModes", "configuration"); }
-            return QuinidineEffectReference.Timing;
+            return QuinidineEffectReference.ResolveTiming(Quinidine);
         }
         if (!Enum.IsDefined(DigitalisShape) || (!DigitalisEffect && DigitalisShape != DigitalisTShape.FishHook))
         { throw new EventWaveformException("Digitalis.ConflictingModes", "configuration"); }

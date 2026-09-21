@@ -83,7 +83,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox QuinidineInput { get; } = new() { ItemsSource = new[] { "奎尼丁示例关闭", "奎尼丁样：低平T／增高u", "奎尼丁样：倒置T／增高u" }, SelectedIndex = 0 };
+    internal ComboBox QuinidineInput { get; } = new() { ItemsSource = new[] { "奎尼丁示例关闭", "奎尼丁样：低平T／增高u", "奎尼丁样：倒置T／增高u", "奎尼丁样：宽QRS／更长QT／低平T", "奎尼丁样：宽QRS／更长QT／倒置T" }, SelectedIndex = 0 };
     internal CheckBox QuinidineNotchedPInput { get; } = new() { Content = "奎尼丁样 P 波轻度切迹" };
     internal Button QuinidineButton { get; } = new() { Content = "载入奎尼丁效应（重置参数）" };
     internal ComboBox DigitalisShapeInput { get; } = new() { ItemsSource = new[] { "洋地黄：鱼钩型终末直立T", "洋地黄：低平T", "洋地黄：倒置T" }, SelectedIndex = 0 };
@@ -485,7 +485,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         QuinidineButton.Click += (_, _) =>
         {
-            if (!_closed && _projected && QuinidineInput.SelectedIndex is >= 0 and <= 2)
+            if (!_closed && _projected && QuinidineInput.SelectedIndex is >= 0 and <= 4)
             { Reset(UsesPulse, ProjectedEcgDemoConfiguration.QuinidinePreset((QuinidineIllustration)QuinidineInput.SelectedIndex, QuinidineInput.SelectedIndex > 0 && QuinidineNotchedPInput.IsChecked == true)); }
         };
         DigitalisButton.Click += (_, _) =>
@@ -1143,7 +1143,7 @@ internal sealed class WaveformDemoWindow : Window
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{(configuration.HyperkalemiaAbsentP ? "规则心室事件，房室比例不可由P波判读" : ConductionInput.SelectedItem)}；{(configuration.HyperkalemiaAbsentP ? "无可测PR" : ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern))}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "（P/PR为窦性搏动；逆行P′80ms，位置见传导摘要）" : "")}{(PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? "（以上时限为窦性搏动；室早无相关P，具体时限见传导摘要，T220ms）" : "")}；{(configuration.HyperkalemiaFusion ? "QT不单独标注" : $"QT {timing.QtIntervalNs / 1_000_000m:0.###} ms")}{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
                 (configuration.HypokalemiaRepolarization ? configuration.HypokalemiaTuFusion ? "；低钾T-u融合：u于源T末前100ms开始、时限350ms；源QT400ms不等于可测QT，QT-u650ms；融合曲线不提供独立T末测量" : "；低钾样ST压低／低幅T／增高u；模板u延迟30ms、时限220ms，QT-u650ms（不计入QT）" : "") +
-                (configuration.Quinidine != QuinidineIllustration.Reference ? $"；{QuinidineInput.SelectedItem}；QT480ms、QT-u710ms；P120/PR200ms{(configuration.QuinidineNotchedP ? "、P轻度切迹" : "")}；非剂量或中毒模型" : "") +
+                (configuration.Quinidine != QuinidineIllustration.Reference ? $"；{QuinidineInput.SelectedItem}；QT{timing.QtIntervalNs / 1_000_000}ms、QT-u{QuinidineEffectReference.ResolveQuIntervalNs(configuration.Quinidine) / 1_000_000}ms；P120/PR200ms{(configuration.QuinidineNotchedP ? "、P轻度切迹" : "")}；非剂量或中毒模型" : "") +
                 (configuration.DigitalisEffect ? $"；{DigitalisShapeInput.SelectedItem}；下垂型ST压低、QT320ms；非剂量或中毒模型" : "") +
                 (configuration.Calcium switch
                 {

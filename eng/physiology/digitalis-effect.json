@@ -64,11 +64,66 @@
           0
         ]
       ]
+    },
+    "LowT": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          32,
+          -50
+        ],
+        [
+          64,
+          -180
+        ],
+        [
+          96,
+          25
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    },
+    "InvertedT": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          32,
+          -50
+        ],
+        [
+          64,
+          -180
+        ],
+        [
+          80,
+          -40
+        ],
+        [
+          96,
+          -100
+        ],
+        [
+          128,
+          0
+        ]
+      ]
     }
   },
   "limitations": [
     "One fixed contour and electrode vector, not a digitized patient ECG",
     "No drug dose, concentration, toxicity or arrhythmia model",
-    "Other digitalis T variants and other drug effects remain open"
-  ]
+    "Other drug effects and rhythm combinations remain open"
+  ],
+  "variants_evidence": "DigitalisTVariantsIllustration@1"
 }

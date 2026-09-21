@@ -1,0 +1,23 @@
+{
+  "id": "DigitalisTVariantsIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "495"
+  },
+  "textbook_figures": [
+    "5-1-104"
+  ],
+  "authored_choices": {
+    "notes": [
+      "Retain original compound through ST trough at phase64. LowT terminal peak25; InvertedT rises to-40 at phase80 then dips to-100 at phase96. All original timing, electrode weights and P/QRS components retained."
+    ]
+  },
+  "scope": "Fixed low/inverted T variants of digitalis effect, not toxicity or dose response.",
+  "verification": [
+    "DigitalisVariantsChangeOnlyPostStContour",
+    "DigitalisRestoresAcrossCompoundJoins",
+    "DigitalisSmokeChecks"
+  ]
+}

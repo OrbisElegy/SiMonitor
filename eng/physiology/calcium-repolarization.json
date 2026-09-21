@@ -37,11 +37,12 @@
   "limitations": [
     "Fixed illustrations, not digitized patient ECG or calcium concentration mapping",
     "No arrhythmia inference or perfusion change",
-    "Other low-calcium T morphologies and absent-ST high-calcium variants remain open"
+    "Other electrolyte/rhythm combinations remain open; additional fixed variants documented separately"
   ],
   "verification": [
     "CalciumChangesStAndQtWithoutMovingDepolarization",
     "CalciumRecoveryAndInvalidModeAreDeterministic",
     "CalciumSmokeChecks"
-  ]
+  ],
+  "additional_variants_evidence": "CalciumRepolarizationVariantsIllustration@1"
 }

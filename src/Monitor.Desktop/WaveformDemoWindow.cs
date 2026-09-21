@@ -83,7 +83,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
-    internal ComboBox CalciumInput { get; } = new() { ItemsSource = new[] { "钙相关示例关闭", "高钙样：短ST／短QT", "低钙样：长ST／长QT／窄T" }, SelectedIndex = 0 };
+    internal ComboBox CalciumInput { get; } = new() { ItemsSource = new[] { "钙相关示例关闭", "高钙样：短ST／短QT", "低钙样：长ST／长QT／窄T", "高钙样：ST消失", "低钙样：低平T", "低钙样：倒置T" }, SelectedIndex = 0 };
     internal Button CalciumButton { get; } = new() { Content = "载入钙相关示例（重置参数）" };
     internal CheckBox HypokalemiaConductionInput { get; } = new() { Content = "低钾 P增高／QRS增宽例（载入或应用）" };
     internal CheckBox HypokalemiaInvertedTInput { get; } = new() { Content = "低钾 T 波倒置（仅改变T分量）" };
@@ -473,7 +473,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         CalciumButton.Click += (_, _) =>
         {
-            if (_closed || !_projected || CalciumInput.SelectedIndex is < 0 or > 2) { return; }
+            if (_closed || !_projected || CalciumInput.SelectedIndex is < 0 or > 5) { return; }
             Reset(UsesPulse, ProjectedEcgDemoConfiguration.CalciumPreset((CalciumIllustration)CalciumInput.SelectedIndex));
         };
         HypokalemiaButton.Click += (_, _) =>
@@ -1113,7 +1113,15 @@ internal sealed class WaveformDemoWindow : Window
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{(configuration.HyperkalemiaAbsentP ? "规则心室事件，房室比例不可由P波判读" : ConductionInput.SelectedItem)}；{(configuration.HyperkalemiaAbsentP ? "无可测PR" : ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern))}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "（P/PR为窦性搏动；逆行P′80ms，位置见传导摘要）" : "")}{(PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? "（以上时限为窦性搏动；室早无相关P，具体时限见传导摘要，T220ms）" : "")}；{(configuration.HyperkalemiaFusion ? "QT不单独标注" : $"QT {timing.QtIntervalNs / 1_000_000m:0.###} ms")}{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
                 (configuration.HypokalemiaRepolarization ? configuration.HypokalemiaTuFusion ? "；低钾T-u融合：u于源T末前100ms开始、时限350ms；源QT400ms不等于可测QT，QT-u650ms；融合曲线不提供独立T末测量" : "；低钾样ST压低／低幅T／增高u；模板u延迟30ms、时限220ms，QT-u650ms（不计入QT）" : "") +
-                (configuration.Calcium == CalciumIllustration.High ? "；高钙样固定例：ST40ms、QT300ms" : configuration.Calcium == CalciumIllustration.Low ? "；低钙样固定例：ST260ms、QT460ms、T120ms；非浓度模型" : "") +
+                (configuration.Calcium switch
+                {
+                    CalciumIllustration.High => "；高钙样固定例：ST40ms、QT300ms",
+                    CalciumIllustration.HighAbsentSt => "；高钙样ST消失固定例：T紧接QRS末端、QT260ms",
+                    CalciumIllustration.Low => "；低钙样固定例：ST260ms、QT460ms、T120ms",
+                    CalciumIllustration.LowFlatT => "；低钙样低平T：参考T幅度1/4；ST260ms、源QT460ms",
+                    CalciumIllustration.LowInvertedT => "；低钙样倒置T：保留ST260ms、QT460ms",
+                    _ => ""
+                }) +
                 (configuration.HypokalemiaConduction ? "；低钾P幅度参考×1.5、QRS120ms；固定教学例，非浓度模型" : "") +
                 (configuration.HypokalemiaInvertedT ? "；低钾T分量倒置，u方向保持；重叠后合成曲线不保证全程负向" : "") +
                 (configuration.HyperkalemiaRepolarization ? configuration.HyperkalemiaFusion ? "；高钾正弦波样QRS–T融合固定例；无独立ST间隙，不对应浓度或自动演变" : configuration.HyperkalemiaAbsentP ? "；高钾无P教学例：保留规则宽QRS（R降低/S加深）/ST压低/高尖T；不据此诊断窦停或逸搏" : configuration.HyperkalemiaConduction ? "；高钾传导受损教学例：宽低P、长PR、宽QRS（R降低/S加深）、ST压低和高尖T（非浓度模型）" : "；高钾样弥漫高尖T／短QT教学例（非浓度或诊断模型）" : "") +

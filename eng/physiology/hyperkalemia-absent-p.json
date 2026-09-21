@@ -1,0 +1,41 @@
+{
+  "id": "HyperkalemiaAbsentPIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "493-494"
+  },
+  "textbook_summary": [
+    "P disappearance may coexist with continuing sinus drive; absent P must not automatically label sinus arrest."
+  ],
+  "textbook_figures": [
+    "5-1-99"
+  ],
+  "references": [
+    {
+      "url": "https://www.jacc.org/doi/10.1016/j.jacep.2017.12.011",
+      "summary": []
+    }
+  ],
+  "authored_choices": {
+    "notes": [
+      "Same highK conduction QRS/ST/T, ventricular and respiratory clocks; explicit absence of effective atrial excitation/contraction; no concentration or cell-level model."
+    ]
+  },
+  "activity": "VentricularOnly",
+  "first_QRS_offset_ms": 240,
+  "PR": "not measurable/applicable; stored PR field is structural source offset only",
+  "P_bands": "removed, not just hidden by display or gain",
+  "limitations": [
+    "One authored absentP mechanism, not all causes",
+    "No sinus/internodal electrophysiology or escape diagnosis",
+    "No derived perfusion impairment",
+    "No sine-wave fusion or R/S voltage remodelling"
+  ],
+  "verification": [
+    "HighKAbsentPRemovesAtrialEventsOnly",
+    "HighKConductionRestoresAcrossDelayedQrsAndT",
+    "HyperkalemiaSmokeChecks"
+  ]
+}

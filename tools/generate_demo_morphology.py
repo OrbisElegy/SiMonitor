@@ -226,6 +226,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
     digitalis = json.loads((root / 'eng/physiology/digitalis-effect.json').read_text())
     high_k_fusion = json.loads((root / 'eng/physiology/hyperkalemia-fusion.json').read_text())
     high_k_qrs = json.loads((root / 'eng/physiology/hyperkalemia-qrs-voltage.json').read_text())
@@ -306,6 +307,8 @@ def main():
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PlethPulseTables.cs': render(
             'Monitor.Simulation.Physiology', 'PlethPulseTables', pleth['tables']),
+        root / 'src/Monitor.Simulation/Physiology/QuinidineEffectTables.cs': render(
+            'Monitor.Simulation.Physiology', 'QuinidineEffectTables', quinidine['tables']),
         root / 'src/Monitor.Simulation/Physiology/DigitalisEffectTables.cs': render(
             'Monitor.Simulation.Physiology', 'DigitalisEffectTables', digitalis['tables']),
         root / 'src/Monitor.Simulation/Physiology/HyperkalemiaFusionTables.cs': render(

@@ -14,7 +14,7 @@ public static class QuinidineEffectReference
     public const long QuIntervalNs = 710_000_000;
     public static RegularPhysiologyPlan CreatePlan() => new(0, Timing.RrIntervalNs,
         Timing.PrIntervalNs, 80_000_000, 280_000_000, 3_750_000_000, 1_875_000_000);
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(QuinidineIllustration mode)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(QuinidineIllustration mode, bool notchedP = false)
     {
         if (mode is not (QuinidineIllustration.LowT or QuinidineIllustration.InvertedT))
         { throw new EventWaveformException("Quinidine.InvalidMode", nameof(mode)); }
@@ -23,7 +23,13 @@ public static class QuinidineEffectReference
         int sign = mode == QuinidineIllustration.InvertedT ? -1 : 1;
         var result = source.Select(e => e with
         {
-            Bands = Array.AsReadOnly(e.Bands.Select((b, i) => i == 2 ? b with
+            Bands = Array.AsReadOnly(e.Bands.Select((b, i) => i == 0 && notchedP ? b with
+            {
+                TableQ32 = Array.AsReadOnly(QuinidineEffectTables.NotchedP.Select(v =>
+                    checked((long)FixedPointMath.RoundDivideTiesToEven((Int128)v *
+                        TextbookElectrodeQrsTables.PWeightsQ32[(int)e.Electrode],
+                        1000 * (Int128)FixedPointMath.Q32One))).ToArray())
+            } : i == 2 ? b with
             {
                 TableQ32 = Array.AsReadOnly(b.TableQ32.Select(v =>
                     (long)FixedPointMath.RoundDivideTiesToEven((Int128)v * sign, 4)).ToArray())
@@ -31,9 +37,9 @@ public static class QuinidineEffectReference
         }).ToArray();
         return ElectrodeWaveformComposition.Restore(new(result, [])).CaptureState().Electrodes;
     }
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(QuinidineIllustration mode)
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(QuinidineIllustration mode, bool notchedP = false)
     {
-        var electrodes = CreateElectrodes(mode);
+        var electrodes = CreateElectrodes(mode, notchedP);
         return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
             electrodes[(int)EcgElectrode.RA].Bands.Select(b => b with
             { TableQ32 = Array.AsReadOnly(b.TableQ32.Select(v => checked(-v)).ToArray()) })).ToArray());

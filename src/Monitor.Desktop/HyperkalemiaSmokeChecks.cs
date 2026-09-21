@@ -37,7 +37,11 @@ internal static class HyperkalemiaSmokeChecks
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
                 }
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), conduction ? 140 : 90, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V2, EcgLead.V4, EcgLead.V6]);
-                if (conduction) { EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 80, [EcgLead.V1, EcgLead.V5]); }
+                if (conduction)
+                {
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 70, [EcgLead.II, EcgLead.V1, EcgLead.V5]);
+                    EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 85, [EcgLead.II, EcgLead.V1, EcgLead.V5]);
+                }
                 if (absentP)
                 {
                     foreach (var block in blocks.Where(b => b.StartSimTimeNs == 0))

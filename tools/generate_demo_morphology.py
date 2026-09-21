@@ -45,6 +45,22 @@ def electrode_shapes(manifest, reference):
     return shapes
 
 
+def hyperkalemia_qrs_shapes(manifest, chest, reference):
+    # Re-author the continuous components, not sign-wise gain on sampled ECG.
+    # Fraction arithmetic keeps the offline table deterministic.
+    r = Fraction(manifest['r_gain_permille'], 1000)
+    terminal = Fraction(manifest['s_gain_permille'], 1000)
+    landmarks = reference['tables']['Qrs']['landmarks']
+    modified_reference = {**reference, 'tables': {**reference['tables'], 'Qrs': {
+        **reference['tables']['Qrs'], 'landmarks': [
+            [phase, amplitude * (r if phase == 56 else terminal if phase == 88 else 1)]
+            for phase, amplitude in landmarks]}}}
+    modified_chest = {**chest, 'chest_component_microvolts': [
+        [q, main * r, s * terminal] for q, main, s in chest['chest_component_microvolts']]}
+    shapes = electrode_shapes(modified_chest, modified_reference)
+    return {name: shape for name, shape in shapes.items() if name not in ('PWeightsQ32', 'TWeightsQ32')}
+
+
 def ventricular_shapes(manifest, chest):
     phases = [sample_shape({'length': chest['phase_length'], 'landmarks': chest['phase_landmarks'][name]})
               for name in ['Early', 'Main', 'Terminal']]
@@ -210,6 +226,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    high_k_qrs = json.loads((root / 'eng/physiology/hyperkalemia-qrs-voltage.json').read_text())
     pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(), parse_float=Fraction)
     arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
     capnogram = json.loads((root / 'eng/physiology/infirmary-capnogram.json').read_text())
@@ -287,6 +304,8 @@ def main():
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PlethPulseTables.cs': render(
             'Monitor.Simulation.Physiology', 'PlethPulseTables', pleth['tables']),
+        root / 'src/Monitor.Simulation/Physiology/HyperkalemiaQrsTables.cs': render(
+            'Monitor.Simulation.Physiology', 'HyperkalemiaQrsTables', hyperkalemia_qrs_shapes(high_k_qrs, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/TextbookElectrodeQrsTables.cs': render(
             'Monitor.Simulation.Physiology', 'TextbookElectrodeQrsTables', electrode_shapes(chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/TextbookEcgTables.cs': render(

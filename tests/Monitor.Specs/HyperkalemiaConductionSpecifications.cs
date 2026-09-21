@@ -8,6 +8,7 @@ internal static class HyperkalemiaConductionSpecifications
     public static Specification[] All =>
     [
         new(nameof(HighKConductionChangesSharedTimingAndMorphology), HighKConductionChangesSharedTimingAndMorphology),
+        new(nameof(HighKQrsVoltageChangesProjectedRAndS), HighKQrsVoltageChangesProjectedRAndS),
         new(nameof(HighKAbsentPRemovesAtrialEventsOnly), HighKAbsentPRemovesAtrialEventsOnly),
         new(nameof(HighKConductionRestoresAcrossDelayedQrsAndT), HighKConductionRestoresAcrossDelayedQrsAndT),
     ];
@@ -24,7 +25,7 @@ internal static class HyperkalemiaConductionSpecifications
         for (int i = 0; i < 10; i++)
         {
             Check.That(electrodes[i].Bands[0].DurationNs == 140_000_000 && electrodes[i].Bands[1].DurationNs == 140_000_000, "P and QRS supports broaden");
-            Check.That(electrodes[i].Bands[1].TableQ32.SequenceEqual(ordinary[i].Bands[1].TableQ32), "QRS duration changes without inventing a bundle-block pattern");
+            Check.That(electrodes[i].Bands[1].DelayNs == 0, "QRS begins at the same shared event");
         }
         for (int i = 0; i < 35; i++)
             for (int lead = 0; lead < 12; lead++)
@@ -38,6 +39,29 @@ internal static class HyperkalemiaConductionSpecifications
         Check.That(samples.All(s => Math.Abs(s.MicrovoltValues[0] + s.MicrovoltValues[2] - s.MicrovoltValues[1]) <= 1), "limb identities hold");
         var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HyperkalemiaConductionReference.CreateLeadIIBands()).GenerateBefore(1_000_000_000, 250, 100);
         Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitor II shares all delayed components");
+    }
+    private static void HighKQrsVoltageChangesProjectedRAndS()
+    {
+        var plan = HyperkalemiaConductionReference.CreatePlan();
+        var changed = HyperkalemiaConductionReference.CreateElectrodes();
+        var reference = TextbookElectrodeReference.CreateElectrodes(timing: HyperkalemiaConductionReference.Timing);
+        IReadOnlyList<ElectrodeSignalSample> Qrs(IReadOnlyList<ElectrodeWaveformPlan> electrodes) =>
+            ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1,
+                electrodes.Select(e => e with { Bands = [e.Bands[1]] }).ToArray()).GenerateBefore(1_000_000_000, 250, 100);
+        var actual = Qrs(changed); var normal = Qrs(reference);
+        foreach (int lead in new[] { 0, 1, 2, 6, 7, 8, 9, 10, 11 })
+        {
+            long r = actual.Max(s => s.MicrovoltValues[lead]), oldR = normal.Max(s => s.MicrovoltValues[lead]);
+            long s = -actual.Min(v => v.MicrovoltValues[lead]), oldS = -normal.Min(v => v.MicrovoltValues[lead]);
+            Check.That(r > oldR * 60 / 100 && r < oldR * 70 / 100, "projected R attenuated with no time shift");
+            Check.That(s > oldS * 125 / 100 && s < oldS * 135 / 100, "projected S deeper");
+        }
+        Check.That(actual.All(s => Math.Abs(s.MicrovoltValues[0] + s.MicrovoltValues[2] - s.MicrovoltValues[1]) <= 1), "limb identities preserved after offline authoring");
+        // Normal and modified Q are identical before main ventricular activation.
+        Check.That(actual.Where(s => s.Tick.SimTimeNs < 257_000_000).Zip(normal).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "early Q unchanged");
+        var absent = HyperkalemiaConductionReference.CreateElectrodes(true);
+        for (int i = 0; i < 10; i++)
+            Check.That(changed[i].Bands[1].TableQ32.SequenceEqual(absent[i].Bands[0].TableQ32), "same voltage morphology with and without P");
     }
     private static void HighKAbsentPRemovesAtrialEventsOnly()
     {

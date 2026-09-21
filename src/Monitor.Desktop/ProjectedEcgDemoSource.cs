@@ -6,7 +6,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -107,11 +107,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         { throw new EventWaveformException("Hyperkalemia.ConflictingModes", "configuration"); }
         if (HyperkalemiaConduction && !HyperkalemiaRepolarization)
         { throw new EventWaveformException("Hyperkalemia.ConflictingModes", "configuration"); }
-        if (HypokalemiaTuFusion && !HypokalemiaRepolarization)
+        if ((HypokalemiaTuFusion || HypokalemiaInvertedT) && !HypokalemiaRepolarization)
         { throw new EventWaveformException("Hypokalemia.ConflictingModes", "configuration"); }
         if (HypokalemiaRepolarization)
         {
-            if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard, HypokalemiaTuFusion = false } != Hypokalemia)
+            if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard, HypokalemiaTuFusion = false, HypokalemiaInvertedT = false } != Hypokalemia)
             { throw new EventWaveformException("Hypokalemia.ConflictingModes", "configuration"); }
             return HypokalemiaRepolarizationReference.Timing;
         }
@@ -247,7 +247,7 @@ internal static class ProjectedEcgDemoSource
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
         var electrodes = configuration.HypokalemiaRepolarization
-            ? HypokalemiaRepolarizationReference.CreateElectrodes(configuration.HypokalemiaTuFusion)
+            ? HypokalemiaRepolarizationReference.CreateElectrodes(configuration.HypokalemiaTuFusion, configuration.HypokalemiaInvertedT)
             : configuration.HyperkalemiaRepolarization
             ? configuration.HyperkalemiaFusion ? HyperkalemiaFusionReference.CreateElectrodes() : configuration.HyperkalemiaConduction ? HyperkalemiaConductionReference.CreateElectrodes(configuration.HyperkalemiaAbsentP) : HyperkalemiaRepolarizationReference.CreateElectrodes()
             : configuration.BundleBlock != EcgBundleBlockIllustration.Reference

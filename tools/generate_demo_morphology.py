@@ -45,6 +45,81 @@ def electrode_shapes(manifest, reference):
     return shapes
 
 
+def digitalis_joined_shapes(manifest, chest, reference):
+    # Author one QRS-ST-T source per electrode. Joining after lead projection
+    # allows the rS-dominant anterior leads to retain their original contour.
+    electrodes = electrode_shapes(chest, reference)
+    unit = 1 << 32
+    times = [Fraction(i * 5, 8) for i in range(512)]
+    def lookup(values, position):
+        index = int(position)
+        if index >= len(values):
+            return Fraction(0)
+        last = values[index + 1] if index + 1 < len(values) else 0
+        return Fraction(values[index]) + (last - values[index]) * (position - index)
+    qrs = {name: [lookup(shape['values_q32'], ms * Fraction(128, 80))
+                  if ms < 80 else Fraction(0) for ms in times]
+           for name, shape in electrodes.items() if name not in ('PWeightsQ32', 'TWeightsQ32')}
+    wilson = [(r + l + f) / 3 for r, l, f in zip(qrs['RA'], qrs['LA'], qrs['LL'])]
+    leads = {'I': [l - r for l, r in zip(qrs['LA'], qrs['RA'])],
+             'II': [f - r for f, r in zip(qrs['LL'], qrs['RA'])]}
+    leads.update({f'V{i}': [c - w for c, w in zip(qrs[f'C{i}'], wilson)] for i in range(1, 7)})
+    weights = dict(zip(['RA', 'LA', 'RL', 'LL', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'],
+                       manifest['authored_choices']['electrode_weights_permille']))
+    mean_weight = Fraction(weights['RA'] + weights['LA'] + weights['LL'], 3)
+    lead_weights = {'I': weights['LA'] - weights['RA'], 'II': weights['LL'] - weights['RA']}
+    lead_weights.update({f'V{i}': weights[f'C{i}'] - mean_weight for i in range(1, 7)})
+    authored = manifest['qrs_st_join']
+    shoulder, trough = authored['shoulder_ms'], authored['trough_ms']
+    def hermite(x, x0, x1, y0, y1, m0, m1):
+        t = Fraction(x - x0, x1 - x0)
+        return ((2*t**3 - 3*t**2 + 1)*y0 + (t**3 - 2*t**2 + t)*(x1-x0)*m0
+                + (-2*t**3 + 3*t**2)*y1 + (t**3 - t**2)*(x1-x0)*m1)
+    result = {}
+    offsets = manifest['authored_choices']['phase_offsets_ms']
+    for shape_name, shape in manifest['tables'].items():
+        st = sample_shape(shape)
+        st_values = []
+        for ms in times:
+            offset = ms - 60
+            value = Fraction(0)
+            if offset >= 0:
+                for j, (start, end) in enumerate(zip(offsets, offsets[1:])):
+                    if start <= offset < end:
+                        value = lookup(st, 32*j + (offset-start)*Fraction(32, end-start))
+                        break
+            st_values.append(value)
+        joined = {}
+        for name, original in leads.items():
+            gain = Fraction(lead_weights[name], 1000)
+            values = [q + s*gain for q, s in zip(original, st_values)]
+            if name in authored['leads']:
+                peak_index = max(range(128), key=lambda i: original[i])
+                peak = times[peak_index]
+                y0, y1, y2 = original[peak_index], authored['shoulder_microvolts']*unit*gain, st_values[trough*8//5]*gain
+                h0, h1 = shoulder-peak, trough-shoulder
+                d0, d1 = (y1-y0)/h0, (y2-y1)/h1
+                if not (d0 < 0 and d1 < 0):
+                    raise ValueError('digitalis join must descend from R to ST trough')
+                # Monotone PCHIP interior derivative: no artificial zero slope
+                # at the shoulder, and the same derivative on both sides.
+                w0, w1 = 2*h1+h0, h1+2*h0
+                slope = Fraction(w0+w1) / (w0/d0+w1/d1)
+                for index in range(peak_index, trough*8//5):
+                    ms = times[index]
+                    values[index] = (hermite(ms, peak, shoulder, y0, y1, 0, slope) if ms < shoulder
+                                  else hermite(ms, shoulder, trough, y1, y2, slope, 0))
+            joined[name] = values
+        ra = [(-i-ii)/3 for i, ii in zip(joined['I'], joined['II'])]
+        la = [r+i for r, i in zip(ra, joined['I'])]
+        ll = [r+ii for r, ii in zip(ra, joined['II'])]
+        # Zero-sum limb gauge; chest values are already relative to Wilson.
+        output = [ra, la, [0]*512, ll] + [joined[f'V{i}'] for i in range(1, 7)]
+        for name, values in zip(['RA', 'LA', 'RL', 'LL', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'], output):
+            result[f'{shape_name}_{name}'] = {'values_q32': [round(v) for v in values]}
+    return result
+
+
 def hyperkalemia_qrs_shapes(manifest, chest, reference):
     # Re-author the continuous components, not sign-wise gain on sampled ECG.
     # Fraction arithmetic keeps the offline table deterministic.
@@ -311,6 +386,8 @@ def main():
             'Monitor.Simulation.Physiology', 'QuinidineEffectTables', quinidine['tables']),
         root / 'src/Monitor.Simulation/Physiology/DigitalisEffectTables.cs': render(
             'Monitor.Simulation.Physiology', 'DigitalisEffectTables', digitalis['tables']),
+        root / 'src/Monitor.Simulation/Physiology/DigitalisJoinedTables.cs': render(
+            'Monitor.Simulation.Physiology', 'DigitalisJoinedTables', digitalis_joined_shapes(digitalis, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/HyperkalemiaFusionTables.cs': render(
             'Monitor.Simulation.Physiology', 'HyperkalemiaFusionTables', high_k_fusion['tables']),
         root / 'src/Monitor.Simulation/Physiology/HyperkalemiaQrsTables.cs': render(

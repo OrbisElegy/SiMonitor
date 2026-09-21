@@ -125,5 +125,20 @@
     "No drug dose, concentration, toxicity or arrhythmia model",
     "Other drug effects and rhythm combinations remain open"
   ],
-  "variants_evidence": "DigitalisTVariantsIllustration@1"
+  "variants_evidence": "DigitalisTVariantsIllustration@1",
+  "qrs_st_join": {
+    "leads": [
+      "I",
+      "II",
+      "V4",
+      "V5",
+      "V6"
+    ],
+    "shoulder_ms": 60,
+    "shoulder_microvolts": 20,
+    "trough_ms": 150,
+    "method": "Offline exact-rational monotone Hermite from original sampled R peak through shoulder to original ST trough; shared nonzero shoulder derivative, zero derivatives at peak/trough. Preserve V1-V3 original projected composite. Reconstruct zero-sum limb electrodes; preserve limb identities. 512 samples at0.625ms; original terminal ST-T after150ms.",
+    "reason": "Original terminal S recovery plus additive ST depression produced rebound, not continuous fish-hook descent.",
+    "limits": "Authored selected-lead illustration, not every digitalis ECG or a dose-response model."
+  }
 }

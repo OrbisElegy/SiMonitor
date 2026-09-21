@@ -83,6 +83,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox ChestStArchInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestJInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox ChestStEndInput { get; } = new() { Text = "0", Width = 65 };
+    internal ComboBox DigitalisShapeInput { get; } = new() { ItemsSource = new[] { "洋地黄：鱼钩型终末直立T", "洋地黄：低平T", "洋地黄：倒置T" }, SelectedIndex = 0 };
     internal CheckBox DigitalisInput { get; } = new() { Content = "洋地黄效应示例（非中毒判定）" };
     internal Button DigitalisButton { get; } = new() { Content = "载入洋地黄效应（重置参数）" };
     internal ComboBox CalciumInput { get; } = new() { ItemsSource = new[] { "钙相关示例关闭", "高钙样：短ST／短QT", "低钙样：长ST／长QT／窄T", "高钙样：ST消失", "低钙样：低平T", "低钙样：倒置T" }, SelectedIndex = 0 };
@@ -325,6 +326,7 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(TScaleInputs[index]);
             }
             settings.Children.Add(DigitalisInput);
+            settings.Children.Add(DigitalisShapeInput);
             settings.Children.Add(DigitalisButton);
             settings.Children.Add(CalciumInput);
             settings.Children.Add(CalciumButton);
@@ -477,7 +479,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         DigitalisButton.Click += (_, _) =>
         {
-            if (!_closed && _projected) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Digitalis); }
+            if (!_closed && _projected && DigitalisShapeInput.SelectedIndex is >= 0 and <= 2) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.Digitalis with { DigitalisShape = (DigitalisTShape)DigitalisShapeInput.SelectedIndex }); }
         };
         CalciumButton.Click += (_, _) =>
         {
@@ -840,7 +842,7 @@ internal sealed class WaveformDemoWindow : Window
             var selectedActivity = (CardiacActivity)CardiacActivityInput.SelectedIndex;
             var ecgActivity = (HyperkalemiaAbsentPInput.IsChecked == true) != EcgConfiguration.HyperkalemiaAbsentP &&
                 selectedActivity == EcgConfiguration.CardiacActivity ? configuration.CardiacActivity : selectedActivity;
-            configuration = configuration with { DigitalisEffect = DigitalisInput.IsChecked == true, Calcium = (CalciumIllustration)CalciumInput.SelectedIndex, HypokalemiaConduction = HypokalemiaConductionInput.IsChecked == true, HypokalemiaInvertedT = HypokalemiaInvertedTInput.IsChecked == true, HyperkalemiaFusion = HyperkalemiaFusionInput.IsChecked == true, HyperkalemiaAbsentP = HyperkalemiaAbsentPInput.IsChecked == true, HyperkalemiaConduction = HyperkalemiaConductionInput.IsChecked == true, HypokalemiaTuFusion = HypokalemiaFusionInput.IsChecked == true, HypokalemiaRepolarization = HypokalemiaInput.IsChecked == true, HyperkalemiaRepolarization = HyperkalemiaInput.IsChecked == true, IllustrateAfAberrancy = afAberrancy, BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = ecgActivity, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
+            configuration = configuration with { DigitalisShape = DigitalisInput.IsChecked == true ? (DigitalisTShape)DigitalisShapeInput.SelectedIndex : DigitalisTShape.FishHook, DigitalisEffect = DigitalisInput.IsChecked == true, Calcium = (CalciumIllustration)CalciumInput.SelectedIndex, HypokalemiaConduction = HypokalemiaConductionInput.IsChecked == true, HypokalemiaInvertedT = HypokalemiaInvertedTInput.IsChecked == true, HyperkalemiaFusion = HyperkalemiaFusionInput.IsChecked == true, HyperkalemiaAbsentP = HyperkalemiaAbsentPInput.IsChecked == true, HyperkalemiaConduction = HyperkalemiaConductionInput.IsChecked == true, HypokalemiaTuFusion = HypokalemiaFusionInput.IsChecked == true, HypokalemiaRepolarization = HypokalemiaInput.IsChecked == true, HyperkalemiaRepolarization = HyperkalemiaInput.IsChecked == true, IllustrateAfAberrancy = afAberrancy, BundleBlock = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, ConductionPattern = ConductionSelection.Pattern(ConductionInput.SelectedIndex), ConductedBeatsPerGroup = ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, TContour = contour, Ventricular = (EcgVentricularIllustration)VentricularInput.SelectedIndex, Atrial = (EcgAtrialIllustration)AtrialInput.SelectedIndex, Zones = zones, Infarction = infarction.ChestMask == 0 && infarction.Stage == InfarctionIllustrationStage.None && infarction.Territory == InfarctionTerritory.CustomChest && infarction.RepolarizationDelayNs == 0 && infarction.Components is null ? null : infarction, Fusion = fusion == ProjectedEcgFusionConfiguration.Default ? null : fusion, ChestStArchMicrovolts = chestArch, ChestP = pWave, ChestJMicrovolts = chestJ, ChestStEndMicrovolts = chestEnd, TWave = tWave == ProjectedEcgTConfiguration.Default ? null : tWave, IndependentVentricularOffsetMilliseconds = independentOffset, IndependentVentricularPeriodMilliseconds = independentPeriod, UWave = u == ProjectedEcgUConfiguration.Default ? null : u, CardiacActivity = ecgActivity, Placement = (EcgLimbPlacement)LimbPlacementInput.SelectedIndex };
             Reset(UsesPulse, configuration);
         }
         catch (EventWaveformException error) when (error.ReasonCode == "Digitalis.ConflictingModes")
@@ -1094,6 +1096,7 @@ internal sealed class WaveformDemoWindow : Window
             HypokalemiaConductionInput.IsChecked = configuration.HypokalemiaConduction;
             CalciumInput.SelectedIndex = (int)configuration.Calcium;
             DigitalisInput.IsChecked = configuration.DigitalisEffect;
+            DigitalisShapeInput.SelectedIndex = (int)configuration.DigitalisShape;
             HypokalemiaInput.IsChecked = configuration.HypokalemiaRepolarization;
             HyperkalemiaFusionInput.IsChecked = configuration.HyperkalemiaFusion;
             HyperkalemiaAbsentPInput.IsChecked = configuration.HyperkalemiaAbsentP;
@@ -1115,7 +1118,7 @@ internal sealed class WaveformDemoWindow : Window
             TPeakInput.Text = tWave.PeakPositionPermille is { } peak ? (peak / 10m).ToString("0.#", CultureInfo.InvariantCulture) : "";
             for (int index = 0; index < TScaleInputs.Length; index++)
             { TScaleInputs[index].Text = (tWave.ChestScales[index] / 1000m).ToString("0.###", CultureInfo.InvariantCulture); }
-            string waveTiming = configuration.DigitalisEffect ? "P100／PR160／QRS80ms；ST–T复合鱼钩型，T时限不单独标注" : configuration.HyperkalemiaFusion ? "无P；PR不适用；QRS–T融合，独立QRS/T/QT不可辨；复合轮廓720ms" : configuration.HyperkalemiaAbsentP ? "无P；PR不适用；QRS140/T160ms；首次QRS偏移240ms仅为源时序" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? (configuration.IllustrateAfAberrancy ? "无正常P；f波不规则；普通QRS80/QT300 ms，差异传导QRS140/QT400 ms" : "无正常P；f波不规则；QRS80 ms；T140 ms") : AtrialFlutterReference.IsPattern(configuration.ConductionPattern)
+            string waveTiming = configuration.DigitalisEffect ? "P100／PR160／QRS80ms；ST–T复合轮廓，T时限不单独标注" : configuration.HyperkalemiaFusion ? "无P；PR不适用；QRS–T融合，独立QRS/T/QT不可辨；复合轮廓720ms" : configuration.HyperkalemiaAbsentP ? "无P；PR不适用；QRS140/T160ms；首次QRS偏移240ms仅为源时序" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? (configuration.IllustrateAfAberrancy ? "无正常P；f波不规则；普通QRS80/QT300 ms，差异传导QRS140/QT400 ms" : "无正常P；f波不规则；QRS80 ms；T140 ms") : AtrialFlutterReference.IsPattern(configuration.ConductionPattern)
                 ? "F周期200 ms（无正常P）；QRS80 ms；T140 ms"
                 : string.Create(CultureInfo.InvariantCulture, $"P/模板PR/QRS/T {timing.PDurationNs / 1_000_000m:0.###}/{configuration.PrIntervalMilliseconds}/{timing.QrsDurationNs / 1_000_000m:0.###}/{configuration.TDurationMilliseconds} ms");
             string rateSummary = configuration.ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? "房率300次/分；平均室率100次/分，RR400/600/800ms" : PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? $"基础窦性{configuration.HeartRateBpm}次/分；含室早，RR非等间距" : PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含交界性早搏，RR非等间距" : PrematureAtrialReference.IsPattern(configuration.ConductionPattern) ? "基础窦性75次/分；含房早，RR非等间距" : AtrialFibrillationReference.IsPattern(configuration.ConductionPattern) ? "长期平均室率75次/分（当前RR不固定）"
@@ -1125,7 +1128,7 @@ internal sealed class WaveformDemoWindow : Window
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{(configuration.HyperkalemiaAbsentP ? "规则心室事件，房室比例不可由P波判读" : ConductionInput.SelectedItem)}；{(configuration.HyperkalemiaAbsentP ? "无可测PR" : ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern))}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "（P/PR为窦性搏动；逆行P′80ms，位置见传导摘要）" : "")}{(PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? "（以上时限为窦性搏动；室早无相关P，具体时限见传导摘要，T220ms）" : "")}；{(configuration.HyperkalemiaFusion ? "QT不单独标注" : $"QT {timing.QtIntervalNs / 1_000_000m:0.###} ms")}{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
                 (configuration.HypokalemiaRepolarization ? configuration.HypokalemiaTuFusion ? "；低钾T-u融合：u于源T末前100ms开始、时限350ms；源QT400ms不等于可测QT，QT-u650ms；融合曲线不提供独立T末测量" : "；低钾样ST压低／低幅T／增高u；模板u延迟30ms、时限220ms，QT-u650ms（不计入QT）" : "") +
-                (configuration.DigitalisEffect ? "；洋地黄效应固定例：下垂型ST压低、终末窄直立T、QT320ms；非剂量或中毒模型" : "") +
+                (configuration.DigitalisEffect ? $"；{DigitalisShapeInput.SelectedItem}；下垂型ST压低、QT320ms；非剂量或中毒模型" : "") +
                 (configuration.Calcium switch
                 {
                     CalciumIllustration.High => "；高钙样固定例：ST40ms、QT300ms",

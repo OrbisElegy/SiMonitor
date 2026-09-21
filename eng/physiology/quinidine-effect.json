@@ -35,16 +35,45 @@
       200,
       150,
       100
-    ]
+    ],
+    "optional_P_notch": "Two rounded peaks150 microvolts with shallow125 microvolt notch; original electrode weights and120ms support retained. Authored illustration, not measured drug response."
   },
   "limitations": [
     "No concentration/dose/toxicity model",
-    "No P notch or associated AV block, VT/torsades inference",
+    "No associated AV block, VT/torsades inference",
     "No derived mechanical or perfusion impairment; mechanical delay remains authored80ms"
   ],
   "verification": [
     "QuinidineSeparatesLongQtFromProminentU",
     "QuinidineRestoresAndRejectsUnknownModes",
-    "QuinidineSmokeChecks"
-  ]
+    "QuinidineSmokeChecks",
+    "QuinidineNotchChangesOnlyP"
+  ],
+  "tables": {
+    "NotchedP": {
+      "length": 128,
+      "landmarks": [
+        [
+          0,
+          0
+        ],
+        [
+          40,
+          150
+        ],
+        [
+          64,
+          125
+        ],
+        [
+          88,
+          150
+        ],
+        [
+          128,
+          0
+        ]
+      ]
+    }
+  }
 }

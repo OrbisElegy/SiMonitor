@@ -6,7 +6,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false, bool HypokalemiaConduction = false, CalciumIllustration Calcium = CalciumIllustration.Reference, bool DigitalisEffect = false, DigitalisTShape DigitalisShape = DigitalisTShape.FishHook, QuinidineIllustration Quinidine = QuinidineIllustration.Reference)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false, bool HypokalemiaConduction = false, CalciumIllustration Calcium = CalciumIllustration.Reference, bool DigitalisEffect = false, DigitalisTShape DigitalisShape = DigitalisTShape.FishHook, QuinidineIllustration Quinidine = QuinidineIllustration.Reference, bool QuinidineNotchedP = false)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -17,11 +17,13 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         { Calcium = mode, HeartRateBpm = 60, TDurationMilliseconds = (int)(timing.TDurationNs / 1_000_000) };
     }
 
-    internal static ProjectedEcgDemoConfiguration QuinidinePreset(QuinidineIllustration mode)
+    internal static ProjectedEcgDemoConfiguration QuinidinePreset(QuinidineIllustration mode, bool notchedP = false)
     {
         if (!Enum.IsDefined(mode)) { throw new EventWaveformException("Quinidine.InvalidMode", nameof(mode)); }
+        if (mode == QuinidineIllustration.Reference && notchedP)
+        { throw new EventWaveformException("Quinidine.ConflictingModes", nameof(notchedP)); }
         return mode == QuinidineIllustration.Reference ? Default : Default with
-        { Quinidine = mode, HeartRateBpm = 60, PDurationMilliseconds = 120, PrIntervalMilliseconds = 200 };
+        { Quinidine = mode, QuinidineNotchedP = notchedP, HeartRateBpm = 60, PDurationMilliseconds = 120, PrIntervalMilliseconds = 200 };
     }
 
     internal static ProjectedEcgDemoConfiguration Digitalis { get; } = Default with
@@ -122,9 +124,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal EcgCycleTiming ResolveTiming()
     {
         if (!Enum.IsDefined(Quinidine)) { throw new EventWaveformException("Quinidine.InvalidMode", "configuration"); }
+        if (Quinidine == QuinidineIllustration.Reference && QuinidineNotchedP)
+        { throw new EventWaveformException("Quinidine.ConflictingModes", "configuration"); }
         if (Quinidine != QuinidineIllustration.Reference)
         {
-            if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard } != QuinidinePreset(Quinidine))
+            if (!Enum.IsDefined(Placement) || this with { Placement = EcgLimbPlacement.Standard } != QuinidinePreset(Quinidine, QuinidineNotchedP))
             { throw new EventWaveformException("Quinidine.ConflictingModes", "configuration"); }
             return QuinidineEffectReference.Timing;
         }
@@ -288,7 +292,7 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine)
+        var electrodes = configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine, configuration.QuinidineNotchedP)
             : configuration.DigitalisEffect ? DigitalisEffectReference.CreateElectrodes(configuration.DigitalisShape)
             : configuration.Calcium != CalciumIllustration.Reference
             ? CalciumRepolarizationReference.CreateElectrodes(configuration.Calcium)

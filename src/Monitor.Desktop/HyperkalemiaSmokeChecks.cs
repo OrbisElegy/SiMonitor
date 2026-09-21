@@ -15,14 +15,15 @@ internal static class HyperkalemiaSmokeChecks
         void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         try
         {
-            foreach (bool conduction in new[] { false, true })
+            foreach (var (conduction, absentP) in new[] { (false, false), (true, false), (true, true) })
             {
                 Click(window.VentricularDisorganizationButton);
                 Click(window.StepButton); Click(window.RunButton);
                 var oldTimer = window.ActiveTimer;
                 window.HyperkalemiaConductionInput.IsChecked = conduction;
+                window.HyperkalemiaAbsentPInput.IsChecked = absentP;
                 Click(window.HyperkalemiaButton); window.Pulse(oldTimer);
-                var config = conduction ? ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction : ProjectedEcgDemoConfiguration.Hyperkalemia;
+                var config = absentP ? ProjectedEcgDemoConfiguration.HyperkalemiaWithoutP : conduction ? ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction : ProjectedEcgDemoConfiguration.Hyperkalemia;
                 if (window.EcgConfiguration != config || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.BlockCount != 0)
                 { throw new InvalidOperationException("Hyperkalemia loader retained disorganized source/timer."); }
                 Click(window.ApplyEcgButton);
@@ -37,6 +38,14 @@ internal static class HyperkalemiaSmokeChecks
                 }
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), conduction ? 140 : 90, [EcgLead.I, EcgLead.II, EcgLead.AVR, EcgLead.V2, EcgLead.V4, EcgLead.V6]);
                 if (conduction) { EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), 80, [EcgLead.V1, EcgLead.V5]); }
+                if (absentP)
+                {
+                    foreach (var block in blocks.Where(b => b.StartSimTimeNs == 0))
+                        if (block.Planes.Any(p => p.Samples.Any(v => v != 0)))
+                        { throw new InvalidOperationException("Absent-P preset still produces P samples."); }
+                    try { ProjectedEcgDemoSource.Create(config with { CardiacActivity = CardiacActivity.AtrialAndVentricular }); throw new InvalidOperationException("Atrial activity accepted in absent-P preset."); }
+                    catch (EventWaveformException e) when (e.ReasonCode == "Hyperkalemia.ConflictingModes") { }
+                }
                 var restored = ElectrodeWaveformGroup.Restore(source.CaptureState());
                 var a = source.AdvanceTo(6_200_000_000, 50, 1, 100);
                 var b = restored.AdvanceTo(6_200_000_000, 50, 1, 100);
@@ -48,8 +57,17 @@ internal static class HyperkalemiaSmokeChecks
                 if (window.EcgConfiguration != config || window.Trace != trace || window.ActiveTimer != timer || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
                 { throw new InvalidOperationException("Conflicting hyperkalemia edit changed accepted state."); }
                 Click(window.ResetButton);
-                if (window.HyperkalemiaConductionInput.IsChecked != conduction || window.HyperkalemiaInput.IsChecked != true || window.TContourInput.SelectedIndex != 0)
+                if (window.HyperkalemiaAbsentPInput.IsChecked != absentP || window.HyperkalemiaConductionInput.IsChecked != conduction || window.HyperkalemiaInput.IsChecked != true || window.TContourInput.SelectedIndex != 0)
                 { throw new InvalidOperationException("Hyperkalemia reset lost accepted state."); }
+                if (absentP)
+                {
+                    window.HyperkalemiaAbsentPInput.IsChecked = false; Click(window.ApplyEcgButton);
+                    if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction)
+                    { throw new InvalidOperationException("Leaving absentP did not restore authored atrial activity."); }
+                    window.HyperkalemiaAbsentPInput.IsChecked = true; Click(window.ApplyEcgButton);
+                    if (window.EcgConfiguration != config)
+                    { throw new InvalidOperationException("Returning to absentP did not suppress atrial activity."); }
+                }
                 foreach (var invalid in new[] { config with { IllustrateAfAberrancy = true }, config with { QrsDurationMilliseconds = 160 }, config with { VentricularConductionRatio = 2 }, config with { Placement = (EcgLimbPlacement)99 } })
                 {
                     try { ProjectedEcgDemoSource.Create(invalid); }
@@ -62,6 +80,7 @@ internal static class HyperkalemiaSmokeChecks
                     if (window.EcgConfiguration != config || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
                     { throw new InvalidOperationException("Orphan high-K conduction accepted."); }
                 }
+                window.HyperkalemiaAbsentPInput.IsChecked = false;
                 window.HyperkalemiaConductionInput.IsChecked = false;
                 window.HyperkalemiaInput.IsChecked = false; Click(window.ApplyEcgButton);
                 if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default)

@@ -7,12 +7,14 @@ namespace Monitor.Simulation.Physiology;
 public static class HyperkalemiaConductionReference
 {
     public const string EvidenceId = "HyperkalemiaConductionIllustration@1";
+    public const string AbsentPEvidenceId = "HyperkalemiaAbsentPIllustration@1";
     public static EcgCycleTiming Timing { get; } = new(1_000_000_000, 140_000_000,
         240_000_000, 140_000_000, 440_000_000, 160_000_000);
-    public static RegularPhysiologyPlan CreatePlan() => new(0, Timing.RrIntervalNs,
-        Timing.PrIntervalNs, 80_000_000, Timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000);
+    public static RegularPhysiologyPlan CreatePlan(bool absentP = false) => new(0, Timing.RrIntervalNs,
+        Timing.PrIntervalNs, 80_000_000, Timing.PrIntervalNs + 80_000_000, 3_750_000_000, 1_875_000_000,
+        CardiacActivity: absentP ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular);
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool absentP = false)
     {
         int[] st = [40, 0, 0, -40, -50, -80, -100, -100, -80, -60];
         var source = TextbookElectrodeReference.CreateElectrodes(timing: Timing, stSegment: new(st, st));
@@ -30,12 +32,22 @@ public static class HyperkalemiaConductionReference
                 _ => band,
             }).ToArray()),
         }).ToArray());
+        if (absentP)
+        {
+            // This authored example suppresses effective atrial excitation,
+            // not the ventricular timing grid; it is not a sinus-node model.
+            output = Array.AsReadOnly(output.Select(electrode => electrode with
+            {
+                Bands = Array.AsReadOnly(electrode.Bands.Where(band =>
+                    band.Trigger != PhysiologyCycleEventKind.AtrialElectrical).ToArray()),
+            }).ToArray());
+        }
         return ElectrodeWaveformComposition.Restore(new(output, [])).CaptureState().Electrodes;
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool absentP = false)
     {
-        var electrodes = CreateElectrodes();
+        var electrodes = CreateElectrodes(absentP);
         return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
             electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
             { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());

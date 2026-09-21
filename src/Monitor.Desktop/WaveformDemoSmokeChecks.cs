@@ -25,6 +25,7 @@ internal static class WaveformDemoSmokeChecks
         HypokalemiaSmokeChecks.Verify();
         CalciumSmokeChecks.Verify();
         DigitalisSmokeChecks.Verify();
+        QuinidineSmokeChecks.Verify();
         PrematureAtrialSmokeChecks.Verify();
         JunctionalEscapeSmokeChecks.Verify();
         AtrialFlutterSmokeChecks.Verify();

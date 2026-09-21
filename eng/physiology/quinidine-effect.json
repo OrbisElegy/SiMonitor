@@ -7,7 +7,7 @@
     "pages": "496"
   },
   "textbook_summary": [
-    "Quinidine-related QT prolongation, low or inverted T, prominent U, slightly wider P and longer PR."
+    "Quinidine-related QT prolongation, low or inverted T, prominent U, slightly wider P and longer PR. Textbook also describes marked QT and QRS prolongation with toxicity; the new fixed variants illustrate these waveforms without diagnosing toxicity."
   ],
   "authored_choices": {
     "RR_P_PR_QRS_QT_T_ms": [
@@ -36,18 +36,32 @@
       150,
       100
     ],
-    "optional_P_notch": "Two rounded peaks150 microvolts with shallow125 microvolt notch; original electrode weights and120ms support retained. Authored illustration, not measured drug response."
+    "optional_P_notch": "Two rounded peaks150 microvolts with shallow125 microvolt notch; original electrode weights and120ms support retained. Authored illustration, not measured drug response.",
+    "wide_QRS_variants": {
+      "modes": [
+        "WideQrsLowT",
+        "WideQrsInvertedT"
+      ],
+      "QRS_QT_QU_ms": [
+        140,
+        560,
+        790
+      ],
+      "unchanged": "RR1000/P120/PR200/T180; U delay30/duration200; original component gains and normalized QRS contour; mechanical delay80ms"
+    }
   },
   "limitations": [
     "No concentration/dose/toxicity model",
     "No associated AV block, VT/torsades inference",
-    "No derived mechanical or perfusion impairment; mechanical delay remains authored80ms"
+    "No derived mechanical or perfusion impairment; mechanical delay remains authored80ms",
+    "Wide QRS is an authored uniform temporal expansion, not a spatial conduction or toxicokinetic model. No automatic AV block, bradycardia, torsades or perfusion effect."
   ],
   "verification": [
     "QuinidineSeparatesLongQtFromProminentU",
     "QuinidineRestoresAndRejectsUnknownModes",
     "QuinidineSmokeChecks",
-    "QuinidineNotchChangesOnlyP"
+    "QuinidineNotchChangesOnlyP",
+    "QuinidineWideQrsRetainsEventsAndSeparatesQtFromU"
   ],
   "tables": {
     "NotchedP": {

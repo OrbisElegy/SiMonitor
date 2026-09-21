@@ -1,0 +1,47 @@
+{
+  "id": "CalciumRepolarizationIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "495"
+  },
+  "textbook_summary": [
+    "High calcium shortens ST/QT; low calcium prolongs ST/QT and may narrow upright T."
+  ],
+  "textbook_figures": [
+    "5-1-102",
+    "5-1-103"
+  ],
+  "authored_choices": {
+    "RR_ms": 1000,
+    "P_ms": 100,
+    "PR_ms": 160,
+    "QRS_ms": 80,
+    "reference_QT_T_ST_ms": [
+      400,
+      180,
+      140
+    ],
+    "high_QT_T_ST_ms": [
+      300,
+      180,
+      40
+    ],
+    "low_QT_T_ST_ms": [
+      460,
+      120,
+      260
+    ]
+  },
+  "limitations": [
+    "Fixed illustrations, not digitized patient ECG or calcium concentration mapping",
+    "No arrhythmia inference or perfusion change",
+    "Other low-calcium T morphologies and absent-ST high-calcium variants remain open"
+  ],
+  "verification": [
+    "CalciumChangesStAndQtWithoutMovingDepolarization",
+    "CalciumRecoveryAndInvalidModeAreDeterministic",
+    "CalciumSmokeChecks"
+  ]
+}

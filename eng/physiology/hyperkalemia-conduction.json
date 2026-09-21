@@ -28,7 +28,7 @@
     "mechanical_from_P": 320
   },
   "P_scale": "one third",
-  "QRS": "Reference topology time-expanded, no bundle-block label or claimed R/S voltage remodelling",
+  "QRS": "Reference timing expanded; R/S voltage illustration composed via HyperkalemiaQrsVoltageIllustration@1, without bundle-block label",
   "ST_electrode_microvolt": [
     40,
     0,
@@ -45,8 +45,8 @@
   "limitations": [
     "No potassium concentration/severity model",
     "No automatic evolution",
-    "No absent P or sine-wave fusion",
-    "R/S voltage variants remain open",
+    "No sine-wave fusion; optional absent P documented separately",
+    "Other R/S voltage variants remain open",
     "No derived pump/perfusion impairment"
   ],
   "verification": [

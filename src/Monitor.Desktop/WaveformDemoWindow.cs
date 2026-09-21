@@ -325,7 +325,7 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(HyperkalemiaButton);
             settings.Children.Add(HyperkalemiaConductionInput);
             settings.Children.Add(HyperkalemiaAbsentPInput);
-            settings.Children.Add(new TextBlock { Text = "高钾样复极：复极例75次/分、QT300/T120ms；传导例60次/分、P140/PR240/QRS140/QT440/T160ms、低幅P和ST压低；不对应血钾浓度。载入清除其他形态设置；取消勾选可返回参考编辑。" });
+            settings.Children.Add(new TextBlock { Text = "高钾样复极：复极例75次/分、QT300/T120ms；传导例60次/分、P140/PR240/QRS140/QT440/T160ms、低幅P、R降低/S加深及ST压低；不对应血钾浓度。载入清除其他形态设置；取消勾选可返回参考编辑。" });
             settings.Children.Add(TContourInput);
             settings.Children.Add(TContourLeadInput);
             settings.Children.Add(new TextBlock { Text = "T轮廓峰幅（μV，1～2000；单相正向/普通倒置允许0压平）" });
@@ -1086,7 +1086,7 @@ internal sealed class WaveformDemoWindow : Window
                 : string.Create(CultureInfo.InvariantCulture,
                 $"已应用接线：{LimbPlacementInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；{rateSummary}；{(configuration.HyperkalemiaAbsentP ? "规则心室事件，房室比例不可由P波判读" : ConductionInput.SelectedItem)}；{(configuration.HyperkalemiaAbsentP ? "无可测PR" : ConductionSelection.Summary(configuration.VentricularConductionRatio, configuration.ConductedBeatsPerGroup, configuration.ConductionPattern))}；{configuration.MethodId ?? "固定示意（不使用 QTc）"}；QT参考RR {timing.RrIntervalNs / 1_000_000m:0.###} ms；{waveTiming}{(PrematureJunctionalReference.IsPattern(configuration.ConductionPattern) ? "（P/PR为窦性搏动；逆行P′80ms，位置见传导摘要）" : "")}{(PrematureVentricularReference.IsPattern(configuration.ConductionPattern) ? "（以上时限为窦性搏动；室早无相关P，具体时限见传导摘要，T220ms）" : "")}；QT {timing.QtIntervalNs / 1_000_000m:0.###} ms{(configuration.ConductionPattern == AvConductionPattern.AberrantPrematureAtrialIllustration ? "（以上时限仅指窦性搏动；房早使用独立140/400/180ms QRS/QT/T）" : "")}") +
                 (configuration.HypokalemiaRepolarization ? configuration.HypokalemiaTuFusion ? "；低钾T-u融合：u于源T末前100ms开始、时限350ms；源QT400ms不等于可测QT，QT-u650ms；融合曲线不提供独立T末测量" : "；低钾样ST压低／低平T／增高u；模板u延迟30ms、时限220ms，QT-u650ms（不计入QT）" : "") +
-                (configuration.HyperkalemiaRepolarization ? configuration.HyperkalemiaAbsentP ? "；高钾无P教学例：保留规则宽QRS/ST压低/高尖T；不据此诊断窦停或逸搏" : configuration.HyperkalemiaConduction ? "；高钾传导受损教学例：宽低P、长PR、宽QRS、ST压低和高尖T（非浓度模型）" : "；高钾样弥漫高尖T／短QT教学例（非浓度或诊断模型）" : "") +
+                (configuration.HyperkalemiaRepolarization ? configuration.HyperkalemiaAbsentP ? "；高钾无P教学例：保留规则宽QRS（R降低/S加深）/ST压低/高尖T；不据此诊断窦停或逸搏" : configuration.HyperkalemiaConduction ? "；高钾传导受损教学例：宽低P、长PR、宽QRS（R降低/S加深）、ST压低和高尖T（非浓度模型）" : "；高钾样弥漫高尖T／短QT教学例（非浓度或诊断模型）" : "") +
                 (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}（含继发ST–T）" : "") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.Zones is not null ? "" : !infarction.HasActiveRegion ? "；阶段示意关闭" : $"；{(infarction.Components is null ? InfarctionStageInput.SelectedItem : "独立组合")}／{InfarctionTerritoryInput.SelectedItem}（仅自选模式使用勾选项）：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +

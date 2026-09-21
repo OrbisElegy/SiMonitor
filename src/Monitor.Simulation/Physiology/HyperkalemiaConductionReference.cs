@@ -7,6 +7,7 @@ namespace Monitor.Simulation.Physiology;
 public static class HyperkalemiaConductionReference
 {
     public const string EvidenceId = "HyperkalemiaConductionIllustration@1";
+    public const string QrsVoltageEvidenceId = "HyperkalemiaQrsVoltageIllustration@1";
     public const string AbsentPEvidenceId = "HyperkalemiaAbsentPIllustration@1";
     public static EcgCycleTiming Timing { get; } = new(1_000_000_000, 140_000_000,
         240_000_000, 140_000_000, 440_000_000, 160_000_000);
@@ -19,6 +20,10 @@ public static class HyperkalemiaConductionReference
         int[] st = [40, 0, 0, -40, -50, -80, -100, -100, -80, -60];
         var source = TextbookElectrodeReference.CreateElectrodes(timing: Timing, stSegment: new(st, st));
         var peaked = HyperkalemiaRepolarizationReference.CreateElectrodes();
+        IReadOnlyList<long>[] qrs = [HyperkalemiaQrsTables.RA, HyperkalemiaQrsTables.LA,
+            HyperkalemiaQrsTables.RL, HyperkalemiaQrsTables.LL, HyperkalemiaQrsTables.C1,
+            HyperkalemiaQrsTables.C2, HyperkalemiaQrsTables.C3, HyperkalemiaQrsTables.C4,
+            HyperkalemiaQrsTables.C5, HyperkalemiaQrsTables.C6];
         var output = Array.AsReadOnly(source.Select((electrode, i) => electrode with
         {
             Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index switch
@@ -28,6 +33,7 @@ public static class HyperkalemiaConductionReference
                     TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value =>
                     (long)FixedPointMath.RoundDivideTiesToEven(value, 3)).ToArray())
                 },
+                1 => band with { TableQ32 = qrs[i] },
                 2 => band with { TableQ32 = peaked[i].Bands[2].TableQ32, PhasePoints = null },
                 _ => band,
             }).ToArray()),

@@ -1,0 +1,30 @@
+{
+  "id": "HyperkalemiaQrsVoltageIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第七节",
+    "pages": "493-494"
+  },
+  "textbook_figures": [
+    "5-1-98"
+  ],
+  "r_gain_permille": 650,
+  "s_gain_permille": 1300,
+  "authored_choices": {
+    "notes": [
+      "Limb reference R/S landmarks and chest main/terminal components re-authored offline with Fraction arithmetic. Preserve early Q and component timing; electrode projection preserves limb identities and Wilson reference. Exact gains are authored, not potassium concentration calibration."
+    ]
+  },
+  "application": "High-K conduction and absent-P variants; early peaked-T/short-QT example unchanged.",
+  "limitations": [
+    "No sine-wave QRS-T fusion",
+    "No anatomical or concentration model",
+    "Other QRS patterns remain open"
+  ],
+  "verification": [
+    "HighKQrsVoltageChangesProjectedRAndS",
+    "HighKConductionRestoresAcrossDelayedQrsAndT",
+    "HyperkalemiaSmokeChecks"
+  ]
+}

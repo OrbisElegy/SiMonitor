@@ -31,11 +31,12 @@
     "One authored absentP mechanism, not all causes",
     "No sinus/internodal electrophysiology or escape diagnosis",
     "No derived perfusion impairment",
-    "No sine-wave fusion or R/S voltage remodelling"
+    "No sine-wave fusion; other R/S voltage patterns remain open"
   ],
   "verification": [
     "HighKAbsentPRemovesAtrialEventsOnly",
     "HighKConductionRestoresAcrossDelayedQrsAndT",
     "HyperkalemiaSmokeChecks"
-  ]
+  ],
+  "QRS_voltage_evidence": "HyperkalemiaQrsVoltageIllustration@1"
 }

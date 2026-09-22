@@ -15,7 +15,9 @@ public static class LeftBundleBlockReference
         VentricularConductionRatio: 4, ConductedBeatsPerGroup: 3,
         ConductionPattern: AvConductionPattern.MobitzTwoLbbbFourToThreeIllustration);
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes() => CreateElectrodes(Timing);
+
+    internal static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgCycleTiming timing)
     {
         IReadOnlyList<long>[] qrs = [LeftBundleBlockTables.RA, LeftBundleBlockTables.LA,
             LeftBundleBlockTables.RL, LeftBundleBlockTables.LL, LeftBundleBlockTables.C1,
@@ -23,8 +25,8 @@ public static class LeftBundleBlockReference
             LeftBundleBlockTables.C5, LeftBundleBlockTables.C6];
         long peak = TextbookEcgTables.T.Max();
         var st = new EcgStSegmentPlan([40, -80, 0, 40, 60, 60, 40, -30, -80, -70],
-            [50, -100, 0, 50, 80, 80, 60, -50, -100, -90]).CreateBands(Timing);
-        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((electrode, i) => electrode with
+            [50, -100, 0, 50, 80, 80, 60, -50, -100, -90]).CreateBands(timing);
+        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: timing).Select((electrode, i) => electrode with
         {
             Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index switch
             {

@@ -8,12 +8,13 @@ internal static class BundleBlockSpecifications
     public static Specification[] All =>
     [
         new(nameof(StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII), StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII),
+        new(nameof(IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms), IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms),
         new(nameof(IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt), IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt),
     ];
 
     private static void StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII()
     {
-        foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft })
+        foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft })
         {
             var plan = BundleBlockReference.CreatePlan(mode);
             var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(6_400_000_000, 100);
@@ -33,9 +34,9 @@ internal static class BundleBlockSpecifications
             var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
             Check.That(source.GenerateBefore(3_200_000_000, 742, 100).Zip(restored.GenerateBefore(3_200_000_000, 742, 100))
                 .All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "restore within QRS preserves full fourth beat");
-            var reference = BundleBlockReference.CreateElectrodes(mode == EcgBundleBlockIllustration.CompleteLeft ? mode : EcgBundleBlockIllustration.CompleteRight);
+            var reference = BundleBlockReference.CreateElectrodes(mode is EcgBundleBlockIllustration.CompleteLeft or EcgBundleBlockIllustration.IncompleteLeft ? EcgBundleBlockIllustration.CompleteLeft : EcgBundleBlockIllustration.CompleteRight);
             Check.That(electrodes.Zip(reference).All(p => p.First.Bands[0].TableQ32.SequenceEqual(p.Second.Bands[0].TableQ32)), "P unchanged");
-            if (mode != EcgBundleBlockIllustration.IncompleteRight)
+            if (mode is EcgBundleBlockIllustration.CompleteRight or EcgBundleBlockIllustration.CompleteLeft)
             {
                 var old = mode == EcgBundleBlockIllustration.CompleteRight ? RightBundleBlockReference.CreateElectrodes() : LeftBundleBlockReference.CreateElectrodes();
                 var oldPlan = mode == EcgBundleBlockIllustration.CompleteRight ? RightBundleBlockReference.CreatePlan() : LeftBundleBlockReference.CreatePlan();
@@ -43,11 +44,44 @@ internal static class BundleBlockSpecifications
                 Check.That(samples.Take(200).Zip(oldBeat).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "existing complete BBB morphology byte stable");
             }
         }
-        foreach (var invalid in new[] { EcgBundleBlockIllustration.Reference, (EcgBundleBlockIllustration)(-1), (EcgBundleBlockIllustration)4 })
+        foreach (var invalid in new[] { EcgBundleBlockIllustration.Reference, (EcgBundleBlockIllustration)(-1), (EcgBundleBlockIllustration)99 })
         {
             try { BundleBlockReference.CreateElectrodes(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "EcgBundleBlock.InvalidMode") { continue; }
             throw new InvalidOperationException("Unknown bundle illustration accepted.");
+        }
+    }
+
+    private static void IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms()
+    {
+        const EcgBundleBlockIllustration mode = EcgBundleBlockIllustration.IncompleteLeft;
+        var timing = BundleBlockReference.Timing(mode);
+        Check.That(timing.QrsDurationNs == 110_000_000 && timing.QtIntervalNs == 420_000_000 && timing.StDurationNs == 130_000_000, "110ms QRS with recalculated ST support, QT unchanged");
+        var electrodes = BundleBlockReference.CreateElectrodes(mode);
+        Check.That(electrodes.All(e => e.Bands[1].DurationNs == 110_000_000), "shared 110ms ventricular support");
+        var samples = ElectrodeSignalGenerator.Start(BundleBlockReference.CreatePlan(mode), "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
+        int V(int index, EcgLead lead) => samples[index].MicrovoltValues[(int)lead];
+        foreach (var lead in new[] { EcgLead.I, EcgLead.V5, EcgLead.V6 })
+        {
+            Check.That(Enumerable.Range(40, 12).All(i => V(i, lead) >= 0), "lateral initial q absent");
+            Check.That(V(51, lead) > V(55, lead) + 80 && V(59, lead) > V(55, lead) + 150, "lateral notched R within shorter QRS");
+            Check.That(V(70, lead) < -40 && V(125, lead) < -100, "secondary ST/T opposite dominant lateral R");
+        }
+        foreach (var lead in new[] { EcgLead.V1, EcgLead.V2 })
+        {
+            Check.That(lead == EcgLead.V1 ? Enumerable.Range(41, 25).All(i => V(i, lead) < 0) :
+                V(42, lead) > 20 && Enumerable.Range(45, 21).All(i => V(i, lead) < 0), "V1 QS and V2 small-r deep-S retained");
+            Check.That(V(70, lead) > 40 && V(125, lead) > 100, "secondary anterior ST/T upright");
+        }
+        Check.That(samples.Skip(145).All(s => s.MicrovoltValues.All(v => v == 0)), "QT420 ends at580ms without residual ventricular signal");
+        foreach (long boundary in new[] { 268_000_000L, 270_000_000, 272_000_000, 400_000_000, 578_000_000 })
+        {
+            var source = ElectrodeSignalGenerator.Start(BundleBlockReference.CreatePlan(mode), "AcqECGMonitor250@1", 1, electrodes);
+            source.GenerateBefore(boundary, 200, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            var a = source.GenerateBefore(1_600_000_000, 400, 100);
+            var b = restored.GenerateBefore(1_600_000_000, 400, 100);
+            Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "QRS/ST/T boundary recovery exact");
         }
     }
 

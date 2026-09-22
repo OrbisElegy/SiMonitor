@@ -17,7 +17,7 @@ internal static class BundleBlockSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft })
+                foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft })
                 {
                     // Exercise resets from both a disorganized and a dropped-beat source.
                     foreach (bool priorBlock in new[] { false, true })

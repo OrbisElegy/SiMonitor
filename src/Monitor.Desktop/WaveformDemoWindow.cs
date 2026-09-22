@@ -117,7 +117,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button VentricularDisorganizationButton { get; } = new() { Content = "载入室扑／室颤示例（重置参数）" };
     internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）", "二度Ⅱ型4:3＋完全RBBB", "二度Ⅱ型4:3＋完全LBBB" }, SelectedIndex = 0 };
-    internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）" }, SelectedIndex = 0 };
+    internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）", "不完全LBBB（1:1）" }, SelectedIndex = 0 };
     internal Button BundleBlockButton { get; } = new() { Content = "载入束支阻滞示例（重置参数）" };
     internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
     internal Button PrematureVentricularButton { get; } = new() { Content = "载入单形室早示例（重置参数）" };
@@ -509,7 +509,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         BundleBlockButton.Click += (_, _) =>
         {
-            if (_closed || BundleBlockInput.SelectedIndex is < 0 or > 3) { return; }
+            if (_closed || BundleBlockInput.SelectedIndex is < 0 or > 4) { return; }
             var mode = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex;
             Reset(UsesPulse, BundleBlockPreset.Ecg(mode), BundleBlockPreset.Physiology(mode));
         };

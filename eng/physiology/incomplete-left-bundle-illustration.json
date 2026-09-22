@@ -1,0 +1,34 @@
+{
+  "id": "IncompleteLeftBundleIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "489"
+  },
+  "textbook_summary": [
+    "LBBB morphology; QRS < 120 ms described as incomplete; resemblance to LVH limits interpretation."
+  ],
+  "authored_choices": {
+    "QRS_ms": 110,
+    "RR_P_PR_QT_T_ms": [
+      800,
+      100,
+      160,
+      420,
+      180
+    ],
+    "conduction": "1:1; ventricular electrical160ms and mechanical240ms in each800ms cycle",
+    "morphology": "Existing left-bundle QRS contour compressed to110ms; V1 QS/V2 rS, lateral notched R without initial q; retain secondary ST-T vector, recompute ST support130ms."
+  },
+  "limitations": [
+    "Fixed illustration, not diagnostic discrimination from LVH or every incomplete LBBB variant",
+    "No automatic AV block, mechanical impairment or anatomical conduction simulation",
+    "Original complete LBBB and MobitzII examples unchanged"
+  ],
+  "verification": [
+    "IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms",
+    "StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII",
+    "BundleBlockSmokeChecks"
+  ]
+}

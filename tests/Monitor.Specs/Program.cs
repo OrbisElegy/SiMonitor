@@ -63,6 +63,7 @@ internal static class Program
             .. LeftBundleBlockSpecifications.All,
             .. BundleBlockSpecifications.All,
             .. WpwSpecifications.All,
+            .. ShortPrSpecifications.All,
             .. PrematureAtrialSpecifications.All,
             .. BlockedPrematureAtrialSpecifications.All,
             .. AberrantPrematureAtrialSpecifications.All,

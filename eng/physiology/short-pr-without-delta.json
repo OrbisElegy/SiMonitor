@@ -1,0 +1,33 @@
+{
+  "id": "ShortPrWithoutDeltaIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "492"
+  },
+  "textbook_summary": [
+    "LGL: PR < 120 ms, no delta at QRS onset."
+  ],
+  "authored_choices": {
+    "RR_P_PR_QRS_QT_T_ms": [
+      800,
+      80,
+      100,
+      80,
+      400,
+      180
+    ],
+    "electrodes": "Unmodified TextbookElectrodeReference component tables, retimed only",
+    "mechanical_delay_ms": 80
+  },
+  "limitations": [
+    "Fixed short-PR/no-delta morphology only, not LGL diagnosis or pathway anatomy",
+    "No inferred AVRT, pump impairment or automatic rhythm evolution"
+  ],
+  "verification": [
+    "ShortPrHasNormalQrsAndEarlySharedEvents",
+    "ShortPrRestoresAcrossComponentBoundaries",
+    "ShortPrSmokeChecks"
+  ]
+}

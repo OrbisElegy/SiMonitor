@@ -67,6 +67,7 @@ internal static class Program
             .. NormalPrDeltaSpecifications.All,
             .. SvtSpecifications.All,
             .. VtSpecifications.All,
+            .. VtPerfusionSpecifications.All,
             .. SvtPerfusionSpecifications.All,
             .. PrematureAtrialSpecifications.All,
             .. BlockedPrematureAtrialSpecifications.All,

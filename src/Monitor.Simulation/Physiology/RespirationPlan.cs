@@ -30,7 +30,9 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
             long[] artifact = Enumerable.Range(0, count).Select(index => checked(
                 (RespirationTables.Cycle[(index + count / 4) % count] -
                  RespirationTables.Cycle[(index + 3 * count / 4) % count]) * CardiacArtifactCounts)).ToArray();
-            bands.Add(new(PhysiologyCycleEventKind.VentricularMechanical, 0, physiology.HeartPeriodNs,
+            // Independent faster ventricles must not stack multiple full atrial-cycle artifacts.
+            long support = Math.Min(physiology.HeartPeriodNs, physiology.IndependentVentricularPeriodNs ?? physiology.HeartPeriodNs);
+            bands.Add(new(PhysiologyCycleEventKind.VentricularMechanical, 0, support,
                 Array.AsReadOnly(artifact)));
         }
         return new(physiology, new(channelId, "AcqResp125@1", 1, 1, 0, 1), bands.AsReadOnly(), 10, qualityFlags);

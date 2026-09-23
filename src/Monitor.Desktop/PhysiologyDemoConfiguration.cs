@@ -8,10 +8,11 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125,
     int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0,
     int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0,
-    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false)
+    RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false)
 {
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
+    internal static PhysiologyDemoConfiguration VtPreset { get; } = Default with { Vt = true };
     internal static PhysiologyDemoConfiguration SvtPreset { get; } = Default with { Svt = true };
     internal static PhysiologyDemoConfiguration NormalPrDeltaPreset { get; } = Default with { NormalPrDelta = true };
     internal static PhysiologyDemoConfiguration ShortPrPreset { get; } = Default with { ShortPr = true };
@@ -72,6 +73,12 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
 
     internal RegularPhysiologyPlan ResolvePlan()
     {
+        if (Vt && (Svt || NormalPrDelta || ProlongedPrDelta || ShortPr || Wpw || WpwNegativeV1 || WpwSmallerDelta ||
+            BundleBlock != EcgBundleBlockIllustration.Reference || ConductionPattern != AvConductionPattern.FixedPr ||
+            VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+            IndependentVentricularPeriodMilliseconds is not null || IndependentVentricularOffsetMilliseconds is not null ||
+            IllustrateAfSystemicPulseDeficit || IllustrateAfAberrancy || !UseVascularReservoir))
+        { throw new EventWaveformException("Vt.ConflictingModes", "configuration"); }
         if (Svt && (NormalPrDelta || ProlongedPrDelta || ShortPr || Wpw || WpwNegativeV1 || WpwSmallerDelta ||
             BundleBlock != EcgBundleBlockIllustration.Reference || ConductionPattern != AvConductionPattern.FixedPr ||
             VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
@@ -123,10 +130,10 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern);
         var timing = Svt ? SupraventricularTachycardiaReference.Timing : NormalPrDelta ? NormalPrDeltaReference.ResolveTiming(ProlongedPrDelta) : ShortPr ? ShortPrReference.Timing : Wpw ? WpwReference.ResolveTiming(WpwSmallerDelta) : prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
-        long offset = Svt ? 0 : DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
-        return new(0, ConductionPattern == AvConductionPattern.InterpolatedPvcIllustration ? 1_000_000_000 : fibrillation || prematureBeat ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
+        long offset = Vt ? 120_000_000 : Svt ? 0 : DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
+        return new(0, Vt ? 800_000_000 : ConductionPattern == AvConductionPattern.InterpolatedPvcIllustration ? 1_000_000_000 : fibrillation || prematureBeat ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
             offset + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,
-            ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, RespiratoryPattern, ConductedBeatsPerGroup, Svt ? AvConductionPattern.NarrowComplexSvtIllustration : ConductionPattern);
+            ActivityDurationBreaths is { } durationCount ? (ulong)durationCount : null, VentricularConductionRatio, CardiacActivity, VentricularMechanicalEnabled, MechanicalAfterCycles is { } mechanicalCycles ? (ulong)mechanicalCycles : null, MechanicalDurationCycles is { } durationCycles ? (ulong)durationCycles : null, MechanicalEveryCycles, Vt ? 375_000_000 : IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, RespiratoryPattern, ConductedBeatsPerGroup, Vt ? AvConductionPattern.MonomorphicVtIllustration : Svt ? AvConductionPattern.NarrowComplexSvtIllustration : ConductionPattern);
     }
 }

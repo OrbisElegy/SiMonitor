@@ -21,6 +21,7 @@ internal static class WaveformDemoSmokeChecks
         ConductionRatioSmokeChecks.Verify();
         SecondDegreeBlockSmokeChecks.Verify();
         BundleBlockSmokeChecks.Verify();
+        WpwSmokeChecks.Verify();
         HyperkalemiaSmokeChecks.Verify();
         HypokalemiaSmokeChecks.Verify();
         CalciumSmokeChecks.Verify();

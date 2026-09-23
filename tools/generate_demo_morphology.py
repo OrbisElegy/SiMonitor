@@ -17,10 +17,14 @@ def sample_shape(shape):
                           for power, coefficient in enumerate(coefficients)) * (1 << 32))
                 for index in range(shape['length'])]
     values = []
-    for (start, first), (end, last) in zip(shape['landmarks'], shape['landmarks'][1:]):
+    slopes = shape.get('slopes')
+    for segment, ((start, first), (end, last)) in enumerate(zip(shape['landmarks'], shape['landmarks'][1:])):
         for index in range(start, end):
             t = Fraction(index - start, end - start)
-            values.append(round((first + (last - first) * (3 * t * t - 2 * t * t * t)) * (1 << 32)))
+            value = first + (last-first)*(3*t*t-2*t*t*t)
+            if slopes is not None:
+                value += (end-start)*((t**3-2*t*t+t)*Fraction(*slopes[segment]) + (t**3-t*t)*Fraction(*slopes[segment+1]))
+            values.append(round(value * (1 << 32)))
     if len(values) != shape['length']:
         raise ValueError('landmarks must span the declared table length')
     return values
@@ -318,6 +322,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    wpw = json.loads((root / 'eng/physiology/wpw-positive-v1.json').read_text())
     lpfb = json.loads((root / 'eng/physiology/left-posterior-fascicular-illustration.json').read_text())
     lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text())
     quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
@@ -353,6 +358,8 @@ def main():
     rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
     lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/WpwTables.cs': render(
+            'Monitor.Simulation.Physiology', 'WpwTables', conduction_shapes(wpw)),
         root / 'src/Monitor.Simulation/Physiology/LeftPosteriorFascicularTables.cs': render(
             'Monitor.Simulation.Physiology', 'LeftPosteriorFascicularTables', fascicular_shapes(lpfb, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/LeftAnteriorFascicularTables.cs': render(

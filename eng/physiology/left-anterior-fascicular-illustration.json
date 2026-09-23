@@ -1,0 +1,82 @@
+{
+  "id": "LeftAnteriorFascicularIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "490"
+  },
+  "textbook_summary": [
+    "I/aVL qR; II/III/aVF rS.",
+    "Integrated QRS frontal direction within -45 to -90 degrees."
+  ],
+  "authored_choices": {
+    "RR_P_PR_QRS_QT_T_ms": [
+      800,
+      100,
+      160,
+      100,
+      400,
+      180
+    ],
+    "limb_qrs_shapes": {
+      "I": {
+        "length": 128,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            -80
+          ],
+          [
+            76,
+            900
+          ],
+          [
+            128,
+            0
+          ]
+        ]
+      },
+      "II": {
+        "length": 128,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            60
+          ],
+          [
+            76,
+            -700
+          ],
+          [
+            128,
+            0
+          ]
+        ]
+      }
+    },
+    "conduction": "1:1; mechanical delay80ms",
+    "projection": "derive RA/LA/LL from I/II in zero-sum gauge; preserve reference chest QRS relative to Wilson; P/T retained"
+  },
+  "constraints": [
+    "aVL R peak at least45ms; QRS100ms below120ms"
+  ],
+  "limitations": [
+    "Authored fixed vector and timing, not calibrated anatomical conduction or automated diagnosis",
+    "Optional poor chest R progression, deep lateral S and V1 QS variants not implemented",
+    "No inferred perfusion impairment or other rhythm combination"
+  ],
+  "verification": [
+    "LeftAnteriorFascicularHasRegionalQrRsAndLeftAxis",
+    "StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII",
+    "BundleBlockSmokeChecks"
+  ]
+}

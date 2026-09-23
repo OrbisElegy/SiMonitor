@@ -120,6 +120,23 @@ def digitalis_joined_shapes(manifest, chest, reference):
     return result
 
 
+def left_anterior_fascicular_shapes(manifest, chest, reference):
+    original = electrode_shapes(chest, reference)
+    leads = {name: sample_shape(shape) for name, shape in
+             manifest['authored_choices']['limb_qrs_shapes'].items()}
+    ra = [round(Fraction(-i-ii, 3)) for i, ii in zip(leads['I'], leads['II'])]
+    la = [r+i for r, i in zip(ra, leads['I'])]
+    ll = [r+ii for r, ii in zip(ra, leads['II'])]
+    old_mean = [Fraction(r+l+f, 3) for r, l, f in zip(
+        original['RA']['values_q32'], original['LA']['values_q32'], original['LL']['values_q32'])]
+    new_mean = [Fraction(r+l+f, 3) for r, l, f in zip(ra, la, ll)]
+    values = [ra, la, [0]*128, ll] + [
+        [round(c-old+new) for c, old, new in zip(original[f'C{i}']['values_q32'], old_mean, new_mean)]
+        for i in range(1, 7)]
+    return {name: {'values_q32': value} for name, value in zip(
+        ['RA', 'LA', 'RL', 'LL', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'], values)}
+
+
 def hyperkalemia_qrs_shapes(manifest, chest, reference):
     # Re-author the continuous components, not sign-wise gain on sampled ECG.
     # Fraction arithmetic keeps the offline table deterministic.
@@ -301,6 +318,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text())
     quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
     digitalis = json.loads((root / 'eng/physiology/digitalis-effect.json').read_text())
     high_k_fusion = json.loads((root / 'eng/physiology/hyperkalemia-fusion.json').read_text())
@@ -334,6 +352,8 @@ def main():
     rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
     lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/LeftAnteriorFascicularTables.cs': render(
+            'Monitor.Simulation.Physiology', 'LeftAnteriorFascicularTables', left_anterior_fascicular_shapes(lafb, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/LeftBundleBlockTables.cs': render(
             'Monitor.Simulation.Physiology', 'LeftBundleBlockTables', conduction_shapes(lbbb)),
         root / 'src/Monitor.Simulation/Physiology/RightBundleBlockTables.cs': render(

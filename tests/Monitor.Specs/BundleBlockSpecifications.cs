@@ -8,13 +8,14 @@ internal static class BundleBlockSpecifications
     public static Specification[] All =>
     [
         new(nameof(StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII), StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII),
+        new(nameof(LeftAnteriorFascicularHasRegionalQrRsAndLeftAxis), LeftAnteriorFascicularHasRegionalQrRsAndLeftAxis),
         new(nameof(IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms), IncompleteLeftBundleKeepsLeftSidedMorphologyWithin110Ms),
         new(nameof(IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt), IncompleteRightBundleHasShorterRsRPrimeWithoutChangingQt),
     ];
 
     private static void StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII()
     {
-        foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft })
+        foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft, EcgBundleBlockIllustration.LeftAnteriorFascicular })
         {
             var plan = BundleBlockReference.CreatePlan(mode);
             var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(6_400_000_000, 100);
@@ -49,6 +50,42 @@ internal static class BundleBlockSpecifications
             try { BundleBlockReference.CreateElectrodes(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "EcgBundleBlock.InvalidMode") { continue; }
             throw new InvalidOperationException("Unknown bundle illustration accepted.");
+        }
+    }
+
+    private static void LeftAnteriorFascicularHasRegionalQrRsAndLeftAxis()
+    {
+        const EcgBundleBlockIllustration mode = EcgBundleBlockIllustration.LeftAnteriorFascicular;
+        var timing = BundleBlockReference.Timing(mode);
+        Check.That(timing.QrsDurationNs == 100_000_000 && timing.QtIntervalNs == 400_000_000, "mildly prolonged100ms QRS with QT400ms");
+        var plan = BundleBlockReference.CreatePlan(mode);
+        var electrodes = BundleBlockReference.CreateElectrodes(mode);
+        var a = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
+        var reference = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, TextbookElectrodeReference.CreateElectrodes(timing: timing)).GenerateBefore(800_000_000, 200, 100);
+        foreach (var lead in new[] { EcgLead.I, EcgLead.AVL })
+        {
+            Check.That(a[43].MicrovoltValues[(int)lead] < -50 && a[55].MicrovoltValues[(int)lead] > 800, "lateral qR");
+        }
+        foreach (var lead in new[] { EcgLead.II, EcgLead.III, EcgLead.AVF })
+        {
+            Check.That(a[43].MicrovoltValues[(int)lead] > 40 && a[55].MicrovoltValues[(int)lead] < -600, "inferior rS");
+        }
+        var qrs = a.Where(s => s.Tick.SimTimeNs is >= 160_000_000 and < 260_000_000).ToArray();
+        var peak = qrs.MaxBy(s => s.MicrovoltValues[(int)EcgLead.AVL])!;
+        Check.That(peak.Tick.SimTimeNs - 160_000_000 >= 45_000_000, "aVL delayed R peak");
+        long i = qrs.Sum(s => (long)s.MicrovoltValues[0]), ii = qrs.Sum(s => (long)s.MicrovoltValues[1]);
+        // y=(2II-I)/sqrt(3). This integer inequality verifies -90<axis<=-45.
+        Check.That(i > 0 && ii < 0 && (Int128)(i - 2 * ii) * (i - 2 * ii) >= 3 * (Int128)i * i, "integrated QRS left-superior axis");
+        Check.That(a.Zip(reference).All(p => Enumerable.Range(6, 6).All(l => Math.Abs(p.First.MicrovoltValues[l] - p.Second.MicrovoltValues[l]) <= 1)), "reference chest contours preserved through Wilson rebase");
+        Check.That(a.Zip(reference).Where(p => p.First.Tick.SimTimeNs < 160_000_000 || p.First.Tick.SimTimeNs >= 260_000_000).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "P/ST/T unchanged");
+        foreach (long boundary in new[] { 158_000_000L, 218_000_000, 258_000_000, 260_000_000 })
+        {
+            var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
+            source.GenerateBefore(boundary, 200, 100);
+            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+            var first = source.GenerateBefore(1_600_000_000, 400, 100);
+            var second = restored.GenerateBefore(1_600_000_000, 400, 100);
+            Check.That(first.Count == second.Count && first.Zip(second).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "fascicular onset/peak/end recovery exact");
         }
     }
 

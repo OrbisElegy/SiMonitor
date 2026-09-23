@@ -2,7 +2,7 @@
 namespace Monitor.Simulation.Physiology;
 
 // Morphology is separate from AV conduction. These named examples use 1:1.
-public enum EcgBundleBlockIllustration { Reference, CompleteRight, IncompleteRight, CompleteLeft, IncompleteLeft }
+public enum EcgBundleBlockIllustration { Reference, CompleteRight, IncompleteRight, CompleteLeft, IncompleteLeft, LeftAnteriorFascicular }
 
 public static class BundleBlockReference
 {
@@ -13,6 +13,7 @@ public static class BundleBlockReference
         EcgBundleBlockIllustration.IncompleteRight => RightBundleBlockReference.Timing with { QrsDurationNs = 110_000_000 },
         EcgBundleBlockIllustration.CompleteLeft => LeftBundleBlockReference.Timing,
         EcgBundleBlockIllustration.IncompleteLeft => LeftBundleBlockReference.Timing with { QrsDurationNs = 110_000_000 },
+        EcgBundleBlockIllustration.LeftAnteriorFascicular => LeftAnteriorFascicularReference.Timing,
         _ => throw Invalid(),
     };
 
@@ -26,6 +27,7 @@ public static class BundleBlockReference
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgBundleBlockIllustration mode)
     {
         var timing = Timing(mode);
+        if (mode == EcgBundleBlockIllustration.LeftAnteriorFascicular) { return LeftAnteriorFascicularReference.CreateElectrodes(); }
         return mode is EcgBundleBlockIllustration.CompleteLeft or EcgBundleBlockIllustration.IncompleteLeft
             ? LeftBundleBlockReference.CreateElectrodes(timing) : RightBundleBlockReference.CreateElectrodes(timing);
     }

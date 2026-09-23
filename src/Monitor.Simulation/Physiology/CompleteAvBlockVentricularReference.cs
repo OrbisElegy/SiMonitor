@@ -23,14 +23,16 @@ public static class CompleteAvBlockVentricularReference
         return plan;
     }
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes() => CreateElectrodes(Timing);
+
+    internal static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgCycleTiming timing)
     {
         IReadOnlyList<long>[] qrs = [VentricularEscapeTables.RA, VentricularEscapeTables.LA,
             VentricularEscapeTables.RL, VentricularEscapeTables.LL, VentricularEscapeTables.C1,
             VentricularEscapeTables.C2, VentricularEscapeTables.C3, VentricularEscapeTables.C4,
             VentricularEscapeTables.C5, VentricularEscapeTables.C6];
         long peak = TextbookEcgTables.T.Max();
-        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((electrode, i) => electrode with
+        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: timing).Select((electrode, i) => electrode with
         {
             Bands = Array.AsReadOnly(electrode.Bands.Select((band, index) => index switch
             {

@@ -17,7 +17,7 @@ internal static class BundleBlockSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft, EcgBundleBlockIllustration.LeftAnteriorFascicular })
+                foreach (var mode in new[] { EcgBundleBlockIllustration.CompleteRight, EcgBundleBlockIllustration.IncompleteRight, EcgBundleBlockIllustration.CompleteLeft, EcgBundleBlockIllustration.IncompleteLeft, EcgBundleBlockIllustration.LeftAnteriorFascicular, EcgBundleBlockIllustration.LeftPosteriorFascicular })
                 {
                     // Exercise resets from both a disorganized and a dropped-beat source.
                     foreach (bool priorBlock in new[] { false, true })
@@ -41,7 +41,7 @@ internal static class BundleBlockSmokeChecks
                         var source = ProjectedEcgDemoSource.Create(window.EcgConfiguration);
                         var blocks = Enumerable.Range(1, 30).SelectMany(step => source.AdvanceTo(step * 200_000_000L, 50, 1, 100)).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
                         EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 40, [EcgLead.I, EcgLead.V1, EcgLead.V2, EcgLead.V5, EcgLead.V6]);
-                        if (mode == EcgBundleBlockIllustration.LeftAnteriorFascicular)
+                        if (mode is EcgBundleBlockIllustration.LeftAnteriorFascicular or EcgBundleBlockIllustration.LeftPosteriorFascicular)
                             EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 40, [EcgLead.II, EcgLead.III, EcgLead.AVL, EcgLead.AVF]);
                         EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 110, [EcgLead.V1, EcgLead.V5]);
                         EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 640, [EcgLead.V1, EcgLead.V5]);

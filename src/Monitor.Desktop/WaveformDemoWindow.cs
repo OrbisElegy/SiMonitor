@@ -117,7 +117,7 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox QtcInput { get; } = new() { Text = "400", Width = 70, IsEnabled = false };
     internal Button VentricularDisorganizationButton { get; } = new() { Content = "载入室扑／室颤示例（重置参数）" };
     internal ComboBox SecondDegreePresetInput { get; } = new() { ItemsSource = new[] { "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不据比例分型）", "二度Ⅱ型4:3＋完全RBBB", "二度Ⅱ型4:3＋完全LBBB" }, SelectedIndex = 0 };
-    internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）", "不完全LBBB（1:1）", "左前分支阻滞（1:1）" }, SelectedIndex = 0 };
+    internal ComboBox BundleBlockInput { get; } = new() { ItemsSource = new[] { "参考（无束支模板）", "完全RBBB（1:1）", "不完全RBBB（1:1）", "完全LBBB（1:1）", "不完全LBBB（1:1）", "左前分支阻滞（1:1）", "左后分支阻滞（1:1）" }, SelectedIndex = 0 };
     internal Button BundleBlockButton { get; } = new() { Content = "载入束支阻滞示例（重置参数）" };
     internal Button SecondDegreePresetButton { get; } = new() { Content = "载入二度阻滞示例（重置参数）" };
     internal Button PrematureVentricularButton { get; } = new() { Content = "载入单形室早示例（重置参数）" };
@@ -509,7 +509,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         BundleBlockButton.Click += (_, _) =>
         {
-            if (_closed || BundleBlockInput.SelectedIndex is < 0 or > 5) { return; }
+            if (_closed || BundleBlockInput.SelectedIndex is < 0 or > 6) { return; }
             var mode = (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex;
             Reset(UsesPulse, BundleBlockPreset.Ecg(mode), BundleBlockPreset.Physiology(mode));
         };
@@ -1157,7 +1157,7 @@ internal sealed class WaveformDemoWindow : Window
                 (configuration.HypokalemiaConduction ? "；低钾P幅度参考×1.5、QRS120ms；固定教学例，非浓度模型" : "") +
                 (configuration.HypokalemiaInvertedT ? "；低钾T分量倒置，u方向保持；重叠后合成曲线不保证全程负向" : "") +
                 (configuration.HyperkalemiaRepolarization ? configuration.HyperkalemiaFusion ? "；高钾正弦波样QRS–T融合固定例；无独立ST间隙，不对应浓度或自动演变" : configuration.HyperkalemiaAbsentP ? "；高钾无P教学例：保留规则宽QRS（R降低/S加深）/ST压低/高尖T；不据此诊断窦停或逸搏" : configuration.HyperkalemiaConduction ? "；高钾传导受损教学例：宽低P、长PR、宽QRS（R降低/S加深）、ST压低和高尖T（非浓度模型）" : "；高钾样弥漫高尖T／短QT教学例（非浓度或诊断模型）" : "") +
-                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}{(configuration.BundleBlock == EcgBundleBlockIllustration.LeftAnteriorFascicular ? "（固定左轴示例）" : "（含继发ST–T）")}" : "") +
+                (configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? $"；{BundleBlockInput.SelectedItem}{(configuration.BundleBlock == EcgBundleBlockIllustration.LeftAnteriorFascicular ? "（固定左轴示例）" : configuration.BundleBlock == EcgBundleBlockIllustration.LeftPosteriorFascicular ? "（固定右轴示例）" : "（含继发ST–T）")}" : "") +
                 (configuration.IndependentVentricularPeriodMilliseconds is { } independent ? $"；独立心室周期 {independent} ms、首次 QRS 偏移 {configuration.IndependentVentricularOffsetMilliseconds ?? configuration.PrIntervalMilliseconds} ms（后续 P-QRS 间隔不固定）" : "") +
                 (configuration.Zones is not null ? "" : !infarction.HasActiveRegion ? "；阶段示意关闭" : $"；{(infarction.Components is null ? InfarctionStageInput.SelectedItem : "独立组合")}／{InfarctionTerritoryInput.SelectedItem}（仅自选模式使用勾选项）：{string.Join("/", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))}（覆盖该处 QRS/ST/T）") +
                 (configuration.Zones is not null ? $"；三区域：缺血={IschemiaZoneInput.SelectedItem}，损伤={InjuryZoneInput.SelectedItem}，坏死={NecrosisZoneInput.SelectedItem}；缺血区域复极延长 {RepolarizationDelayInput.Text} ms（区域关闭时不生效）；使用组合 Q/ST/T 值，阶段及其他手动 ST/T/融合暂不生效" : "") +

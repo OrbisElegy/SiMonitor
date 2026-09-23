@@ -1,0 +1,82 @@
+{
+  "id": "LeftPosteriorFascicularIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "490"
+  },
+  "textbook_summary": [
+    "I/aVL rS; III/aVF qR.",
+    "Integrated QRS frontal direction within +90 to +180 degrees."
+  ],
+  "authored_choices": {
+    "RR_P_PR_QRS_QT_T_ms": [
+      800,
+      100,
+      160,
+      100,
+      400,
+      180
+    ],
+    "limb_qrs_shapes": {
+      "I": {
+        "length": 128,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            60
+          ],
+          [
+            76,
+            -600
+          ],
+          [
+            128,
+            0
+          ]
+        ]
+      },
+      "II": {
+        "length": 128,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            16,
+            -40
+          ],
+          [
+            76,
+            900
+          ],
+          [
+            128,
+            0
+          ]
+        ]
+      }
+    },
+    "conduction": "1:1; mechanical delay80ms",
+    "projection": "derive RA/LA/LL from I/II in zero-sum gauge; preserve reference chest QRS relative to Wilson; P/T retained"
+  },
+  "constraints": [
+    "QRS100ms below120ms"
+  ],
+  "limitations": [
+    "Authored fixed vector and timing, not anatomical conduction or automated diagnosis",
+    "Does not distinguish other causes of right-axis deviation",
+    "No inferred perfusion impairment or bifascicular/rhythm combination"
+  ],
+  "verification": [
+    "LeftPosteriorFascicularHasRegionalRsQrAndRightAxis",
+    "StandaloneBundleBlocksKeepEveryBeatAndSharedLeadII",
+    "BundleBlockSmokeChecks"
+  ]
+}

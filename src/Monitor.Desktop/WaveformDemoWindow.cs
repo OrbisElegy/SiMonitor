@@ -253,7 +253,7 @@ internal sealed class WaveformDemoWindow : Window
             conduction.Children.Add(WpwNegativeV1Input);
             conduction.Children.Add(WpwSmallerDeltaInput);
             conduction.Children.Add(WpwButton);
-            if (_projected) { conduction.Children.Add(VtInput); conduction.Children.Add(VtButton); }
+            conduction.Children.Add(VtInput); conduction.Children.Add(VtButton);
             conduction.Children.Add(SvtInput);
             conduction.Children.Add(SvtButton);
             conduction.Children.Add(ShortPrInput);
@@ -511,7 +511,7 @@ internal sealed class WaveformDemoWindow : Window
         };
         VtButton.Click += (_, _) =>
         {
-            if (!_closed && _projected) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.VtPreset); }
+            if (!_closed && (_projected || _physiology)) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.VtPreset, PhysiologyDemoConfiguration.VtPreset); }
         };
         SvtButton.Click += (_, _) =>
         {
@@ -1023,8 +1023,10 @@ internal sealed class WaveformDemoWindow : Window
                 independentPeriod = parsedPeriod;
             }
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
-                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit, afAberrancy, WpwInput.IsChecked == true, WpwInput.IsChecked == true && WpwNegativeV1Input.IsChecked == true, ShortPrInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true, WpwInput.IsChecked == true && WpwSmallerDeltaInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true && ProlongedPrDeltaInput.IsChecked == true, SvtInput.IsChecked == true));
+                (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit, afAberrancy, WpwInput.IsChecked == true, WpwInput.IsChecked == true && WpwNegativeV1Input.IsChecked == true, ShortPrInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true, WpwInput.IsChecked == true && WpwSmallerDeltaInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true && ProlongedPrDeltaInput.IsChecked == true, SvtInput.IsChecked == true, VtInput.IsChecked == true));
         }
+        catch (EventWaveformException error) when (error.ReasonCode == "Vt.ConflictingModes")
+        { BreathConfigurationStatus.Text = "未应用：室速使用固定独立房室时序及血管回落源，请载入重置冲突参数。当前波形保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "Svt.ConflictingModes")
         { BreathConfigurationStatus.Text = "未应用：室上速需启用血管回落模型，且不能与其他节律、形态或独立心室时钟叠加。当前状态保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "NormalPrDelta.ConflictingModes")
@@ -1065,7 +1067,7 @@ internal sealed class WaveformDemoWindow : Window
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
         AfAberrancyInput.IsChecked = _projected ? configuration.IllustrateAfAberrancy : breathConfiguration.IllustrateAfAberrancy;
-        VtInput.IsChecked = _projected && configuration.Vt;
+        VtInput.IsChecked = _projected ? configuration.Vt : breathConfiguration.Vt;
         SvtInput.IsChecked = _projected ? configuration.Svt : breathConfiguration.Svt;
         ProlongedPrDeltaInput.IsChecked = _projected ? configuration.ProlongedPrDelta : breathConfiguration.ProlongedPrDelta;
         NormalPrDeltaInput.IsChecked = _projected ? configuration.NormalPrDelta : breathConfiguration.NormalPrDelta;
@@ -1115,7 +1117,9 @@ internal sealed class WaveformDemoWindow : Window
             _activeBreathConfiguration.Text = VentricularDisorganizationReference.IsPattern(breathConfiguration.ConductionPattern)
                 ? $"已应用：{ConductionInput.SelectedItem}；无独立P/QRS/T或有效射血；Pleth无搏动，RC压力衰减。呼吸周期{breathConfiguration.BreathPeriodMilliseconds} ms，吸气{breathConfiguration.InspirationMilliseconds} ms；Resp/CO₂仍依独立呼吸设置生成，不模拟气体交换反馈。"
                 : string.Create(CultureInfo.InvariantCulture,
-                $"已应用：{RespiratoryPatternInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；首次 QRS 偏移 {breathConfiguration.IndependentVentricularOffsetMilliseconds ?? (breathConfiguration.Svt ? 0 : breathConfiguration.NormalPrDelta ? (breathConfiguration.ProlongedPrDelta ? 240 : 160) : breathConfiguration.Wpw || breathConfiguration.ShortPr ? 100 : AtrialFlutterReference.IsPattern(breathConfiguration.ConductionPattern) || AtrialFibrillationReference.IsPattern(breathConfiguration.ConductionPattern) ? 80 : 160)} ms；独立心室周期 {breathConfiguration.IndependentVentricularPeriodMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "未启用"} ms；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}、每 {breathConfiguration.MechanicalEveryCycles} 个室性周期一次（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即；停止持续周期数 {MechanicalDurationCyclesInput.Text}，空为不恢复）；{ConductionInput.SelectedItem}；{ConductionSelection.Summary(breathConfiguration.VentricularConductionRatio, breathConfiguration.ConductedBeatsPerGroup, breathConfiguration.ConductionPattern)}；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/参考呼气末 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+                $"已应用：{RespiratoryPatternInput.SelectedItem}；{CardiacActivityInput.SelectedItem}；首次 QRS 偏移 {breathConfiguration.IndependentVentricularOffsetMilliseconds ?? (breathConfiguration.Vt ? 120 : breathConfiguration.Svt ? 0 : breathConfiguration.NormalPrDelta ? (breathConfiguration.ProlongedPrDelta ? 240 : 160) : breathConfiguration.Wpw || breathConfiguration.ShortPr ? 100 : AtrialFlutterReference.IsPattern(breathConfiguration.ConductionPattern) || AtrialFibrillationReference.IsPattern(breathConfiguration.ConductionPattern) ? 80 : 160)} ms；独立心室周期 {(breathConfiguration.Vt ? 375 : breathConfiguration.IndependentVentricularPeriodMilliseconds)?.ToString(CultureInfo.InvariantCulture) ?? "未启用"} ms；室性机械事件{(breathConfiguration.VentricularMechanicalEnabled ? "启用" : "关闭")}、每 {breathConfiguration.MechanicalEveryCycles} 个室性周期一次（先完成周期数 {MechanicalAfterCyclesInput.Text}，空为立即；停止持续周期数 {MechanicalDurationCyclesInput.Text}，空为不恢复）；{(breathConfiguration.Vt ? "独立房室时钟" : ConductionInput.SelectedItem)}；{(breathConfiguration.Vt ? "房室分离" : ConductionSelection.Summary(breathConfiguration.VentricularConductionRatio, breathConfiguration.ConductedBeatsPerGroup, breathConfiguration.ConductionPattern))}；目标呼吸活动 {RespiratoryActivityInput.SelectedItem}（先完成次数 {ActivityAfterBreathsInput.Text}，留空立即；状态持续周期 {ActivityDurationBreathsInput.Text}，留空不恢复）；周期 {breathConfiguration.BreathPeriodMilliseconds} ms；吸气/呼气 {breathConfiguration.InspirationMilliseconds}/{breathConfiguration.BreathPeriodMilliseconds - breathConfiguration.InspirationMilliseconds} ms（吸气／呼气末停顿 {breathConfiguration.InspiratoryPauseMilliseconds}/{breathConfiguration.ExpiratoryPauseMilliseconds} ms）；Resp 幅度 {breathConfiguration.RespAmplitudeCounts}，心源伪差幅度 {breathConfiguration.RespCardiacArtifactCounts}。Resp、CO₂、CVP 共用呼吸时序；不是测得的 RR。CO₂ 平台起始 {(breathConfiguration.Co2PlateauStartCentiMmHg is null ? "参考比例" : Co2PlateauInput.Text + " mmHg")}，基线/参考呼气末 {breathConfiguration.Co2BaselineMmHg}/{breathConfiguration.Co2EndExpiratoryMmHg} mmHg；死腔/上升/下降 {breathConfiguration.Co2DeadSpaceMilliseconds}/{breathConfiguration.Co2RiseMilliseconds}/{breathConfiguration.Co2FallMilliseconds} ms；CO₂ 管路滞后 {breathConfiguration.Co2TransportDelayMilliseconds} ms；展宽步长 {breathConfiguration.Co2DispersionStepMilliseconds} ms。");
+            if (breathConfiguration.Vt)
+            { _activeBreathConfiguration.Text += "；单形性室速：室率160／房率75次/分，无固定PR；心室电/机械事件120/200ms；固定射血输入，未作血流动力学校准"; }
             if (breathConfiguration.Svt)
             { _activeBreathConfiguration.Text += "；规则窄QRS室上速200次/分，P′与QRS重叠；电/机械事件0/80ms；灌注采用固定输入示例"; }
             if (breathConfiguration.NormalPrDelta)

@@ -35,12 +35,13 @@
   "limitations": [
     "Established fixed200bpm example, not onset/termination, AVNRT/AVRT diagnosis or reentry mechanism",
     "No delta or separate sinus P; synchronous atrial/ventricular grid is authored",
-    "Shared monitorII factory exists; physiology demo and fast-rate perfusion integration remain pending",
+    "Both demos share the source; bounded overlap integration is documented in svt-perfusion.json",
     "No inference of ejection strength or hemodynamic compensation"
   ],
   "verification": [
     "SvtHasOverlappingRetrogradePAndRegularNarrowQrs",
     "SvtRestoresAcrossBeatsAndMatchesMonitorII",
-    "SvtSmokeChecks"
+    "SvtSmokeChecks",
+    "SvtPhysiologySmokeChecks"
   ]
 }

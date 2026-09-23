@@ -1,0 +1,32 @@
+{
+  "id": "SvtPerfusionIllustration@1",
+  "source": "Reuse current authored Pleth/ABP/PA/CVP supports and inputs at shared SVT300ms RR",
+  "authored_choices": {
+    "electrical_mechanical_ms": [
+      0,
+      80
+    ],
+    "pleth_support_ms": 512,
+    "arterial_morphology_ms": 600,
+    "pulmonary_morphology_ms": 640,
+    "arterial_pulmonary_ejection_ms": [
+      240,
+      200
+    ],
+    "maximum_overlap_abp_pa_cvp": [
+      2,
+      3,
+      2
+    ]
+  },
+  "limitations": [
+    "Existing input strengths are retained; not a model of SVT stroke volume, compensation or calibrated pressure",
+    "No onset/termination/reentry mechanism or inferred pump failure",
+    "Finite pressure64tau and Pleth join+64tau history, no epoch scan"
+  ],
+  "verification": [
+    "SvtPerfusionPreservesSupportsAndBoundsOverlap",
+    "SvtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
+    "SvtPhysiologySmokeChecks"
+  ]
+}

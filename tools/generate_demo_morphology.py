@@ -323,6 +323,7 @@ def main():
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
     wpw = json.loads((root / 'eng/physiology/wpw-positive-v1.json').read_text())
+    wpw_negative = json.loads((root / 'eng/physiology/wpw-negative-v1.json').read_text())
     lpfb = json.loads((root / 'eng/physiology/left-posterior-fascicular-illustration.json').read_text())
     lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text())
     quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
@@ -358,6 +359,8 @@ def main():
     rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
     lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/WpwNegativeTables.cs': render(
+            'Monitor.Simulation.Physiology', 'WpwNegativeTables', conduction_shapes(wpw_negative)),
         root / 'src/Monitor.Simulation/Physiology/WpwTables.cs': render(
             'Monitor.Simulation.Physiology', 'WpwTables', conduction_shapes(wpw)),
         root / 'src/Monitor.Simulation/Physiology/LeftPosteriorFascicularTables.cs': render(

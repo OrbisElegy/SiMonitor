@@ -33,7 +33,7 @@ internal static class PhysiologyDemoSource
         // pressure across missing and resumed ejections. Teaching parameters only.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
-                configuration.Wpw ? WpwReference.CreateLeadIIBands() :
+                configuration.Wpw ? WpwReference.CreateLeadIIBands(configuration.WpwNegativeV1) :
                 configuration.BundleBlock != EcgBundleBlockIllustration.Reference ? BundleBlockReference.CreateLeadIIBands(configuration.BundleBlock) :
                 VentricularDisorganizationReference.IsPattern(plan.ConductionPattern) ? VentricularDisorganizationReference.CreateLeadIIBands(plan.ConductionPattern) :
                 plan.ConductionPattern == AvConductionPattern.MobitzTwoRbbbFourToThreeIllustration ? RightBundleBlockReference.CreateLeadIIBands() :

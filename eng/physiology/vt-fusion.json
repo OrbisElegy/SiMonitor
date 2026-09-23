@@ -1,0 +1,52 @@
+{
+  "id": "VtFusionIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480,482"
+  },
+  "textbook_summary": [
+    "VT may show ventricular fusion; fusion and capture are distinct phenomena."
+  ],
+  "authored_choices": {
+    "ventricular_period_ms": 375,
+    "atrial_period_ms": 800,
+    "fusion_cycle_slot_zero_based": 13,
+    "ventricular_cycles_per_group": 32,
+    "group_ms": 12000,
+    "first_fusion_ms": 4995,
+    "preceding_P_ms": 4800,
+    "P_to_fusion_ms": 195,
+    "electrode_weights_permille": {
+      "normal_conducted": 500,
+      "ventricular": 500
+    },
+    "component_QRS_support_ms": [
+      80,
+      160
+    ],
+    "QT_T_ms": [
+      275,
+      100
+    ]
+  },
+  "invariants": [
+    "One P source, one ventricular electrical event and one mechanical event at selected beat",
+    "Only selected beat QRS/T replaced, no full VT retained underneath",
+    "Electrode mixing retains limb projection; both demos share source",
+    "Mechanical timing and fixed ejection inputs unchanged; no doubled perfusion"
+  ],
+  "limitations": [
+    "Authored discrete mixture, not propagation, AV nodal conduction, refractory or anatomical model",
+    "Fraction does not calibrate recruited myocardial mass or stroke volume",
+    "Complete capture and its changed RR/ejection schedule remain open",
+    "Polymorphic VT, TdP, onset/termination and other physiology gaps remain"
+  ],
+  "verification": [
+    "VtFusionSelectsOnlyOneAtrialAlignedBeatPerGroup",
+    "VtFusionPreservesProjectionAndRestoresWithinSelectedBeat",
+    "VtSmokeChecks both variants",
+    "VtPhysiologySmokeChecks both variants"
+  ]
+}

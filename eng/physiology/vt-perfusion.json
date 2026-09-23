@@ -24,7 +24,7 @@
   "limitations": [
     "CVP retains independent atrial a and ventricular c/x/v/y clocks, no closed-valve cannon a model",
     "No pulse-strength modulation from atrioventricular phase, no VT hemodynamic calibration",
-    "No VT capture/fusion beats, onset/termination, polymorphic VT or TdP",
+    "Optional VT fusion documented in vt-fusion.json; capture, onset/termination, polymorphic VT and TdP remain open",
     "Both demos now share VT ECG timing; Resp/CO2 unchanged unless cardiac artifact requested"
   ],
   "verification": [

@@ -1,5 +1,5 @@
 {
-  "id": "WpwPositiveV1Illustration@1",
+  "id": "WpwNegativeV1Illustration@1",
   "source": {
     "title": "诊断学（第10版）",
     "isbn": "9787117363631",
@@ -8,7 +8,7 @@
   },
   "textbook_figures": [
     "5-1-94",
-    "5-1-95"
+    "5-1-96"
   ],
   "authored_choices": {
     "RR_P_PR_QRS_QT_T_ms": [
@@ -123,15 +123,15 @@
           ],
           [
             56,
-            250
+            -200
           ],
           [
             112,
-            1100
+            -900
           ],
           [
             200,
-            -60
+            -100
           ],
           [
             256,
@@ -144,7 +144,7 @@
             1
           ],
           [
-            250,
+            -200,
             56
           ],
           [
@@ -400,7 +400,7 @@
     "leadTMicrovolts": {
       "I": -200,
       "II": -150,
-      "V1": -250,
+      "V1": 250,
       "V2": -300,
       "V3": -350,
       "V4": -400,
@@ -411,12 +411,13 @@
     "st_gain_from_T": "one fifth at J and ST end"
   },
   "limitations": [
-    "Fixed positive V1 delta and dominant R illustration; not accessory-pathway localisation or diagnosis",
-    "Negative-V1 option is documented separately in wpw-negative-v1.json; no AVRT or pre-excited AF",
-    "P-J240ms; exact landmarks and amplitudes authored, not traced textbook data"
+    "Fixed V1 negative delta and QS illustration; not pathway localisation or diagnosis",
+    "Only V1 QRS/ST/T differs from positive-V1 example; remaining leads and P are retained authored choices, not an anatomical propagation model",
+    "P-J240ms; numeric landmarks authored, not traced textbook data",
+    "No variable pre-excitation, AVRT or pre-excited AF"
   ],
   "verification": [
-    "WpwHasShortPrSlurredOnsetAndSharedEvents",
+    "WpwNegativeV1IsRegional",
     "WpwRestoresAndProjectsConsistently",
     "WpwSmokeChecks",
     "WpwPhysiologySmokeChecks"

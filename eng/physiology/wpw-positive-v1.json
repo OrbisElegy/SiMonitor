@@ -413,12 +413,13 @@
   "limitations": [
     "Fixed positive V1 delta and dominant R illustration; not accessory-pathway localisation or diagnosis",
     "No negative-delta variant, AVRT or pre-excited AF",
-    "P-J240ms; exact landmarks and amplitudes authored, not traced textbook data",
-    "12-lead demo first; physiology-demo preset remains pending"
+    "P-J240ms; exact landmarks and amplitudes authored, not traced textbook data"
   ],
   "verification": [
     "WpwHasShortPrSlurredOnsetAndSharedEvents",
     "WpwRestoresAndProjectsConsistently",
-    "WpwSmokeChecks"
-  ]
+    "WpwSmokeChecks",
+    "WpwPhysiologySmokeChecks"
+  ],
+  "integration": "Both demos share the source; physiology ventricular/ejection events at100/180ms, with unchanged ejection shape/gain and respiratory timing."
 }

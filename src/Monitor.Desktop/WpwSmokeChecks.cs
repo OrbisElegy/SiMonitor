@@ -10,10 +10,10 @@ internal static class WpwSmokeChecks
 {
     internal static void Verify()
     {
-        Verify(false);
-        Verify(true);
+        foreach (bool smallerDelta in new[] { false, true })
+        { Verify(false, smallerDelta); Verify(true, smallerDelta); }
     }
-    private static void Verify(bool negativeV1)
+    private static void Verify(bool negativeV1, bool smallerDelta)
     {
         var window = new WaveformDemoWindow(projected: true);
         window.Show();
@@ -24,8 +24,9 @@ internal static class WpwSmokeChecks
             var oldTimer = window.ActiveTimer;
             Click(window.WpwButton); window.Pulse(oldTimer);
             window.WpwNegativeV1Input.IsChecked = negativeV1;
+            window.WpwSmallerDeltaInput.IsChecked = smallerDelta;
             Click(window.ApplyEcgButton);
-            var config = ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = negativeV1 };
+            var config = ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = negativeV1, WpwSmallerDelta = smallerDelta, QrsDurationMilliseconds = smallerDelta ? 110 : 140 };
             if (window.EcgConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null)
             { throw new InvalidOperationException("WPW loader retained previous source."); }
             Click(window.ApplyEcgButton);
@@ -51,9 +52,9 @@ internal static class WpwSmokeChecks
             if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
             { throw new InvalidOperationException("WPW conflicting edit mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.WpwNegativeV1Input.IsChecked != negativeV1 || window.WpwInput.IsChecked != true || window.DigitalisInput.IsChecked == true)
+            if (window.WpwSmallerDeltaInput.IsChecked != smallerDelta || window.WpwNegativeV1Input.IsChecked != negativeV1 || window.WpwInput.IsChecked != true || window.DigitalisInput.IsChecked == true)
             { throw new InvalidOperationException("WPW reset lost accepted state."); }
-            foreach (var invalid in new[] { config with { Wpw = false, WpwNegativeV1 = true }, config with { PrIntervalMilliseconds = 160 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft }, config with { VentricularConductionRatio = 2 } })
+            foreach (var invalid in new[] { config with { Wpw = false, WpwSmallerDelta = true }, config with { Wpw = false, WpwNegativeV1 = true }, config with { PrIntervalMilliseconds = 160 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft }, config with { VentricularConductionRatio = 2 } })
             {
                 try { ProjectedEcgDemoSource.Create(invalid); }
                 catch (EventWaveformException e) when (e.ReasonCode == "Wpw.ConflictingModes") { continue; }
@@ -65,6 +66,11 @@ internal static class WpwSmokeChecks
             window.WpwNegativeV1Input.IsChecked = negativeV1; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != config)
             { throw new InvalidOperationException("WPW variant roundtrip failed."); }
+            window.WpwSmallerDeltaInput.IsChecked = !smallerDelta; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != (config with { WpwSmallerDelta = !smallerDelta, QrsDurationMilliseconds = smallerDelta ? 140 : 110 }))
+            { throw new InvalidOperationException("WPW smaller-delta switch failed."); }
+            window.WpwSmallerDeltaInput.IsChecked = smallerDelta; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != config) { throw new InvalidOperationException("WPW smaller-delta roundtrip failed."); }
             window.WpwInput.IsChecked = false; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default)
             { throw new InvalidOperationException("WPW clear failed."); }

@@ -8,6 +8,7 @@ internal static class WpwSpecifications
     public static Specification[] All =>
     [
         new(nameof(WpwHasShortPrSlurredOnsetAndSharedEvents), WpwHasShortPrSlurredOnsetAndSharedEvents),
+        new(nameof(WpwSmallerDeltaChangesMorphologyWithoutChangingEvents), WpwSmallerDeltaChangesMorphologyWithoutChangingEvents),
         new(nameof(WpwNegativeV1IsRegional), WpwNegativeV1IsRegional),
         new(nameof(WpwRestoresAndProjectsConsistently), WpwRestoresAndProjectsConsistently),
     ];
@@ -48,17 +49,49 @@ internal static class WpwSpecifications
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, WpwReference.CreateLeadIIBands(true)).GenerateBefore(800_000_000, 200, 100);
         Check.That(negative.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "negative variant monitor II parity");
     }
+    private static void WpwSmallerDeltaChangesMorphologyWithoutChangingEvents()
+    {
+        Check.That(WpwReference.ResolveTiming(true).QrsDurationNs == 110_000_000 && WpwReference.ResolveTiming(false) == WpwReference.Timing, "narrower authored QRS, old timing retained");
+        foreach (bool negative in new[] { false, true })
+        {
+            var large = WpwReference.CreateElectrodes(negative);
+            var small = WpwReference.CreateElectrodes(negative, true);
+            // Compare at common normalized landmarks, independently of duration.
+            foreach (int electrode in Enumerable.Range(0, 10))
+            {
+                var a = large[electrode].Bands[1]; var b = small[electrode].Bands[1];
+                Check.That(b.DurationNs == 110_000_000, "all QRS components use110ms");
+                Check.That(Math.Abs(2 * b.TableQ32[56] - a.TableQ32[56]) <= 2, "initial delta landmark halved");
+                Check.That(Math.Abs(b.TableQ32[112] - a.TableQ32[112]) <= 2, "main normalized QRS peak retained");
+            }
+            var plan = WpwReference.CreatePlan();
+            var aSamples = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, large).GenerateBefore(800_000_000, 200, 100);
+            var bSamples = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, small).GenerateBefore(800_000_000, 200, 100);
+            Check.That(aSamples.Take(25).Zip(bSamples).All(p => p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "unchanged P/PR and ventricular onset");
+            foreach (var lead in new[] { EcgLead.II, EcgLead.V1, EcgLead.V5 })
+            {
+                int a = aSamples[105].MicrovoltValues[(int)lead], b = bSamples[105].MicrovoltValues[(int)lead];
+                Check.That(Math.Abs(a) > 80 && Math.Abs(2 * b - a) <= 2, "secondary T halved with polarity retained");
+                int stA = aSamples[70].MicrovoltValues[(int)lead], stB = bSamples[70].MicrovoltValues[(int)lead];
+                Check.That(Math.Abs(2 * stB - stA) <= 2, "secondary ST halved");
+            }
+            Check.That(bSamples.Skip(125).All(s => s.MicrovoltValues.All(v => v == 0)), "QT endpoint unchanged");
+            var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, WpwReference.CreateLeadIIBands(negative, true)).GenerateBefore(800_000_000, 200, 100);
+            Check.That(bSamples.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "smaller-delta monitorII parity");
+        }
+    }
     private static void WpwRestoresAndProjectsConsistently()
     {
-        foreach (bool negativeV1 in new[] { false, true })
-            foreach (long boundary in new[] { 98_000_000L, 128_000_000, 160_000_000, 238_000_000, 320_000_000, 498_000_000 })
-            {
-                var source = ElectrodeSignalGenerator.Start(WpwReference.CreatePlan(), "AcqECGMonitor250@1", 1, WpwReference.CreateElectrodes(negativeV1));
-                source.GenerateBefore(boundary, 200, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var a = source.GenerateBefore(1_600_000_000, 400, 100);
-                var b = restored.GenerateBefore(1_600_000_000, 400, 100);
-                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "delta/QRS/ST/T recovery exact");
-            }
+        foreach (bool smallerDelta in new[] { false, true })
+            foreach (bool negativeV1 in new[] { false, true })
+                foreach (long boundary in new[] { 98_000_000L, 128_000_000, 160_000_000, 238_000_000, 320_000_000, 498_000_000 })
+                {
+                    var source = ElectrodeSignalGenerator.Start(WpwReference.CreatePlan(), "AcqECGMonitor250@1", 1, WpwReference.CreateElectrodes(negativeV1, smallerDelta));
+                    source.GenerateBefore(boundary, 200, 100);
+                    var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                    var a = source.GenerateBefore(1_600_000_000, 400, 100);
+                    var b = restored.GenerateBefore(1_600_000_000, 400, 100);
+                    Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "delta/QRS/ST/T recovery exact");
+                }
     }
 }

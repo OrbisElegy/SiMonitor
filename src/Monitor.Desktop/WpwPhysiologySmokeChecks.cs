@@ -11,12 +11,12 @@ internal static class WpwPhysiologySmokeChecks
 {
     internal static void Verify()
     {
-        Verify(false);
-        Verify(true);
+        foreach (bool smallerDelta in new[] { false, true })
+        { Verify(false, smallerDelta); Verify(true, smallerDelta); }
     }
-    private static void Verify(bool negativeV1)
+    private static void Verify(bool negativeV1, bool smallerDelta)
     {
-        var config = PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = negativeV1 };
+        var config = PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = negativeV1, WpwSmallerDelta = smallerDelta };
         var plan = config.ResolvePlan();
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(1_600_000_000, 30);
         if (!events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).Select(e => e.SimTimeNs).SequenceEqual(new long[] { 100_000_000, 900_000_000 }) ||
@@ -24,7 +24,7 @@ internal static class WpwPhysiologySmokeChecks
         { throw new InvalidOperationException("Physiology WPW did not advance shared ventricular events."); }
         var blocks = DecodeCompletedOutput(config, 6_000_000_000);
         var positive = DecodeCompletedOutput(PhysiologyDemoConfiguration.WpwPreset, 6_000_000_000);
-        for (int row = 0; row < 7; row++)
+        for (int row = smallerDelta ? 1 : 0; row < 7; row++)
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(positive, row)))
             { throw new InvalidOperationException("Regional V1 variant changed lead II or other physiology."); }
         var shifted = DecodeCompletedOutput(PhysiologyDemoConfiguration.Default with
@@ -39,7 +39,7 @@ internal static class WpwPhysiologySmokeChecks
         foreach (int row in new[] { 2, 3, 5, 6 })
             if (MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
             { throw new InvalidOperationException("WPW retained old perfusion timing."); }
-        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, WpwReference.CreateLeadIIBands(negativeV1)).GenerateBefore(6_000_000_000, 1500, 100);
+        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, WpwReference.CreateLeadIIBands(negativeV1, smallerDelta)).GenerateBefore(6_000_000_000, 1500, 100);
         short[] ecgSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 0);
         if (ecgSamples.Length != ii.Count || ecgSamples.Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("Physiology WPW differs from shared lead II."); }
@@ -56,6 +56,7 @@ internal static class WpwPhysiologySmokeChecks
             var oldTimer = window.ActiveTimer;
             Click(window.WpwButton); window.Pulse(oldTimer);
             window.WpwNegativeV1Input.IsChecked = negativeV1;
+            window.WpwSmallerDeltaInput.IsChecked = smallerDelta;
             Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.WpwInput.IsChecked != true)
             { throw new InvalidOperationException("WPW physiology loader retained previous state."); }
@@ -73,7 +74,7 @@ internal static class WpwPhysiologySmokeChecks
             if (window.BreathConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
             { throw new InvalidOperationException("Conflicting WPW edit mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.WpwNegativeV1Input.IsChecked != negativeV1 || window.WpwInput.IsChecked != true || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text))
+            if (window.WpwSmallerDeltaInput.IsChecked != smallerDelta || window.WpwNegativeV1Input.IsChecked != negativeV1 || window.WpwInput.IsChecked != true || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text))
             { throw new InvalidOperationException("WPW physiology reset lost accepted source."); }
             window.WpwNegativeV1Input.IsChecked = !negativeV1; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != (config with { WpwNegativeV1 = !negativeV1 }))
@@ -81,6 +82,11 @@ internal static class WpwPhysiologySmokeChecks
             window.WpwNegativeV1Input.IsChecked = negativeV1; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != config)
             { throw new InvalidOperationException("WPW variant roundtrip failed."); }
+            window.WpwSmallerDeltaInput.IsChecked = !smallerDelta; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration != (config with { WpwSmallerDelta = !smallerDelta }))
+            { throw new InvalidOperationException("WPW smaller-delta switch failed."); }
+            window.WpwSmallerDeltaInput.IsChecked = smallerDelta; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration != config) { throw new InvalidOperationException("WPW smaller-delta roundtrip failed."); }
             window.WpwInput.IsChecked = false; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != PhysiologyDemoConfiguration.Default)
             { throw new InvalidOperationException("WPW physiology clear failed."); }
@@ -89,7 +95,7 @@ internal static class WpwPhysiologySmokeChecks
             { throw new InvalidOperationException("AF loader retained WPW."); }
         }
         finally { window.Close(); }
-        foreach (var invalid in new[] { config with { Wpw = false, WpwNegativeV1 = true }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteRight }, config with { ConductionPattern = AvConductionPattern.AtrialFlutterIllustration }, config with { VentricularConductionRatio = 2 }, config with { CardiacActivity = CardiacActivity.VentricularOnly } })
+        foreach (var invalid in new[] { config with { Wpw = false, WpwSmallerDelta = true }, config with { Wpw = false, WpwNegativeV1 = true }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteRight }, config with { ConductionPattern = AvConductionPattern.AtrialFlutterIllustration }, config with { VentricularConductionRatio = 2 }, config with { CardiacActivity = CardiacActivity.VentricularOnly } })
         {
             try { PhysiologyDemoSource.Create(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "Wpw.ConflictingModes") { continue; }

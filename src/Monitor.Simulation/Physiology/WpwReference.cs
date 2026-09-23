@@ -12,7 +12,8 @@ public static class WpwReference
         100_000_000, 140_000_000, 400_000_000, 180_000_000);
     public static RegularPhysiologyPlan CreatePlan() => new(0, Timing.RrIntervalNs,
         Timing.PrIntervalNs, 80_000_000, 180_000_000, 3_750_000_000, 1_875_000_000);
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool negativeV1 = false)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool negativeV1 = false) => CreateElectrodes(negativeV1, Timing);
+    internal static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool negativeV1, EcgCycleTiming timing)
     {
         IReadOnlyList<long>[] qrs = negativeV1
             ? [WpwNegativeTables.RA, WpwNegativeTables.LA, WpwNegativeTables.RL, WpwNegativeTables.LL,
@@ -22,8 +23,8 @@ public static class WpwReference
         var amplitudes = negativeV1 ? WpwNegativeTables.TAmplitudesQ32 : WpwTables.TAmplitudesQ32;
         long peak = TextbookEcgTables.T.Max();
         int[] levels = amplitudes.Select(v => checked((int)FixedPointMath.RoundDivideTiesToEven(v, 5 * (Int128)FixedPointMath.Q32One))).ToArray();
-        var st = new EcgStSegmentPlan(levels, levels).CreateBands(Timing);
-        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((e, i) => e with
+        var st = new EcgStSegmentPlan(levels, levels).CreateBands(timing);
+        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: timing).Select((e, i) => e with
         {
             Bands = Array.AsReadOnly(e.Bands.Select((b, index) => index switch
             {

@@ -6,7 +6,7 @@ namespace Monitor.Desktop;
 internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
     int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
     int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false, bool HypokalemiaConduction = false, CalciumIllustration Calcium = CalciumIllustration.Reference, bool DigitalisEffect = false, DigitalisTShape DigitalisShape = DigitalisTShape.FishHook, QuinidineIllustration Quinidine = QuinidineIllustration.Reference, bool QuinidineNotchedP = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false)
+    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false, bool HypokalemiaConduction = false, CalciumIllustration Calcium = CalciumIllustration.Reference, bool DigitalisEffect = false, DigitalisTShape DigitalisShape = DigitalisTShape.FishHook, QuinidineIllustration Quinidine = QuinidineIllustration.Reference, bool QuinidineNotchedP = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false)
 {
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
@@ -137,10 +137,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (ProlongedPrDelta && !NormalPrDelta) { throw new EventWaveformException("NormalPrDelta.ConflictingModes", "configuration"); }
         if (NormalPrDelta)
         {
-            if (this != NormalPrDeltaPreset) { throw new EventWaveformException("NormalPrDelta.ConflictingModes", "configuration"); }
-            return NormalPrDeltaReference.Timing;
+            if (this != (NormalPrDeltaPreset with { ProlongedPrDelta = ProlongedPrDelta, PrIntervalMilliseconds = ProlongedPrDelta ? 240 : 160 })) { throw new EventWaveformException("NormalPrDelta.ConflictingModes", "configuration"); }
+            return NormalPrDeltaReference.ResolveTiming(ProlongedPrDelta);
         }
         if (ShortPr)
         {
@@ -322,7 +323,7 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.NormalPrDelta ? NormalPrDeltaReference.CreateElectrodes() : configuration.ShortPr ? ShortPrReference.CreateElectrodes() : configuration.Wpw ? WpwReference.CreateElectrodes(configuration.WpwNegativeV1, configuration.WpwSmallerDelta) : configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine, configuration.QuinidineNotchedP)
+        var electrodes = configuration.NormalPrDelta ? NormalPrDeltaReference.CreateElectrodes(configuration.ProlongedPrDelta) : configuration.ShortPr ? ShortPrReference.CreateElectrodes() : configuration.Wpw ? WpwReference.CreateElectrodes(configuration.WpwNegativeV1, configuration.WpwSmallerDelta) : configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine, configuration.QuinidineNotchedP)
             : configuration.DigitalisEffect ? DigitalisEffectReference.CreateElectrodes(configuration.DigitalisShape)
             : configuration.Calcium != CalciumIllustration.Reference
             ? CalciumRepolarizationReference.CreateElectrodes(configuration.Calcium)

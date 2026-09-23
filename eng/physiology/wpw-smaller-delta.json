@@ -1,0 +1,25 @@
+{
+  "id": "WpwSmallerDeltaIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "491"
+  },
+  "authored_choices": {
+    "qrs_ms": 110,
+    "delta_divisor": 2,
+    "secondary_st_t_divisor": 2
+  },
+  "limitations": [
+    "Fixed smaller-delta variant of both V1 polarities, not calibrated pre-excitation fraction or clinical severity",
+    "RR800/P80/PR100/QT400/T180ms unchanged; ventricular/ejection100/180ms unchanged",
+    "Main/terminal normalized QRS landmarks retained; no pathway or pump inference"
+  ],
+  "verification": [
+    "WpwSmallerDeltaChangesMorphologyWithoutChangingEvents",
+    "WpwRestoresAndProjectsConsistently",
+    "WpwSmokeChecks",
+    "WpwPhysiologySmokeChecks"
+  ]
+}

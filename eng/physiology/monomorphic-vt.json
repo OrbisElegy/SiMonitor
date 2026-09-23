@@ -1,0 +1,44 @@
+{
+  "id": "MonomorphicVtIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480-481"
+  },
+  "textbook_summary": [
+    "Broad abnormal QRS; faster ventricular rhythm with slower independent P and no fixed PR."
+  ],
+  "textbook_figures": [
+    "5-1-66",
+    "5-1-67"
+  ],
+  "authored_choices": {
+    "atrial_period_ms": 800,
+    "ventricular_period_ms": 375,
+    "first_QRS_ms": 120,
+    "atrial_ventricular_mechanical_offsets_ms": [
+      80,
+      200
+    ],
+    "P_QRS_QT_T_ms": [
+      100,
+      160,
+      275,
+      100
+    ],
+    "structural_PR_placeholder_ms": 100,
+    "contour": "Reuse authored ventricular escape QRS and discordant T coefficients; shorter T/QT support for established VT"
+  },
+  "limitations": [
+    "Fixed monomorphic160bpm example, not traced ventricular focus or clinical QT calibration",
+    "No capture/fusion beats, onset/termination, polymorphic VT or TdP",
+    "12-lead demo and shared monitorII source only; physiology demo and VT perfusion integration remain next",
+    "PR placeholder is hidden; true independent source clocks determine P/QRS timing"
+  ],
+  "verification": [
+    "VtSeparatesFasterVentriclesFromSlowerAtria",
+    "VtPreservesMonomorphicQrsAndRestoresIndependentPhases",
+    "VtSmokeChecks"
+  ]
+}

@@ -26,6 +26,7 @@ internal static class WaveformDemoSmokeChecks
         ShortPrSmokeChecks.Verify();
         NormalPrDeltaSmokeChecks.Verify();
         SvtSmokeChecks.Verify();
+        VtSmokeChecks.Verify();
         SvtPhysiologySmokeChecks.Verify();
         HyperkalemiaSmokeChecks.Verify();
         HypokalemiaSmokeChecks.Verify();

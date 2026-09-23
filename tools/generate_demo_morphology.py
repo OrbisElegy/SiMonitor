@@ -120,7 +120,7 @@ def digitalis_joined_shapes(manifest, chest, reference):
     return result
 
 
-def left_anterior_fascicular_shapes(manifest, chest, reference):
+def fascicular_shapes(manifest, chest, reference):
     original = electrode_shapes(chest, reference)
     leads = {name: sample_shape(shape) for name, shape in
              manifest['authored_choices']['limb_qrs_shapes'].items()}
@@ -318,6 +318,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
+    lpfb = json.loads((root / 'eng/physiology/left-posterior-fascicular-illustration.json').read_text())
     lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text())
     quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
     digitalis = json.loads((root / 'eng/physiology/digitalis-effect.json').read_text())
@@ -352,8 +353,10 @@ def main():
     rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
     lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
     outputs = {
+        root / 'src/Monitor.Simulation/Physiology/LeftPosteriorFascicularTables.cs': render(
+            'Monitor.Simulation.Physiology', 'LeftPosteriorFascicularTables', fascicular_shapes(lpfb, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/LeftAnteriorFascicularTables.cs': render(
-            'Monitor.Simulation.Physiology', 'LeftAnteriorFascicularTables', left_anterior_fascicular_shapes(lafb, chest, manifest)),
+            'Monitor.Simulation.Physiology', 'LeftAnteriorFascicularTables', fascicular_shapes(lafb, chest, manifest)),
         root / 'src/Monitor.Simulation/Physiology/LeftBundleBlockTables.cs': render(
             'Monitor.Simulation.Physiology', 'LeftBundleBlockTables', conduction_shapes(lbbb)),
         root / 'src/Monitor.Simulation/Physiology/RightBundleBlockTables.cs': render(

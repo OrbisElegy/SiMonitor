@@ -1,0 +1,46 @@
+{
+  "id": "NarrowComplexSvtIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480"
+  },
+  "textbook_summary": [
+    "Regular rapid SVT, typically normal QRS, P-prime may be hard to distinguish."
+  ],
+  "textbook_figures": [
+    "5-1-64",
+    "5-1-65"
+  ],
+  "authored_choices": {
+    "RR_QRS_QT_T_ms": [
+      300,
+      80,
+      240,
+      100
+    ],
+    "P_prime_ms": 40,
+    "P_prime_vector": "Negative one half of reference P electrode coefficients",
+    "atrial_ventricular_electrical_offsets_ms": [
+      0,
+      0
+    ],
+    "atrial_ventricular_mechanical_offsets_ms": [
+      80,
+      80
+    ],
+    "structural_PR_placeholder_ms": 40
+  },
+  "limitations": [
+    "Established fixed200bpm example, not onset/termination, AVNRT/AVRT diagnosis or reentry mechanism",
+    "No delta or separate sinus P; synchronous atrial/ventricular grid is authored",
+    "Shared monitorII factory exists; physiology demo and fast-rate perfusion integration remain pending",
+    "No inference of ejection strength or hemodynamic compensation"
+  ],
+  "verification": [
+    "SvtHasOverlappingRetrogradePAndRegularNarrowQrs",
+    "SvtRestoresAcrossBeatsAndMatchesMonitorII",
+    "SvtSmokeChecks"
+  ]
+}

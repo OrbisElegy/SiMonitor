@@ -22,7 +22,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration, NarrowComplexSvtIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -71,6 +71,11 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalEveryCycles < 1 ||
             plan.ConductedBeatsPerGroup < 1 ||
             !Enum.IsDefined(plan.ConductionPattern) ||
+            (plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration &&
+                (plan.HeartPeriodNs != 300_000_000 || plan.VentricularElectricalOffsetNs != 0 ||
+                 plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 80_000_000 ||
+                 plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
+                 plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular)) ||
             (VentricularDisorganizationReference.IsPattern(plan.ConductionPattern) &&
                 (plan.HeartPeriodNs != 800_000_000 || plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
                  plan.CardiacActivity != CardiacActivity.VentricularOnly || plan.VentricularMechanicalEnabled ||
@@ -119,7 +124,7 @@ public sealed class RegularPhysiologyTimeline
             plan.VentricularConductionRatio < 1 || plan.VentricularPeriodNs > long.MaxValue ||
             (plan.IndependentVentricularPeriodNs is { } independent &&
                 (independent < plan.HeartPeriodNs || plan.VentricularConductionRatio != 1)) ||
-            plan.VentricularElectricalOffsetNs < (plan.IndependentVentricularPeriodNs is null ? 1 : 0) ||
+            plan.VentricularElectricalOffsetNs < (plan.IndependentVentricularPeriodNs is null && plan.ConductionPattern != AvConductionPattern.NarrowComplexSvtIllustration ? 1 : 0) ||
             plan.VentricularElectricalOffsetNs >= (plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs) ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||
             plan.VentricularMechanicalOffsetNs < plan.VentricularElectricalOffsetNs ||

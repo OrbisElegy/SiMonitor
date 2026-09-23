@@ -1,0 +1,34 @@
+{
+  "id": "NormalPrDeltaIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "492"
+  },
+  "textbook_summary": [
+    "Mahaim: normal or prolonged PR with possible delta."
+  ],
+  "authored_choices": {
+    "RR_P_PR_QRS_QT_T_ms": [
+      800,
+      100,
+      160,
+      140,
+      400,
+      180
+    ],
+    "electrodes": "Retimed WpwNegativeV1 illustration tables; authored reuse, not traced Mahaim ECG",
+    "mechanical_delay_ms": 80
+  },
+  "limitations": [
+    "Fixed normal PR plus delta morphology only; not Mahaim diagnosis or anatomical pathway model",
+    "Prolonged PR, decremental conduction and associated LBBB tachycardia remain open",
+    "No inferred pump impairment or automatic rhythm evolution"
+  ],
+  "verification": [
+    "NormalPrDeltaPreservesContoursAndDelaysEvents",
+    "NormalPrDeltaRestoresAcrossBoundaries",
+    "NormalPrDeltaSmokeChecks"
+  ]
+}

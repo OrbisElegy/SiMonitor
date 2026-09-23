@@ -32,7 +32,7 @@
   },
   "limitations": [
     "Fixed monomorphic160bpm example, not traced ventricular focus or clinical QT calibration",
-    "No capture/fusion beats, onset/termination, polymorphic VT or TdP",
+    "Optional fusion illustration documented in vt-fusion.json; capture, onset/termination, polymorphic VT and TdP remain open",
     "Both demos now integrated; bounded fixed-input perfusion documented in vt-perfusion.json",
     "PR placeholder is hidden; true independent source clocks determine P/QRS timing"
   ],

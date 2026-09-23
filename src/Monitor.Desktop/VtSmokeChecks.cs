@@ -11,7 +11,13 @@ internal static class VtSmokeChecks
 {
     internal static void Verify()
     {
-        var config = ProjectedEcgDemoConfiguration.VtPreset;
+        Verify(false);
+        Verify(true);
+    }
+
+    private static void Verify(bool fusion)
+    {
+        var config = ProjectedEcgDemoConfiguration.VtPreset with { VtFusion = fusion };
         var window = new WaveformDemoWindow(projected: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -19,7 +25,7 @@ internal static class VtSmokeChecks
         {
             Click(window.WpwButton); Click(window.StepButton); Click(window.RunButton);
             var oldTimer = window.ActiveTimer;
-            Click(window.VtButton); window.Pulse(oldTimer);
+            Click(window.VtButton); window.VtFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton); window.Pulse(oldTimer);
             if (window.EcgConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.WpwInput.IsChecked == true)
             { throw new InvalidOperationException("VT loader retained WPW state."); }
             Click(window.ApplyEcgButton);
@@ -34,11 +40,11 @@ internal static class VtSmokeChecks
                 Click(window.StepButton);
                 blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(b => WaveformEnvelopeCodec.Decode(b)));
             }
-            foreach (int sample in new[] { 0, 35, 75, 110 })
+            foreach (int sample in new[] { 0, 35, 75, 110, 1248, 1275 })
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), sample, [EcgLead.I, EcgLead.II, EcgLead.V1, EcgLead.V5]);
             // Compare the completed raw record range, excluding samples still in acquisition delay.
             long capturedEnd = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
-            var expected = ElectrodeSignalGenerator.Start(VentricularTachycardiaReference.CreatePlan(), "AcqECGMonitor250@1", 1, VentricularTachycardiaReference.CreateElectrodes()).GenerateBefore(capturedEnd, 1500, 200);
+            var expected = ElectrodeSignalGenerator.Start(VentricularTachycardiaReference.CreatePlan(), "AcqECGMonitor250@1", 1, VentricularTachycardiaReference.CreateElectrodes(fusion)).GenerateBefore(capturedEnd, 1500, 200);
             foreach (var lead in Enum.GetValues<EcgLead>())
             {
                 var actual = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
@@ -54,14 +60,18 @@ internal static class VtSmokeChecks
             if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
             { throw new InvalidOperationException("VT conflict mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.VtInput.IsChecked != true || window.WpwInput.IsChecked == true) { throw new InvalidOperationException("VT reset lost accepted state."); }
+            if (window.VtInput.IsChecked != true || window.VtFusionInput.IsChecked != fusion || window.WpwInput.IsChecked == true) { throw new InvalidOperationException("VT reset lost accepted state."); }
+            window.VtFusionInput.IsChecked = !fusion; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != (config with { VtFusion = !fusion })) { throw new InvalidOperationException("VT fusion toggle failed."); }
+            window.VtFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != config) { throw new InvalidOperationException("VT fusion toggle restore failed."); }
             window.VtInput.IsChecked = false; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default || window.PrIntervalInput.Text == "—") { throw new InvalidOperationException("VT clear failed."); }
             Click(window.VtButton); Click(window.WpwButton);
-            if (window.VtInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained VT."); }
+            if (window.VtInput.IsChecked == true || window.VtFusionInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained VT."); }
         }
         finally { window.Close(); }
-        foreach (var invalid in new[] { config with { Wpw = true }, config with { HeartRateBpm = 160 }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { QrsDurationMilliseconds = 80 } })
+        foreach (var invalid in new[] { config with { Wpw = true }, config with { Vt = false, VtFusion = true }, config with { HeartRateBpm = 160 }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { QrsDurationMilliseconds = 80 } })
         {
             try { ProjectedEcgDemoSource.Create(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "Vt.ConflictingModes") { continue; }

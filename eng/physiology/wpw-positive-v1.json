@@ -1,0 +1,424 @@
+{
+  "id": "WpwPositiveV1Illustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "491"
+  },
+  "textbook_figures": [
+    "5-1-94",
+    "5-1-95"
+  ],
+  "authored_choices": {
+    "RR_P_PR_QRS_QT_T_ms": [
+      800,
+      80,
+      100,
+      140,
+      400,
+      180
+    ],
+    "leadQrsShapes": {
+      "I": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            180
+          ],
+          [
+            112,
+            900
+          ],
+          [
+            200,
+            -120
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            180,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "II": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            150
+          ],
+          [
+            112,
+            700
+          ],
+          [
+            200,
+            -100
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            150,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V1": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            250
+          ],
+          [
+            112,
+            1100
+          ],
+          [
+            200,
+            -60
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            250,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V2": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            300
+          ],
+          [
+            112,
+            1400
+          ],
+          [
+            200,
+            -100
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            300,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V3": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            300
+          ],
+          [
+            112,
+            1500
+          ],
+          [
+            200,
+            -150
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            300,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V4": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            250
+          ],
+          [
+            112,
+            1500
+          ],
+          [
+            200,
+            -160
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            250,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V5": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            200
+          ],
+          [
+            112,
+            1300
+          ],
+          [
+            200,
+            -160
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            200,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "V6": {
+        "length": 256,
+        "landmarks": [
+          [
+            0,
+            0
+          ],
+          [
+            56,
+            180
+          ],
+          [
+            112,
+            1100
+          ],
+          [
+            200,
+            -130
+          ],
+          [
+            256,
+            0
+          ]
+        ],
+        "slopes": [
+          [
+            0,
+            1
+          ],
+          [
+            180,
+            56
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      }
+    },
+    "leadTMicrovolts": {
+      "I": -200,
+      "II": -150,
+      "V1": -250,
+      "V2": -300,
+      "V3": -350,
+      "V4": -400,
+      "V5": -300,
+      "V6": -250
+    },
+    "mechanical_delay_ms": 80,
+    "st_gain_from_T": "one fifth at J and ST end"
+  },
+  "limitations": [
+    "Fixed positive V1 delta and dominant R illustration; not accessory-pathway localisation or diagnosis",
+    "No negative-delta variant, AVRT or pre-excited AF",
+    "P-J240ms; exact landmarks and amplitudes authored, not traced textbook data",
+    "12-lead demo first; physiology-demo preset remains pending"
+  ],
+  "verification": [
+    "WpwHasShortPrSlurredOnsetAndSharedEvents",
+    "WpwRestoresAndProjectsConsistently",
+    "WpwSmokeChecks"
+  ]
+}

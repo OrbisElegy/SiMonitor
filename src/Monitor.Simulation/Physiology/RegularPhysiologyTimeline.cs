@@ -22,7 +22,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration, NarrowComplexSvtIllustration, MonomorphicVtIllustration, VtCaptureIllustration, AcceleratedVentricularIllustration, AcceleratedJunctionalIllustration, SinusArrhythmiaIllustration, SinusArrestIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration, NarrowComplexSvtIllustration, MonomorphicVtIllustration, VtCaptureIllustration, AcceleratedVentricularIllustration, AcceleratedJunctionalIllustration, SinusArrhythmiaIllustration, SinusArrestIllustration, SinoatrialBlockTwoIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -71,7 +71,7 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalEveryCycles < 1 ||
             plan.ConductedBeatsPerGroup < 1 ||
             !Enum.IsDefined(plan.ConductionPattern) ||
-            (plan.ConductionPattern is AvConductionPattern.SinusArrhythmiaIllustration or AvConductionPattern.SinusArrestIllustration &&
+            (plan.ConductionPattern is AvConductionPattern.SinusArrhythmiaIllustration or AvConductionPattern.SinusArrestIllustration or AvConductionPattern.SinoatrialBlockTwoIllustration &&
                 (plan.HeartPeriodNs != 800_000_000 || plan.VentricularElectricalOffsetNs != 160_000_000 ||
                  plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 240_000_000 ||
                  plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
@@ -264,6 +264,12 @@ public sealed class RegularPhysiologyTimeline
             kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical or PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
         {
             SinusArrestReference.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
+            return;
+        }
+        if (plan.ConductionPattern == AvConductionPattern.SinoatrialBlockTwoIllustration &&
+            kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical or PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
+        {
+            SinoatrialBlockTwoReference.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
             return;
         }
         if (plan.ConductionPattern == AvConductionPattern.VtCaptureIllustration &&

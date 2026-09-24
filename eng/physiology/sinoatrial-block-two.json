@@ -1,0 +1,67 @@
+{
+  "id": "SinoatrialBlockTwoIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "485"
+  },
+  "textbook_summary": [
+    "typeII SA block loses P-QRS-T with integer-multiple long PP."
+  ],
+  "implementation_basis": [
+    "Existing authored fixed perfusion inputs, not clinical calibration"
+  ],
+  "authored_choices": {
+    "P_onsets_ms": [
+      0,
+      800,
+      1600,
+      3200
+    ],
+    "group_ms": 4000,
+    "baseline_PP_ms": 800,
+    "long_PP_ms": 1600,
+    "cardiac_offsets_ms": [
+      0,
+      80,
+      160,
+      240
+    ],
+    "P_PR_QRS_QT_T_ms": [
+      100,
+      160,
+      80,
+      400,
+      180
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "pressure_and_CVP_overlap": 1,
+    "resp_artifact_support_ms": 800
+  },
+  "invariants": [
+    "Recovery on original baseline sinus grid after exact doubled PP",
+    "Dropped P-QRS-T and no new mechanical input; preceding repolarization completes",
+    "Finite optical and vascular runoff",
+    "CVP cardiac components and Resp artifact follow surviving beats",
+    "Indexed bounded lookup, recovery and atomic configuration",
+    "Existing non-integer sinus-arrest example preserved"
+  ],
+  "limitations": [
+    "Fixed second-degree typeII example only; no first-degree or third-degree inference",
+    "No sinus-node potential or conduction mechanism",
+    "No first escape or RR-dependent pump calibration"
+  ],
+  "verification": [
+    "SinoatrialBlockTwoMovesConductedEventsTogether",
+    "SinoatrialBlockTwoPreservesMorphologyAndRecovery",
+    "SinoatrialBlockTwoBoundsLateLookupAndRejectsConflicts",
+    "SinoatrialBlockTwoRetainsBoundedPerfusionThroughPause",
+    "SinoatrialBlockTwoSmokeChecks",
+    "SinoatrialBlockTwoPhysiologySmokeChecks"
+  ]
+}

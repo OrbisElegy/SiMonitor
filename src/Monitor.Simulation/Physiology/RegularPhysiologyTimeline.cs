@@ -22,7 +22,7 @@ public enum RespiratoryActivity { Breathing, EffortOnly, Absent }
 // Source event availability; no inference of perfusion or detected arrest.
 public enum CardiacActivity { AtrialAndVentricular, AtrialOnly, Absent, VentricularOnly }
 
-public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration, NarrowComplexSvtIllustration, MonomorphicVtIllustration, VtCaptureIllustration, AcceleratedVentricularIllustration, AcceleratedJunctionalIllustration }
+public enum AvConductionPattern { FixedPr, WenckebachFourToThreeIllustration, CompleteAvBlockJunctionalIllustration, CompleteAvBlockVentricularIllustration, AtrialFlutterIllustration, AtrialFibrillationCoarseIllustration, AtrialFibrillationFineIllustration, VentricularFlutterIllustration, VentricularFibrillationCoarseIllustration, VentricularFibrillationFineIllustration, WenckebachThreeToTwoIllustration, WenckebachFiveToFourIllustration, MobitzTwoThreeToTwoIllustration, MobitzTwoFourToThreeIllustration, MobitzTwoRbbbFourToThreeIllustration, MobitzTwoLbbbFourToThreeIllustration, PrematureAtrialIllustration, BlockedPrematureAtrialIllustration, AberrantPrematureAtrialIllustration, PrematureJunctionalIllustration, PrematureJunctionalAfterQrsIllustration, PrematureJunctionalOverlappingIllustration, PrematureVentricularIllustration, VentricularBigeminyIllustration, VentricularTrigeminyIllustration, PolymorphicPvcIllustration, MultifocalPvcIllustration, InterpolatedPvcIllustration, VentricularCoupletIllustration, PolymorphicVentricularCoupletIllustration, RonTLongQtPvcIllustration, ShortCoupledRonTPvcIllustration, VariableAtrialFlutterIllustration, NarrowComplexSvtIllustration, MonomorphicVtIllustration, VtCaptureIllustration, AcceleratedVentricularIllustration, AcceleratedJunctionalIllustration, SinusArrhythmiaIllustration }
 
 // Optional count starts with normal breathing and applies the target activity
 // after that many complete source cycles. Null applies the target from epoch.
@@ -45,8 +45,8 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
 {
     // Irregular sources expose a conservative interval for pulse support and
     // indexed pressure bounds. Their event times come from their own visitor.
-    internal Int128 AtrialPeriodNs => ConductionPattern == AvConductionPattern.VentricularBigeminyIllustration ? 1_600_000_000 : PrematureJunctionalReference.IsPattern(ConductionPattern) ? PrematureJunctionalReference.MinimumAtrialIntervalNs(ConductionPattern) : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 400_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : HeartPeriodNs;
-    internal Int128 VentricularPeriodNs => ConductionPattern == AvConductionPattern.VtCaptureIllustration ? 330_000_000 : ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? 400_000_000 : PrematureVentricularReference.IsPattern(ConductionPattern) ? PrematureVentricularReference.MinimumRrNs(ConductionPattern) : PrematureJunctionalReference.IsPattern(ConductionPattern) ? 500_000_000 : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 800_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : AtrialFibrillationReference.IsPattern(ConductionPattern)
+    internal Int128 AtrialPeriodNs => ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VentricularBigeminyIllustration ? 1_600_000_000 : PrematureJunctionalReference.IsPattern(ConductionPattern) ? PrematureJunctionalReference.MinimumAtrialIntervalNs(ConductionPattern) : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 400_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : HeartPeriodNs;
+    internal Int128 VentricularPeriodNs => ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VtCaptureIllustration ? 330_000_000 : ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? 400_000_000 : PrematureVentricularReference.IsPattern(ConductionPattern) ? PrematureVentricularReference.MinimumRrNs(ConductionPattern) : PrematureJunctionalReference.IsPattern(ConductionPattern) ? 500_000_000 : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 800_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : AtrialFibrillationReference.IsPattern(ConductionPattern)
         ? AtrialFibrillationReference.MinimumRrNs : IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * (ConductedBeatsPerGroup > 1 ? 1 : VentricularConductionRatio);
 }
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
@@ -71,6 +71,12 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalEveryCycles < 1 ||
             plan.ConductedBeatsPerGroup < 1 ||
             !Enum.IsDefined(plan.ConductionPattern) ||
+            (plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration &&
+                (plan.HeartPeriodNs != 800_000_000 || plan.VentricularElectricalOffsetNs != 160_000_000 ||
+                 plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 240_000_000 ||
+                 plan.VentricularConductionRatio != 1 || plan.ConductedBeatsPerGroup != 1 ||
+                 plan.IndependentVentricularPeriodNs is not null || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                 plan.MechanicalEveryCycles != 1 || plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             (plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration &&
                 (plan.HeartPeriodNs != 300_000_000 || plan.VentricularElectricalOffsetNs != 0 ||
                  plan.AtrialMechanicalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 80_000_000 ||
@@ -248,6 +254,12 @@ public sealed class RegularPhysiologyTimeline
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration &&
+            kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical or PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
+        {
+            SinusArrhythmiaReference.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
+            return;
+        }
         if (plan.ConductionPattern == AvConductionPattern.VtCaptureIllustration &&
             kind is PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
         {

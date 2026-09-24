@@ -33,6 +33,8 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
         };
     }
 
+    internal static ProjectedEcgDemoConfiguration SinusArrhythmiaPreset { get; } = Default with
+    { ConductionPattern = AvConductionPattern.SinusArrhythmiaIllustration };
     internal static ProjectedEcgDemoConfiguration AtrialEscapePreset { get; } = Default with
     { AtrialEscape = true, HeartRateBpm = 50, PDurationMilliseconds = 80 };
     internal static ProjectedEcgDemoConfiguration AarPreset { get; } = Default with
@@ -157,6 +159,11 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration)
+        {
+            if (this != SinusArrhythmiaPreset) { throw new ArgumentException("Sinus arrhythmia requires its fixed illustration."); }
+            return SinusArrhythmiaReference.Timing;
+        }
         if (AtrialEscape)
         {
             if (this != AtrialEscapePreset) { throw new EventWaveformException("AtrialEscape.ConflictingModes", "configuration"); }
@@ -376,7 +383,7 @@ internal static class ProjectedEcgDemoSource
             Enumerable.Range(0, 10).Select(i => i < 4 ? 0 : configuration.ChestStArchMicrovolts).ToArray());
         EcgPWavePlan? pWave = configuration.ChestP is { } p
             ? new(Enumerable.Range(0, 10).Select(i => i == (int)EcgElectrode.C1 ? p : null).ToArray()) : null;
-        var electrodes = configuration.AtrialEscape ? AtrialEscapeReference.CreateElectrodes() : configuration.Aar ? AcceleratedAtrialReference.CreateElectrodes() : configuration.Ajr ? AcceleratedJunctionalReference.CreateElectrodes() : configuration.Aivr ? AcceleratedVentricularReference.CreateElectrodes(configuration.AivrFusion, configuration.AivrCapture) : configuration.Vt ? VentricularTachycardiaReference.CreateElectrodes(configuration.VtFusion, configuration.VtCapture, configuration.VtBidirectional, configuration.VtTwisting) : configuration.Svt ? SupraventricularTachycardiaReference.CreateElectrodes(configuration.SvtRbbb, configuration.SvtLbbb) : configuration.NormalPrDelta ? NormalPrDeltaReference.CreateElectrodes(configuration.ProlongedPrDelta) : configuration.ShortPr ? ShortPrReference.CreateElectrodes() : configuration.Wpw ? WpwReference.CreateElectrodes(configuration.WpwNegativeV1, configuration.WpwSmallerDelta) : configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine, configuration.QuinidineNotchedP)
+        var electrodes = configuration.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? SinusArrhythmiaReference.CreateElectrodes() : configuration.AtrialEscape ? AtrialEscapeReference.CreateElectrodes() : configuration.Aar ? AcceleratedAtrialReference.CreateElectrodes() : configuration.Ajr ? AcceleratedJunctionalReference.CreateElectrodes() : configuration.Aivr ? AcceleratedVentricularReference.CreateElectrodes(configuration.AivrFusion, configuration.AivrCapture) : configuration.Vt ? VentricularTachycardiaReference.CreateElectrodes(configuration.VtFusion, configuration.VtCapture, configuration.VtBidirectional, configuration.VtTwisting) : configuration.Svt ? SupraventricularTachycardiaReference.CreateElectrodes(configuration.SvtRbbb, configuration.SvtLbbb) : configuration.NormalPrDelta ? NormalPrDeltaReference.CreateElectrodes(configuration.ProlongedPrDelta) : configuration.ShortPr ? ShortPrReference.CreateElectrodes() : configuration.Wpw ? WpwReference.CreateElectrodes(configuration.WpwNegativeV1, configuration.WpwSmallerDelta) : configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateElectrodes(configuration.Quinidine, configuration.QuinidineNotchedP)
             : configuration.DigitalisEffect ? DigitalisEffectReference.CreateElectrodes(configuration.DigitalisShape)
             : configuration.Calcium != CalciumIllustration.Reference
             ? CalciumRepolarizationReference.CreateElectrodes(configuration.Calcium)
@@ -417,6 +424,7 @@ internal static class ProjectedEcgDemoSource
             VentricularMechanicalEnabled: !VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern),
             IndependentVentricularPeriodNs: configuration.IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, ConductedBeatsPerGroup: configuration.ConductedBeatsPerGroup, ConductionPattern: configuration.ConductionPattern);
         if (configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration) { plan = AtrialFlutterReference.CreatePlan(configuration.VentricularConductionRatio); }
+        if (configuration.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration) { plan = SinusArrhythmiaReference.CreatePlan(); }
         if (configuration.AtrialEscape) { plan = AtrialEscapeReference.CreatePlan(); }
         if (configuration.Aar) { plan = AcceleratedAtrialReference.CreatePlan(); }
         if (configuration.Ajr) { plan = AcceleratedJunctionalReference.CreatePlan(); }

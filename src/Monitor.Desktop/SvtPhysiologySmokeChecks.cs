@@ -9,17 +9,23 @@ namespace Monitor.Desktop;
 
 internal static class SvtPhysiologySmokeChecks
 {
-    internal static void Verify()
+    internal static void Verify() { Verify(false); Verify(true); }
+
+    private static void Verify(bool rbbb)
     {
-        var config = PhysiologyDemoConfiguration.SvtPreset;
+        var config = PhysiologyDemoConfiguration.SvtPreset with { SvtRbbb = rbbb };
         var plan = config.ResolvePlan();
         if (plan != SupraventricularTachycardiaReference.CreatePlan()) { throw new InvalidOperationException("SVT physiology plan differs from shared source."); }
         var blocks = MechanicalUncouplingSmokeChecks.Decode(config);
         var normal = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.Default);
+        var narrow = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.SvtPreset);
+        foreach (int row in new[] { 1, 2, 3, 4, 5, 6 })
+            if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(narrow, row)))
+            { throw new InvalidOperationException("RBBB morphology changed fixed non-ECG inputs."); }
         foreach (int row in new[] { 1, 4 })
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
             { throw new InvalidOperationException("SVT changed respiration/CO2."); }
-        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, SupraventricularTachycardiaReference.CreateLeadIIBands()).GenerateBefore(6_000_000_000, 1500, 100);
+        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, SupraventricularTachycardiaReference.CreateLeadIIBands(rbbb)).GenerateBefore(6_000_000_000, 1500, 100);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("SVT physiology monitorII mismatch."); }
         var pleth = PlethRunoffSource.Create(plan, SvtPerfusionReference.Pleth);
@@ -56,7 +62,7 @@ internal static class SvtPhysiologySmokeChecks
         {
             Click(window.VentricularDisorganizationButton); Click(window.StepButton); Click(window.RunButton);
             var oldTimer = window.ActiveTimer;
-            Click(window.SvtButton); window.Pulse(oldTimer);
+            Click(window.SvtButton); window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyBreathButton); window.Pulse(oldTimer);
             if (window.BreathConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.SvtInput.IsChecked != true)
             { throw new InvalidOperationException("SVT physiology loader retained VF state."); }
             Click(window.ApplyBreathButton);
@@ -71,14 +77,18 @@ internal static class SvtPhysiologySmokeChecks
             if (window.BreathConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
             { throw new InvalidOperationException("SVT physiology conflict mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.SvtInput.IsChecked != true || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text)) { throw new InvalidOperationException("SVT physiology reset lost source."); }
+            if (window.SvtInput.IsChecked != true || window.SvtRbbbInput.IsChecked != rbbb || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text)) { throw new InvalidOperationException("SVT physiology reset lost source."); }
+            window.SvtRbbbInput.IsChecked = !rbbb; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration != (PhysiologyDemoConfiguration.SvtPreset with { SvtRbbb = !rbbb })) { throw new InvalidOperationException("SVT RBBB toggle failed."); }
+            window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyBreathButton);
+            if (window.BreathConfiguration != config) { throw new InvalidOperationException("SVT RBBB toggle restore failed."); }
             window.SvtInput.IsChecked = false; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != PhysiologyDemoConfiguration.Default) { throw new InvalidOperationException("SVT physiology clear failed."); }
             Click(window.SvtButton); Click(window.WpwButton);
-            if (window.SvtInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained SVT."); }
+            if (window.SvtInput.IsChecked == true || window.SvtRbbbInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained SVT."); }
         }
         finally { window.Close(); }
-        foreach (var invalid in new[] { config with { UseVascularReservoir = false }, config with { Wpw = true }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft } })
+        foreach (var invalid in new[] { config with { Svt = false, SvtRbbb = true }, config with { UseVascularReservoir = false }, config with { Wpw = true }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft } })
         {
             try { PhysiologyDemoSource.Create(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "Svt.ConflictingModes") { continue; }

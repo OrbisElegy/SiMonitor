@@ -1,0 +1,48 @@
+{
+  "id": "SvtRightBundleBlockIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480"
+  },
+  "textbook_summary": [
+    "SVT may have wide QRS with bundle block or intraventricular aberrancy."
+  ],
+  "implementation_basis": [
+    "Existing RightBundleBlockReference authored electrode contours"
+  ],
+  "authored_choices": {
+    "RR_ms": 300,
+    "P_QRS_QT_T_ST_ms": [
+      40,
+      140,
+      260,
+      100,
+      20
+    ],
+    "ventricular_electrical_mechanical_ms": [
+      0,
+      80
+    ],
+    "atrial_mechanical_ms": 80
+  },
+  "invariants": [
+    "Same overlapping retrograde P as narrow SVT",
+    "Shared RBBB QRS and secondary ST/T with shorter support",
+    "Limb identities and monitorII parity",
+    "Same SVT event grid and fixed perfusion inputs; non-ECG channels unchanged",
+    "Atomic orphan/conflicting configuration rejection and wire recovery"
+  ],
+  "limitations": [
+    "Not rate-dependent aberrancy or reentry mechanism",
+    "Not calibrated pump impairment or clinical waveform measurements",
+    "No episode onset/termination or AVNRT/AVRT differentiation"
+  ],
+  "verification": [
+    "SvtRightBundleWidensVentriclesWithoutChangingAtria",
+    "SvtRightBundlePreservesProjectionAndPhase",
+    "SvtSmokeChecks",
+    "SvtPhysiologySmokeChecks"
+  ]
+}

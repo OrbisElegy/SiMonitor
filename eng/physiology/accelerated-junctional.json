@@ -1,0 +1,50 @@
+{
+  "id": "AcceleratedJunctionalIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "Nonparoxysmal tachycardia / accelerated autonomous rhythms.",
+    "Junctional rhythm usually 70-130 bpm.",
+    "Similar rates may produce interference AV dissociation and capture/fusion.",
+    "Often gradual onset and termination."
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      600,
+      800
+    ],
+    "QRS_QT_T_ms": [
+      80,
+      400,
+      180
+    ],
+    "first_QRS_mechanical_ms": [
+      120,
+      200
+    ],
+    "atrial_mechanical_ms": 80,
+    "PR_builder_placeholder_ms": 100,
+    "source": "Normal narrow QRS/ST/T with independent sinus P; no added retrograde P"
+  },
+  "invariants": [
+    "Only named fixed grid permits600ms independent ventricle with800ms atrium",
+    "Single independent P source; no fixed measurable PR",
+    "Shared monitorII and limb identities retained across recovery",
+    "12-lead demo loads atomically and fences stale timer"
+  ],
+  "limitations": [
+    "Established dissociated rhythm example, not automaticity or AV competition mechanism",
+    "No gradual onset/termination, retrograde variants or competitive capture",
+    "No focus localization or pump calibration",
+    "Physiology demo integration is NEXT; accelerated atrial rhythm and complete TdP remain open"
+  ],
+  "verification": [
+    "AcceleratedJunctionalRhythmHasIndependentRates",
+    "AcceleratedJunctionalRhythmPreservesNarrowQrsAndPhase",
+    "AcceleratedJunctionalSmokeChecks"
+  ]
+}

@@ -33,6 +33,7 @@ internal static class PhysiologyDemoSource
         // pressure across missing and resumed ejections. Teaching parameters only.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
+                configuration.Aar ? AcceleratedAtrialReference.CreateLeadIIBands() :
                 configuration.Ajr ? AcceleratedJunctionalReference.CreateLeadIIBands() :
                 configuration.Aivr ? AcceleratedVentricularReference.CreateLeadIIBands() :
                 configuration.Vt ? VentricularTachycardiaReference.CreateLeadIIBands(configuration.VtFusion, configuration.VtCapture, configuration.VtBidirectional, configuration.VtTwisting) :
@@ -54,7 +55,8 @@ internal static class PhysiologyDemoSource
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pleth : configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pleth : configuration.Vt ? VtPerfusionReference.Pleth : configuration.Svt ? SvtPerfusionReference.Pleth : new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
+                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: configuration.Aar ? AcceleratedAtrialPerfusionReference.Pleth : configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pleth : configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pleth : configuration.Vt ? VtPerfusionReference.Pleth : configuration.Svt ? SvtPerfusionReference.Pleth : new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
+             configuration.Aar ? AcceleratedAtrialPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              configuration.Aivr ? AcceleratedVentricularPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              configuration.Vt ? VtPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
@@ -64,6 +66,7 @@ internal static class PhysiologyDemoSource
                     Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit).CreateChannel(plan, ChannelId(3), 0)
                 : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
+             configuration.Aar ? AcceleratedAtrialPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              configuration.Vt ? VtPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
@@ -72,6 +75,7 @@ internal static class PhysiologyDemoSource
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0),
+             configuration.Aar ? AcceleratedAtrialPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              configuration.Aivr ? AcceleratedVentricularPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              configuration.Vt ? VtPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :

@@ -16,20 +16,23 @@ public static class AcceleratedVentricularReference
         IndependentVentricularPeriodNs: 750_000_000,
         ConductionPattern: AvConductionPattern.AcceleratedVentricularIllustration);
 
+    public const string CaptureEvidenceId = "AcceleratedVentricularCoincidentCaptureIllustration@1";
     public const string FusionEvidenceId = "AcceleratedVentricularFusionIllustration@1";
     // Slot0 of16 repeats every12s, aligned with every15th sinus P.
-    // P at0/12000ms precedes fusion at120/12120ms: authored PR120ms.
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false)
+    // P at0/12000ms precedes fusion or coincident capture at120/12120ms.
+    // Authored PR120ms; capture keeps the original grid, no focus reset.
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false, bool capture = false)
     {
+        if (fusion && capture) { throw new EventWaveformException("Aivr.ConflictingModes", "configuration"); }
         var ventricular = CompleteAvBlockVentricularReference.CreateElectrodes(Timing);
-        if (!fusion) { return ventricular; }
+        if (!fusion && !capture) { return ventricular; }
         var conducted = TextbookElectrodeReference.CreateElectrodes(timing: Timing with { QrsDurationNs = 80_000_000 });
         return Array.AsReadOnly(ventricular.Select((e, i) => e with
         {
             Bands = Array.AsReadOnly(e.Bands.Select(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical
                 ? b with { VentricularCycles = new(16, 65534) } : b)
-                .Concat(e.Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(Half))
-                .Concat(conducted[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(Half)).ToArray())
+                .Concat(fusion ? e.Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(Half) : [])
+                .Concat(conducted[i].Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.VentricularElectrical).Select(b => capture ? b with { VentricularCycles = new(16, 1) } : Half(b))).ToArray())
         }).ToArray());
         EventWaveformBand Half(EventWaveformBand b) => b with
         {
@@ -38,9 +41,9 @@ public static class AcceleratedVentricularReference
         };
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false)
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false, bool capture = false)
     {
-        var electrodes = CreateElectrodes(fusion);
+        var electrodes = CreateElectrodes(fusion, capture);
         return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Zip(electrodes[(int)EcgElectrode.RA].Bands)
             .Select(pair => pair.First with
             {

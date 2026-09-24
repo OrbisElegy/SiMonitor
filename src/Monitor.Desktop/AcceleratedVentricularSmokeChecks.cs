@@ -9,12 +9,12 @@ namespace Monitor.Desktop;
 
 internal static class AcceleratedVentricularSmokeChecks
 {
-    internal static void Verify() { Verify(false); Verify(true); }
+    internal static void Verify() { Verify(false); Verify(true); Verify(false, true); }
 
-    private static void Verify(bool fusion)
+    private static void Verify(bool fusion, bool capture = false)
     {
-        var config = ProjectedEcgDemoConfiguration.AivrPreset with { AivrFusion = fusion };
-        foreach (var invalid in new[] { config with { Aivr = false, AivrFusion = true }, config with { Vt = true }, config with { VtCapture = true },
+        var config = ProjectedEcgDemoConfiguration.AivrPreset with { AivrFusion = fusion, AivrCapture = capture };
+        foreach (var invalid in new[] { config with { Aivr = false, AivrFusion = true }, config with { Aivr = false, AivrFusion = false, AivrCapture = true }, config with { AivrFusion = true, AivrCapture = true }, config with { Vt = true }, config with { VtCapture = true },
             config with { VtTwisting = true }, config with { Svt = true }, config with { Wpw = true },
             config with { HeartRateBpm = 80 }, config with { IndependentVentricularPeriodMilliseconds = 750 },
             config with { QrsDurationMilliseconds = 80 }, config with { VentricularConductionRatio = 2 },
@@ -31,7 +31,7 @@ internal static class AcceleratedVentricularSmokeChecks
         {
             Click(window.VtButton); window.VtTwistingInput.IsChecked = true; Click(window.ApplyEcgButton);
             Click(window.StepButton); Click(window.RunButton); var previousTimer = window.ActiveTimer;
-            Click(window.AivrButton); window.AivrFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton); window.Pulse(previousTimer);
+            Click(window.AivrButton); window.AivrCaptureInput.IsChecked = capture; window.AivrFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton); window.Pulse(previousTimer);
             if (window.EcgConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 ||
                 window.ActiveTimer is not null || window.VtInput.IsChecked == true || window.VtTwistingInput.IsChecked == true)
             { throw new InvalidOperationException("AIVR loader retained previous VT state."); }
@@ -51,10 +51,10 @@ internal static class AcceleratedVentricularSmokeChecks
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), sample, [EcgLead.I, EcgLead.II, EcgLead.V1, EcgLead.V5]);
             long end = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
             var expected = ElectrodeSignalGenerator.Start(AcceleratedVentricularReference.CreatePlan(), "AcqECGMonitor250@1", 1,
-                AcceleratedVentricularReference.CreateElectrodes(fusion)).GenerateBefore(end, 1500, 200);
+                AcceleratedVentricularReference.CreateElectrodes(fusion, capture)).GenerateBefore(end, 1500, 200);
             foreach (var lead in Enum.GetValues<EcgLead>())
             {
-                var actual = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
+                short[] actual = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
                 if (actual.Length != expected.Count || actual.Zip(expected).Any(p => Math.Abs(p.First - p.Second.MicrovoltValues[(int)lead]) > 1))
                 { throw new InvalidOperationException("AIVR demo differs from shared electrode source."); }
             }
@@ -67,18 +67,23 @@ internal static class AcceleratedVentricularSmokeChecks
             window.VtInput.IsChecked = true; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
             { throw new InvalidOperationException("AIVR conflict changed accepted state."); }
+            Click(window.ResetButton); Click(window.RunButton);
+            timer = window.ActiveTimer; trace = window.Trace; time = window.SimulationTimeNs;
+            window.AivrFusionInput.IsChecked = true; window.AivrCaptureInput.IsChecked = true; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
+            { throw new InvalidOperationException("AIVR capture/fusion conflict changed native state."); }
             Click(window.ResetButton);
-            if (window.AivrInput.IsChecked != true || window.AivrFusionInput.IsChecked != fusion || window.VtInput.IsChecked == true || window.EcgConfiguration != config)
+            if (window.AivrInput.IsChecked != true || window.AivrFusionInput.IsChecked != fusion || window.AivrCaptureInput.IsChecked != capture || window.VtInput.IsChecked == true || window.EcgConfiguration != config)
             { throw new InvalidOperationException("AIVR reset lost accepted state."); }
-            window.AivrFusionInput.IsChecked = !fusion; Click(window.ApplyEcgButton);
-            if (window.EcgConfiguration != (config with { AivrFusion = !fusion })) { throw new InvalidOperationException("AIVR fusion toggle failed."); }
-            window.AivrFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton);
+            window.AivrCaptureInput.IsChecked = false; window.AivrFusionInput.IsChecked = !fusion; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != (config with { AivrFusion = !fusion, AivrCapture = false })) { throw new InvalidOperationException("AIVR fusion toggle failed."); }
+            window.AivrCaptureInput.IsChecked = capture; window.AivrFusionInput.IsChecked = fusion; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != config) { throw new InvalidOperationException("AIVR fusion toggle restore failed."); }
             window.AivrInput.IsChecked = false; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default || window.PrIntervalInput.Text == "—")
             { throw new InvalidOperationException("AIVR clear did not restore default."); }
             Click(window.AivrButton); Click(window.VentricularDisorganizationButton); Click(window.AivrButton); Click(window.WpwButton);
-            if (window.AivrInput.IsChecked == true || window.AivrFusionInput.IsChecked == true || window.EcgConfiguration != ProjectedEcgDemoConfiguration.WpwPreset)
+            if (window.AivrInput.IsChecked == true || window.AivrFusionInput.IsChecked == true || window.AivrCaptureInput.IsChecked == true || window.EcgConfiguration != ProjectedEcgDemoConfiguration.WpwPreset)
             { throw new InvalidOperationException("AIVR flag leaked into another loader."); }
         }
         finally { window.Close(); }

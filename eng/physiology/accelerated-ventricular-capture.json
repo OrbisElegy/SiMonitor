@@ -1,0 +1,55 @@
+{
+  "id": "AcceleratedVentricularCoincidentCaptureIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "fusion and capture in accelerated autonomous rhythms."
+  ],
+  "implementation_basis": [
+    "Existing authored conducted and ventricular electrode contours"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      750,
+      800
+    ],
+    "capture_slot_group": [
+      0,
+      16
+    ],
+    "capture_repeat_ms": 12000,
+    "P_to_capture_ms": 120,
+    "ventricular_electrical_mechanical_ms": [
+      120,
+      200
+    ],
+    "captured_QRS_QT_T_ms": [
+      80,
+      400,
+      180
+    ]
+  },
+  "invariants": [
+    "Complete normal ventricular morphology replaces selected broad QRS/T",
+    "Independent P and unselected beats unchanged",
+    "Coincident electrical event and single mechanical event; RR grid unchanged",
+    "Fusion and capture cannot occupy same slot",
+    "Shared projection, raw data and within-beat recovery",
+    "Non-ECG fixed inputs unchanged"
+  ],
+  "limitations": [
+    "Coincident fixed example only; no early capture or ectopic focus reset",
+    "No refractory/automaticity competition or pump calibration"
+  ],
+  "verification": [
+    "AcceleratedVentricularCaptureSelectsOnlyOneAtrialAlignedBeatPerGroup",
+    "AcceleratedVentricularCapturePreservesProjectionAndRestoresWithinSelectedBeat",
+    "CaptureAndFusionCannotOccupyTheSameSlot",
+    "AcceleratedVentricularSmokeChecks",
+    "AcceleratedVentricularPhysiologySmokeChecks"
+  ]
+}

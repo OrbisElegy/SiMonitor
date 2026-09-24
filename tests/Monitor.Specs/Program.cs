@@ -68,6 +68,7 @@ internal static class Program
             .. SvtSpecifications.All,
             .. VtSpecifications.All,
             .. AcceleratedVentricularSpecifications.All,
+            .. AcceleratedJunctionalSpecifications.All,
             .. VtFusionSpecifications.All,
             .. VtCaptureSpecifications.All,
             .. BidirectionalVtSpecifications.All,

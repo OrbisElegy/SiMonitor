@@ -28,6 +28,7 @@ internal static class WaveformDemoSmokeChecks
         SvtSmokeChecks.Verify();
         VtSmokeChecks.Verify();
         AcceleratedVentricularSmokeChecks.Verify();
+        AcceleratedJunctionalSmokeChecks.Verify();
         AcceleratedVentricularPhysiologySmokeChecks.Verify();
         VtPhysiologySmokeChecks.Verify();
         SvtPhysiologySmokeChecks.Verify();

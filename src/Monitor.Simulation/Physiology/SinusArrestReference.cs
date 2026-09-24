@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Simulation.Physiology;
 
-// Authored PP sequence, not respiratory coupling or sinus-node physiology.
-public static class SinusArrhythmiaReference
+// Fixed pause without escape: PP2000ms is not a multiple of baseline800ms.
+// Timing is authored, not a sinus-node or automaticity model.
+public static class SinusArrestReference
 {
-    public const string EvidenceId = "SinusArrhythmiaIllustration@1";
-    public static EcgCycleTiming Timing { get; } = new(600_000_000, 100_000_000,
+    public const string EvidenceId = "SinusArrestIllustration@1";
+    public static EcgCycleTiming Timing { get; } = new(800_000_000, 100_000_000,
         160_000_000, 80_000_000, 400_000_000, 180_000_000);
     public static RegularPhysiologyPlan CreatePlan() => new(0, 800_000_000,
         160_000_000, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000,
-        ConductionPattern: AvConductionPattern.SinusArrhythmiaIllustration);
+        ConductionPattern: AvConductionPattern.SinusArrestIllustration);
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes() =>
         TextbookElectrodeReference.CreateElectrodes(timing: Timing);
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
@@ -23,8 +24,8 @@ public static class SinusArrhythmiaReference
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        const long groupDuration = 3_200_000_000;
-        ReadOnlySpan<long> slots = [0, 800_000_000, 1_800_000_000, 2_400_000_000];
+        const long groupDuration = 4_400_000_000;
+        ReadOnlySpan<long> slots = [0, 800_000_000, 1_600_000_000, 3_600_000_000];
         IndexedCardiacSchedule.Visit(plan, kind, offset, inclusive, exclusive,
             maximumEvents, visitor, groupDuration, slots, cancellationToken);
     }

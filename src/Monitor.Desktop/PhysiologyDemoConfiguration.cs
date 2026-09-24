@@ -13,6 +13,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
     internal static PhysiologyDemoConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
     internal static PhysiologyDemoConfiguration SinusArrhythmiaPreset { get; } = Default with { ConductionPattern = AvConductionPattern.SinusArrhythmiaIllustration };
+    internal static PhysiologyDemoConfiguration SinusArrestPreset { get; } = Default with { ConductionPattern = AvConductionPattern.SinusArrestIllustration };
     internal static PhysiologyDemoConfiguration AtrialEscapePreset { get; } = Default with { AtrialEscape = true };
     internal static PhysiologyDemoConfiguration AarPreset { get; } = Default with { Aar = true };
     internal static PhysiologyDemoConfiguration AjrPreset { get; } = Default with { Ajr = true };
@@ -147,6 +148,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         { throw new EventWaveformException("Flutter.OneToOneRequiresReservoir", "configuration"); }
         if (ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration && !UseVascularReservoir)
         { throw new EventWaveformException("SinusArrhythmia.RequiresReservoir", "configuration"); }
+        if (ConductionPattern == AvConductionPattern.SinusArrestIllustration && !UseVascularReservoir)
+        { throw new EventWaveformException("SinusArrest.RequiresReservoir", "configuration"); }
         _ = ConductionSelection.Index(VentricularConductionRatio, ConductedBeatsPerGroup, ConductionPattern);
         // Demo input/display bounds, not physiological normal ranges.
         if ((IndependentVentricularPeriodMilliseconds is { } independent && (independent is < 800 or > 3200 || VentricularConductionRatio != 1)) ||

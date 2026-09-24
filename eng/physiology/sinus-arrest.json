@@ -1,0 +1,67 @@
+{
+  "id": "SinusArrestIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "476"
+  },
+  "textbook_summary": [
+    "sinus arrest: long PP not an integer multiple; escape may follow."
+  ],
+  "implementation_basis": [
+    "Existing fixed authored perfusion inputs, not calibrated stroke volume"
+  ],
+  "authored_choices": {
+    "P_onsets_ms": [
+      0,
+      800,
+      1600,
+      3600
+    ],
+    "group_ms": 4400,
+    "baseline_PP_ms": 800,
+    "long_PP_ms": 2000,
+    "cardiac_offsets_ms": [
+      0,
+      80,
+      160,
+      240
+    ],
+    "P_PR_QRS_QT_T_ms": [
+      100,
+      160,
+      80,
+      400,
+      180
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "pressure_and_CVP_overlap": 1,
+    "resp_artifact_support_ms": 800
+  },
+  "invariants": [
+    "No P/QRS/ejection during the pause; preceding repolarization completes",
+    "Optical and vascular finite runoff continues",
+    "CVP and Resp artifacts follow surviving events",
+    "Indexed lookup and half-open budget atomicity",
+    "Shared12-lead and physiology source with wire recovery",
+    "Sinus arrhythmia regression remains unchanged"
+  ],
+  "limitations": [
+    "Fixed example without escape, not an automaticity model",
+    "Not sinus exit block or complete sick-sinus syndrome",
+    "No stroke-volume calibration or gas exchange feedback"
+  ],
+  "verification": [
+    "SinusArrestMovesConductedEventsTogether",
+    "SinusArrestPreservesMorphologyAndRecovery",
+    "SinusArrestBoundsLateLookupAndRejectsConflicts",
+    "SinusArrestRetainsBoundedPerfusionThroughPause",
+    "SinusArrestSmokeChecks",
+    "SinusArrestPhysiologySmokeChecks"
+  ]
+}

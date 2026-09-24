@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+namespace Monitor.Simulation.Physiology;
+
+// Authored fixed inputs for200ms RR, not calibrated flutter hemodynamics.
+public static class FlutterOneToOnePerfusionReference
+{
+    public const string EvidenceId = "FlutterOneToOnePerfusionIllustration@1";
+    public static PlethRunoffPlan Pleth { get; } = SvtPerfusionReference.Pleth;
+    public static VascularPressurePlan Arterial { get; } = SvtPerfusionReference.Arterial with
+    {
+        EjectionDurationNs = 120_000_000,
+        Morphology = SvtPerfusionReference.Arterial.Morphology! with { MaximumPulseOverlap = 3 }
+    };
+    public static VascularPressurePlan Pulmonary { get; } = SvtPerfusionReference.Pulmonary with
+    {
+        EjectionDurationNs = 160_000_000,
+        Morphology = SvtPerfusionReference.Pulmonary.Morphology! with { MaximumPulseOverlap = 4 }
+    };
+    // Flutter timeline suppresses AtrialMechanical; do not synthesize normal a waves.
+    public static CentralVenousPressurePlan Venous { get; } = SvtPerfusionReference.Venous;
+}

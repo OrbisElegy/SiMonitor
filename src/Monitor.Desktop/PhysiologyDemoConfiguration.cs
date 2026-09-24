@@ -133,8 +133,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             (ConductionPattern != AvConductionPattern.FixedPr || VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 ||
              CardiacActivity != CardiacActivity.AtrialAndVentricular || IndependentVentricularPeriodMilliseconds is not null || IndependentVentricularOffsetMilliseconds is not null))
         { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
-        if (AtrialFlutterReference.IsPattern(ConductionPattern) && VentricularConductionRatio == 1)
-        { throw new EventWaveformException("Flutter.OneToOnePerfusionPending", "configuration"); }
+        if (AtrialFlutterReference.IsPattern(ConductionPattern) && VentricularConductionRatio == 1 && !UseVascularReservoir)
+        { throw new EventWaveformException("Flutter.OneToOneRequiresReservoir", "configuration"); }
         _ = ConductionSelection.Index(VentricularConductionRatio, ConductedBeatsPerGroup, ConductionPattern);
         // Demo input/display bounds, not physiological normal ranges.
         if ((IndependentVentricularPeriodMilliseconds is { } independent && (independent is < 800 or > 3200 || VentricularConductionRatio != 1)) ||
@@ -158,7 +158,7 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern);
         var timing = Aar ? AcceleratedAtrialReference.Timing : Svt ? SupraventricularTachycardiaReference.ResolveTiming(SvtRbbb, SvtLbbb) : NormalPrDelta ? NormalPrDeltaReference.ResolveTiming(ProlongedPrDelta) : ShortPr ? ShortPrReference.Timing : Wpw ? WpwReference.ResolveTiming(WpwSmallerDelta) : prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
-        long offset = Ajr || Aivr || Vt ? 120_000_000 : Svt ? 0 : DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
+        long offset = Ajr || Aivr || Vt ? 120_000_000 : Svt ? 0 : DemoVentricularTiming.ResolveOffset(IndependentVentricularPeriodMilliseconds, IndependentVentricularOffsetMilliseconds, flutter ? 80_000_000 : timing.PrIntervalNs);
         return new(0, Ajr || Aivr || Vt ? 800_000_000 : ConductionPattern == AvConductionPattern.InterpolatedPvcIllustration ? 1_000_000_000 : fibrillation || prematureBeat ? 800_000_000 : flutter ? 200_000_000 : timing.RrIntervalNs, offset, 80_000_000,
             offset + 80_000_000, BreathPeriodMilliseconds * 1_000_000L, InspirationMilliseconds * 1_000_000L,
             InspiratoryPauseMilliseconds * 1_000_000L, ExpiratoryPauseMilliseconds * 1_000_000L, RespiratoryActivity, ActivityAfterBreaths is { } count ? (ulong)count : null,

@@ -222,7 +222,7 @@ internal sealed class WaveformDemoWindow : Window
     public WaveformDemoWindow(bool physiology = false, bool projected = false)
     {
         _projected = projected;
-        if (projected) { ConductionInput.ItemsSource = ConductionInput.ItemsSource!.Cast<string>().Append("房扑1:1（固定示意）").ToArray(); }
+        if (projected || physiology) { ConductionInput.ItemsSource = ConductionInput.ItemsSource!.Cast<string>().Append("房扑1:1（固定示意）").ToArray(); }
         _physiology = physiology && !projected;
         Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth / ABP / CO₂ / PA / CVP 演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
         ShapeButton.IsVisible = !physiology && !projected;
@@ -1059,6 +1059,8 @@ internal sealed class WaveformDemoWindow : Window
             Reset(UsesPulse, breathConfiguration: new(period, inspiration, amplitude, plateau, baseline, end, deadSpace, rise, fall, transport, dispersion, pause, expiratoryPause, artifact,
                 (RespiratoryActivity)RespiratoryActivityInput.SelectedIndex, afterBreaths, durationBreaths, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Atrial, (CardiacActivity)CardiacActivityInput.SelectedIndex, mechanicalEnabled, mechanicalAfter, mechanicalDuration, MechanicalEveryCyclesInput.SelectedIndex + 1, vascularReservoir, independentPeriod, ParseIndependentVentricularOffset(), (RespiratoryPattern)RespiratoryPatternInput.SelectedIndex, ConductionSelection.Resolve(ConductionInput.SelectedIndex).Conducted, ConductionSelection.Pattern(ConductionInput.SelectedIndex), (EcgBundleBlockIllustration)BundleBlockInput.SelectedIndex, afPulseDeficit, afAberrancy, WpwInput.IsChecked == true, WpwInput.IsChecked == true && WpwNegativeV1Input.IsChecked == true, ShortPrInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true, WpwInput.IsChecked == true && WpwSmallerDeltaInput.IsChecked == true, NormalPrDeltaInput.IsChecked == true && ProlongedPrDeltaInput.IsChecked == true, SvtInput.IsChecked == true, VtInput.IsChecked == true, VtInput.IsChecked == true && VtFusionInput.IsChecked == true, VtInput.IsChecked == true && VtCaptureInput.IsChecked == true, VtInput.IsChecked == true && VtBidirectionalInput.IsChecked == true, VtInput.IsChecked == true && VtTwistingInput.IsChecked == true, AivrInput.IsChecked == true, AjrInput.IsChecked == true, AarInput.IsChecked == true, SvtInput.IsChecked == true && SvtRbbbInput.IsChecked == true, SvtInput.IsChecked == true && SvtLbbbInput.IsChecked == true));
         }
+        catch (EventWaveformException error) when (error.ReasonCode == "Flutter.OneToOneRequiresReservoir")
+        { BreathConfigurationStatus.Text = "未应用：房扑1:1需启用血管回落模型。当前波形保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "Aar.ConflictingModes")
         { BreathConfigurationStatus.Text = "未应用：加速性房性自主心律需固定1:1下传及血管回落源，不能叠加其他节律或形态。当前波形保持。"; }
         catch (EventWaveformException error) when (error.ReasonCode == "Ajr.ConflictingModes")
@@ -1183,6 +1185,8 @@ internal sealed class WaveformDemoWindow : Window
             { _activeBreathConfiguration.Text += "；偶发融合：首搏4.995s，每12s重复；P至融合搏动195ms；射血输入保持固定"; }
             if (breathConfiguration.Vt)
             { _activeBreathConfiguration.Text += "；室速：室率160／房率75次/分，无固定PR；心室电/机械事件120/200ms；固定射血输入，未作血流动力学校准"; }
+            if (breathConfiguration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration && breathConfiguration.VentricularConductionRatio == 1)
+            { _activeBreathConfiguration.Text += "；房扑1:1：电/机械事件80/160ms；固定动脉/肺动脉输入120/160ms，保留完整脉冲及有限回落；未标定血流动力学损害"; }
             if (breathConfiguration.Svt)
             { _activeBreathConfiguration.Text += (breathConfiguration.SvtRbbb || breathConfiguration.SvtLbbb) ? $"；室上速200次/分合并{(breathConfiguration.SvtLbbb ? "左" : "右")}束支阻滞QRS140ms；P′与QRS重叠；电/机械事件0/80ms；沿用固定灌注输入，未标定阻滞相关泵功能" : "；规则窄QRS室上速200次/分，P′与QRS重叠；电/机械事件0/80ms；灌注采用固定输入示例"; }
             if (breathConfiguration.NormalPrDelta)

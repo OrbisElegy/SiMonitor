@@ -74,7 +74,6 @@ internal static class Program
             .. AtrialEscapeSpecifications.All,
             .. SinusArrhythmiaSpecifications.All,
     .. SinusArrestSpecifications.All,
-    .. SinoatrialBlockTwoSpecifications.All,
     .. SinusArrhythmiaPerfusionSpecifications.All,
             .. AtrialEscapePerfusionSpecifications.All,
             .. VtFusionSpecifications.All,

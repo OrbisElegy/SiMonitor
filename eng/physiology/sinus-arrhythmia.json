@@ -1,0 +1,56 @@
+{
+  "id": "SinusArrhythmiaIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "476"
+  },
+  "textbook_summary": [
+    "sinus origin unchanged with varying PP intervals."
+  ],
+  "authored_choices": {
+    "PP_RR_sequence_ms": [
+      800,
+      1000,
+      600,
+      800
+    ],
+    "group_ms": 3200,
+    "atrial_electrical_mechanical_ms": [
+      0,
+      80
+    ],
+    "ventricular_electrical_mechanical_ms": [
+      160,
+      240
+    ],
+    "P_PR_QRS_QT_T_ms": [
+      100,
+      160,
+      80,
+      400,
+      180
+    ],
+    "minimum_interval_ms": 600
+  },
+  "invariants": [
+    "Normal sinus P and QRS/T unchanged",
+    "Fixed1:1 conduction and electrical/mechanical delays",
+    "Indexed group lookup, no scan from epoch",
+    "Breathing event clock independent",
+    "Atomic event budget and unsupported plan rejection",
+    "Shared projection and within-beat/irregular-boundary recovery"
+  ],
+  "limitations": [
+    "Authored fixed sequence, not respiratory coupling or sinus-node dynamics",
+    "No first pause/escape or disease onset",
+    "Physiology demo gated pending bounded perfusion and artifact integration"
+  ],
+  "verification": [
+    "SinusArrhythmiaMovesConductedEventsTogether",
+    "SinusArrhythmiaPreservesMorphologyAndRecovery",
+    "SinusArrhythmiaBoundsLateLookupAndRejectsConflicts",
+    "SinusArrhythmiaSmokeChecks"
+  ]
+}

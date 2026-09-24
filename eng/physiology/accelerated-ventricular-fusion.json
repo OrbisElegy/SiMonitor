@@ -1,0 +1,62 @@
+{
+  "id": "AcceleratedVentricularFusionIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "accelerated autonomous rhythms can show AV dissociation and fusion/capture."
+  ],
+  "implementation_basis": [
+    "Existing authored normal and ventricular escape electrode contours"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      750,
+      800
+    ],
+    "ventricular_electrical_mechanical_ms": [
+      120,
+      200
+    ],
+    "fusion_slot_group": [
+      0,
+      16
+    ],
+    "fusion_repeat_ms": 12000,
+    "P_to_fusion_ms": 120,
+    "normal_ventricular_weights_permille": [
+      500,
+      500
+    ],
+    "normal_ventricular_QRS_ms": [
+      80,
+      160
+    ],
+    "QT_T_ms": [
+      400,
+      180
+    ]
+  },
+  "invariants": [
+    "Only selected QRS/T changes; independent P remains single",
+    "Half contours retain their own time supports",
+    "Original full ventricular QRS/T excluded in fusion slot",
+    "One electrical and one mechanical event per ventricular beat",
+    "Non-ECG fixed inputs unchanged",
+    "Projection, within-beat recovery and atomic demo lifecycle"
+  ],
+  "limitations": [
+    "Fixed illustration, not automaticity/refractory/competition model",
+    "No calibrated fusion pump function or anatomical recruitment",
+    "Complete capture and gradual onset/termination remain open"
+  ],
+  "verification": [
+    "AcceleratedVentricularFusionSelectsOnlyOneAtrialAlignedBeatPerGroup",
+    "AcceleratedVentricularFusionPreservesProjectionAndRestoresWithinSelectedBeat",
+    "AcceleratedVentricularSmokeChecks",
+    "AcceleratedVentricularPhysiologySmokeChecks"
+  ]
+}

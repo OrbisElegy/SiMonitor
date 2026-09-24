@@ -36,7 +36,7 @@ internal static class PhysiologyDemoSource
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 configuration.Aar ? AcceleratedAtrialReference.CreateLeadIIBands() :
                 configuration.Ajr ? AcceleratedJunctionalReference.CreateLeadIIBands() :
-                configuration.Aivr ? AcceleratedVentricularReference.CreateLeadIIBands(configuration.AivrFusion) :
+                configuration.Aivr ? AcceleratedVentricularReference.CreateLeadIIBands(configuration.AivrFusion, configuration.AivrCapture) :
                 configuration.Vt ? VentricularTachycardiaReference.CreateLeadIIBands(configuration.VtFusion, configuration.VtCapture, configuration.VtBidirectional, configuration.VtTwisting) :
                 configuration.Svt ? SupraventricularTachycardiaReference.CreateLeadIIBands(configuration.SvtRbbb, configuration.SvtLbbb) :
                 configuration.NormalPrDelta ? NormalPrDeltaReference.CreateLeadIIBands(configuration.ProlongedPrDelta) :

@@ -1,0 +1,51 @@
+{
+  "id": "AcceleratedVentricularIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "Nonparoxysmal tachycardia / accelerated autonomous rhythms.",
+    "Ventricular rhythm usually 60-100 bpm, between escape rhythm and paroxysmal tachycardia.",
+    "Similar atrial and ventricular rates may cause interference dissociation, capture or fusion.",
+    "Often gradual onset and termination."
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      750,
+      800
+    ],
+    "QRS_QT_T_ms": [
+      160,
+      400,
+      180
+    ],
+    "first_QRS_mechanical_ms": [
+      120,
+      200
+    ],
+    "atrial_mechanical_ms": 80,
+    "PR_builder_placeholder_ms": 100,
+    "source": "Authored broad ventricular electrode QRS and secondary T contour with independent normal P"
+  },
+  "invariants": [
+    "Named independent grid rejects changed timings or ordinary/escape pattern substitution",
+    "Electrical and mechanical ventricular events share750ms cycle, atrial events800ms",
+    "P drifts relative to QRS; no fixed measurable PR",
+    "Shared monitorII and twelve-lead projection preserve limb identities and checkpoint phases",
+    "12-lead demo rejects undefined combinations atomically and fences prior timer"
+  ],
+  "limitations": [
+    "Established fixed rhythm only; no automaticity, AV competition, gradual onset/termination, capture or fusion",
+    "No anatomical focus localization or AIVR pump calibration",
+    "Physiology demo integration is NEXT, not yet implemented",
+    "Other accelerated atrial/junctional rhythms and complete TdP remain open"
+  ],
+  "verification": [
+    "AcceleratedVentricularRhythmHasCloseIndependentRates",
+    "AcceleratedVentricularRhythmPreservesBroadQrsAndPhase",
+    "AcceleratedVentricularSmokeChecks"
+  ]
+}

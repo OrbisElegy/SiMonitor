@@ -67,6 +67,7 @@ internal static class Program
             .. NormalPrDeltaSpecifications.All,
             .. SvtSpecifications.All,
             .. VtSpecifications.All,
+            .. AcceleratedVentricularSpecifications.All,
             .. VtFusionSpecifications.All,
             .. VtCaptureSpecifications.All,
             .. BidirectionalVtSpecifications.All,

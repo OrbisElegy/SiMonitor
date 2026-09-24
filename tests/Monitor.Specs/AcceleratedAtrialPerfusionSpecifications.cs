@@ -16,11 +16,11 @@ internal static class AcceleratedAtrialPerfusionSpecifications
     private static void AcceleratedAtrialPerfusionPreservesSupportsAndBoundsOverlap()
     {
         var plan = AcceleratedAtrialReference.CreatePlan();
-        Check.That(AcceleratedAtrialPerfusionReference.Pleth.PulseDurationNs == 512_000_000 && AcceleratedAtrialPerfusionReference.Arterial.Morphology!.DurationNs == 600_000_000 && AcceleratedAtrialPerfusionReference.Pulmonary.Morphology!.DurationNs == 640_000_000, "full morphology supports retained at600ms RR");
-        _ = VascularPressureSource.Create(plan, AcceleratedAtrialPerfusionReference.Arterial);
-        _ = VascularPressureSource.Create(plan, AcceleratedAtrialPerfusionReference.Pulmonary);
-        _ = AcceleratedAtrialPerfusionReference.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
-        foreach (var pressure in new[] { AcceleratedAtrialPerfusionReference.Arterial with { Morphology = AcceleratedAtrialPerfusionReference.Arterial.Morphology! with { DurationNs = 760_000_000 } }, AcceleratedAtrialPerfusionReference.Pulmonary with { Morphology = AcceleratedAtrialPerfusionReference.Pulmonary.Morphology! with { MaximumPulseOverlap = 1 } } })
+        Check.That(FixedPerfusionPresets.PulmonaryOverlap.Pleth.PulseDurationNs == 512_000_000 && FixedPerfusionPresets.PulmonaryOverlap.Arterial.Morphology!.DurationNs == 600_000_000 && FixedPerfusionPresets.PulmonaryOverlap.Pulmonary.Morphology!.DurationNs == 640_000_000, "full morphology supports retained at600ms RR");
+        _ = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Arterial);
+        _ = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pulmonary);
+        _ = FixedPerfusionPresets.PulmonaryOverlap.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
+        foreach (var pressure in new[] { FixedPerfusionPresets.PulmonaryOverlap.Arterial with { Morphology = FixedPerfusionPresets.PulmonaryOverlap.Arterial.Morphology! with { DurationNs = 760_000_000 } }, FixedPerfusionPresets.PulmonaryOverlap.Pulmonary with { Morphology = FixedPerfusionPresets.PulmonaryOverlap.Pulmonary.Morphology! with { MaximumPulseOverlap = 1 } } })
         {
             try { VascularPressureSource.Create(plan, pressure); }
             catch (EventWaveformException) { continue; }
@@ -31,9 +31,9 @@ internal static class AcceleratedAtrialPerfusionSpecifications
     private static void AcceleratedAtrialPerfusionIsPeriodicAtLateTimesAndRetainsRunoff()
     {
         var plan = AcceleratedAtrialReference.CreatePlan();
-        var pleth = PlethRunoffSource.Create(plan, AcceleratedAtrialPerfusionReference.Pleth);
+        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pleth);
         Check.That(pleth.MaximumHistoryEvents < 100 && pleth.SupportNs < 27_000_000_000, "optical history bounded independently of run duration");
-        foreach (var pressure in new[] { AcceleratedAtrialPerfusionReference.Arterial, AcceleratedAtrialPerfusionReference.Pulmonary })
+        foreach (var pressure in new[] { FixedPerfusionPresets.PulmonaryOverlap.Arterial, FixedPerfusionPresets.PulmonaryOverlap.Pulmonary })
         {
             Check.That((pressure.EjectionDurationNs + 64 * pressure.TimeConstantNs + 599_999_999) / 600_000_000 < 350, "pressure finite history under350 events");
             var source = VascularPressureSource.Create(plan, pressure);
@@ -49,16 +49,16 @@ internal static class AcceleratedAtrialPerfusionSpecifications
             Check.That(values.Max() - values.Min() > Q, "pressure pulses retain modulation");
         }
         var singlePlan = plan with { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 };
-        var single = PlethRunoffSource.Create(singlePlan, AcceleratedAtrialPerfusionReference.Pleth);
+        var single = PlethRunoffSource.Create(singlePlan, FixedPerfusionPresets.PulmonaryOverlap.Pleth);
         long time = 1_100_000_000;
         Check.That(Math.Abs(pleth.EvaluateAt(time) - single.EvaluateAt(time) - single.EvaluateAt(time - 600_000_000)) <= 3, "overlapping optical pulses retain earlier tails");
-        var interrupted = VascularPressureSource.Create(singlePlan, AcceleratedAtrialPerfusionReference.Arterial);
-        Check.That(interrupted.EvaluateAt(800_000_000) > AcceleratedAtrialPerfusionReference.Arterial.AsymptoticPressureCentiMmHg * Q, "missing subsequent ejection retains pressure runoff");
+        var interrupted = VascularPressureSource.Create(singlePlan, FixedPerfusionPresets.PulmonaryOverlap.Arterial);
+        Check.That(interrupted.EvaluateAt(800_000_000) > FixedPerfusionPresets.PulmonaryOverlap.Arterial.AsymptoticPressureCentiMmHg * Q, "missing subsequent ejection retains pressure runoff");
     }
     private static void AcceleratedAtrialVenousAndRespiratoryComponentsRespectConductedClocks()
     {
         var plan = AcceleratedAtrialReference.CreatePlan();
-        var channel = AcceleratedAtrialPerfusionReference.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
+        var channel = FixedPerfusionPresets.PulmonaryOverlap.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
         var bands = channel.Bands;
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(3_000_000_000, 100);
         var atrial = EventWaveformComposition.Restore(new([bands[0]], events));

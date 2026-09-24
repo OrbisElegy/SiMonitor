@@ -24,7 +24,7 @@ internal static class PhysiologyDemoSource
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
         bool flutter = AtrialFlutterReference.IsPattern(plan.ConductionPattern);
-        bool fastFlutter = flutter && plan.VentricularConductionRatio == 1;
+        var fixedPerfusion = ResolveFixedPerfusion(configuration, plan);
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(plan.ConductionPattern) || PrematureJunctionalReference.IsPattern(plan.ConductionPattern) || PrematureVentricularReference.IsPattern(plan.ConductionPattern);
         bool beatPerfusion = PrematureBeatPerfusion.IsPattern(plan.ConductionPattern);
@@ -61,46 +61,37 @@ internal static class PhysiologyDemoSource
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: sinusArrest ? SinusArrestPerfusionReference.Pleth : sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Pleth : configuration.AtrialEscape ? AtrialEscapePerfusionReference.Pleth : fastFlutter ? FlutterOneToOnePerfusionReference.Pleth : configuration.Aar ? AcceleratedAtrialPerfusionReference.Pleth : configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pleth : configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pleth : configuration.Vt ? VtPerfusionReference.Pleth : configuration.Svt ? SvtPerfusionReference.Pleth : new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
-             sinusArrest ? SinusArrestPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.AtrialEscape ? AtrialEscapePerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             fastFlutter ? FlutterOneToOnePerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.Aar ? AcceleratedAtrialPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.Aivr ? AcceleratedVentricularPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.Vt ? VtPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.Svt ? SvtPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
-             configuration.UseVascularReservoir
+                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
+             fixedPerfusion?.Arterial.CreateChannel(plan, ChannelId(3), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
                     Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit).CreateChannel(plan, ChannelId(3), 0)
-                : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0),
+                : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0)),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
-             sinusArrest ? SinusArrestPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.AtrialEscape ? AtrialEscapePerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             fastFlutter ? FlutterOneToOnePerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.Aar ? AcceleratedAtrialPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.Vt ? VtPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.Svt ? SvtPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
-             configuration.UseVascularReservoir
+             fixedPerfusion?.Pulmonary.CreateChannel(plan, ChannelId(5), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation).CreateChannel(plan, ChannelId(5), 0)
-                : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0),
-             sinusArrest ? SinusArrestPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.AtrialEscape ? AtrialEscapePerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             fastFlutter ? FlutterOneToOnePerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.Aar ? AcceleratedAtrialPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.Aivr ? AcceleratedVentricularPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.Vt ? VtPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             configuration.Svt ? SvtPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
-             new CentralVenousPressurePlan(600,
+                : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0)),
+             fixedPerfusion?.Venous.CreateChannel(plan, ChannelId(6), 0) ?? (new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0)]);
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))]);
     }
+    // Select the bundle once so Pleth/ABP/PA/CVP cannot drift into separate
+    // per-channel rhythm mappings. Existing configuration validation runs first.
+    private static FixedPerfusionPreset? ResolveFixedPerfusion(
+        PhysiologyDemoConfiguration configuration, RegularPhysiologyPlan plan)
+    {
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration || configuration.AtrialEscape || configuration.Aivr)
+        { return FixedPerfusionPresets.SinglePulse; }
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration || configuration.Aar || configuration.Ajr)
+        { return FixedPerfusionPresets.PulmonaryOverlap; }
+        if (AtrialFlutterReference.IsPattern(plan.ConductionPattern) && plan.VentricularConductionRatio == 1)
+        { return new(FlutterOneToOnePerfusionReference.Pleth, FlutterOneToOnePerfusionReference.Arterial, FlutterOneToOnePerfusionReference.Pulmonary, FlutterOneToOnePerfusionReference.Venous); }
+        if (configuration.Vt)
+        { return new(VtPerfusionReference.Pleth, VtPerfusionReference.Arterial, VtPerfusionReference.Pulmonary, VtPerfusionReference.Venous); }
+        if (configuration.Svt)
+        { return new(SvtPerfusionReference.Pleth, SvtPerfusionReference.Arterial, SvtPerfusionReference.Pulmonary, SvtPerfusionReference.Venous); }
+        return null;
+    }
+
 }

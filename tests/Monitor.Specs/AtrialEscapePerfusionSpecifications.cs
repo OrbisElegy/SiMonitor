@@ -16,11 +16,11 @@ internal static class AtrialEscapePerfusionSpecifications
     private static void AtrialEscapePerfusionPreservesSupportsAndBoundsOverlap()
     {
         var plan = AtrialEscapeReference.CreatePlan();
-        Check.That(AtrialEscapePerfusionReference.Pleth.PulseDurationNs == 512_000_000 && AtrialEscapePerfusionReference.Arterial.Morphology!.DurationNs == 600_000_000 && AtrialEscapePerfusionReference.Pulmonary.Morphology!.DurationNs == 640_000_000, "full morphology supports retained at1200ms RR");
-        _ = VascularPressureSource.Create(plan, AtrialEscapePerfusionReference.Arterial);
-        _ = VascularPressureSource.Create(plan, AtrialEscapePerfusionReference.Pulmonary);
-        _ = AtrialEscapePerfusionReference.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
-        foreach (var pressure in new[] { AtrialEscapePerfusionReference.Arterial with { Morphology = AtrialEscapePerfusionReference.Arterial.Morphology! with { DurationNs = 1_280_000_000 } }, AtrialEscapePerfusionReference.Pulmonary with { Morphology = AtrialEscapePerfusionReference.Pulmonary.Morphology! with { DurationNs = 1_280_000_000 } } })
+        Check.That(FixedPerfusionPresets.SinglePulse.Pleth.PulseDurationNs == 512_000_000 && FixedPerfusionPresets.SinglePulse.Arterial.Morphology!.DurationNs == 600_000_000 && FixedPerfusionPresets.SinglePulse.Pulmonary.Morphology!.DurationNs == 640_000_000, "full morphology supports retained at1200ms RR");
+        _ = VascularPressureSource.Create(plan, FixedPerfusionPresets.SinglePulse.Arterial);
+        _ = VascularPressureSource.Create(plan, FixedPerfusionPresets.SinglePulse.Pulmonary);
+        _ = FixedPerfusionPresets.SinglePulse.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
+        foreach (var pressure in new[] { FixedPerfusionPresets.SinglePulse.Arterial with { Morphology = FixedPerfusionPresets.SinglePulse.Arterial.Morphology! with { DurationNs = 1_280_000_000 } }, FixedPerfusionPresets.SinglePulse.Pulmonary with { Morphology = FixedPerfusionPresets.SinglePulse.Pulmonary.Morphology! with { DurationNs = 1_280_000_000 } } })
         {
             try { VascularPressureSource.Create(plan, pressure); }
             catch (EventWaveformException) { continue; }
@@ -31,9 +31,9 @@ internal static class AtrialEscapePerfusionSpecifications
     private static void AtrialEscapePerfusionIsPeriodicAtLateTimesAndRetainsRunoff()
     {
         var plan = AtrialEscapeReference.CreatePlan();
-        var pleth = PlethRunoffSource.Create(plan, AtrialEscapePerfusionReference.Pleth);
+        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.SinglePulse.Pleth);
         Check.That(pleth.MaximumHistoryEvents < 100 && pleth.SupportNs < 27_000_000_000, "optical history bounded independently of run duration");
-        foreach (var pressure in new[] { AtrialEscapePerfusionReference.Arterial, AtrialEscapePerfusionReference.Pulmonary })
+        foreach (var pressure in new[] { FixedPerfusionPresets.SinglePulse.Arterial, FixedPerfusionPresets.SinglePulse.Pulmonary })
         {
             Check.That((pressure.EjectionDurationNs + 64 * pressure.TimeConstantNs + 1_199_999_999) / 1_200_000_000 < 180, "pressure finite history under180 events");
             var source = VascularPressureSource.Create(plan, pressure);
@@ -49,16 +49,16 @@ internal static class AtrialEscapePerfusionSpecifications
             Check.That(values.Max() - values.Min() > Q, "pressure pulses retain modulation");
         }
         var singlePlan = plan with { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 };
-        var single = PlethRunoffSource.Create(singlePlan, AtrialEscapePerfusionReference.Pleth);
+        var single = PlethRunoffSource.Create(singlePlan, FixedPerfusionPresets.SinglePulse.Pleth);
         long time = 1_700_000_000;
         Check.That(Math.Abs(pleth.EvaluateAt(time) - single.EvaluateAt(time) - single.EvaluateAt(time - 1_200_000_000)) <= 3, "overlapping optical pulses retain earlier tails");
-        var interrupted = VascularPressureSource.Create(singlePlan, AtrialEscapePerfusionReference.Arterial);
-        Check.That(interrupted.EvaluateAt(800_000_000) > AtrialEscapePerfusionReference.Arterial.AsymptoticPressureCentiMmHg * Q, "missing subsequent ejection retains pressure runoff");
+        var interrupted = VascularPressureSource.Create(singlePlan, FixedPerfusionPresets.SinglePulse.Arterial);
+        Check.That(interrupted.EvaluateAt(800_000_000) > FixedPerfusionPresets.SinglePulse.Arterial.AsymptoticPressureCentiMmHg * Q, "missing subsequent ejection retains pressure runoff");
     }
     private static void AtrialEscapeVenousAndRespiratoryComponentsRespectConductedClocks()
     {
         var plan = AtrialEscapeReference.CreatePlan();
-        var channel = AtrialEscapePerfusionReference.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
+        var channel = FixedPerfusionPresets.SinglePulse.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
         var bands = channel.Bands;
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(3_000_000_000, 100);
         var atrial = EventWaveformComposition.Restore(new([bands[0]], events));

@@ -64,20 +64,20 @@ internal static class SinusArrestSpecifications
     private static void SinusArrestRetainsBoundedPerfusionThroughPause()
     {
         var plan = SinusArrestReference.CreatePlan();
-        var pleth = PlethRunoffSource.Create(plan, SinusArrestPerfusionReference.Pleth);
+        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.SinglePulse.Pleth);
         var isolatedPlan = plan with
         {
             ConductionPattern = AvConductionPattern.FixedPr,
             VentricularMechanicalEnabled = false,
             MechanicalAfterCycles = 1
         };
-        var isolated = PlethRunoffSource.Create(isolatedPlan, SinusArrestPerfusionReference.Pleth);
+        var isolated = PlethRunoffSource.Create(isolatedPlan, FixedPerfusionPresets.SinglePulse.Pleth);
         long expected = new long[] { 0, 800_000_000, 1_600_000_000 }
             .Sum(offset => isolated.EvaluateAt(3_500_000_000 - offset));
         Check.That(Math.Abs(pleth.EvaluateAt(3_500_000_000) - expected) <= 3 && expected > 0,
             "pause retains all earlier optical tails without new ejection");
         Check.That(pleth.MaximumHistoryEvents < 100, "history bound excludes elapsed runtime");
-        foreach (var pressure in new[] { SinusArrestPerfusionReference.Arterial, SinusArrestPerfusionReference.Pulmonary })
+        foreach (var pressure in new[] { FixedPerfusionPresets.SinglePulse.Arterial, FixedPerfusionPresets.SinglePulse.Pulmonary })
         {
             var source = VascularPressureSource.Create(plan, pressure);
             Check.That(source.EvaluateAt(2_800_000_000) > source.EvaluateAt(3_500_000_000) &&
@@ -89,7 +89,7 @@ internal static class SinusArrestSpecifications
                     "late pressure lookup matches settled pause phase");
         }
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(4_400_000_000, 100);
-        var cvp = SinusArrestPerfusionReference.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
+        var cvp = FixedPerfusionPresets.SinglePulse.Venous.CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
         var mechanical = EventWaveformComposition.Restore(new(cvp.Bands.Take(5).ToArray(), events));
         var resp = new RespirationPlan(1000, 200).CreateChannel(plan, Guid.Parse("11111111-1111-4111-8111-111111111111"), 0);
         var artifact = EventWaveformComposition.Restore(new([resp.Bands[1]], events));

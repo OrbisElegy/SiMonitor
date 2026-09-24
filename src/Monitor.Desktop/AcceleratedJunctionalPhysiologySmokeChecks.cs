@@ -25,12 +25,12 @@ internal static class AcceleratedJunctionalPhysiologySmokeChecks
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, AcceleratedJunctionalReference.CreateLeadIIBands()).GenerateBefore(6_000_000_000, 1500, 100);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("AJR physiology monitorII mismatch."); }
-        var pleth = PlethRunoffSource.Create(plan, AcceleratedJunctionalPerfusionReference.Pleth);
-        var abp = VascularPressureSource.Create(plan, AcceleratedJunctionalPerfusionReference.Arterial);
-        var pa = VascularPressureSource.Create(plan, AcceleratedJunctionalPerfusionReference.Pulmonary);
+        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pleth);
+        var abp = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Arterial);
+        var pa = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pulmonary);
         foreach (int row in new[] { 2, 3, 5 })
         {
-            var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
+            short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
             for (int i = 0; i < samples.Length; i++)
             {
                 long time = i * 8_000_000L;
@@ -40,7 +40,7 @@ internal static class AcceleratedJunctionalPhysiologySmokeChecks
             }
             if (samples.Skip(250).Distinct().Count() < 10) { throw new InvalidOperationException("AJR perfusion became flat."); }
         }
-        var cvpPlan = AcceleratedJunctionalPerfusionReference.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
+        var cvpPlan = FixedPerfusionPresets.PulmonaryOverlap.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
         var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(6_000_000_000, 750, 200);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 6).Zip(cvp).Any(p => p.First != p.Second.NormalizedValue))
         { throw new InvalidOperationException("AJR CVP overlap mismatch."); }

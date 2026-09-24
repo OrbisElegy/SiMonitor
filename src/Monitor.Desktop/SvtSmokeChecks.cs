@@ -9,11 +9,11 @@ namespace Monitor.Desktop;
 
 internal static class SvtSmokeChecks
 {
-    internal static void Verify() { Verify(false); Verify(true); }
+    internal static void Verify() { Verify(false); Verify(true); Verify(false, true); }
 
-    private static void Verify(bool rbbb)
+    private static void Verify(bool rbbb, bool lbbb = false)
     {
-        var config = rbbb ? ProjectedEcgDemoConfiguration.SvtRightBundlePreset : ProjectedEcgDemoConfiguration.SvtPreset;
+        var config = lbbb ? ProjectedEcgDemoConfiguration.SvtLeftBundlePreset : rbbb ? ProjectedEcgDemoConfiguration.SvtRightBundlePreset : ProjectedEcgDemoConfiguration.SvtPreset;
         var window = new WaveformDemoWindow(projected: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -21,7 +21,7 @@ internal static class SvtSmokeChecks
         {
             Click(window.WpwButton); Click(window.StepButton); Click(window.RunButton);
             var oldTimer = window.ActiveTimer;
-            Click(window.SvtButton); window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyEcgButton); window.Pulse(oldTimer);
+            Click(window.SvtButton); window.SvtLbbbInput.IsChecked = lbbb; window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyEcgButton); window.Pulse(oldTimer);
             if (window.EcgConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.WpwInput.IsChecked == true)
             { throw new InvalidOperationException("SVT loader retained WPW state."); }
             Click(window.ApplyEcgButton);
@@ -40,10 +40,10 @@ internal static class SvtSmokeChecks
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), sample, [EcgLead.I, EcgLead.II, EcgLead.V1, EcgLead.V5]);
             // Compare the completed raw record range, excluding samples still in acquisition delay.
             long capturedEnd = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
-            var expected = ElectrodeSignalGenerator.Start(SupraventricularTachycardiaReference.CreatePlan(), "AcqECGMonitor250@1", 1, SupraventricularTachycardiaReference.CreateElectrodes(rbbb)).GenerateBefore(capturedEnd, 1500, 200);
+            var expected = ElectrodeSignalGenerator.Start(SupraventricularTachycardiaReference.CreatePlan(), "AcqECGMonitor250@1", 1, SupraventricularTachycardiaReference.CreateElectrodes(rbbb, lbbb)).GenerateBefore(capturedEnd, 1500, 200);
             foreach (var lead in Enum.GetValues<EcgLead>())
             {
-                var actual = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
+                short[] actual = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(lead)).Samples).ToArray();
                 if (actual.Length != expected.Count || actual.Zip(expected).Any(p => Math.Abs(p.First - p.Second.MicrovoltValues[(int)lead]) > 1))
                 { throw new InvalidOperationException("SVT source did not use shared zero-offset schedule."); }
             }
@@ -56,23 +56,29 @@ internal static class SvtSmokeChecks
             if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
             { throw new InvalidOperationException("SVT conflict mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.SvtInput.IsChecked != true || window.SvtRbbbInput.IsChecked != rbbb || window.WpwInput.IsChecked == true) { throw new InvalidOperationException("SVT reset lost accepted state."); }
-            window.SvtRbbbInput.IsChecked = !rbbb; Click(window.ApplyEcgButton);
+            Click(window.RunButton);
+            timer = window.ActiveTimer; trace = window.Trace; time = window.SimulationTimeNs;
+            window.SvtRbbbInput.IsChecked = true; window.SvtLbbbInput.IsChecked = true; Click(window.ApplyEcgButton);
+            if (window.EcgConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.EcgConfigurationStatus.Text))
+            { throw new InvalidOperationException("Simultaneous SVT bundle shapes mutated native state."); }
+            Click(window.ResetButton);
+            if (window.SvtInput.IsChecked != true || window.SvtRbbbInput.IsChecked != rbbb || window.SvtLbbbInput.IsChecked != lbbb || window.WpwInput.IsChecked == true) { throw new InvalidOperationException("SVT reset lost accepted state."); }
+            window.SvtLbbbInput.IsChecked = false; window.SvtRbbbInput.IsChecked = !rbbb; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != ((rbbb ? ProjectedEcgDemoConfiguration.SvtPreset : ProjectedEcgDemoConfiguration.SvtRightBundlePreset))) { throw new InvalidOperationException("SVT RBBB toggle failed."); }
-            window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyEcgButton);
+            window.SvtLbbbInput.IsChecked = lbbb; window.SvtRbbbInput.IsChecked = rbbb; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != config) { throw new InvalidOperationException("SVT RBBB toggle restore failed."); }
             window.SvtInput.IsChecked = false; Click(window.ApplyEcgButton);
             if (window.EcgConfiguration != ProjectedEcgDemoConfiguration.Default || window.PrIntervalInput.Text == "—") { throw new InvalidOperationException("SVT clear failed."); }
             Click(window.SvtButton); Click(window.WpwButton);
-            if (window.SvtInput.IsChecked == true || window.SvtRbbbInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained SVT."); }
+            if (window.SvtInput.IsChecked == true || window.SvtRbbbInput.IsChecked == true || window.SvtLbbbInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained SVT."); }
         }
         finally { window.Close(); }
-        foreach (var invalid in new[] { config with { Svt = false, SvtRbbb = true }, config with { Wpw = true }, config with { HeartRateBpm = 75 }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { QrsDurationMilliseconds = rbbb ? 80 : 140 } })
+        foreach (var invalid in new[] { config with { Svt = false, SvtRbbb = true }, config with { Svt = false, SvtRbbb = false, SvtLbbb = true }, config with { SvtRbbb = true, SvtLbbb = true }, config with { Wpw = true }, config with { HeartRateBpm = 75 }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { QrsDurationMilliseconds = rbbb || lbbb ? 80 : 140 } })
         {
             try { ProjectedEcgDemoSource.Create(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "Svt.ConflictingModes") { continue; }
             throw new InvalidOperationException("Invalid SVT source accepted.");
         }
-        Console.WriteLine("ok: SVT200bpm narrow/RBBB variants, shared samples, overlap pixels, hidden PR, recovery and atomic lifecycle");
+        Console.WriteLine("ok: SVT200bpm narrow/RBBB/LBBB variants, shared samples, overlap pixels, hidden PR, recovery and atomic lifecycle");
     }
 }

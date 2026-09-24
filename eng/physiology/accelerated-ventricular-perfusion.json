@@ -1,0 +1,48 @@
+{
+  "id": "AcceleratedVentricularPerfusionIllustration@1",
+  "implementation_basis": [
+    "AcceleratedVentricularIllustration@1",
+    "Existing authored fixed perfusion inputs, not clinical calibration"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      750,
+      800
+    ],
+    "electrical_mechanical_ms": [
+      120,
+      200
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "ABP_PA_morphology_overlap": [
+      1,
+      1
+    ],
+    "CVP_component_overlap": 1,
+    "CVP_atrial_trigger": "AtrialMechanical",
+    "CVP_other_triggers": "VentricularMechanical",
+    "resp_cardiac_artifact_support_ms": 750
+  },
+  "invariants": [
+    "Independent atrial and ventricular source grids shared with12-lead ECG",
+    "No clipping of pulse supports; finite pressure and optical runoff history",
+    "CVP superposition preserves atrioventricular phase drift without artificial a-wave amplification",
+    "Default Resp/CO2 unchanged; cardiac artifact uses ventricular events",
+    "Atomic conflicts, reset/clear, stale timer fencing and wire recovery in physiology demo"
+  ],
+  "limitations": [
+    "Fixed ejection strength, not AIVR stroke volume or pressure calibration",
+    "No cannon a, valve mechanics or phase-dependent pump feedback",
+    "Gradual onset/termination, AIVR capture/fusion and other autonomous rhythms remain open"
+  ],
+  "verification": [
+    "AcceleratedVentricularPerfusionPreservesSupportsAndBoundsOverlap",
+    "AcceleratedVentricularPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
+    "AcceleratedVentricularVenousAndRespiratoryComponentsRespectIndependentClocks",
+    "AcceleratedVentricularPhysiologySmokeChecks"
+  ]
+}

@@ -37,7 +37,7 @@ internal static class PhysiologyDemoSource
                 configuration.Ajr ? AcceleratedJunctionalReference.CreateLeadIIBands() :
                 configuration.Aivr ? AcceleratedVentricularReference.CreateLeadIIBands() :
                 configuration.Vt ? VentricularTachycardiaReference.CreateLeadIIBands(configuration.VtFusion, configuration.VtCapture, configuration.VtBidirectional, configuration.VtTwisting) :
-                configuration.Svt ? SupraventricularTachycardiaReference.CreateLeadIIBands() :
+                configuration.Svt ? SupraventricularTachycardiaReference.CreateLeadIIBands(configuration.SvtRbbb) :
                 configuration.NormalPrDelta ? NormalPrDeltaReference.CreateLeadIIBands(configuration.ProlongedPrDelta) :
                 configuration.ShortPr ? ShortPrReference.CreateLeadIIBands() :
                 configuration.Wpw ? WpwReference.CreateLeadIIBands(configuration.WpwNegativeV1, configuration.WpwSmallerDelta) :

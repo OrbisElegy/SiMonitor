@@ -128,9 +128,9 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
     internal static ProjectedEcgDemoConfiguration Flutter(int ratio) => Default with
     {
         HeartRateBpm = 300,
-        PDurationMilliseconds = 40,
-        PrIntervalMilliseconds = 80,
-        TDurationMilliseconds = 140,
+        PDurationMilliseconds = ratio == 1 ? 20 : 40,
+        PrIntervalMilliseconds = ratio == 1 ? 20 : 80,
+        TDurationMilliseconds = ratio == 1 ? 80 : 140,
         VentricularConductionRatio = ratio,
         ConductionPattern = AvConductionPattern.AtrialFlutterIllustration,
     };
@@ -408,6 +408,7 @@ internal static class ProjectedEcgDemoSource
             VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity,
             VentricularMechanicalEnabled: !VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern),
             IndependentVentricularPeriodNs: configuration.IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, ConductedBeatsPerGroup: configuration.ConductedBeatsPerGroup, ConductionPattern: configuration.ConductionPattern);
+        if (configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration) { plan = AtrialFlutterReference.CreatePlan(configuration.VentricularConductionRatio); }
         if (configuration.Aar) { plan = AcceleratedAtrialReference.CreatePlan(); }
         if (configuration.Ajr) { plan = AcceleratedJunctionalReference.CreatePlan(); }
         if (configuration.Aivr) { plan = AcceleratedVentricularReference.CreatePlan(); }

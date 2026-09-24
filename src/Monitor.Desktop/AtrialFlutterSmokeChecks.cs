@@ -10,6 +10,8 @@ internal static class AtrialFlutterSmokeChecks
 {
     internal static void Verify()
     {
+        try { PhysiologyDemoSource.Create(PhysiologyDemoConfiguration.Flutter(1)); throw new InvalidOperationException("Unvalidated1:1 flutter perfusion accepted."); }
+        catch (EventWaveformException e) when (e.ReasonCode == "Flutter.OneToOnePerfusionPending") { }
         foreach (bool projected in new[] { false, true })
         {
             WaveformDemoWindow window = new(physiology: !projected, projected: projected);
@@ -17,7 +19,7 @@ internal static class AtrialFlutterSmokeChecks
             void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             try
             {
-                foreach (int variant in new[] { 4, 3, 2, 0 })
+                foreach (int variant in projected ? new[] { 4, 3, 2, 1, 0 } : new[] { 4, 3, 2, 0 })
                 {
                     bool variable = variant == 0;
                     int ratio = variable ? 2 : variant;
@@ -26,12 +28,13 @@ internal static class AtrialFlutterSmokeChecks
                     Click(window.FlutterButton); window.Pulse(stale);
                     if (window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null)
                     { throw new InvalidOperationException("Flutter preset failed atomic reset."); }
-                    int selection = variable ? 39 : ratio == 2 ? 9 : ratio == 3 ? 38 : 10;
+                    int selection = variable ? 39 : ratio == 1 ? 40 : ratio == 2 ? 9 : ratio == 3 ? 38 : 10;
                     window.ConductionInput.SelectedIndex = selection;
                     Click(projected ? window.ApplyEcgButton : window.ApplyBreathButton);
                     if (!string.IsNullOrEmpty(projected ? window.EcgConfigurationStatus.Text : window.BreathConfigurationStatus.Text) ||
                         (projected ? window.EcgConfiguration.VentricularConductionRatio : window.BreathConfiguration.VentricularConductionRatio) != ratio)
                     { throw new InvalidOperationException($"Flutter {ratio}:1 failed to apply: {window.EcgConfigurationStatus.Text} {window.BreathConfigurationStatus.Text}"); }
+                    if (projected && (window.PDurationInput.Text != "—" || window.PrIntervalInput.Text != "—")) { throw new InvalidOperationException("Flutter exposed placeholder P/PR."); }
                     for (int step = 0; step < 30; step++) { Click(window.StepButton); }
                     WaveformEnvelope[] blocks;
                     if (projected)
@@ -98,6 +101,6 @@ internal static class AtrialFlutterSmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: flutter fixed2:1/3:1/4:1 and variable2/3/4 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
+        Console.WriteLine("ok: flutter projected1:1, fixed2:1/3:1/4:1 and variable2/3/4 controls, continuous F/QRS pixels, pressure, recovery and atomic rejection");
     }
 }

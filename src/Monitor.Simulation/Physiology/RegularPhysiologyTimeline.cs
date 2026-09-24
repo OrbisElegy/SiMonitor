@@ -109,7 +109,7 @@ public sealed class RegularPhysiologyTimeline
                  plan.VentricularElectricalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 160_000_000 ||
                  plan.MechanicalEveryCycles != 1 || plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             (AtrialFlutterReference.IsPattern(plan.ConductionPattern) &&
-                (plan.HeartPeriodNs != 200_000_000 || plan.VentricularConductionRatio is not (2 or 3 or 4) ||
+                (plan.HeartPeriodNs != 200_000_000 || plan.VentricularConductionRatio is not (1 or 2 or 3 or 4) ||
                  plan.ConductedBeatsPerGroup != 1 || plan.IndependentVentricularPeriodNs is not null ||
                  plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
                  plan.VentricularElectricalOffsetNs != 80_000_000 || plan.VentricularMechanicalOffsetNs != 160_000_000)) ||

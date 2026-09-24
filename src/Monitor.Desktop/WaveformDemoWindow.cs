@@ -185,6 +185,10 @@ internal sealed class WaveformDemoWindow : Window
     internal TextBox Co2FallInput { get; } = new() { Text = "200", Width = 65 };
     internal TextBox Co2TransportInput { get; } = new() { Text = "0", Width = 65 };
     internal TextBox Co2DispersionInput { get; } = new() { Text = "0", Width = 65 };
+    internal TextBox[] PressureZeroInputs { get; } = Enumerable.Range(0, 3).Select(_ => new TextBox { Text = "0", Width = 75 }).ToArray();
+    internal Button ApplyPressureZeroButton { get; } = new() { Content = "应用压力偏移并重新开始" };
+    internal TextBlock PressureZeroStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
+    internal PressureZeroOffsets PressureOffsets { get; private set; } = new();
     internal Button ApplyBreathButton { get; } = new() { Content = "应用波形参数并重新开始" };
     internal TextBlock BreathConfigurationStatus { get; } = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _activeBreathConfiguration = new() { TextWrapping = TextWrapping.Wrap };
@@ -511,6 +515,15 @@ internal sealed class WaveformDemoWindow : Window
                 settings.Children.Add(new TextBlock { Text = label });
                 settings.Children.Add(input);
             }
+            foreach (var (label, input) in new[] { ("ABP 零点偏移（mmHg）", PressureZeroInputs[0]),
+                ("PA 零点偏移（mmHg）", PressureZeroInputs[1]), ("CVP 零点偏移（mmHg）", PressureZeroInputs[2]) })
+            {
+                settings.Children.Add(new TextBlock { Text = label });
+                settings.Children.Add(input);
+            }
+            settings.Children.Add(ApplyPressureZeroButton);
+            panel.Children.Add(new TextBlock { Text = "压力偏移范围 −10～10 mmHg，最多两位小数；0 移除偏移。独立应用后暂停并从零开始，仅改变采集压力，不改变患者真值。切换节律保留已应用偏移；此操作不是传感器校零。" });
+            panel.Children.Add(PressureZeroStatus);
             settings.Children.Add(ApplyBreathButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
@@ -652,6 +665,18 @@ internal sealed class WaveformDemoWindow : Window
             if (!_closed) { Reset(UsesPulse, ProjectedEcgDemoConfiguration.JunctionalEscape, PhysiologyDemoConfiguration.JunctionalEscape); }
         };
         ApplyEcgButton.Click += (_, _) => ApplyEcgConfiguration();
+        ApplyPressureZeroButton.Click += (_, _) =>
+        {
+            if (_closed || !_physiology) { return; }
+            try
+            {
+                var offsets = new PressureZeroOffsets(PressureZeroOffsets.Parse(PressureZeroInputs[0].Text),
+                    PressureZeroOffsets.Parse(PressureZeroInputs[1].Text), PressureZeroOffsets.Parse(PressureZeroInputs[2].Text));
+                Reset(UsesPulse, pressureOffsets: offsets);
+            }
+            catch (ArgumentException)
+            { PressureZeroStatus.Text = "未应用：请输入 −10～10 mmHg，最多两位小数；原数据与运行状态保留。"; }
+        };
         ApplyBreathButton.Click += (_, _) => ApplyBreathConfiguration();
         ShapeButton.Click += (_, _) =>
         {
@@ -1123,12 +1148,13 @@ internal sealed class WaveformDemoWindow : Window
         }
     }
 
-    private void Reset(bool pulse, ProjectedEcgDemoConfiguration? configuration = null, PhysiologyDemoConfiguration? breathConfiguration = null)
+    private void Reset(bool pulse, ProjectedEcgDemoConfiguration? configuration = null, PhysiologyDemoConfiguration? breathConfiguration = null, PressureZeroOffsets? pressureOffsets = null)
     {
+        pressureOffsets ??= PressureOffsets;
         configuration ??= EcgConfiguration;
         breathConfiguration ??= BreathConfiguration;
         PeriodicWaveformGroup source = CreateSource(pulse);
-        PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create(breathConfiguration) : null;
+        PhysiologyWaveformGroup? eventSource = _physiology ? PhysiologyDemoSource.Create(breathConfiguration, pressureOffsets) : null;
         ElectrodeWaveformGroup? electrodeSource = _projected ? ProjectedEcgDemoSource.Create(configuration) : null;
         string qrsSummary = electrodeSource is null ? "" : AuthoredQrsSummary.Create(electrodeSource, configuration.CardiacActivity);
         RawTrace empty = new([], _physiology, projected: _projected);
@@ -1139,6 +1165,11 @@ internal sealed class WaveformDemoWindow : Window
         EcgConfiguration = configuration;
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
+        PressureOffsets = pressureOffsets;
+        var pressureValues = new[] { pressureOffsets.Abp, pressureOffsets.Pa, pressureOffsets.Cvp };
+        for (int index = 0; index < pressureValues.Length; index++)
+        { PressureZeroInputs[index].Text = (pressureValues[index] / 100m).ToString("0.##", CultureInfo.InvariantCulture); }
+        PressureZeroStatus.Text = $"已应用压力偏移（mmHg）：ABP {PressureZeroInputs[0].Text}，PA {PressureZeroInputs[1].Text}，CVP {PressureZeroInputs[2].Text}。";
         AfAberrancyInput.IsChecked = _projected ? configuration.IllustrateAfAberrancy : breathConfiguration.IllustrateAfAberrancy;
         VtTwistingInput.IsChecked = _projected ? configuration.VtTwisting : breathConfiguration.VtTwisting;
         VtBidirectionalInput.IsChecked = _projected ? configuration.VtBidirectional : breathConfiguration.VtBidirectional;

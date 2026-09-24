@@ -133,6 +133,8 @@ internal sealed record PhysiologyDemoConfiguration(int BreathPeriodMilliseconds,
             (ConductionPattern != AvConductionPattern.FixedPr || VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 ||
              CardiacActivity != CardiacActivity.AtrialAndVentricular || IndependentVentricularPeriodMilliseconds is not null || IndependentVentricularOffsetMilliseconds is not null))
         { throw new EventWaveformException("EcgBundleBlock.ConflictingModes", "configuration"); }
+        if (AtrialFlutterReference.IsPattern(ConductionPattern) && VentricularConductionRatio == 1)
+        { throw new EventWaveformException("Flutter.OneToOnePerfusionPending", "configuration"); }
         _ = ConductionSelection.Index(VentricularConductionRatio, ConductedBeatsPerGroup, ConductionPattern);
         // Demo input/display bounds, not physiological normal ranges.
         if ((IndependentVentricularPeriodMilliseconds is { } independent && (independent is < 800 or > 3200 || VentricularConductionRatio != 1)) ||

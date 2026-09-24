@@ -1,0 +1,49 @@
+{
+  "id": "AtrialFlutterOneToOneIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "flutter can conduct 1:1."
+  ],
+  "implementation_basis": [
+    "Existing300/min continuous authored flutter electrode band"
+  ],
+  "authored_choices": {
+    "F_RR_ms": 200,
+    "QRS_QT_T_ST_ms": [
+      80,
+      180,
+      80,
+      20
+    ],
+    "builder_P_PR_ms": [
+      20,
+      20
+    ],
+    "ventricular_electrical_mechanical_ms": [
+      80,
+      160
+    ]
+  },
+  "invariants": [
+    "Continuous F remains present under QRS/T",
+    "One ventricular electrical/mechanical event per F cycle",
+    "No normal atrial mechanical contractions",
+    "P/PR builder placeholders do not move the80ms QRS event",
+    "Projection and monitorII parity; phase and wire recovery"
+  ],
+  "limitations": [
+    "Fixed established rhythm, no onset/termination or AV-node mechanism",
+    "Short repolarization support is authored, not textbook measurement",
+    "Physiology demo rejects1:1 until bounded perfusion integration; no calibrated hemodynamics"
+  ],
+  "verification": [
+    "OneToOneFlutterPreservesEventsProjectionAndRecovery",
+    "FlutterHasContinuousFAndConductedVentricles",
+    "AtrialFlutterSmokeChecks projected1:1"
+  ]
+}

@@ -6,6 +6,7 @@ namespace Monitor.Simulation.Physiology;
 public static class AtrialFlutterReference
 {
     public const string EvidenceId = "AtrialFlutterIllustrationDraft@3";
+    public const string OneToOneEvidenceId = "AtrialFlutterOneToOneIllustration@1";
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.AtrialFlutterIllustration or AvConductionPattern.VariableAtrialFlutterIllustration;
     public static RegularPhysiologyPlan CreateVariablePlan() => CreatePlan(2) with { ConductionPattern = AvConductionPattern.VariableAtrialFlutterIllustration };
 
@@ -40,7 +41,10 @@ public static class AtrialFlutterReference
 
     public static EcgCycleTiming Timing(int ratio)
     {
-        if (ratio is not (2 or 3 or 4)) { throw new ArgumentOutOfRangeException(nameof(ratio)); }
+        if (ratio is not (1 or 2 or 3 or 4)) { throw new ArgumentOutOfRangeException(nameof(ratio)); }
+        // At1:1 use short authored repolarization support, without changing
+        // the80ms ventricular event offset. P/PR20 are builder placeholders.
+        if (ratio == 1) { return new(200_000_000, 20_000_000, 20_000_000, 80_000_000, 180_000_000, 80_000_000); }
         // P/PR here are construction placeholders; the P band is replaced in full.
         return new(ratio * 200_000_000L, 40_000_000, 80_000_000, 80_000_000, 300_000_000, 140_000_000);
     }

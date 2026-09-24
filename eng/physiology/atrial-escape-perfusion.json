@@ -1,0 +1,47 @@
+{
+  "id": "AtrialEscapePerfusionIllustration@1",
+  "implementation_basis": [
+    "AtrialEscapeIllustration@1",
+    "Existing authored fixed perfusion inputs; not clinical calibration"
+  ],
+  "authored_choices": {
+    "PP_RR_ms": [
+      1200,
+      1200
+    ],
+    "atrial_mechanical_ms": 80,
+    "ventricular_electrical_mechanical_ms": [
+      160,
+      240
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "ABP_PA_overlap": [
+      1,
+      1
+    ],
+    "CVP_overlap": 1,
+    "resp_cardiac_artifact_support_ms": 1200
+  },
+  "invariants": [
+    "Shared regular1:1 electrical/mechanical grid",
+    "Complete pulse supports and finite history runoff",
+    "Normal mechanical a wave remains positive despite negative P-prime",
+    "CVP ventricular components follow conducted ejection",
+    "Default Resp/CO2 unchanged; artifact isolated to Resp",
+    "Atomic configuration and deterministic wire recovery"
+  ],
+  "limitations": [
+    "Fixed strengths, not calibrated escape pump function or gas-exchange feedback",
+    "No first-escape trigger, focus localization or wandering rhythm"
+  ],
+  "verification": [
+    "AtrialEscapePerfusionPreservesSupportsAndBoundsOverlap",
+    "AtrialEscapePerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
+    "AtrialEscapeVenousAndRespiratoryComponentsRespectConductedClocks",
+    "AtrialEscapePhysiologySmokeChecks"
+  ]
+}

@@ -23,8 +23,13 @@ public static class VentricularTachycardiaReference
     public const string FusionEvidenceId = "VtFusionIllustration@1";
     public const int FusionCycleLength = 32;
     public const int FusionCycleSlot = 13;
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false, bool capture = false, bool bidirectional = false)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false, bool capture = false, bool bidirectional = false, bool twisting = false)
     {
+        if (twisting)
+        {
+            if (fusion || capture || bidirectional) { throw new EventWaveformException("Vt.ConflictingModes", "configuration"); }
+            return TwistingVtReference.CreateElectrodes();
+        }
         if (bidirectional)
         {
             if (fusion || capture) { throw new EventWaveformException("Vt.ConflictingModes", "configuration"); }
@@ -55,9 +60,19 @@ public static class VentricularTachycardiaReference
         };
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false, bool capture = false, bool bidirectional = false)
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false, bool capture = false, bool bidirectional = false, bool twisting = false)
     {
-        var electrodes = CreateElectrodes(fusion, capture, bidirectional);
+        var electrodes = CreateElectrodes(fusion, capture, bidirectional, twisting);
+        if (twisting)
+        {
+            // Combine matching electrode bands to stay below the32-band limit.
+            return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Zip(electrodes[(int)EcgElectrode.RA].Bands)
+                .Select(pair => pair.First with
+                {
+                    TableQ32 = Array.AsReadOnly(pair.First.TableQ32.Zip(pair.Second.TableQ32)
+                    .Select(v => checked(v.First - v.Second)).ToArray())
+                }).ToArray());
+        }
         return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
             electrodes[(int)EcgElectrode.RA].Bands.Select(b => b with
             { TableQ32 = Array.AsReadOnly(b.TableQ32.Select(v => checked(-v)).ToArray()) })).ToArray());

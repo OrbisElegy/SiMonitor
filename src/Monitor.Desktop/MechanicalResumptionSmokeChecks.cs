@@ -31,8 +31,8 @@ internal static class MechanicalResumptionSmokeChecks
                 if (window.SimulationTimeNs != step * 200_000_000L)
                 { throw new InvalidOperationException("Mechanical recovery reset the source clock."); }
             }
-            var actual = MechanicalUncouplingSmokeChecks.Decode(config);
-            var normal = MechanicalUncouplingSmokeChecks.Decode(config with { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null, MechanicalDurationCycles = null });
+            var actual = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+            var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null, MechanicalDurationCycles = null }, 4_000_000_000);
             foreach (int row in new[] { 0, 1, 4 })
             {
                 if (!MechanicalUncouplingSmokeChecks.Samples(actual, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
@@ -74,7 +74,7 @@ internal static class MechanicalResumptionSmokeChecks
             { throw new InvalidOperationException("Reset lost the accepted mechanical recovery schedule."); }
             window.MechanicalDurationCyclesInput.Text = "";
             Click(window.ApplyBreathButton);
-            short[] suppressed = MechanicalUncouplingSmokeChecks.Samples(MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration), 2);
+            short[] suppressed = MechanicalUncouplingSmokeChecks.Samples(PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000), 2);
             if (window.BreathConfiguration.MechanicalDurationCycles is not null ||
                 suppressed.Skip(125).Zip(suppressed.Skip(126)).Any(pair => pair.Second > pair.First))
             { throw new InvalidOperationException("Clearing duration did not restore permanent suppression."); }

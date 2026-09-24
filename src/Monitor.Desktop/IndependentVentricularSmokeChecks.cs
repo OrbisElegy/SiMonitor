@@ -25,8 +25,8 @@ internal static class IndependentVentricularSmokeChecks
                     window.SimulationTimeNs != 0 || window.BlockCount != 0 || window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException($"Independent ventricular period {text} did not atomically replace the source: {window.BreathConfigurationStatus.Text}"); }
                 for (int step = 0; step < 30; step++) { Click(window.StepButton); }
-                var actual = MechanicalUncouplingSmokeChecks.Decode(config);
-                var normal = MechanicalUncouplingSmokeChecks.Decode(config with { IndependentVentricularPeriodMilliseconds = null });
+                var actual = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+                var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { IndependentVentricularPeriodMilliseconds = null }, 4_000_000_000);
                 foreach (int row in new[] { 1, 4 })
                 {
                     if (!MechanicalUncouplingSmokeChecks.Samples(actual, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))

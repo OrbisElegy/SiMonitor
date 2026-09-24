@@ -44,10 +44,10 @@ internal static class VentricularPhaseSmokeChecks
                     }
                     else
                     {
-                        var blocks = MechanicalUncouplingSmokeChecks.Decode(physiologyConfig);
+                        var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(physiologyConfig, 4_000_000_000);
                         MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks);
                         VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
-                        var normal = MechanicalUncouplingSmokeChecks.Decode(physiologyConfig with { IndependentVentricularOffsetMilliseconds = null });
+                        var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(physiologyConfig with { IndependentVentricularOffsetMilliseconds = null }, 4_000_000_000);
                         foreach (int row in new[] { 1, 4 })
                         {
                             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))

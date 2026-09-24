@@ -33,8 +33,8 @@ internal static class MechanicalUncouplingSmokeChecks
                     window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Mechanical selection did not atomically restart the source."); }
                 for (int step = 0; step < 30; step++) { Click(window.StepButton); }
-                var actual = Decode(config);
-                var coupled = Decode(config with { VentricularMechanicalEnabled = true });
+                var actual = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+                var coupled = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { VentricularMechanicalEnabled = true }, 4_000_000_000);
                 foreach (int row in new[] { 0, 4 })
                 {
                     if (!Samples(actual, row).SequenceEqual(Samples(coupled, row)))
@@ -48,10 +48,10 @@ internal static class MechanicalUncouplingSmokeChecks
                 }
                 if (!enabled)
                 {
-                    var atrial = Decode(config with { CardiacActivity = CardiacActivity.AtrialOnly });
+                    var atrial = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { CardiacActivity = CardiacActivity.AtrialOnly }, 4_000_000_000);
                     if (!Samples(actual, 6).SequenceEqual(Samples(atrial, 6)) || !Samples(actual, 6).Any(value => value != 0))
                     { throw new InvalidOperationException("CVP did not preserve atrial and respiratory components alone."); }
-                    var clean = Decode(config with { RespCardiacArtifactCounts = 0 });
+                    var clean = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { RespCardiacArtifactCounts = 0 }, 4_000_000_000);
                     if (!Samples(actual, 1).SequenceEqual(Samples(clean, 1)))
                     { throw new InvalidOperationException("Resp retained artifact without ventricular mechanics."); }
                 }
@@ -76,12 +76,6 @@ internal static class MechanicalUncouplingSmokeChecks
         Console.WriteLine("ok: mechanical uncoupling retains ECG/gas, removes pulses/artifact, preserves CVP a/respiration and native pixels/lifecycle");
     }
 
-    internal static WaveformEnvelope[] Decode(PhysiologyDemoConfiguration config)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        return Enumerable.Range(1, 30).SelectMany(step => source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
-            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
-    }
     internal static short[] Samples(WaveformEnvelope[] blocks, int row) => blocks.SelectMany(block =>
         block.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row)).Samples).ToArray();
 

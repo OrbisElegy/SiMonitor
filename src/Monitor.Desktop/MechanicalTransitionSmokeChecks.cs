@@ -35,8 +35,8 @@ internal static class MechanicalTransitionSmokeChecks
                 if (window.SimulationTimeNs != step * 200_000_000L)
                 { throw new InvalidOperationException("Mechanical cutoff reset the running source clock."); }
             }
-            var actual = MechanicalUncouplingSmokeChecks.Decode(config);
-            var normal = MechanicalUncouplingSmokeChecks.Decode(config with { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null });
+            var actual = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+            var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null }, 4_000_000_000);
             foreach (int row in new[] { 0, 1, 4 })
             {
                 if (!MechanicalUncouplingSmokeChecks.Samples(actual, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
@@ -72,7 +72,7 @@ internal static class MechanicalTransitionSmokeChecks
             window.MechanicalAfterCyclesInput.Text = "";
             Click(window.ApplyBreathButton);
             if (window.BreathConfiguration.MechanicalAfterCycles is not null ||
-                MechanicalUncouplingSmokeChecks.Samples(MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration), 2).Any(value => value != 0))
+                MechanicalUncouplingSmokeChecks.Samples(PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000), 2).Any(value => value != 0))
             { throw new InvalidOperationException("Clearing the count did not restore immediate mechanical suppression."); }
 
             void VerifyUnchanged()

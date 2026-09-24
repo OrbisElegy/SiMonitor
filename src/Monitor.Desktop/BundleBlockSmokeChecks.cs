@@ -46,14 +46,16 @@ internal static class BundleBlockSmokeChecks
                         EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 110, [EcgLead.V1, EcgLead.V5]);
                         EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks, 640, [EcgLead.V1, EcgLead.V5]);
                         var restored = ElectrodeWaveformGroup.Restore(source.CaptureState());
-                        if (source.AdvanceTo(6_200_000_000, 50, 1, 100).Zip(restored.AdvanceTo(6_200_000_000, 50, 1, 100)).Any(p => !p.First.SequenceEqual(p.Second)))
+                        var expected = source.AdvanceTo(6_200_000_000, 50, 1, 100);
+                        var actual = restored.AdvanceTo(6_200_000_000, 50, 1, 100);
+                        if (expected.Count == 0 || expected.Count != actual.Count || expected.Zip(actual).Any(p => !p.First.SequenceEqual(p.Second)))
                         { throw new InvalidOperationException("Standalone bundle electrode wire recovery diverged."); }
                     }
                     else
                     {
-                        var blocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
-                        var normal = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.Default);
-                        if (blocks.Zip(normal).Any(pair => pair.First.Planes.Where(p => p.ChannelId != PhysiologyDemoSource.ChannelId(0))
+                        var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
+                        var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.Default, 4_000_000_000);
+                        if (blocks.Length != normal.Length || blocks.Zip(normal).Any(pair => pair.First.Planes.Where(p => p.ChannelId != PhysiologyDemoSource.ChannelId(0))
                             .Any(p => !p.Samples.SequenceEqual(pair.Second.Planes.Single(q => q.ChannelId == p.ChannelId).Samples))))
                         { throw new InvalidOperationException("Standalone bundle morphology altered non-ECG physiology."); }
                         MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks);
@@ -61,7 +63,9 @@ internal static class BundleBlockSmokeChecks
                         var source = PhysiologyDemoSource.Create(window.BreathConfiguration);
                         for (int step = 1; step <= 12; step++) { source.AdvanceTo(step * 200_000_000L, 50, 1, 100); }
                         var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-                        if (source.AdvanceTo(2_600_000_000, 50, 1, 100).Zip(restored.AdvanceTo(2_600_000_000, 50, 1, 100)).Any(p => !p.First.SequenceEqual(p.Second)))
+                        var expected = source.AdvanceTo(2_600_000_000, 50, 1, 100);
+                        var actual = restored.AdvanceTo(2_600_000_000, 50, 1, 100);
+                        if (expected.Count == 0 || expected.Count != actual.Count || expected.Zip(actual).Any(p => !p.First.SequenceEqual(p.Second)))
                         { throw new InvalidOperationException("Standalone bundle physiology wire recovery diverged."); }
                     }
                     Click(window.HoldButton); Click(window.RunButton);

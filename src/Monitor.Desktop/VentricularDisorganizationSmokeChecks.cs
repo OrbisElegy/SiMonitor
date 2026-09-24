@@ -51,7 +51,7 @@ internal static class VentricularDisorganizationSmokeChecks
                     }
                     else
                     {
-                        blocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
+                        blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
                         MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 20);
                         VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 2).Any(v => v != 0))

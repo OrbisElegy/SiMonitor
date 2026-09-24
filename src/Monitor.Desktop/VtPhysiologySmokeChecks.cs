@@ -2,8 +2,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
-using Monitor.Simulation.Acquisition;
-using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -23,58 +21,12 @@ internal static class VtPhysiologySmokeChecks
     private static void Verify(bool fusion, bool capture, bool bidirectional = false, bool twisting = false)
     {
         var config = PhysiologyDemoConfiguration.VtPreset with { VtFusion = fusion, VtCapture = capture, VtBidirectional = bidirectional, VtTwisting = twisting };
-        var plan = config.ResolvePlan();
-        if (plan != VentricularTachycardiaReference.CreatePlan(capture)) { throw new InvalidOperationException("VT physiology plan differs from shared source."); }
-        var blocks = Decode(config);
-        var normal = Decode(PhysiologyDemoConfiguration.Default);
-        var ordinary = Decode(PhysiologyDemoConfiguration.VtPreset with { VtCapture = capture });
+        var blocks = PhysiologyChannelSmokeChecks.Verify("VT", config, VentricularTachycardiaReference.CreatePlan(capture),
+            VentricularTachycardiaReference.CreateLeadIIBands(fusion, capture, bidirectional, twisting), new(VtPerfusionReference.Pleth, VtPerfusionReference.Arterial, VtPerfusionReference.Pulmonary, VtPerfusionReference.Venous));
+        var ordinary = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.VtPreset with { VtCapture = capture }, 6_000_000_000);
         foreach (int row in new[] { 1, 2, 3, 4, 5, 6 })
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(ordinary, row)))
-            { throw new InvalidOperationException("Fusion changed fixed mechanical or respiratory inputs."); }
-        foreach (int row in new[] { 1, 4 })
-            if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
-            { throw new InvalidOperationException("VT changed respiration/CO2."); }
-        if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Length != 1500)
-        { throw new InvalidOperationException("VT test must include six seconds of completed raw ECG after acquisition delay."); }
-        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, VentricularTachycardiaReference.CreateLeadIIBands(fusion, capture, bidirectional, twisting)).GenerateBefore(6_000_000_000, 1500, 100);
-        if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
-        { throw new InvalidOperationException("VT physiology monitorII mismatch."); }
-        var pleth = PlethRunoffSource.Create(plan, VtPerfusionReference.Pleth);
-        var abp = VascularPressureSource.Create(plan, VtPerfusionReference.Arterial);
-        var pa = VascularPressureSource.Create(plan, VtPerfusionReference.Pulmonary);
-        foreach (int row in new[] { 2, 3, 5 })
-        {
-            short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
-            for (int i = 0; i < samples.Length; i++)
-            {
-                long time = i * 8_000_000L;
-                long q32 = row == 2 ? pleth.EvaluateAt(time) : row == 3 ? abp.EvaluateAt(time) : pa.EvaluateAt(time);
-                if (samples[i] != (short)FixedPointMath.RoundDivideTiesToEven(q32, FixedPointMath.Q32One))
-                { throw new InvalidOperationException("VT perfusion support or phase mismatch."); }
-            }
-            if (samples.Skip(250).Distinct().Count() < 10) { throw new InvalidOperationException("VT perfusion became flat."); }
-        }
-        var cvpPlan = VtPerfusionReference.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
-        var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(6_000_000_000, 750, 200);
-        if (MechanicalUncouplingSmokeChecks.Samples(blocks, 6).Zip(cvp).Any(p => p.First != p.Second.NormalizedValue))
-        { throw new InvalidOperationException("VT CVP overlap mismatch."); }
-        var artifactConfig = config with { RespCardiacArtifactCounts = 200 };
-        var artifactBlocks = Decode(artifactConfig);
-        var artifactPlan = new RespirationPlan(1000, 200).CreateChannel(plan, PhysiologyDemoSource.ChannelId(1), 0);
-        var expectedResp = PhysiologySignalGenerator.Start(plan, "AcqResp125@1", 1, artifactPlan.Bands).GenerateBefore(6_000_000_000, 750, 200);
-        if (MechanicalUncouplingSmokeChecks.Samples(artifactBlocks, 1).Zip(expectedResp).Any(p => p.First != p.Second.NormalizedValue))
-        { throw new InvalidOperationException("VT respiratory cardiac artifact clock mismatch."); }
-        foreach (int row in new[] { 0, 2, 3, 4, 5, 6 })
-            if (!MechanicalUncouplingSmokeChecks.Samples(artifactBlocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(blocks, row)))
-            { throw new InvalidOperationException("VT respiratory artifact leaked to another channel."); }
-        foreach (long boundary in new[] { 200_000_000L, 400_000_000, 800_000_000, 4_200_000_000, 4_400_000_000, 5_000_000_000, 5_200_000_000 })
-        {
-            var source = PhysiologyDemoSource.Create(config);
-            for (long time = 200_000_000; time <= boundary; time += 200_000_000) { source.AdvanceTo(time, 50, 1, 100); }
-            var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-            var a = source.AdvanceTo(boundary + 200_000_000, 50, 1, 100); var b = restored.AdvanceTo(boundary + 200_000_000, 50, 1, 100);
-            if (a.Count != b.Count || a.Zip(b).Any(p => !p.First.SequenceEqual(p.Second))) { throw new InvalidOperationException("VT physiology wire recovery mismatch."); }
-        }
+            { throw new InvalidOperationException("VT morphology changed fixed mechanical or respiratory inputs."); }
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -146,13 +98,4 @@ internal static class VtPhysiologySmokeChecks
         }
         Console.WriteLine("ok: VT physiology full supports, bounded overlap, shared samples/pixels, recovery and atomic lifecycle");
     }
-    // Pleth has2s acquisition delay; advance to8s to publish the first6s
-    // across all channels, including the fusion event at4.995s.
-    private static WaveformEnvelope[] Decode(PhysiologyDemoConfiguration config)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        return Enumerable.Range(1, 40).SelectMany(step => source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
-            .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
-    }
-
 }

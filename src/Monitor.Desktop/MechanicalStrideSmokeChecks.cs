@@ -25,8 +25,8 @@ internal static class MechanicalStrideSmokeChecks
                 if (config.MechanicalEveryCycles != stride || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.IsHeld || window.ActiveTimer is not null)
                 { throw new InvalidOperationException("Mechanical stride did not atomically restart the source."); }
                 for (int step = 0; step < 30; step++) { Click(window.StepButton); }
-                var actual = MechanicalUncouplingSmokeChecks.Decode(config);
-                var normal = MechanicalUncouplingSmokeChecks.Decode(config with { MechanicalEveryCycles = 1 });
+                var actual = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+                var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { MechanicalEveryCycles = 1 }, 4_000_000_000);
                 foreach (int row in new[] { 0, 1, 4 })
                 {
                     if (!MechanicalUncouplingSmokeChecks.Samples(actual, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
@@ -64,7 +64,7 @@ internal static class MechanicalStrideSmokeChecks
             window.MechanicalAfterCyclesInput.Text = "1";
             window.MechanicalDurationCyclesInput.Text = "2";
             Click(window.ApplyBreathButton);
-            var scheduled = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
+            var scheduled = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
             short[] pulseSamples = MechanicalUncouplingSmokeChecks.Samples(scheduled, 2);
             if (pulseSamples.Skip(140).Take(249).Zip(pulseSamples.Skip(141)).Any(pair => pair.Second > pair.First) ||
                 pulseSamples[140] <= 0 || pulseSamples.Skip(440).Take(50).Max() <= pulseSamples[439])

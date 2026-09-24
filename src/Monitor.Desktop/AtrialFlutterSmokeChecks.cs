@@ -58,7 +58,7 @@ internal static class AtrialFlutterSmokeChecks
                     }
                     else
                     {
-                        blocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
+                        blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
                         if (ratio == 1) { VerifyFastPerfusion(window.BreathConfiguration, blocks); }
                         MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 20);
                         // Fixed development pressure rows clip high samples. Verify visible
@@ -122,7 +122,7 @@ internal static class AtrialFlutterSmokeChecks
     {
         var plan = config.ResolvePlan();
         if (plan != AtrialFlutterReference.CreatePlan(1)) { throw new InvalidOperationException("Fast flutter lost shared event offsets."); }
-        var normal = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.Default);
+        var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.Default, 4_000_000_000);
         foreach (int row in new[] { 1, 4 })
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
             { throw new InvalidOperationException("Fast flutter changed default respiration/CO2."); }
@@ -143,7 +143,9 @@ internal static class AtrialFlutterSmokeChecks
         var cvpPlan = FlutterOneToOnePerfusionReference.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
         var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(4_000_000_000, 500, 100);
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, AtrialFlutterReference.CreateLeadIIBands(1)).GenerateBefore(4_000_000_000, 1000, 100);
-        if (!MechanicalUncouplingSmokeChecks.Samples(blocks, 6).SequenceEqual(cvp.Select(s => s.NormalizedValue)) || MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
+        short[] ecgSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 0);
+        if (!MechanicalUncouplingSmokeChecks.Samples(blocks, 6).SequenceEqual(cvp.Select(s => s.NormalizedValue)) ||
+            ecgSamples.Length != ii.Count || ecgSamples.Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("Fast flutter CVP/ECG mismatch."); }
         var source = PhysiologyDemoSource.Create(config);
         for (int step = 1; step <= 40; step++)

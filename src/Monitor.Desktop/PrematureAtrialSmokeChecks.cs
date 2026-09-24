@@ -148,7 +148,7 @@ internal static class PrematureAtrialSmokeChecks
                     }
                     if (selection == 28)
                     {
-                        var junctionalBlocks = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.PrematureJunctional);
+                        var junctionalBlocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureJunctional, 4_000_000_000);
                         foreach (int row in new[] { 2, 3, 5 })
                         {
                             if (MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(junctionalBlocks, row)))
@@ -162,7 +162,7 @@ internal static class PrematureAtrialSmokeChecks
                     }
                     if (aberrant)
                     {
-                        var narrow = MechanicalUncouplingSmokeChecks.Decode(PhysiologyDemoConfiguration.PrematureAtrial);
+                        var narrow = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureAtrial, 4_000_000_000);
                         foreach (int row in Enumerable.Range(1, 6))
                         {
                             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(narrow, row)))

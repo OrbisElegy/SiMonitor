@@ -2,7 +2,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
-using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -22,14 +21,14 @@ internal static class WpwPhysiologySmokeChecks
         if (!events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularElectrical).Select(e => e.SimTimeNs).SequenceEqual(new long[] { 100_000_000, 900_000_000 }) ||
             !events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).Select(e => e.SimTimeNs).SequenceEqual(new long[] { 180_000_000, 980_000_000 }))
         { throw new InvalidOperationException("Physiology WPW did not advance shared ventricular events."); }
-        var blocks = DecodeCompletedOutput(config, 6_000_000_000);
-        var positive = DecodeCompletedOutput(PhysiologyDemoConfiguration.WpwPreset, 6_000_000_000);
+        var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 6_000_000_000);
+        var positive = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.WpwPreset, 6_000_000_000);
         for (int row = smallerDelta ? 1 : 0; row < 7; row++)
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(positive, row)))
             { throw new InvalidOperationException("Regional V1 variant changed lead II or other physiology."); }
-        var shifted = DecodeCompletedOutput(PhysiologyDemoConfiguration.Default with
+        var shifted = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.Default with
         { IndependentVentricularPeriodMilliseconds = 800, IndependentVentricularOffsetMilliseconds = 100 }, 6_000_000_000);
-        var normal = DecodeCompletedOutput(PhysiologyDemoConfiguration.Default, 6_000_000_000);
+        var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.Default, 6_000_000_000);
         for (int row = 1; row < 7; row++)
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(shifted, row)))
             { throw new InvalidOperationException("WPW non-ECG waveforms do not follow the same shifted events."); }
@@ -45,7 +44,7 @@ internal static class WpwPhysiologySmokeChecks
         { throw new InvalidOperationException("Physiology WPW differs from shared lead II."); }
         foreach (long boundary in new[] { 200_000_000L, 400_000_000, 800_000_000 })
         {
-            VerifyWireRecovery(config, boundary, "WPW");
+            PhysiologyChannelSmokeChecks.VerifyWireRecovery(config, boundary, "WPW");
         }
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
@@ -102,48 +101,5 @@ internal static class WpwPhysiologySmokeChecks
             throw new InvalidOperationException("Conflicting WPW physiology accepted.");
         }
         Console.WriteLine("ok: WPW physiology shared early ECG/ejection, perfusion phase, unchanged respiration, pixels, recovery and atomic lifecycle");
-    }
-
-    private const long BlockDurationNs = 200_000_000;
-
-    private static long AcquisitionLatencyNs => Math.Max(
-        FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs,
-        FrozenSignalAcquisitionProfiles.Get("AcqCO2_100@1").LatencyNs);
-
-    // Advance through acquisition latency so the requested output interval is
-    // complete on every channel, including the slow Pleth and CO2 channels.
-    private static WaveformEnvelope[] DecodeCompletedOutput(PhysiologyDemoConfiguration config, long toExclusiveSimTimeNs)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        var blocks = new List<WaveformEnvelope>();
-        for (long timeNs = BlockDurationNs; timeNs <= toExclusiveSimTimeNs + AcquisitionLatencyNs; timeNs += BlockDurationNs)
-        {
-            blocks.AddRange(source.AdvanceTo(timeNs, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
-        }
-        if (blocks.Count != toExclusiveSimTimeNs / BlockDurationNs || blocks.Count == 0 ||
-            blocks.Where((block, index) => block.StartSimTimeNs != index * BlockDurationNs || block.DurationNs != BlockDurationNs).Any() ||
-            blocks[^1].StartSimTimeNs + blocks[^1].DurationNs != toExclusiveSimTimeNs)
-        { throw new InvalidOperationException("Physiology fixture did not complete the requested output interval."); }
-        return blocks.ToArray();
-    }
-
-    private static void VerifyWireRecovery(PhysiologyDemoConfiguration config, long checkpointSimTimeNs, string name)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        for (long timeNs = BlockDurationNs; timeNs <= checkpointSimTimeNs; timeNs += BlockDurationNs)
-        { source.AdvanceTo(timeNs, 50, 1, 100); }
-        var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-        long throughSimTimeNs = Math.Max(checkpointSimTimeNs + BlockDurationNs, AcquisitionLatencyNs + BlockDurationNs);
-        int comparedBlocks = 0;
-        for (long timeNs = checkpointSimTimeNs + BlockDurationNs; timeNs <= throughSimTimeNs; timeNs += BlockDurationNs)
-        {
-            var expected = source.AdvanceTo(timeNs, 50, 1, 100);
-            var actual = restored.AdvanceTo(timeNs, 50, 1, 100);
-            if (expected.Count != actual.Count || expected.Zip(actual).Any(pair => !pair.First.SequenceEqual(pair.Second)))
-            { throw new InvalidOperationException(name + " physiology wire recovery mismatch."); }
-            comparedBlocks += expected.Count;
-        }
-        if (comparedBlocks == 0)
-        { throw new InvalidOperationException(name + " physiology wire recovery did not publish any completed blocks."); }
     }
 }

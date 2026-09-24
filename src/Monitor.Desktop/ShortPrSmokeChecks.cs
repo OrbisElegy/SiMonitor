@@ -13,8 +13,8 @@ internal static class ShortPrSmokeChecks
     {
         var ecg = ProjectedEcgDemoConfiguration.ShortPrPreset;
         var physiology = PhysiologyDemoConfiguration.ShortPrPreset;
-        var blocks = DecodeCompletedOutput(physiology, 6_000_000_000);
-        var wpw = DecodeCompletedOutput(PhysiologyDemoConfiguration.WpwPreset, 6_000_000_000);
+        var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(physiology, 6_000_000_000);
+        var wpw = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.WpwPreset, 6_000_000_000);
         for (int row = 1; row < 7; row++)
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(wpw, row)))
             { throw new InvalidOperationException("Short PR changed perfusion despite identical mechanical events."); }
@@ -60,7 +60,7 @@ internal static class ShortPrSmokeChecks
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                     if (!window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("首次 QRS 偏移 100 ms") == true))
                     { throw new InvalidOperationException("Short PR summary offset mismatch."); }
-                    VerifyWireRecovery(physiology, 200_000_000, "Short PR");
+                    PhysiologyChannelSmokeChecks.VerifyWireRecovery(physiology, 200_000_000, "Short PR");
                 }
                 Click(window.HoldButton); Click(window.RunButton);
                 var timer = window.ActiveTimer; var trace = window.Trace; long time = window.SimulationTimeNs;
@@ -90,48 +90,5 @@ internal static class ShortPrSmokeChecks
             throw new InvalidOperationException("Invalid short PR physiology accepted.");
         }
         Console.WriteLine("ok: short PR/no delta both demos, shared ECG/perfusion, pixels, recovery and atomic lifecycle");
-    }
-
-    private const long BlockDurationNs = 200_000_000;
-
-    private static long AcquisitionLatencyNs => Math.Max(
-        FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs,
-        FrozenSignalAcquisitionProfiles.Get("AcqCO2_100@1").LatencyNs);
-
-    // Advance through acquisition latency so the requested output interval is
-    // complete on every channel, including the slow Pleth and CO2 channels.
-    private static WaveformEnvelope[] DecodeCompletedOutput(PhysiologyDemoConfiguration config, long toExclusiveSimTimeNs)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        var blocks = new List<WaveformEnvelope>();
-        for (long timeNs = BlockDurationNs; timeNs <= toExclusiveSimTimeNs + AcquisitionLatencyNs; timeNs += BlockDurationNs)
-        {
-            blocks.AddRange(source.AdvanceTo(timeNs, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
-        }
-        if (blocks.Count != toExclusiveSimTimeNs / BlockDurationNs || blocks.Count == 0 ||
-            blocks.Where((block, index) => block.StartSimTimeNs != index * BlockDurationNs || block.DurationNs != BlockDurationNs).Any() ||
-            blocks[^1].StartSimTimeNs + blocks[^1].DurationNs != toExclusiveSimTimeNs)
-        { throw new InvalidOperationException("Physiology fixture did not complete the requested output interval."); }
-        return blocks.ToArray();
-    }
-
-    private static void VerifyWireRecovery(PhysiologyDemoConfiguration config, long checkpointSimTimeNs, string name)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        for (long timeNs = BlockDurationNs; timeNs <= checkpointSimTimeNs; timeNs += BlockDurationNs)
-        { source.AdvanceTo(timeNs, 50, 1, 100); }
-        var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-        long throughSimTimeNs = Math.Max(checkpointSimTimeNs + BlockDurationNs, AcquisitionLatencyNs + BlockDurationNs);
-        int comparedBlocks = 0;
-        for (long timeNs = checkpointSimTimeNs + BlockDurationNs; timeNs <= throughSimTimeNs; timeNs += BlockDurationNs)
-        {
-            var expected = source.AdvanceTo(timeNs, 50, 1, 100);
-            var actual = restored.AdvanceTo(timeNs, 50, 1, 100);
-            if (expected.Count != actual.Count || expected.Zip(actual).Any(pair => !pair.First.SequenceEqual(pair.Second)))
-            { throw new InvalidOperationException(name + " physiology wire recovery mismatch."); }
-            comparedBlocks += expected.Count;
-        }
-        if (comparedBlocks == 0)
-        { throw new InvalidOperationException(name + " physiology wire recovery did not publish any completed blocks."); }
     }
 }

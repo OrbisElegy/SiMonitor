@@ -15,8 +15,8 @@ internal static class NormalPrDeltaSmokeChecks
     {
         var ecg = ProjectedEcgDemoConfiguration.NormalPrDeltaPreset with { ProlongedPrDelta = prolongedPr, PrIntervalMilliseconds = prolongedPr ? 240 : 160 };
         var physiology = PhysiologyDemoConfiguration.NormalPrDeltaPreset with { ProlongedPrDelta = prolongedPr };
-        var blocks = DecodeCompletedOutput(physiology, 6_000_000_000);
-        var normal = DecodeCompletedOutput(prolongedPr ? PhysiologyDemoConfiguration.Default with { IndependentVentricularPeriodMilliseconds = 800, IndependentVentricularOffsetMilliseconds = 240 } : PhysiologyDemoConfiguration.Default, 6_000_000_000);
+        var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(physiology, 6_000_000_000);
+        var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(prolongedPr ? PhysiologyDemoConfiguration.Default with { IndependentVentricularPeriodMilliseconds = 800, IndependentVentricularOffsetMilliseconds = 240 } : PhysiologyDemoConfiguration.Default, 6_000_000_000);
         for (int row = 1; row < 7; row++)
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
             { throw new InvalidOperationException("Normal PR delta changed perfusion despite identical mechanical events."); }
@@ -67,7 +67,7 @@ internal static class NormalPrDeltaSmokeChecks
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                     if (!window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains(prolongedPr ? "首次 QRS 偏移 240 ms" : "首次 QRS 偏移 160 ms") == true))
                     { throw new InvalidOperationException("Normal PR delta summary offset mismatch."); }
-                    VerifyWireRecovery(physiology, 200_000_000, "PR with delta");
+                    PhysiologyChannelSmokeChecks.VerifyWireRecovery(physiology, 200_000_000, "PR with delta");
                 }
                 Click(window.HoldButton); Click(window.RunButton);
                 var timer = window.ActiveTimer; var trace = window.Trace; long time = window.SimulationTimeNs;
@@ -103,48 +103,5 @@ internal static class NormalPrDeltaSmokeChecks
             throw new InvalidOperationException("Invalid PR with delta physiology accepted.");
         }
         Console.WriteLine($"ok: {(prolongedPr ? "prolonged" : "normal")} PR with delta both demos, shared ECG/perfusion, pixels, recovery and atomic lifecycle");
-    }
-
-    private const long BlockDurationNs = 200_000_000;
-
-    private static long AcquisitionLatencyNs => Math.Max(
-        FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs,
-        FrozenSignalAcquisitionProfiles.Get("AcqCO2_100@1").LatencyNs);
-
-    // Advance through acquisition latency so the requested output interval is
-    // complete on every channel, including the slow Pleth and CO2 channels.
-    private static WaveformEnvelope[] DecodeCompletedOutput(PhysiologyDemoConfiguration config, long toExclusiveSimTimeNs)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        var blocks = new List<WaveformEnvelope>();
-        for (long timeNs = BlockDurationNs; timeNs <= toExclusiveSimTimeNs + AcquisitionLatencyNs; timeNs += BlockDurationNs)
-        {
-            blocks.AddRange(source.AdvanceTo(timeNs, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
-        }
-        if (blocks.Count != toExclusiveSimTimeNs / BlockDurationNs || blocks.Count == 0 ||
-            blocks.Where((block, index) => block.StartSimTimeNs != index * BlockDurationNs || block.DurationNs != BlockDurationNs).Any() ||
-            blocks[^1].StartSimTimeNs + blocks[^1].DurationNs != toExclusiveSimTimeNs)
-        { throw new InvalidOperationException("Physiology fixture did not complete the requested output interval."); }
-        return blocks.ToArray();
-    }
-
-    private static void VerifyWireRecovery(PhysiologyDemoConfiguration config, long checkpointSimTimeNs, string name)
-    {
-        var source = PhysiologyDemoSource.Create(config);
-        for (long timeNs = BlockDurationNs; timeNs <= checkpointSimTimeNs; timeNs += BlockDurationNs)
-        { source.AdvanceTo(timeNs, 50, 1, 100); }
-        var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-        long throughSimTimeNs = Math.Max(checkpointSimTimeNs + BlockDurationNs, AcquisitionLatencyNs + BlockDurationNs);
-        int comparedBlocks = 0;
-        for (long timeNs = checkpointSimTimeNs + BlockDurationNs; timeNs <= throughSimTimeNs; timeNs += BlockDurationNs)
-        {
-            var expected = source.AdvanceTo(timeNs, 50, 1, 100);
-            var actual = restored.AdvanceTo(timeNs, 50, 1, 100);
-            if (expected.Count != actual.Count || expected.Zip(actual).Any(pair => !pair.First.SequenceEqual(pair.Second)))
-            { throw new InvalidOperationException(name + " physiology wire recovery mismatch."); }
-            comparedBlocks += expected.Count;
-        }
-        if (comparedBlocks == 0)
-        { throw new InvalidOperationException(name + " physiology wire recovery did not publish any completed blocks."); }
     }
 }

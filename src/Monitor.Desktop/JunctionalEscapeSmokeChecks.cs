@@ -56,7 +56,7 @@ internal static class JunctionalEscapeSmokeChecks
                 }
                 else
                 {
-                    blocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
+                    blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
                     MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 100);
                     VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                 }

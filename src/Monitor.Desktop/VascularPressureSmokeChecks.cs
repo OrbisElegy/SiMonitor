@@ -22,8 +22,8 @@ internal static class VascularPressureSmokeChecks
                 new PhysiologyDemoConfiguration(3750, 1875, 1000).UseVascularReservoir)
             { throw new InvalidOperationException("The demo must enable pressure morphology with runoff while old explicit configurations retain template behavior."); }
             for (int step = 0; step < 30; step++) { Click(window.StepButton); }
-            var defaultBlocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
-            var defaultLegacy = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration with { UseVascularReservoir = false });
+            var defaultBlocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
+            var defaultLegacy = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration with { UseVascularReservoir = false }, 4_000_000_000);
             VerifyMorphology(defaultBlocks, defaultLegacy, [0, 100, 300]);
             VerifyPressurePixels(window, defaultBlocks, [50, 53, 68, 73, 75, 76, 78, 350, 353, 368, 373, 376, 378],
                 "vascular-pressure-default.png");
@@ -58,15 +58,15 @@ internal static class VascularPressureSmokeChecks
                     if (window.SimulationTimeNs != step * 200_000_000L)
                     { throw new InvalidOperationException("RC pressure changed the shared source clock."); }
                 }
-                var blocks = MechanicalUncouplingSmokeChecks.Decode(config);
-                var legacy = MechanicalUncouplingSmokeChecks.Decode(config with { UseVascularReservoir = false });
+                var blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config, 4_000_000_000);
+                var legacy = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with { UseVascularReservoir = false }, 4_000_000_000);
                 foreach (int row in new[] { 0, 1, 2, 4, 6 })
                 {
                     if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(legacy, row)))
                     { throw new InvalidOperationException("RC selection changed ECG, breathing, Pleth, gas or CVP samples."); }
                 }
-                var normal = MechanicalUncouplingSmokeChecks.Decode(config with
-                { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null, MechanicalDurationCycles = null });
+                var normal = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(config with
+                { VentricularMechanicalEnabled = true, MechanicalAfterCycles = null, MechanicalDurationCycles = null }, 4_000_000_000);
                 foreach (int row in new[] { 3, 5 })
                 {
                     short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);

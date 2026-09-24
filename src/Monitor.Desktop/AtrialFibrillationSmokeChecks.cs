@@ -52,7 +52,7 @@ internal static class AtrialFibrillationSmokeChecks
                     }
                     else
                     {
-                        blocks = MechanicalUncouplingSmokeChecks.Decode(window.BreathConfiguration);
+                        blocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(window.BreathConfiguration, 4_000_000_000);
                         MechanicalUncouplingSmokeChecks.VerifyPixels(window, blocks, 20);
                         VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
                     }

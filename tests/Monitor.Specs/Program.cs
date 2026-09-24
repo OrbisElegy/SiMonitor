@@ -75,6 +75,7 @@ internal static class Program
             .. TwistingVtSpecifications.All,
             .. VtPerfusionSpecifications.All,
             .. AcceleratedVentricularPerfusionSpecifications.All,
+            .. AcceleratedJunctionalPerfusionSpecifications.All,
             .. SvtPerfusionSpecifications.All,
             .. PrematureAtrialSpecifications.All,
             .. BlockedPrematureAtrialSpecifications.All,

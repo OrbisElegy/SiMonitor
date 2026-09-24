@@ -70,6 +70,7 @@ internal static class Program
             .. VtFusionSpecifications.All,
             .. VtCaptureSpecifications.All,
             .. BidirectionalVtSpecifications.All,
+            .. TwistingVtSpecifications.All,
             .. VtPerfusionSpecifications.All,
             .. SvtPerfusionSpecifications.All,
             .. PrematureAtrialSpecifications.All,

@@ -1,0 +1,87 @@
+{
+  "id": "TwistingVtMorphologyIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "Broad polymorphic QRS dominant direction twists about baseline every 3 to 10 beats; typical TdP also has antecedent long QT and transient episodes."
+  ],
+  "textbook_figures": [
+    "5-1-69"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      375,
+      800
+    ],
+    "QRS_QT_T_ms": [
+      160,
+      275,
+      100
+    ],
+    "first_QRS_mechanical_ms": [
+      120,
+      200
+    ],
+    "beat_weights_per_thousand": [
+      [
+        1000,
+        0
+      ],
+      [
+        707,
+        707
+      ],
+      [
+        0,
+        1000
+      ],
+      [
+        -707,
+        707
+      ],
+      [
+        -1000,
+        0
+      ],
+      [
+        -707,
+        -707
+      ],
+      [
+        0,
+        -1000
+      ],
+      [
+        707,
+        -707
+      ]
+    ],
+    "second_limb_basis": "(LL-LA, RA-LL, LA-RA) * 577/1000 for RA, LA, LL; RL zero",
+    "second_chest_basis": "Wilson-relative paired C1/C4, C2/C5, C3/C6 quadrature",
+    "atrial_source": "Unchanged single independent P source",
+    "rounding": "Integer ties-to-even"
+  },
+  "invariants": [
+    "Four-beat reversal and eight-beat repetition preserve ventricular ordinal across recovery",
+    "Two independent bases avoid simultaneous loss of all QRS projections at intermediate rotation",
+    "Shared electrode projections retain limb identities; combined monitorII has17 bands",
+    "Fixed electrical/mechanical timing and non-ECG inputs do not vary with electrical sign",
+    "Both demos reject orphan twisting and combinations with bidirectional/fusion/capture"
+  ],
+  "limitations": [
+    "Morphology illustration only, NOT a complete TdP model",
+    "QT275ms is ventricular component support, not an antecedent long-QT rhythm",
+    "No episodic onset/termination/recurrence, degeneration to VF or TdP hemodynamic feedback",
+    "Authored bases/weights and secondary T changes, not anatomical propagation or clinical calibration"
+  ],
+  "verification": [
+    "TwistingVtUsesIndependentAxesAndFourBeatReversal",
+    "TwistingVtFitsBandBudgetAndRestoresRotationPhase",
+    "VtSmokeChecks twisting variant",
+    "VtPhysiologySmokeChecks twisting variant"
+  ]
+}

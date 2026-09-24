@@ -17,11 +17,12 @@ internal static class VtPhysiologySmokeChecks
         Verify(false, true);
         Verify(true, true);
         Verify(false, false, true);
+        Verify(false, false, false, true);
     }
 
-    private static void Verify(bool fusion, bool capture, bool bidirectional = false)
+    private static void Verify(bool fusion, bool capture, bool bidirectional = false, bool twisting = false)
     {
-        var config = PhysiologyDemoConfiguration.VtPreset with { VtFusion = fusion, VtCapture = capture, VtBidirectional = bidirectional };
+        var config = PhysiologyDemoConfiguration.VtPreset with { VtFusion = fusion, VtCapture = capture, VtBidirectional = bidirectional, VtTwisting = twisting };
         var plan = config.ResolvePlan();
         if (plan != VentricularTachycardiaReference.CreatePlan(capture)) { throw new InvalidOperationException("VT physiology plan differs from shared source."); }
         var blocks = Decode(config);
@@ -35,7 +36,7 @@ internal static class VtPhysiologySmokeChecks
             { throw new InvalidOperationException("VT changed respiration/CO2."); }
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Length != 1500)
         { throw new InvalidOperationException("VT test must include six seconds of completed raw ECG after acquisition delay."); }
-        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, VentricularTachycardiaReference.CreateLeadIIBands(fusion, capture, bidirectional)).GenerateBefore(6_000_000_000, 1500, 100);
+        var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, VentricularTachycardiaReference.CreateLeadIIBands(fusion, capture, bidirectional, twisting)).GenerateBefore(6_000_000_000, 1500, 100);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("VT physiology monitorII mismatch."); }
         var pleth = PlethRunoffSource.Create(plan, VtPerfusionReference.Pleth);
@@ -43,7 +44,7 @@ internal static class VtPhysiologySmokeChecks
         var pa = VascularPressureSource.Create(plan, VtPerfusionReference.Pulmonary);
         foreach (int row in new[] { 2, 3, 5 })
         {
-            var samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
+            short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
             for (int i = 0; i < samples.Length; i++)
             {
                 long time = i * 8_000_000L;
@@ -81,7 +82,7 @@ internal static class VtPhysiologySmokeChecks
         {
             Click(window.VentricularDisorganizationButton); Click(window.StepButton); Click(window.RunButton);
             var oldTimer = window.ActiveTimer;
-            Click(window.VtButton); window.VtBidirectionalInput.IsChecked = bidirectional; window.VtCaptureInput.IsChecked = capture; window.VtFusionInput.IsChecked = fusion; Click(window.ApplyBreathButton); window.Pulse(oldTimer);
+            Click(window.VtButton); window.VtTwistingInput.IsChecked = twisting; window.VtBidirectionalInput.IsChecked = bidirectional; window.VtCaptureInput.IsChecked = capture; window.VtFusionInput.IsChecked = fusion; Click(window.ApplyBreathButton); window.Pulse(oldTimer);
             if (window.BreathConfiguration != config || window.BlockCount != 0 || window.SimulationTimeNs != 0 || window.ActiveTimer is not null || window.VtInput.IsChecked != true)
             { throw new InvalidOperationException("VT physiology loader retained VF state."); }
             Click(window.ApplyBreathButton);
@@ -94,7 +95,7 @@ internal static class VtPhysiologySmokeChecks
             VascularPressureSmokeChecks.VerifyPressurePixels(window, blocks, [150, 200]);
             Click(window.HoldButton); Click(window.RunButton);
             var timer = window.ActiveTimer; var trace = window.Trace; long time = window.SimulationTimeNs;
-            if (bidirectional)
+            if (bidirectional || twisting)
             {
                 window.VtFusionInput.IsChecked = true; Click(window.ApplyBreathButton);
                 if (window.BreathConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
@@ -105,8 +106,8 @@ internal static class VtPhysiologySmokeChecks
             if (window.BreathConfiguration != config || window.ActiveTimer != timer || window.Trace != trace || window.SimulationTimeNs != time || string.IsNullOrEmpty(window.BreathConfigurationStatus.Text))
             { throw new InvalidOperationException("VT physiology conflict mutated accepted state."); }
             Click(window.ResetButton);
-            if (window.VtInput.IsChecked != true || window.VtFusionInput.IsChecked != fusion || window.VtCaptureInput.IsChecked != capture || window.VtBidirectionalInput.IsChecked != bidirectional || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text)) { throw new InvalidOperationException("VT physiology reset lost source."); }
-            if (!bidirectional)
+            if (window.VtInput.IsChecked != true || window.VtFusionInput.IsChecked != fusion || window.VtCaptureInput.IsChecked != capture || window.VtBidirectionalInput.IsChecked != bidirectional || window.VtTwistingInput.IsChecked != twisting || !string.IsNullOrEmpty(window.IndependentVentricularPeriodInput.Text)) { throw new InvalidOperationException("VT physiology reset lost source."); }
+            if (!bidirectional && !twisting)
             {
                 window.VtFusionInput.IsChecked = !fusion; Click(window.ApplyBreathButton);
                 if (window.BreathConfiguration != (config with { VtFusion = !fusion })) { throw new InvalidOperationException("VT fusion toggle failed."); }
@@ -117,20 +118,27 @@ internal static class VtPhysiologySmokeChecks
                 window.VtCaptureInput.IsChecked = capture; Click(window.ApplyBreathButton);
                 if (window.BreathConfiguration != config) { throw new InvalidOperationException("VT capture toggle restore failed."); }
             }
-            if (!fusion && !capture)
+            if (!fusion && !capture && !twisting)
             {
                 window.VtBidirectionalInput.IsChecked = !bidirectional; Click(window.ApplyBreathButton);
                 if (window.BreathConfiguration != (config with { VtBidirectional = !bidirectional })) { throw new InvalidOperationException("Bidirectional VT toggle failed."); }
                 window.VtBidirectionalInput.IsChecked = bidirectional; Click(window.ApplyBreathButton);
                 if (window.BreathConfiguration != config) { throw new InvalidOperationException("Bidirectional VT toggle restore failed."); }
             }
+            if (!fusion && !capture && !bidirectional)
+            {
+                window.VtTwistingInput.IsChecked = !twisting; Click(window.ApplyBreathButton);
+                if (window.BreathConfiguration != (config with { VtTwisting = !twisting })) { throw new InvalidOperationException("Twisting VT toggle failed."); }
+                window.VtTwistingInput.IsChecked = twisting; Click(window.ApplyBreathButton);
+                if (window.BreathConfiguration != config) { throw new InvalidOperationException("Twisting VT toggle restore failed."); }
+            }
             window.VtInput.IsChecked = false; Click(window.ApplyBreathButton);
             if (window.BreathConfiguration != PhysiologyDemoConfiguration.Default) { throw new InvalidOperationException("VT physiology clear failed."); }
             Click(window.VtButton); Click(window.WpwButton);
-            if (window.VtInput.IsChecked == true || window.VtFusionInput.IsChecked == true || window.VtCaptureInput.IsChecked == true || window.VtBidirectionalInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained VT."); }
+            if (window.VtInput.IsChecked == true || window.VtFusionInput.IsChecked == true || window.VtCaptureInput.IsChecked == true || window.VtBidirectionalInput.IsChecked == true || window.VtTwistingInput.IsChecked == true) { throw new InvalidOperationException("WPW loader retained VT."); }
         }
         finally { window.Close(); }
-        foreach (var invalid in new[] { config with { UseVascularReservoir = false }, config with { Wpw = true }, config with { Vt = false, VtBidirectional = true }, config with { VtBidirectional = true, VtFusion = true }, config with { VtBidirectional = true, VtCapture = true }, config with { Vt = false, VtFusion = true }, config with { Vt = false, VtCapture = true }, config with { Svt = true }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft } })
+        foreach (var invalid in new[] { config with { UseVascularReservoir = false }, config with { Wpw = true }, config with { Vt = false, VtTwisting = true }, config with { VtTwisting = true, VtBidirectional = true }, config with { VtTwisting = true, VtFusion = true }, config with { VtTwisting = true, VtCapture = true }, config with { Vt = false, VtBidirectional = true }, config with { VtBidirectional = true, VtFusion = true }, config with { VtBidirectional = true, VtCapture = true }, config with { Vt = false, VtFusion = true }, config with { Vt = false, VtCapture = true }, config with { Svt = true }, config with { VentricularConductionRatio = 2 }, config with { IndependentVentricularPeriodMilliseconds = 800 }, config with { BundleBlock = EcgBundleBlockIllustration.CompleteLeft } })
         {
             try { PhysiologyDemoSource.Create(invalid); }
             catch (EventWaveformException e) when (e.ReasonCode == "Vt.ConflictingModes") { continue; }

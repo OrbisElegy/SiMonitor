@@ -3,7 +3,7 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Established monomorphic VT with independent slower atria. Authored contour,
+// Established VT with independent slower atria. Authored contours,
 // not an anatomical focus, onset or refractory propagation model.
 public static class VentricularTachycardiaReference
 {
@@ -23,8 +23,13 @@ public static class VentricularTachycardiaReference
     public const string FusionEvidenceId = "VtFusionIllustration@1";
     public const int FusionCycleLength = 32;
     public const int FusionCycleSlot = 13;
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false, bool capture = false)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fusion = false, bool capture = false, bool bidirectional = false)
     {
+        if (bidirectional)
+        {
+            if (fusion || capture) { throw new EventWaveformException("Vt.ConflictingModes", "configuration"); }
+            return BidirectionalVtReference.CreateElectrodes();
+        }
         var ventricular = CompleteAvBlockVentricularReference.CreateElectrodes(Timing);
         if (!fusion && !capture) { return ventricular; }
         var conducted = TextbookElectrodeReference.CreateElectrodes(timing: Timing with { QrsDurationNs = 80_000_000 });
@@ -50,9 +55,9 @@ public static class VentricularTachycardiaReference
         };
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false, bool capture = false)
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fusion = false, bool capture = false, bool bidirectional = false)
     {
-        var electrodes = CreateElectrodes(fusion, capture);
+        var electrodes = CreateElectrodes(fusion, capture, bidirectional);
         return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
             electrodes[(int)EcgElectrode.RA].Bands.Select(b => b with
             { TableQ32 = Array.AsReadOnly(b.TableQ32.Select(v => checked(-v)).ToArray()) })).ToArray());

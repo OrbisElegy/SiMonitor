@@ -40,7 +40,7 @@
   "limitations": [
     "Authored discrete mixture, not propagation, AV nodal conduction, refractory or anatomical model",
     "Fraction does not calibrate recruited myocardial mass or stroke volume",
-    "Complete capture and its changed RR/ejection schedule remain open",
+    "Optional fixed capture with changed RR/ejection schedule is documented in vt-capture.json",
     "Polymorphic VT, TdP, onset/termination and other physiology gaps remain"
   ],
   "verification": [

@@ -1,0 +1,46 @@
+{
+  "id": "FlutterOneToOnePerfusionIllustration@1",
+  "implementation_basis": [
+    "AtrialFlutterOneToOneIllustration@1",
+    "Existing authored fixed SVT perfusion seeds; no clinical calibration"
+  ],
+  "authored_choices": {
+    "RR_ms": 200,
+    "electrical_mechanical_ms": [
+      80,
+      160
+    ],
+    "ABP_PA_input_duration_ms": [
+      120,
+      160
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "ABP_PA_overlap": [
+      3,
+      4
+    ],
+    "CVP_overlap": 2
+  },
+  "invariants": [
+    "Normal atrial mechanical events absent; no normal CVP a wave",
+    "Shared ECG and ejection event grid",
+    "Full pulse supports and finite pressure/optical history",
+    "Pressure Int16 amplitude budget validated",
+    "Default Resp/CO2 unchanged",
+    "Reservoir required, invalid changes atomic, wire recovery deterministic"
+  ],
+  "limitations": [
+    "Fixed ejection strength, not measured pump failure or cardiac output",
+    "No perfusion to gas-exchange feedback or AV-node mechanism"
+  ],
+  "verification": [
+    "FlutterOneToOnePerfusionPreservesSupportsAndBoundsOverlap",
+    "FlutterOneToOnePerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
+    "FlutterSuppressesNormalVenousAAndKeepsVentricularPhase",
+    "AtrialFlutterSmokeChecks.VerifyFastPerfusion"
+  ]
+}

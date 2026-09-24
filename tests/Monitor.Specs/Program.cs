@@ -66,7 +66,7 @@ internal static class Program
             .. ShortPrSpecifications.All,
             .. NormalPrDeltaSpecifications.All,
             .. SvtSpecifications.All,
-            .. SvtRightBundleSpecifications.All,
+            .. SvtBundleBlockSpecifications.All,
             .. VtSpecifications.All,
             .. AcceleratedVentricularSpecifications.All,
             .. AcceleratedJunctionalSpecifications.All,

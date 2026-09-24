@@ -1,0 +1,49 @@
+{
+  "id": "SvtLeftBundleBlockIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480"
+  },
+  "textbook_summary": [
+    "SVT may have wide QRS with bundle block."
+  ],
+  "implementation_basis": [
+    "Existing LeftBundleBlockReference authored electrode morphology, excluding its Mobitz-II schedule"
+  ],
+  "authored_choices": {
+    "RR_ms": 300,
+    "P_QRS_QT_T_ST_ms": [
+      40,
+      140,
+      260,
+      100,
+      20
+    ],
+    "atrial_mechanical_ms": 80,
+    "ventricular_electrical_mechanical_ms": [
+      0,
+      80
+    ]
+  },
+  "invariants": [
+    "Same overlapping retrograde P as narrow SVT",
+    "Left-bundle QRS and secondary ST/T share existing electrode tables",
+    "Limb projection and monitorII parity",
+    "No dropped beats copied from the original LBBB demonstration schedule",
+    "All non-ECG fixed inputs unchanged",
+    "Left/right simultaneous and orphan flags rejected atomically"
+  ],
+  "limitations": [
+    "140ms QRS is an authored illustration choice, not a textbook measurement",
+    "No rate-dependent aberrancy, reentry or clinical pump impairment model",
+    "No episode onset/termination or AVNRT/AVRT differentiation"
+  ],
+  "verification": [
+    "SvtLeftBundlePreservesMorphologyAndPhase",
+    "SvtRejectsSimultaneousBundleShapes",
+    "SvtSmokeChecks: narrow/right/left",
+    "SvtPhysiologySmokeChecks: narrow/right/left"
+  ]
+}

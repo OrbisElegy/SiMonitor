@@ -12,10 +12,12 @@ public static class AcceleratedAtrialReference
     public static RegularPhysiologyPlan CreatePlan() => new(0, 600_000_000,
         160_000_000, 80_000_000, 240_000_000, 3_750_000_000, 1_875_000_000);
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes()
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes() => CreateElectrodes(Timing);
+
+    internal static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(EcgCycleTiming timing)
     {
         var ectopic = PrematureAtrialReference.CreateElectrodes();
-        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: Timing).Select((electrode, index) => electrode with
+        return Array.AsReadOnly(TextbookElectrodeReference.CreateElectrodes(timing: timing).Select((electrode, index) => electrode with
         {
             // Replace the sinus P on every atrial event. Do not append an
             // extra P-prime or reuse the PAC coupling/compensatory schedule.

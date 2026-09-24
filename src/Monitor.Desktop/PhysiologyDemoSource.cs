@@ -17,9 +17,11 @@ internal static class PhysiologyDemoSource
         _ => throw new ArgumentOutOfRangeException(nameof(row)),
     };
 
-    internal static PhysiologyWaveformGroup Create(PhysiologyDemoConfiguration? configuration = null)
+    internal static PhysiologyWaveformGroup Create(PhysiologyDemoConfiguration? configuration = null, PressureZeroOffsets? pressureOffsets = null)
     {
         configuration ??= PhysiologyDemoConfiguration.Default;
+        pressureOffsets ??= new();
+        pressureOffsets.Validate();
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
@@ -34,7 +36,7 @@ internal static class PhysiologyDemoSource
         long PulseDuration(long normal) => shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
-        return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
+        PhysiologyWaveformChannelPlan[] channels =
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 sinusArrest ? SinusArrestReference.CreateLeadIIBands() :
                 sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :
@@ -74,7 +76,10 @@ internal static class PhysiologyDemoSource
              fixedPerfusion?.Venous.CreateChannel(plan, ChannelId(6), 0) ?? (new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))]);
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))];
+        foreach (var (row, offset) in new[] { (3, pressureOffsets.Abp), (5, pressureOffsets.Pa), (6, pressureOffsets.Cvp) })
+        { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
+        return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
     }
     // Select the bundle once so Pleth/ABP/PA/CVP cannot drift into separate
     // per-channel rhythm mappings. Existing configuration validation runs first.

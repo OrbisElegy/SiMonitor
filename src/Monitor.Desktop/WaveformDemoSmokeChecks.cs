@@ -32,6 +32,7 @@ internal static class WaveformDemoSmokeChecks
         AcceleratedAtrialSmokeChecks.Verify();
         AtrialEscapeSmokeChecks.Verify();
         FixedPerfusionWireSmokeChecks.Verify();
+        PressureZeroSmokeChecks.Verify();
         SinusArrhythmiaSmokeChecks.Verify();
         SinusArrestSmokeChecks.Verify();
         SinusArrestPhysiologySmokeChecks.Verify();

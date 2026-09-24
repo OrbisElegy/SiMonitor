@@ -1,0 +1,50 @@
+{
+  "id": "AtrialEscapeIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "479"
+  },
+  "textbook_summary": [
+    "atrial escape rhythm typically 50–60/min; P morphology depends on origin."
+  ],
+  "implementation_basis": [
+    "Existing authored PAC ectopic P-prime contour; no focus localization"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      1200,
+      1200
+    ],
+    "P_PR_QRS_QT_T_ms": [
+      80,
+      160,
+      80,
+      400,
+      180
+    ],
+    "atrial_mechanical_ms": 80,
+    "ventricular_electrical_mechanical_ms": [
+      160,
+      240
+    ]
+  },
+  "invariants": [
+    "One ectopic P replaces every sinus P",
+    "No PAC timing or compensatory pause",
+    "Normal narrow QRS and repolarization preserved",
+    "Regular1:1 conduction and single mechanical event per beat",
+    "Projection, event-budget atomicity, wire and phase recovery"
+  ],
+  "limitations": [
+    "Established rhythm only; no first escape after a long pause",
+    "No anatomical focus assignment or wandering rhythm",
+    "Physiology demo integration and pump calibration remain open"
+  ],
+  "verification": [
+    "AtrialEscapeRhythmReplacesEverySinusPWithoutPrematurity",
+    "AtrialEscapeRhythmPreservesConductionProjectionAndRecovery",
+    "AtrialEscapeSmokeChecks"
+  ]
+}

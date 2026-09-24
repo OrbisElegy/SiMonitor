@@ -73,6 +73,7 @@ internal static class Program
             .. AcceleratedAtrialSpecifications.All,
             .. AtrialEscapeSpecifications.All,
             .. SinusArrhythmiaSpecifications.All,
+    .. SinusArrhythmiaPerfusionSpecifications.All,
             .. AtrialEscapePerfusionSpecifications.All,
             .. VtFusionSpecifications.All,
             .. AcceleratedVentricularFusionSpecifications.All,

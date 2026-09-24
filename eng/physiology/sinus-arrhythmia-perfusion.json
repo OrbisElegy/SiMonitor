@@ -1,0 +1,50 @@
+{
+  "id": "SinusArrhythmiaPerfusionIllustration@1",
+  "implementation_basis": [
+    "SinusArrhythmiaIllustration@1",
+    "Existing fixed authored perfusion inputs, not clinical calibration"
+  ],
+  "authored_choices": {
+    "PP_RR_ms": [
+      800,
+      1000,
+      600,
+      800
+    ],
+    "minimum_support_interval_ms": 600,
+    "atrial_mechanical_ms": 80,
+    "ventricular_electrical_mechanical_ms": [
+      160,
+      240
+    ],
+    "Pleth_ABP_PA_support_ms": [
+      512,
+      600,
+      640
+    ],
+    "ABP_PA_overlap": [
+      1,
+      2
+    ],
+    "CVP_overlap": 1,
+    "resp_cardiac_artifact_support_ms": 600
+  },
+  "invariants": [
+    "Shared indexed irregular electrical/mechanical schedule",
+    "Finite history preserves optical and pressure runoff",
+    "CVP components follow atrial and ventricular events separately",
+    "Resp cardiac artifact follows ejection with single-pulse bound",
+    "Default Resp/CO2 unchanged",
+    "Atomic configuration and deterministic wire recovery"
+  ],
+  "limitations": [
+    "Fixed strengths, not calibrated RR-dependent stroke volume or gas exchange",
+    "No sinus-node or respiratory coupling model"
+  ],
+  "verification": [
+    "SinusArrhythmiaPerfusionPreservesSupportsAndBoundsOverlap",
+    "SinusArrhythmiaPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
+    "SinusArrhythmiaVenousAndRespiratoryComponentsRespectConductedClocks",
+    "SinusArrhythmiaPhysiologySmokeChecks"
+  ]
+}

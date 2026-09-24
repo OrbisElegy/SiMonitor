@@ -21,6 +21,7 @@ internal static class PhysiologyDemoSource
     {
         configuration ??= PhysiologyDemoConfiguration.Default;
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
+        bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
         bool flutter = AtrialFlutterReference.IsPattern(plan.ConductionPattern);
         bool fastFlutter = flutter && plan.VentricularConductionRatio == 1;
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
@@ -34,6 +35,7 @@ internal static class PhysiologyDemoSource
         // pressure across missing and resumed ejections. Teaching parameters only.
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16,
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
+                sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :
                 configuration.AtrialEscape ? AtrialEscapeReference.CreateLeadIIBands() :
                 configuration.Aar ? AcceleratedAtrialReference.CreateLeadIIBands() :
                 configuration.Ajr ? AcceleratedJunctionalReference.CreateLeadIIBands() :
@@ -57,7 +59,8 @@ internal static class PhysiologyDemoSource
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: configuration.AtrialEscape ? AtrialEscapePerfusionReference.Pleth : fastFlutter ? FlutterOneToOnePerfusionReference.Pleth : configuration.Aar ? AcceleratedAtrialPerfusionReference.Pleth : configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pleth : configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pleth : configuration.Vt ? VtPerfusionReference.Pleth : configuration.Svt ? SvtPerfusionReference.Pleth : new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
+                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Pleth : configuration.AtrialEscape ? AtrialEscapePerfusionReference.Pleth : fastFlutter ? FlutterOneToOnePerfusionReference.Pleth : configuration.Aar ? AcceleratedAtrialPerfusionReference.Pleth : configuration.Ajr ? AcceleratedJunctionalPerfusionReference.Pleth : configuration.Aivr ? AcceleratedVentricularPerfusionReference.Pleth : configuration.Vt ? VtPerfusionReference.Pleth : configuration.Svt ? SvtPerfusionReference.Pleth : new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
+             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              configuration.AtrialEscape ? AtrialEscapePerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              fastFlutter ? FlutterOneToOnePerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
              configuration.Aar ? AcceleratedAtrialPerfusionReference.Arterial.CreateChannel(plan, ChannelId(3), 0) :
@@ -70,6 +73,7 @@ internal static class PhysiologyDemoSource
                     Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit).CreateChannel(plan, ChannelId(3), 0)
                 : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
+             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              configuration.AtrialEscape ? AtrialEscapePerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              fastFlutter ? FlutterOneToOnePerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
              configuration.Aar ? AcceleratedAtrialPerfusionReference.Pulmonary.CreateChannel(plan, ChannelId(5), 0) :
@@ -81,6 +85,7 @@ internal static class PhysiologyDemoSource
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0),
+             sinusArrhythmia ? SinusArrhythmiaPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              configuration.AtrialEscape ? AtrialEscapePerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              fastFlutter ? FlutterOneToOnePerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :
              configuration.Aar ? AcceleratedAtrialPerfusionReference.Venous.CreateChannel(plan, ChannelId(6), 0) :

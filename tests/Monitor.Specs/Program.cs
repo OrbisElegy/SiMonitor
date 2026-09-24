@@ -48,6 +48,7 @@ internal static class Program
             .. PlethRunoffSpecifications.All,
             .. ArterialPulseSpecifications.All,
             .. VascularPressureSpecifications.All,
+            .. PressureZeroOffsetSpecifications.All,
             .. VascularPressureMorphologySpecifications.All,
             .. PhysiologyForkSpecifications.All,
             .. EcgLimbPlacementSpecifications.All,

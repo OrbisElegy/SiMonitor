@@ -1,0 +1,55 @@
+{
+  "id": "VtCaptureIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "480"
+  },
+  "textbook_summary": [
+    "Occasional conducted ventricular capture during VT, distinct from ventricular fusion."
+  ],
+  "authored_choices": {
+    "group_ms": 12000,
+    "capture_slot_zero_based": 11,
+    "nominal_ventricular_period_ms": 375,
+    "atrial_period_ms": 800,
+    "preceding_P_ms": 4000,
+    "capture_QRS_ms": 4200,
+    "original_suppressed_QRS_ms": 4245,
+    "next_QRS_ms": 4620,
+    "capture_mechanical_ms": 4280,
+    "PR_QRS_QT_T_ms": [
+      200,
+      80,
+      275,
+      100
+    ],
+    "adjacent_RR_ms": [
+      330,
+      420
+    ],
+    "mechanical_delay_ms": 80
+  },
+  "invariants": [
+    "Single conducted QRS/T replaces broad VT contour in selected slot",
+    "No event or second ejection at suppressed original deadline",
+    "Independent atrial schedule and following ectopic deadlines retained",
+    "Cycle stride and temporary mechanical suppression preserve original ordinals",
+    "Indexed time range lookup with bounded endpoint correction; no scan from epoch",
+    "Minimum330ms controls perfusion bounds, existing pressure morphology reference and cardiac artifact support"
+  ],
+  "limitations": [
+    "Authored event replacement, not AV conduction, refractory or focus-reset mechanism",
+    "Fixed ejection strengths retained, no calibrated capture stroke volume or VT pressure",
+    "Pressure morphology follows existing minimum-RR normalization, not a clinical hemodynamic prediction",
+    "Optional fusion remains a separate slot; no polymorphic VT/TdP or onset/termination"
+  ],
+  "verification": [
+    "VtCaptureReplacesElectricalAndMechanicalDeadlines",
+    "VtCaptureUsesConductedContourAndRestoresWithinBeat",
+    "VtCapturePerfusionTracksEarlierEjectionWithBoundedHistory",
+    "VtSmokeChecks four variants",
+    "VtPhysiologySmokeChecks four variants"
+  ]
+}

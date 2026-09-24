@@ -31,7 +31,8 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
                 (RespirationTables.Cycle[(index + count / 4) % count] -
                  RespirationTables.Cycle[(index + 3 * count / 4) % count]) * CardiacArtifactCounts)).ToArray();
             // Independent faster ventricles must not stack multiple full atrial-cycle artifacts.
-            long support = Math.Min(physiology.HeartPeriodNs, physiology.IndependentVentricularPeriodNs ?? physiology.HeartPeriodNs);
+            long support = physiology.ConductionPattern == AvConductionPattern.VtCaptureIllustration ? 330_000_000 :
+                Math.Min(physiology.HeartPeriodNs, physiology.IndependentVentricularPeriodNs ?? physiology.HeartPeriodNs);
             bands.Add(new(PhysiologyCycleEventKind.VentricularMechanical, 0, support,
                 Array.AsReadOnly(artifact)));
         }

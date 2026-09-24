@@ -1,0 +1,49 @@
+{
+  "id": "BidirectionalVtIllustration@1",
+  "source": {
+    "title": "诊断学（第10版）",
+    "isbn": "9787117363631",
+    "section": "第五篇 辅助检查 第一章 心电图 第六节",
+    "pages": "482"
+  },
+  "textbook_summary": [
+    "Adjacent QRS dominant direction alternates during bidirectional VT."
+  ],
+  "textbook_figures": [
+    "5-1-68"
+  ],
+  "authored_choices": {
+    "RR_PP_ms": [
+      375,
+      800
+    ],
+    "QRS_QT_T_ms": [
+      160,
+      275,
+      100
+    ],
+    "first_QRS_mechanical_ms": [
+      120,
+      200
+    ],
+    "vector_pair": "Original authored ventricular electrode QRS/T vector on even ordinals, exact opposite on odd ordinals",
+    "atrial_source": "Unchanged independent P waveform"
+  },
+  "invariants": [
+    "Two-beat selector retains original ventricular ordinals across recovery",
+    "All ventricular electrodes transformed together to retain limb identities",
+    "Electrical sign does not change event timing, fixed ejection input, CVP or respiration",
+    "Both demos share source and reject capture/fusion combinations or orphan flags"
+  ],
+  "limitations": [
+    "One authored opposite vector pair, not an anatomical activation or digitalis/CPVT mechanism model",
+    "Secondary T reversal is an authored choice; other vector pairs and clinical variants remain open",
+    "No hemodynamic calibration, onset/termination, accelerated idioventricular rhythm or TdP"
+  ],
+  "verification": [
+    "BidirectionalVtAlternatesVentricularVectorWithoutInvertingP",
+    "BidirectionalVtPreservesProjectionAndRestoresOddBeats",
+    "VtSmokeChecks bidirectional variant",
+    "VtPhysiologySmokeChecks bidirectional variant"
+  ]
+}

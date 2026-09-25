@@ -14,6 +14,7 @@ internal static class MonitorDisplaySpecifications
         new(nameof(LiveSessionKeepsBoundedHistoryAndProgressiveFrontier), LiveSessionKeepsBoundedHistoryAndProgressiveFrontier),
         new(nameof(AutomaticRangeReservesFifteenPercentAndCalibration), AutomaticRangeReservesFifteenPercentAndCalibration),
         new(nameof(ContourSimplificationBoundsErrorAndPreservesTurningPoints), ContourSimplificationBoundsErrorAndPreservesTurningPoints),
+        new(nameof(CausalContoursNeverRefit), CausalContoursNeverRefit),
         new(nameof(IndependentSpeedsRetainPreviousScaleUntilOverwritten), IndependentSpeedsRetainPreviousScaleUntilOverwritten),
     ];
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
@@ -114,6 +115,30 @@ internal static class MonitorDisplaySpecifications
         Check.That(PreviewContour.Simplify(samples, 0).SequenceEqual(samples), "ECG and zero-tolerance data are unchanged");
         Reject(() => PreviewContour.Simplify([(0, double.NaN)], .3));
         Reject(() => PreviewContour.Simplify([(0, 0), (0, 1)], .3));
+    }
+    private static void CausalContoursNeverRefit()
+    {
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default());
+        while (session.SimulationTimeNs < 8_000_000_000) { session.Advance(50_000_000); }
+        foreach (int channel in new[] { 3, 4, 5 })
+        {
+            var samples = session.Samples(channel, 0, 6_000_000_000).ToArray();
+            var all = PreviewContour.Stable(samples);
+            Check.That(all.Count == samples.Length && all.Zip(samples).All(pair => pair.First.TimeNs == pair.Second.TimeNs && Math.Abs(pair.First.Value - pair.Second.Value) <= .75 + 1e-10),
+                "causal display regression preserves sample times and caps every amplitude error");
+            for (long end = 2_200_000_000; end < 6_000_000_000; end += 200_000_000)
+            {
+                long complete = end;
+                var prefix = PreviewContour.Stable(samples.Where(s => s.TimeNs < end).ToArray());
+                Check.That(prefix.Where(s => s.TimeNs < complete).SequenceEqual(all.Where(s => s.TimeNs < complete)),
+                    "CO2/ABP/PA committed slopes are independent of future samples and extrema");
+            }
+        }
+        Reject(() => PreviewContour.Stable([(0, double.NaN)]));
+        Reject(() => PreviewContour.Stable([(0, 1), (0, 2)]));
+        Reject(() => PreviewContour.Stable([(-1, 1)]));
+        Check.That(PreviewContour.Stable([]).Count == 0 && PreviewContour.Stable([(0, 5)]).Single().Value == 5,
+            "empty and single-sample contours remain safe");
     }
     private static void IndependentSpeedsRetainPreviousScaleUntilOverwritten()
     {

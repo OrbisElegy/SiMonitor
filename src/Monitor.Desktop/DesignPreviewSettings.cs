@@ -27,6 +27,9 @@ internal sealed class DesignPreviewSettings : UserControl
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
     private readonly StackPanel _slotRows = new() { Spacing = 12 };
+    internal const long RespirationPreviewDurationNs = 41_250_000_000;
+    private readonly Dictionary<int, (long TimeNs, double Value)[]> _respirationPreviews = [];
+    private readonly Func<int, (long TimeNs, double Value)[]> _respirationPreview;
     private readonly ContentControl _generation = new();
     private readonly Dictionary<(int, int, int), LocalMonitorPreviewSession> _previews = [];
     private readonly Func<int, int, int, LocalMonitorPreviewSession> _preview;
@@ -35,13 +38,14 @@ internal sealed class DesignPreviewSettings : UserControl
     private Button? _returnFocus;
     private readonly List<StyleThumbnail> _homeThumbnails = [];
     internal int PreviewCacheCount => _previews.Count;
-    internal DesignPreviewSettings(Func<int, int, int, LocalMonitorPreviewSession> preview, Func<int, int, int, Control> paper, Action apply, Action run, Action advanced)
+    internal DesignPreviewSettings(Func<int, int, int, LocalMonitorPreviewSession> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Func<int, int, int, Control> paper, Action apply, Action run, Action advanced)
     {
-        _preview = preview; _paper = paper;
+        _preview = preview; _paper = paper; _respirationPreview = respirationPreview;
         AutomationProperties.SetName(Skin, "监护皮肤与固定行数");
         Func<LocalMonitorPreviewSession> session = () => Preview(EcgSelection, RespirationSelection, EjectionSelection);
-        var generation = new StackPanel { Spacing = 18, Margin = new Thickness(20) };
-        generation.Children.Add(Text("点击黑底波形选择样式；修改保留为草稿，应用后重启监护并更新十二导联快照。"));
+        var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
+        var instruction = Text("点击黑底波形选择样式；修改保留为草稿，应用后重启监护并更新十二导联快照。");
+        instruction.Height = 44; generation.Children.Add(instruction);
         var cards = new WrapPanel { Orientation = Orientation.Horizontal };
         cards.Children.Add(Card("心电图", 0, EcgChoices,
             () => EcgSelection, x => EcgSelection = x, session));
@@ -91,9 +95,9 @@ internal sealed class DesignPreviewSettings : UserControl
     }
     private Button Card(string title, int channel, string[] choices, Func<int> read, Action<int> write, Func<LocalMonitorPreviewSession> session)
     {
-        var caption = new TextBlock { Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
+        var caption = new TextBlock { Height = 40, Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         var content = new StackPanel { Spacing = 8 };
-        var thumbnail = new StyleThumbnail(session, channel); _homeThumbnails.Add(thumbnail);
+        var thumbnail = Thumbnail(session, channel); _homeThumbnails.Add(thumbnail);
         content.Children.Add(caption); content.Children.Add(thumbnail);
         var card = new Button
         {
@@ -101,6 +105,7 @@ internal sealed class DesignPreviewSettings : UserControl
             Background = Brushes.Black,
             Padding = new Thickness(12),
             Width = 238,
+            Height = 162,
             Margin = new Thickness(0, 0, 12, 12),
             CornerRadius = new CornerRadius(8)
         };
@@ -119,13 +124,18 @@ internal sealed class DesignPreviewSettings : UserControl
         string Group(int i) => channel == 0 ? i switch { 0 or 1 or 3 => "窦性心律", 4 => "房性心律", 5 => "交界性心律", _ => "室性心律" }
             : channel == 1 ? i == 0 ? "规则呼吸" : "异常呼吸示意" : i == 0 ? "节律相关" : "异常射血示意";
         activeGroup ??= Group(read());
-        var layout = new Grid { ColumnDefinitions = new("250,150,*"), Margin = new Thickness(16) };
+        var shell = new Grid { RowDefinitions = new("44,*"), Margin = new Thickness(20) };
+        var layout = new Grid { ColumnDefinitions = new("250,150,*"), Margin = new Thickness(0, 12, 0, 0) };
+        Grid.SetRow(layout, 1); shell.Children.Add(layout);
         var selected = new StackPanel { Spacing = 12, Margin = new Thickness(0, 0, 12, 0) };
-        var back = new Button { Content = "返回波形设置", MinHeight = 44 };
+        var back = new Button { Content = "返回波形设置", MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Right };
+        shell.Children.Add(back);
         Button focusTarget = back;
         back.Click += (_, _) => { _generation.Content = _home; _home?.InvalidateVisual(); if (_returnFocus is { } origin) { RestoreFocus(origin); } };
-        selected.Children.Add(back); selected.Children.Add(Text("已选 · " + choices[read()]));
-        selected.Children.Add(new Border { Background = Brushes.Black, Padding = new Thickness(10), Child = new StyleThumbnail(session, channel) });
+        var selectedContent = new StackPanel { Spacing = 8 };
+        selectedContent.Children.Add(new TextBlock { Height = 40, Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
+        selectedContent.Children.Add(Thumbnail(session, channel));
+        selected.Children.Add(new Border { Name = "SelectedStyleCard", Width = 238, Height = 162, CornerRadius = new CornerRadius(8), Background = Brushes.Black, Padding = new Thickness(12), Child = selectedContent });
         if (channel == 0)
         {
             var expanded = new Expander { Header = "十二导联预览", MinHeight = 44 };
@@ -154,14 +164,14 @@ internal sealed class DesignPreviewSettings : UserControl
         {
             if (Group(i) != activeGroup) { continue; }
             int value = i; var panel = new StackPanel { Spacing = 8 };
-            panel.Children.Add(new TextBlock { Text = choices[i] + (read() == i ? " ✓" : ""), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
-            var candidate = new Button { Content = panel, Width = 238, Padding = new Thickness(10), Margin = new Thickness(0, 0, 10, 10), Background = Brushes.Black };
+            panel.Children.Add(new TextBlock { Height = 40, Text = choices[i] + (read() == i ? " ✓" : ""), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
+            var candidate = new Button { Content = panel, Width = 238, Height = 162, CornerRadius = new CornerRadius(8), VerticalContentAlignment = VerticalAlignment.Top, Padding = new Thickness(12), Margin = new Thickness(0, 0, 10, 10), Background = Brushes.Black };
             AutomationProperties.SetName(candidate, choices[i] + (read() == i ? "，已选择" : "，选择此样式"));
             if (focusSelection && read() == i) { focusTarget = candidate; }
             try
             {
                 var source = Preview(channel == 0 ? i : EcgSelection, channel == 1 ? i : RespirationSelection, channel == 3 ? i : EjectionSelection);
-                panel.Children.Add(new StyleThumbnail(() => source, channel));
+                panel.Children.Add(Thumbnail(() => source, channel, channel == 1 ? i : null));
                 candidate.Click += (_, _) =>
                 {
                     write(value); Status.Text = "已选择 " + choices[value] + "；预览已更新，运行数据须应用后改变。";
@@ -176,7 +186,7 @@ internal sealed class DesignPreviewSettings : UserControl
             }
             candidates.Children.Add(candidate);
         }
-        Grid.SetColumn(candidates, 2); layout.Children.Add(candidates); _generation.Content = layout; RestoreFocus(focusTarget);
+        Grid.SetColumn(candidates, 2); layout.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
     }
     private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => control.Focus(), DispatcherPriority.Loaded);
     private void BuildRows()
@@ -224,18 +234,29 @@ internal sealed class DesignPreviewSettings : UserControl
         var panel = new StackPanel { Spacing = 18, Margin = new Thickness(32) };
         panel.Children.Add(new TextBlock { Text = title, FontSize = 23 }); panel.Children.Add(Text(body)); return panel;
     }
-    private sealed class StyleThumbnail(Func<LocalMonitorPreviewSession> session, int channel) : Control
+    private StyleThumbnail Thumbnail(Func<LocalMonitorPreviewSession> session, int channel, int? respiration = null) =>
+        new(session, channel, () =>
+        {
+            int selected = respiration ?? RespirationSelection;
+            if (!_respirationPreviews.TryGetValue(selected, out var samples))
+            { samples = _respirationPreview(selected); _respirationPreviews.Add(selected, samples); }
+            return samples;
+        });
+    private sealed class StyleThumbnail(Func<LocalMonitorPreviewSession> session, int channel, Func<(long TimeNs, double Value)[]> respiration) : Control
     {
         private LocalMonitorPreviewSession? _cachedSource;
         private StreamGeometry? _geometry;
+        private (long TimeNs, double Value)[]? _cachedRespiration;
         protected override Size MeasureOverride(Size availableSize) => new(210, 74);
         public override void Render(DrawingContext context)
         {
-            var source = session();
-            if (!ReferenceEquals(source, _cachedSource))
+            var source = channel == 1 ? null : session();
+            var respiratory = channel == 1 ? respiration() : null;
+            if (_geometry is null || !ReferenceEquals(source, _cachedSource) || !ReferenceEquals(respiratory, _cachedRespiration))
             {
-                _cachedSource = source;
-                var samples = source.Samples(channel, Math.Max(0, source.FrontierNs - 3_000_000_000), source.FrontierNs).ToArray();
+                _cachedSource = source; _cachedRespiration = respiratory;
+                var samples = respiratory ?? source!.Samples(channel, Math.Max(0, source.FrontierNs - 3_000_000_000), source.FrontierNs).ToArray();
+                double duration = channel == 1 ? RespirationPreviewDurationNs : 3e9;
                 _geometry = new StreamGeometry();
                 using var path = _geometry.Open();
                 if (samples.Length > 1)
@@ -244,12 +265,13 @@ internal sealed class DesignPreviewSettings : UserControl
                     for (int i = 0; i < samples.Length; i++)
                     {
                         var sample = samples[i];
-                        Point point = new((sample.TimeNs - samples[0].TimeNs) / 3e9 * 210, 8 + (1 - (sample.Value - minimum) / span) * 55);
+                        Point point = new((sample.TimeNs - samples[0].TimeNs) / duration * 210, 8 + (1 - (sample.Value - minimum) / span) * 55);
                         if (i == 0) { path.BeginFigure(point, false); } else { path.LineTo(point); }
                     }
                     path.EndFigure(false);
                 }
             }
+            if (channel == 1) { context.DrawText(new FormattedText("41.25 s · 完整呼吸分组", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
             if (_geometry is not null) { context.DrawGeometry(null, new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2), _geometry); }
         }
     }

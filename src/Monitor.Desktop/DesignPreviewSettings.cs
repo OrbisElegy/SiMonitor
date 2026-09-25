@@ -17,8 +17,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal int EcgSelection { get; set; }
     internal int RespirationSelection { get; set; }
     internal int EjectionSelection { get; set; }
-    internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 38 };
-    internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 38 };
+    internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 38, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 38, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal TabControl Tabs { get; } = new();
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
@@ -38,13 +38,13 @@ internal sealed class DesignPreviewSettings : UserControl
         cards.Children.Add(Card("射血", 3, EjectionChoices,
             () => EjectionSelection, x => EjectionSelection = x, session));
         generation.Children.Add(cards);
-        var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 36 };
+        var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 36, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         more.Click += (_, _) => advanced(); generation.Children.Add(more);
-        generation.Children.Add(Text("卡片波形来自当前运行样本，选择列表为待应用样式；现有开发窗口中的参数仍独立。"));
+        generation.Children.Add(Text("卡片为已应用配置的静态预览，不持续生成；选择列表为待应用样式。现有开发窗口中的参数仍独立。"));
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(Text("监护皮肤决定固定槽位数；调整窗口不增减行数。每行可独立选通道和量程。"));
         display.Children.Add(Skin);
-        display.Children.Add(Text("自动：每个10秒扫屏起点，以前一轮样本更新量程。固定：输入上下限。超界压平到边界，各行用实线隔开。"));
+        display.Children.Add(Text("自动：每个10秒扫屏起点，以前一轮样本更新量程，目标占用85%（ECG含1mV标定）。固定：输入上下限。超界压平到边界，各行用实线隔开。"));
         var headings = new Grid { ColumnDefinitions = new("36,170,80,*,*") };
         string[] labels = ["行", "通道 / 单位", "量程", "下限", "上限"];
         for (int column = 0; column < labels.Length; column++)
@@ -81,7 +81,7 @@ internal sealed class DesignPreviewSettings : UserControl
             for (int i = 0; i < choices.Length; i++)
             {
                 int selected = i;
-                var button = new Button { Content = choices[i] + (read() == i ? " ✓" : ""), HorizontalAlignment = HorizontalAlignment.Stretch };
+                var button = new Button { Content = choices[i] + (read() == i ? " ✓" : ""), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
                 button.Click += (_, _) => { write(selected); caption.Text = title + " · " + choices[selected]; Status.Text = "有未应用的设置；应用后从头生成。"; flyout.Hide(); };
                 options.Children.Add(button);
             }
@@ -134,21 +134,31 @@ internal sealed class DesignPreviewSettings : UserControl
     }
     private sealed class StyleThumbnail(Func<LocalMonitorPreviewSession> session, int channel) : Control
     {
+        private LocalMonitorPreviewSession? _cachedSource;
+        private StreamGeometry? _geometry;
         protected override Size MeasureOverride(Size availableSize) => new(210, 74);
         public override void Render(DrawingContext context)
         {
             var source = session();
-            var samples = source.Samples(channel, Math.Max(0, source.FrontierNs - 3_000_000_000), source.FrontierNs).ToArray();
-            if (samples.Length < 2) { return; }
-            double minimum = samples.Min(s => s.Value), span = Math.Max(1, samples.Max(s => s.Value) - minimum);
-            Point? previous = null;
-            var pen = new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2);
-            foreach (var sample in samples)
+            if (!ReferenceEquals(source, _cachedSource))
             {
-                Point point = new((sample.TimeNs - samples[0].TimeNs) / 3e9 * Bounds.Width, 8 + (1 - (sample.Value - minimum) / span) * 55);
-                if (previous is { } p) { context.DrawLine(pen, p, point); }
-                previous = point;
+                _cachedSource = source;
+                var samples = source.Samples(channel, Math.Max(0, source.FrontierNs - 3_000_000_000), source.FrontierNs).ToArray();
+                _geometry = new StreamGeometry();
+                using var path = _geometry.Open();
+                if (samples.Length > 1)
+                {
+                    double minimum = samples.Min(s => s.Value), span = Math.Max(1, samples.Max(s => s.Value) - minimum);
+                    for (int i = 0; i < samples.Length; i++)
+                    {
+                        var sample = samples[i];
+                        Point point = new((sample.TimeNs - samples[0].TimeNs) / 3e9 * 210, 8 + (1 - (sample.Value - minimum) / span) * 55);
+                        if (i == 0) { path.BeginFigure(point, false); } else { path.LineTo(point); }
+                    }
+                    path.EndFigure(false);
+                }
             }
+            if (_geometry is not null) { context.DrawGeometry(null, new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2), _geometry); }
         }
     }
 }

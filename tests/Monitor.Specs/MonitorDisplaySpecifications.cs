@@ -12,6 +12,8 @@ internal static class MonitorDisplaySpecifications
         new(nameof(AutoRangeChangesOnlyAtSweepStartFromPreviousSamples), AutoRangeChangesOnlyAtSweepStartFromPreviousSamples),
         new(nameof(ManualAndFailedAutoRangesPreserveTheirState), ManualAndFailedAutoRangesPreserveTheirState),
         new(nameof(LiveSessionKeepsBoundedHistoryAndProgressiveFrontier), LiveSessionKeepsBoundedHistoryAndProgressiveFrontier),
+        new(nameof(AutomaticRangeReservesFifteenPercentAndCalibration), AutomaticRangeReservesFifteenPercentAndCalibration),
+        new(nameof(ContourSimplificationBoundsErrorAndPreservesTurningPoints), ContourSimplificationBoundsErrorAndPreservesTurningPoints),
     ];
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
     {
@@ -79,6 +81,38 @@ internal static class MonitorDisplaySpecifications
         long time = session.SimulationTimeNs;
         Reject(() => session.Advance(0));
         Check.That(session.SimulationTimeNs == time, "invalid advancement does not mutate clocks");
+    }
+    private static void AutomaticRangeReservesFifteenPercentAndCalibration()
+    {
+        var ranges = new MonitorSweepRanges(MonitorDisplayConfiguration.Default());
+        ranges.Advance(MonitorDisplayConfiguration.SweepDurationNs, (_, _, _) => [0, 40]);
+        var gas = ranges.Range(3);
+        Check.That(Math.Abs((gas.Normalize(40) - gas.Normalize(0)) - .85) < 1e-12,
+            "nonflat content occupies 85 percent with symmetric headroom");
+        var ecg = ranges.Range(0);
+        Check.That(ecg.Minimum < 0 && ecg.Maximum > 1000 &&
+            Math.Abs(ecg.Normalize(1000) - ecg.Normalize(0) - .85) < 1e-12,
+            "ECG auto range reserves room for the true 1mV reference");
+    }
+    private static void ContourSimplificationBoundsErrorAndPreservesTurningPoints()
+    {
+        var samples = Enumerable.Range(0, 401).Select(i => ((long)i, Math.Round(i / 10d) / 2)).ToArray();
+        var copy = samples.ToArray();
+        var displayed = PreviewContour.Simplify(samples, .3);
+        Check.That(displayed.Count < samples.Length / 4 && samples.SequenceEqual(copy), "quantized ramp simplifies without altering samples");
+        int segment = 0;
+        foreach (var (time, value) in samples)
+        {
+            while (segment + 2 < displayed.Count && time > displayed[segment + 1].TimeNs) { segment++; }
+            var a = displayed[segment]; var b = displayed[segment + 1];
+            double expected = a.Value + (b.Value - a.Value) * (time - a.TimeNs) / (b.TimeNs - a.TimeNs);
+            Check.That(Math.Abs(expected - value) <= .3 + 1e-10, "every raw sample remains inside the declared display error");
+        }
+        (long, double)[] notch = [(0, 0), (1, 10), (2, 10), (3, 3), (4, 3), (5, 6), (6, 0)];
+        Check.That(PreviewContour.Simplify(notch, 1).SequenceEqual(notch), "peak and notch plateaus survive");
+        Check.That(PreviewContour.Simplify(samples, 0).SequenceEqual(samples), "ECG and zero-tolerance data are unchanged");
+        Reject(() => PreviewContour.Simplify([(0, double.NaN)], .3));
+        Reject(() => PreviewContour.Simplify([(0, 0), (0, 1)], .3));
     }
     private static void Reject(Action action)
     {

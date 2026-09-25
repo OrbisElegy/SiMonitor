@@ -1,14 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Security.Cryptography;
 
-namespace Monitor.Desktop;
+using Monitor.Simulation.Authoring;
+using PhysiologyDemoConfiguration = Monitor.Simulation.Authoring.PhysiologyIllustrationConfiguration;
+using PhysiologyDemoSource = Monitor.Simulation.Authoring.PhysiologyIllustrationSource;
 
-internal static class FixedPerfusionWireSmokeChecks
+namespace Monitor.Specs;
+
+internal static class PhysiologyIllustrationSpecifications
 {
     // Captured from632acca before the refactor: concatenate returned raw wire
     // envelopes from40 advances of200ms (30 completed blocks after delay).
     // Independent expected bytes guard against shared test/source drift.
-    internal static void Verify()
+    public static Specification[] All =>
+    [
+        new(nameof(PreservesFourteenRecordedWireOutputs), PreservesFourteenRecordedWireOutputs),
+        new(nameof(HeadlessSelectionAndValidationRetainBoundaries), HeadlessSelectionAndValidationRetainBoundaries),
+    ];
+    private static void HeadlessSelectionAndValidationRetainBoundaries()
+    {
+        for (int id = 0; id <= 42; id++)
+        {
+            var ratio = AuthoredConductionSelection.Resolve(id);
+            var pattern = AuthoredConductionSelection.Pattern(id);
+            Check.That(AuthoredConductionSelection.Index(ratio.Atrial, ratio.Conducted, pattern) == id,
+                "existing illustration selection retains its canonical ID");
+        }
+        foreach (Action action in new Action[] {
+            () => AuthoredConductionSelection.Resolve(43),
+            () => PhysiologyDemoSource.Create(PhysiologyDemoConfiguration.Default with { BreathPeriodMilliseconds = 0 }),
+            () => PhysiologyDemoSource.Create(PhysiologyDemoConfiguration.SinusArrestPreset with { UseVascularReservoir = false }),
+            () => PhysiologyDemoSource.Create(abpZeroOffsetCentiMmHg: 1001),
+            () => IllustrationVentricularTiming.ResolveOffset(null, 200, 160_000_000) })
+        {
+            bool rejected = false;
+            try { action(); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "headless construction preserves authored validation boundaries");
+        }
+    }
+    private static void PreservesFourteenRecordedWireOutputs()
     {
         (string Name, PhysiologyDemoConfiguration Configuration, int Envelopes, string Sha256)[] cases =
         [
@@ -38,6 +68,5 @@ internal static class FixedPerfusionWireSmokeChecks
             if (count != item.Envelopes || Convert.ToHexStringLower(hash.GetHashAndReset()) != item.Sha256)
             { throw new InvalidOperationException(item.Name + " changed the pre-refactor seven-channel wire output."); }
         }
-        Console.WriteLine("ok:14 physiology configurations preserve pre-refactor seven-channel wire bytes");
     }
 }

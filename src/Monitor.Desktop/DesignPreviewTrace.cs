@@ -55,7 +55,13 @@ internal sealed class DesignPreviewTrace : Control
     }
     private static void Calibration(DrawingContext context, double x, double y)
     {
-        context.DrawLine(new Pen(Brushes.Black, 1), new(x, y), new(x, y - PixelsPerMillivolt));
+        // Paper ECG uses a 200ms-wide, 1mV-high square pulse for each lead.
+        // This is deliberately distinct from the monitor's overlay line.
+        var pen = new Pen(Brushes.Black, 1);
+        double start = x - .2 * PixelsPerSecond;
+        context.DrawLine(pen, new(start, y), new(start, y - PixelsPerMillivolt));
+        context.DrawLine(pen, new(start, y - PixelsPerMillivolt), new(x, y - PixelsPerMillivolt));
+        context.DrawLine(pen, new(x, y - PixelsPerMillivolt), new(x, y));
     }
     private void DrawSamples(DrawingContext context, Guid channel, long from, long to,
         double left, double baseline, double speed, double gain, IBrush color)

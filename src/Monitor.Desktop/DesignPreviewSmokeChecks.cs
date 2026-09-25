@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Runtime.InteropServices;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -47,12 +48,19 @@ internal static class DesignPreviewSmokeChecks
             candidate.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Capture(window, "ui-preview-chooser-selected.png");
             Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "candidate updates draft preview without replacing live source");
+            var selectedCandidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
+                AutomationProperties.GetName(button) == "窦性停搏（无逸搏），已选择");
+            Require(selectedCandidate.IsFocused, "keyboard focus follows rebuilt selected candidate");
+            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(button =>
+                AutomationProperties.GetName(button) == "窦性心律，当前分组" && button.Content?.ToString()?.Contains('✓') == true),
+                "group selection is labelled and not color-only");
             var expansion = window.Settings.GetVisualDescendants().OfType<Expander>().Single();
             expansion.IsExpanded = true;
             Capture(window, "ui-preview-chooser-leads.png");
             Require(window.Settings.GetVisualDescendants().OfType<EcgStyleLeadPreview>().Count() == 12, "selected ECG expands to twelve cached lead traces");
             window.Settings.EcgSelection = 0;
             window.Settings.Tabs.SelectedIndex = 1; Capture(window, "ui-preview-display.png");
+            Require(AutomationProperties.GetName(window.Settings.Slots[0].Speed) == "第1行扫描速度，相对毫米每秒", "speed control has a contextual accessibility name");
             Require(window.Settings.Slots[0].Channel.Bounds.Height > 0, "display tab content has completed layout");
             window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-display-compact.png");
             window.Width = 1440; window.Height = 940;
@@ -118,7 +126,12 @@ internal static class DesignPreviewSmokeChecks
             {
                 int x = 52 + column * 250, baseline = 136 + row * 120;
                 Require(Enumerable.Range(baseline - 39, 38).Count(y => Dark(x, y) || Dark(x - 1, y)) > 30, "each ECG lead has an independent 1mV marker");
+                Require(Enumerable.Range(x - 19, 18).Count(px => Dark(px, baseline - 40) || Dark(px, baseline - 41)) >= 17,
+                    "paper calibration has a 200ms plateau, not a monitor line");
+                Require(Enumerable.Range(baseline - 39, 38).Count(y => Dark(x - 20, y) || Dark(x - 21, y)) > 30,
+                    "paper calibration has an independent rising edge");
             }
+        Require(Enumerable.Range(33, 18).Count(x => Dark(x, 496) || Dark(x, 495)) >= 17, "long II has its own square calibration");
         Require(Enumerable.Range(500, 70).Any(y => Dark(1030, y)), "long lead reaches within one sample of paper grid right edge");
     }
     private static byte[] Raster(Control control, int width, int height)

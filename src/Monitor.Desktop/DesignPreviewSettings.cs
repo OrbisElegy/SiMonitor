@@ -33,14 +33,15 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly ContentControl _generation = new();
     private readonly Dictionary<(int, int, int), LocalMonitorPreviewSession> _previews = [];
     private readonly Func<int, int, int, LocalMonitorPreviewSession> _preview;
-    private readonly Func<int, int, int, Control> _paper;
+    private readonly StackPanel _advancedParameters = new() { Spacing = 16, Margin = new Thickness(20) };
+    internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
     private Control? _home;
     private Button? _returnFocus;
     private readonly List<StyleThumbnail> _homeThumbnails = [];
     internal int PreviewCacheCount => _previews.Count;
-    internal DesignPreviewSettings(Func<int, int, int, LocalMonitorPreviewSession> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Func<int, int, int, Control> paper, Action apply, Action run, Action advanced)
+    internal DesignPreviewSettings(Func<int, int, int, LocalMonitorPreviewSession> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced)
     {
-        _preview = preview; _paper = paper; _respirationPreview = respirationPreview;
+        _preview = preview; _respirationPreview = respirationPreview;
         AutomationProperties.SetName(Skin, "监护皮肤与固定行数");
         Func<LocalMonitorPreviewSession> session = () => Preview(EcgSelection, RespirationSelection, EjectionSelection);
         var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
@@ -55,12 +56,14 @@ internal sealed class DesignPreviewSettings : UserControl
             () => EjectionSelection, x => EjectionSelection = x, session));
         generation.Children.Add(cards);
         var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-        more.Click += (_, _) => advanced(); generation.Children.Add(more);
+        more.Click += (_, _) => advanced();
         generation.Children.Add(Text("卡片与候选样式均为所选配置的缓存预览；应用前不会改变监护。现有开发窗口中的参数仍独立。"));
         _home = generation; _generation.Content = generation;
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(Text("监护皮肤决定固定槽位数；调整窗口不增减行数。每行可独立选通道和量程。"));
         display.Children.Add(Skin);
+        display.Children.Add(Text("纸质十二导联排布")); display.Children.Add(PaperLayout);
+        AutomationProperties.SetName(PaperLayout, "纸质十二导联排布");
         display.Children.Add(Text("自动：每行自己的扫屏起点，以前一轮样本更新量程，目标占用85%（ECG含1mV标定）。旧轨迹保留旧比例。固定：输入上下限。超界压平到边界，各行用实线隔开。"));
         var headings = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
         string[] labels = ["行", "通道 / 单位", "量程", "下限", "上限", "扫速 mm/s* "];
@@ -77,6 +80,12 @@ internal sealed class DesignPreviewSettings : UserControl
             new TabItem { Header = "显示", Content = Scroll(display) },
             new TabItem { Header = "声音", Content = Scroll(Note("声音尚未启用", "心搏提示音来源、音量等设置将在此接入。当前不会发声。")) },
             new TabItem { Header = "报警", Content = Scroll(Note("报警尚未启用", "报警阈值、确认与限时声音暂停将在此接入。未启用不表示不存在报警条件。")) },
+            new TabItem { Header = "生命体征", Content = Scroll(VitalSigns()) },
+            new TabItem { Header = "高级参数", Content = Scroll(_advancedParameters) },
+        };
+        Tabs.SelectionChanged += (_, _) =>
+        {
+            if (Tabs.SelectedIndex == 5) { RefreshAdvanced(more); }
         };
         var controls = new WrapPanel { Margin = new Thickness(20, 12), Orientation = Orientation.Horizontal };
         Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run);
@@ -136,12 +145,9 @@ internal sealed class DesignPreviewSettings : UserControl
         selectedContent.Children.Add(new TextBlock { Height = 40, Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
         selectedContent.Children.Add(Thumbnail(session, channel));
         selected.Children.Add(new Border { Name = "SelectedStyleCard", Width = 238, Height = 162, CornerRadius = new CornerRadius(8), Background = Brushes.Black, Padding = new Thickness(12), Child = selectedContent });
-        if (channel == 0)
-        {
-            var expanded = new Expander { Header = "十二导联预览", MinHeight = 44 };
-            expanded.Expanding += (_, _) => expanded.Content ??= _paper(EcgSelection, RespirationSelection, EjectionSelection);
-            selected.Children.Add(expanded);
-        }
+        var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44 };
+        parameters.Click += (_, _) => Tabs.SelectedIndex = 5;
+        selected.Children.Add(parameters);
         layout.Children.Add(selected);
         var groups = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 12, 0) };
         foreach (string group in Enumerable.Range(0, choices.Length).Select(Group).Distinct())
@@ -187,6 +193,36 @@ internal sealed class DesignPreviewSettings : UserControl
             candidates.Children.Add(candidate);
         }
         Grid.SetColumn(candidates, 2); layout.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
+    }
+    private static StackPanel VitalSigns()
+    {
+        var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
+        panel.Children.Add(Text("生命体征设置 · 预留页面"));
+        panel.Children.Add(Text("以下数值编辑尚未接入生成与测量，不会应用到当前模拟。当前节律与呼吸样式在波形生成页选择。"));
+        foreach (string name in new[] { "心率（bpm）", "无创血压（mmHg）", "呼吸频率（次/分）", "SpO₂（%）", "体温（°C）", "EtCO₂（mmHg）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })
+        {
+            var row = new Grid { ColumnDefinitions = new("220,*") };
+            row.Children.Add(Text(name));
+            var field = new TextBox { Text = "尚未接入", IsEnabled = false, MaxWidth = 300, HorizontalAlignment = HorizontalAlignment.Left };
+            AutomationProperties.SetName(field, name + "，尚未接入"); Grid.SetColumn(field, 1); row.Children.Add(field); panel.Children.Add(row);
+        }
+        return panel;
+    }
+    private void RefreshAdvanced(Button developer)
+    {
+        _advancedParameters.Children.Clear();
+        _advancedParameters.Children.Add(Text("当前波形高级参数 · 预留编辑入口"));
+        _advancedParameters.Children.Add(Text("下列内容来自当前选择的模板，仅供查看，编辑尚未接入。固定病理模板不开放与其不兼容的时序修改。"));
+        _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
+        var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
+        _advancedParameters.Children.Add(Text($"P {config.Ecg.PDurationMilliseconds} ms · PR {config.Ecg.PrIntervalMilliseconds} ms · QRS {config.Ecg.QrsDurationMilliseconds} ms · QTc {config.Ecg.QtcMilliseconds} ms"));
+        _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
+        _advancedParameters.Children.Add(Text(RespirationSelection == 3 ? "当前无呼吸分量，不提供吸呼比、呼吸深度等编辑。" :
+            $"周期 {config.Physiology.BreathPeriodMilliseconds} ms · 吸气 {config.Physiology.InspirationMilliseconds} ms · 相对深度 {config.Physiology.RespAmplitudeCounts}"));
+        _advancedParameters.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
+        _advancedParameters.Children.Add(Text(EjectionSelection == 3 ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+        _advancedParameters.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
+        _advancedParameters.Children.Add(developer);
     }
     private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => control.Focus(), DispatcherPriority.Loaded);
     private void BuildRows()

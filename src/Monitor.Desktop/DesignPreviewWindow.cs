@@ -44,7 +44,7 @@ internal sealed class DesignPreviewWindow : Window
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
         _monitor = new(_session);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(CreateStylePreview, CreateRespirationPreview, (e, r, j) => EcgStyleLeadPreview.Create(CapturePaper(ResolveStyle(e, r, j).Ecg)), ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        Settings = new(CreateStylePreview, CreateRespirationPreview, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -109,7 +109,7 @@ internal sealed class DesignPreviewWindow : Window
         _workspace.Content = page switch
         {
             0 => _monitor,
-            1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg) },
+            1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
             _ => Settings
         };
     }

@@ -14,6 +14,7 @@ internal static class MonitorDisplaySpecifications
         new(nameof(LiveSessionKeepsBoundedHistoryAndProgressiveFrontier), LiveSessionKeepsBoundedHistoryAndProgressiveFrontier),
         new(nameof(AutomaticRangeReservesFifteenPercentAndCalibration), AutomaticRangeReservesFifteenPercentAndCalibration),
         new(nameof(ContourSimplificationBoundsErrorAndPreservesTurningPoints), ContourSimplificationBoundsErrorAndPreservesTurningPoints),
+        new(nameof(IndependentSpeedsRetainPreviousScaleUntilOverwritten), IndependentSpeedsRetainPreviousScaleUntilOverwritten),
     ];
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
     {
@@ -47,8 +48,8 @@ internal static class MonitorDisplaySpecifications
         ranges.Advance(MonitorDisplayConfiguration.SweepDurationNs - 1, Values);
         Check.That(calls == 0 && ranges.Range(0) == plan.Slots[0].Range, "no mid-sweep scale changes");
         ranges.Advance(MonitorDisplayConfiguration.SweepDurationNs, Values);
-        Check.That(calls == 3 && ranges.Range(0).Minimum < -10 && ranges.Range(0).Maximum > 100 && !ranges.ShowPrevious(0),
-            "new scale includes padding and removes old-scale history from this row");
+        Check.That(calls == 3 && ranges.Range(0).Minimum < -10 && ranges.Range(0).Maximum > 100 && ranges.ShowPrevious(0) && ranges.PreviousRange(0) == plan.Slots[0].Range,
+            "new scale includes padding and preserves the old range for old history");
         var accepted = ranges.Range(0);
         ranges.Advance(MonitorDisplayConfiguration.SweepDurationNs + 100, (_, _, _) => throw new InvalidOperationException());
         Check.That(ranges.Range(0) == accepted, "new samples cannot resize the current sweep");
@@ -113,6 +114,22 @@ internal static class MonitorDisplaySpecifications
         Check.That(PreviewContour.Simplify(samples, 0).SequenceEqual(samples), "ECG and zero-tolerance data are unchanged");
         Reject(() => PreviewContour.Simplify([(0, double.NaN)], .3));
         Reject(() => PreviewContour.Simplify([(0, 0), (0, 1)], .3));
+    }
+    private static void IndependentSpeedsRetainPreviousScaleUntilOverwritten()
+    {
+        var slots = MonitorDisplayConfiguration.Default(MonitorSkin.ThreeRows).Slots.ToArray();
+        slots[0] = slots[0] with { SpeedTenthsMmPerSecond = 125 };
+        slots[2] = slots[2] with { SpeedTenthsMmPerSecond = 500 };
+        var ranges = new MonitorSweepRanges(new(MonitorSkin.ThreeRows, slots));
+        ranges.Advance(5_000_000_000, (_, from, to) => { Check.That(from == 0 && to == 5_000_000_000, "fast row owns its completed window"); return [10, 40]; });
+        Check.That(ranges.RowCycle(0) == 0 && ranges.RowCycle(1) == 0 && ranges.RowCycle(2) == 1, "only fast row wraps");
+        Check.That(ranges.PreviousRange(2) == slots[2].Range && ranges.ShowPrevious(2), "old trace keeps old gain when new gain is installed");
+        var oldFast = ranges.Range(2);
+        ranges.Advance(10_000_000_000, (_, _, _) => [20, 80]);
+        Check.That(ranges.RowCycle(0) == 0 && ranges.RowCycle(1) == 1 && ranges.RowCycle(2) == 2 && ranges.PreviousRange(2) == oldFast,
+            "each row keeps exactly its previous sweep scale");
+        slots[0] = slots[0] with { SpeedTenthsMmPerSecond = 0 };
+        Reject(() => { _ = new MonitorDisplayConfiguration(MonitorSkin.ThreeRows, slots); });
     }
     private static void Reject(Action action)
     {

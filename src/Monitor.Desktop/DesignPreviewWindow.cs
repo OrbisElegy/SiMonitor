@@ -25,7 +25,6 @@ internal sealed class DesignPreviewWindow : Window
     private WaveformEnvelope[] _ecg;
     private LiveMonitorTrace _monitor;
     private LocalMonitorPreviewSession _session;
-    private LocalMonitorPreviewSession _thumbnailSource;
     private DispatcherTimer? _timer;
     private long _lastTick;
     private bool _closed;
@@ -43,10 +42,9 @@ internal sealed class DesignPreviewWindow : Window
         Background = Brush.Parse("#F5F6F8"); Foreground = Brush.Parse("#202C39");
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
-        _thumbnailSource = CreateThumbnailSource(PhysiologyDemoConfiguration.Default);
         _monitor = new(_session);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(() => _thumbnailSource, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        Settings = new(CreateStylePreview, (e, r, j) => EcgStyleLeadPreview.Create(CapturePaper(ResolveStyle(e, r, j).Ecg)), ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -104,7 +102,7 @@ internal sealed class DesignPreviewWindow : Window
         _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", _ => "设置" };
         _subtitle.Text = page switch
         {
-            0 => $"{_session.Display.Slots.Count}个固定槽位 · 10秒扫屏 · 测量与报警未启用",
+            0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速 · 测量与报警未启用",
             1 => "监护采样快照",
             _ => "波形生成、显示、声音与报警"
         };
@@ -119,28 +117,10 @@ internal sealed class DesignPreviewWindow : Window
     {
         try
         {
-            var config = Settings.EcgSelection switch
-            { 1 => PhysiologyDemoConfiguration.SinusArrestPreset, 2 => PhysiologyDemoConfiguration.PrematureVentricular, _ => PhysiologyDemoConfiguration.Default };
-            var ecgConfig = Settings.EcgSelection switch
-            { 1 => ProjectedEcgDemoConfiguration.SinusArrestPreset, 2 => ProjectedEcgDemoConfiguration.PrematureVentricular, _ => ProjectedEcgDemoConfiguration.Default };
-            config = config with
-            {
-                RespiratoryPattern = Settings.RespirationSelection switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
-                RespiratoryActivity = Settings.RespirationSelection == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing
-            };
-            if (Settings.EjectionSelection == 1 && Settings.EcgSelection != 2) { throw new ArgumentException("早搏弱射血需选择单形室早。"); }
-            if (Settings.EjectionSelection == 2)
-            {
-                if (Settings.EcgSelection != 0) { throw new ArgumentException("2:1漏搏需选择窦性参考。"); }
-                config = config with { VentricularConductionRatio = 2 };
-                ecgConfig = ecgConfig with { VentricularConductionRatio = 2 };
-            }
-            if (Settings.EjectionSelection == 3) { config = config with { VentricularMechanicalEnabled = false }; }
+            var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay());
             var ecg = CapturePaper(ecgConfig);
-            var thumbnails = CreateThumbnailSource(config);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
-            _thumbnailSource = thumbnails; Settings.RefreshThumbnails();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -182,6 +162,27 @@ internal sealed class DesignPreviewWindow : Window
         _state.Text = $"{(_timer is null ? "已暂停" : "运行中")} · {_session.SimulationTimeNs / 1_000_000_000}s";
         if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续生成" : "暂停生成"; }
     }
+    internal static (PhysiologyDemoConfiguration Physiology, ProjectedEcgDemoConfiguration Ecg) ResolveStyle(int ecg, int resp, int ejection)
+    {
+        var config = ecg switch { 1 => PhysiologyDemoConfiguration.SinusArrestPreset, 2 => PhysiologyDemoConfiguration.PrematureVentricular, 3 => PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 4 => PhysiologyDemoConfiguration.PrematureAtrial, 5 => PhysiologyDemoConfiguration.PrematureJunctional, _ => PhysiologyDemoConfiguration.Default };
+        var ecgConfig = ecg switch { 1 => ProjectedEcgDemoConfiguration.SinusArrestPreset, 2 => ProjectedEcgDemoConfiguration.PrematureVentricular, 3 => ProjectedEcgDemoConfiguration.SinusArrhythmiaPreset, 4 => ProjectedEcgDemoConfiguration.PrematureAtrial, 5 => ProjectedEcgDemoConfiguration.PrematureJunctional, _ => ProjectedEcgDemoConfiguration.Default };
+        config = config with
+        {
+            RespiratoryPattern = resp switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
+            RespiratoryActivity = resp == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing
+        };
+        if (ejection == 1 && ecg != 2) { throw new ArgumentException("早搏弱射血需选择单形室早。"); }
+        if (ejection == 2)
+        {
+            if (ecg != 0) { throw new ArgumentException("2:1漏搏需选择窦性参考。"); }
+            config = config with { VentricularConductionRatio = 2 };
+            ecgConfig = ecgConfig with { VentricularConductionRatio = 2 };
+        }
+        if (ejection == 3) { config = config with { VentricularMechanicalEnabled = false }; }
+        return (config, ecgConfig);
+    }
+    private static LocalMonitorPreviewSession CreateStylePreview(int ecg, int resp, int ejection) =>
+        CreateThumbnailSource(ResolveStyle(ecg, resp, ejection).Physiology);
     private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration)
     {
         var preview = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default());

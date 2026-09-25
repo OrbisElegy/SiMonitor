@@ -12,7 +12,10 @@ public sealed record MonitorAmplitudeRange(double Minimum, double Maximum)
         { throw new ArgumentException("MonitorDisplay.InvalidRange"); }
     }
 }
-public sealed record MonitorDisplaySlot(int Channel, bool Automatic, MonitorAmplitudeRange Range);
+public sealed record MonitorDisplaySlot(int Channel, bool Automatic, MonitorAmplitudeRange Range, int SpeedTenthsMmPerSecond = 250)
+{
+    public long DurationNs => MonitorDisplayConfiguration.SweepDurationNs * 250 / SpeedTenthsMmPerSecond;
+}
 public sealed class MonitorDisplayConfiguration
 {
     public const double AutoOccupancy = .85;
@@ -41,6 +44,7 @@ public sealed class MonitorDisplayConfiguration
         {
             if (slot is null || slot.Range is null) { throw new ArgumentException("MonitorDisplay.InvalidSlot"); }
             _ = ReferenceRange(slot.Channel); slot.Range.Validate();
+            if (slot.SpeedTenthsMmPerSecond is not (125 or 250 or 500)) { throw new ArgumentException("MonitorDisplay.InvalidSpeed"); }
         }
         Skin = skin; Slots = Array.AsReadOnly(owned);
     }
@@ -56,22 +60,27 @@ public sealed class MonitorDisplayConfiguration
 public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration)
 {
     private MonitorAmplitudeRange[] _ranges = configuration.Slots.Select(s => s.Range).ToArray();
-    private bool[] _showPrevious = configuration.Slots.Select(_ => true).ToArray();
+    private MonitorAmplitudeRange[] _previous = configuration.Slots.Select(s => s.Range).ToArray();
+    private long[] _cycles = new long[configuration.Slots.Count];
+    private long _frontier;
     public long Cycle { get; private set; }
     public MonitorAmplitudeRange Range(int slot) => _ranges[slot];
-    public bool ShowPrevious(int slot) => _showPrevious[slot];
+    public bool ShowPrevious(int slot) => _cycles[slot] > 0;
+    public long RowCycle(int slot) => _cycles[slot];
+    public MonitorAmplitudeRange PreviousRange(int slot) => _previous[slot];
     public void Advance(long frontierNs, Func<int, long, long, IEnumerable<double>> samples)
     {
         ArgumentNullException.ThrowIfNull(samples);
-        long cycle = frontierNs / MonitorDisplayConfiguration.SweepDurationNs;
-        if (frontierNs < 0 || cycle < Cycle) { throw new ArgumentException("MonitorDisplay.TimeRegression"); }
-        if (cycle == Cycle) { return; }
-        long end = cycle * MonitorDisplayConfiguration.SweepDurationNs;
-        long start = end - MonitorDisplayConfiguration.SweepDurationNs;
-        var next = _ranges.ToArray();
+        if (frontierNs < _frontier) { throw new ArgumentException("MonitorDisplay.TimeRegression"); }
+        var nextCycles = configuration.Slots.Select(s => frontierNs / s.DurationNs).ToArray();
+        var next = _ranges.ToArray(); var previous = _previous.ToArray();
         for (int slot = 0; slot < next.Length; slot++)
         {
+            if (nextCycles[slot] == _cycles[slot]) { continue; }
+            previous[slot] = _ranges[slot];
             if (!configuration.Slots[slot].Automatic) { continue; }
+            long end = nextCycles[slot] * configuration.Slots[slot].DurationNs;
+            long start = end - configuration.Slots[slot].DurationNs;
             double minimum = double.PositiveInfinity, maximum = double.NegativeInfinity;
             int count = 0;
             foreach (double value in samples(configuration.Slots[slot].Channel, start, end))
@@ -87,7 +96,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
             next[slot] = new(minimum - padding, maximum + padding);
             next[slot].Validate();
         }
-        _showPrevious = next.Select((r, i) => r == _ranges[i]).ToArray();
-        _ranges = next; Cycle = cycle;
+        if (!nextCycles.SequenceEqual(_cycles)) { Cycle++; }
+        _ranges = next; _previous = previous; _cycles = nextCycles; _frontier = frontierNs;
     }
 }

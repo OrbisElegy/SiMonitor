@@ -6,11 +6,6 @@ namespace Monitor.Desktop;
 // A bounded demo control, not a transducer calibration or height model.
 internal sealed record PressureZeroOffsets(int Abp = 0, int Pa = 0, int Cvp = 0)
 {
-    internal void Validate()
-    {
-        if (new[] { Abp, Pa, Cvp }.Any(value => value is < -1000 or > 1000))
-        { throw new ArgumentException("Pressure demo offset must be within +/-10 mmHg."); }
-    }
     internal static int Parse(string? text)
     {
         if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,

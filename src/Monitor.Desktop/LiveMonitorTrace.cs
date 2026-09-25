@@ -24,21 +24,22 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
         for (int row = 0; row < session.Display.Slots.Count; row++)
             for (int age = 0; age < 2; age++)
             {
-                long cycle = _cycle - age;
+                long cycle = session.Ranges.RowCycle(row) - age;
+                long duration = session.Display.Slots[row].DurationNs;
                 if (cycle < 0 || (age == 1 && !session.Ranges.ShowPrevious(row))) { continue; }
-                long from = cycle * MonitorDisplayConfiguration.SweepDurationNs;
+                long from = cycle * duration;
                 var path = new StreamGeometry();
                 using (var geometry = path.Open())
                 {
                     bool started = false;
                     int channel = session.Display.Slots[row].Channel;
-                    var samples = session.Samples(channel, from, from + MonitorDisplayConfiguration.SweepDurationNs).ToArray();
+                    var samples = session.Samples(channel, from, from + duration).ToArray();
                     double tolerance = channel is 3 or 4 or 5 && samples.Length > 0
                         ? Math.Min(.75, (samples.Max(s => s.Value) - samples.Min(s => s.Value)) * .015) : 0;
                     foreach (var sample in PreviewContour.Simplify(samples, tolerance))
                     {
-                        Point point = new((sample.TimeNs - from) / (double)MonitorDisplayConfiguration.SweepDurationNs,
-                            1 - session.Ranges.Range(row).Normalize(sample.Value));
+                        Point point = new((sample.TimeNs - from) / (double)duration,
+                            1 - (age == 0 ? session.Ranges.Range(row) : session.Ranges.PreviousRange(row)).Normalize(sample.Value));
                         if (!started) { geometry.BeginFigure(point, false); started = true; }
                         else { geometry.LineTo(point); }
                     }
@@ -56,9 +57,10 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
         int rows = session.Display.Slots.Count;
         double rowHeight = Bounds.Height / rows;
         double left = 132, width = Math.Max(1, Bounds.Width - left - 18);
-        double phase = (session.FrontierNs % MonitorDisplayConfiguration.SweepDurationNs) / (double)MonitorDisplayConfiguration.SweepDurationNs;
         for (int row = 0; row < rows; row++)
         {
+            long duration = session.Display.Slots[row].DurationNs;
+            double phase = (session.FrontierNs % duration) / (double)duration;
             int channel = session.Display.Slots[row].Channel;
             var color = Brush.Parse(Colors[channel]);
             var range = session.Ranges.Range(row);
@@ -67,13 +69,12 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
             Label(context, Names[channel], 12, top + 10, color, 14);
             Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
             Label(context, Units[channel] + (session.Display.Slots[row].Automatic ? " · 自动" : " · 固定"), 12, top + 49, color, 11);
-            double gutter = width * .2 / 10.2;
-            Rect plot = new(left + gutter, top + 9, width - gutter, Math.Max(1, rowHeight - 20));
+            Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
             if (channel == 0)
             {
                 if (range.Minimum <= 0 && range.Maximum >= 1000)
                 {
-                    double x = left + gutter / 2;
+                    double x = left + width * 200_000_000 / duration;
                     context.DrawLine(new Pen(color, 1.2), new(x, plot.Bottom - range.Normalize(0) * plot.Height),
                         new(x, plot.Bottom - range.Normalize(1000) * plot.Height));
                     Label(context, "1 mV", 12, top + 66, color, 11);

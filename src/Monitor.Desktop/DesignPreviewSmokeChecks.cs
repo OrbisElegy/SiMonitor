@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.VisualTree;
 using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
@@ -38,6 +39,19 @@ internal static class DesignPreviewSmokeChecks
             Require(narrowScale < wideScale, "paper including waves and calibration scales with the viewport");
             window.Width = 1440; window.Height = 940; window.SelectPage(2);
             Capture(window, "ui-preview-settings.png");
+            window.Settings.OpenEcgChooser(); Capture(window, "ui-preview-chooser.png");
+            Require(window.Settings.PreviewCacheCount >= 3, "grouped choices own distinct cached source configurations");
+            var candidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
+                button.Content is StackPanel panel && panel.Children.OfType<TextBlock>().Any(text => text.Text == "窦性停搏（无逸搏）"));
+            var unchanged = window.Session;
+            candidate.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Capture(window, "ui-preview-chooser-selected.png");
+            Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "candidate updates draft preview without replacing live source");
+            var expansion = window.Settings.GetVisualDescendants().OfType<Expander>().Single();
+            expansion.IsExpanded = true;
+            Capture(window, "ui-preview-chooser-leads.png");
+            Require(window.Settings.GetVisualDescendants().OfType<EcgStyleLeadPreview>().Count() == 12, "selected ECG expands to twelve cached lead traces");
+            window.Settings.EcgSelection = 0;
             window.Settings.Tabs.SelectedIndex = 1; Capture(window, "ui-preview-display.png");
             Require(window.Settings.Slots[0].Channel.Bounds.Height > 0, "display tab content has completed layout");
             window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-display-compact.png");
@@ -53,6 +67,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Slots[0].Auto.IsChecked = false;
             window.Settings.Slots[0].Minimum.Text = "-0.01";
             window.Settings.Slots[0].Maximum.Text = "0.01";
+            window.Settings.Slots[1].Speed.SelectedIndex = 2;
+            window.Settings.Slots[2].Speed.SelectedIndex = 0;
             window.ApplySettings();
             Require(!ReferenceEquals(source, window.Session) && window.Session.Display.Slots.Count == 3, "apply changes fixed skin and restarts");
             window.Pulse(timer, 50_000_000);
@@ -61,12 +77,12 @@ internal static class DesignPreviewSmokeChecks
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             VerifyClamping(window.MonitorTrace);
             for (int i = 0; i < 300; i++) { window.Pulse(timer, 50_000_000); }
-            Require(window.Session.Ranges.Cycle == 2, "native sweep wraps twice with boundary range updates");
+            Require(window.Session.Ranges.RowCycle(0) == 2 && window.Session.Ranges.RowCycle(1) == 4 && window.Session.Ranges.RowCycle(2) == 1, "native sweep wraps twice with boundary range updates");
             window.SelectPage(0); Capture(window, "ui-preview-monitor-wrap.png");
             window.Pause(); long paused = window.Session.SimulationTimeNs;
             window.Pulse(timer, 50_000_000); Require(window.Session.SimulationTimeNs == paused, "pause holds simulation");
             window.Start(); window.SelectPage(0); Require(window.Session.SimulationTimeNs == paused, "navigation/resume never regenerates history");
-            foreach (var choice in new[] { (1, 1, 0), (2, 2, 1), (0, 0, 2), (0, 3, 3) })
+            foreach (var choice in new[] { (1, 1, 0), (2, 2, 1), (0, 0, 2), (0, 3, 3), (3, 0, 0), (4, 0, 0), (5, 0, 0) })
             {
                 source = window.Session;
                 window.Settings.EcgSelection = choice.Item1;
@@ -81,12 +97,13 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyGapAndCalibration(LiveMonitorTrace trace)
     {
-        byte[] data = Raster(trace, 800, 600);
+        byte[] data = Raster(new LiveMonitorTrace(new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default())), 800, 600);
         bool Green(int x, int y) => data[(y * 800 + x) * 4 + 1] > 130 && data[(y * 800 + x) * 4 + 1] > data[(y * 800 + x) * 4 + 2] * 1.3;
-        double gutter = 650 * .2 / 10.2;
-        int calibrationX = (int)Math.Round(132 + gutter / 2);
+        double gutter = 0;
+        int calibrationX = (int)Math.Round(132 + 650 * .2 / 10);
         int calibrationPixels = Enumerable.Range(9, 100).Count(y => Green(calibrationX, y) || Green(calibrationX - 1, y));
         Require(Math.Abs(calibrationPixels - 100 * 1000 / 2700d) < 4, "ECG calibration has a true 1mV height at current range");
+        data = Raster(trace, 800, 600);
         double phase = trace.Session.FrontierNs % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
         int headX = (int)(132 + gutter + phase * (650 - gutter));
         Require(Enumerable.Range(10, 95).Count(y => Green(headX, y) || Green(headX + 1, y)) < 12, "no vertical sweep cursor");
@@ -94,9 +111,15 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyPaperEnd(DesignPreviewTrace paper)
     {
-        byte[] data = Raster(paper, 1094, 596);
-        bool Dark(int x, int y) => data[(y * 1094 + x) * 4] < 120 && data[(y * 1094 + x) * 4 + 1] < 120;
-        Require(Enumerable.Range(500, 70).Any(y => Dark(1060, y)), "long lead reaches within one sample of paper grid right edge");
+        byte[] data = Raster(paper, 1064, 596);
+        bool Dark(int x, int y) => data[(y * 1064 + x) * 4] < 160 && data[(y * 1064 + x) * 4 + 1] < 160;
+        for (int column = 0; column < 4; column++)
+            for (int row = 0; row < 3; row++)
+            {
+                int x = 52 + column * 250, baseline = 136 + row * 120;
+                Require(Enumerable.Range(baseline - 39, 38).Count(y => Dark(x, y) || Dark(x - 1, y)) > 30, "each ECG lead has an independent 1mV marker");
+            }
+        Require(Enumerable.Range(500, 70).Any(y => Dark(1030, y)), "long lead reaches within one sample of paper grid right edge");
     }
     private static byte[] Raster(Control control, int width, int height)
     {

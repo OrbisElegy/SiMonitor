@@ -10,7 +10,7 @@ namespace Monitor.Application.Presentation;
 public sealed class LocalMonitorPreviewSession
 {
     public const long PresentationLatencyNs = 2_200_000_000;
-    public const int RetainedBlockCount = 102;
+    public const int RetainedBlockCount = 202;
     private readonly PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
     public long SimulationTimeNs { get; private set; }

@@ -25,6 +25,7 @@ internal sealed class DesignPreviewWindow : Window
     private WaveformEnvelope[] _ecg;
     private LiveMonitorTrace _monitor;
     private LocalMonitorPreviewSession _session;
+    private LocalMonitorPreviewSession _thumbnailSource;
     private DispatcherTimer? _timer;
     private long _lastTick;
     private bool _closed;
@@ -42,9 +43,10 @@ internal sealed class DesignPreviewWindow : Window
         Background = Brush.Parse("#F5F6F8"); Foreground = Brush.Parse("#202C39");
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
+        _thumbnailSource = CreateThumbnailSource(PhysiologyDemoConfiguration.Default);
         _monitor = new(_session);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(() => _session, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        Settings = new(() => _thumbnailSource, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -103,7 +105,7 @@ internal sealed class DesignPreviewWindow : Window
         _subtitle.Text = page switch
         {
             0 => $"{_session.Display.Slots.Count}个固定槽位 · 10秒扫屏 · 测量与报警未启用",
-            1 => "10秒快照 · 按显示区等比适配 · 监护采样",
+            1 => "监护采样快照",
             _ => "波形生成、显示、声音与报警"
         };
         _workspace.Content = page switch
@@ -136,7 +138,9 @@ internal sealed class DesignPreviewWindow : Window
             if (Settings.EjectionSelection == 3) { config = config with { VentricularMechanicalEnabled = false }; }
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay());
             var ecg = CapturePaper(ecgConfig);
+            var thumbnails = CreateThumbnailSource(config);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
+            _thumbnailSource = thumbnails; Settings.RefreshThumbnails();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -168,7 +172,6 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
-            if (Page == 2) { Settings.RefreshThumbnails(); }
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -178,6 +181,12 @@ internal sealed class DesignPreviewWindow : Window
     {
         _state.Text = $"{(_timer is null ? "已暂停" : "运行中")} · {_session.SimulationTimeNs / 1_000_000_000}s";
         if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续生成" : "暂停生成"; }
+    }
+    private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration)
+    {
+        var preview = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default());
+        for (int i = 0; i < 108; i++) { preview.Advance(50_000_000); }
+        return preview;
     }
     private static WaveformEnvelope[] CapturePaper(ProjectedEcgDemoConfiguration configuration)
     {

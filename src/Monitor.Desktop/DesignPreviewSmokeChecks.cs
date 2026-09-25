@@ -18,13 +18,17 @@ internal static class DesignPreviewSmokeChecks
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Page == 0 && window.Session.FrontierNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");
+            VerifyGapAndCalibration(window.MonitorTrace);
             Capture(window, "ui-preview-monitor.png");
             double wideMonitor = window.MonitorTrace.Bounds.Width;
             window.Width = 1000; window.Height = 720;
             Capture(window, "ui-preview-monitor-compact.png");
             Require(window.MonitorTrace.Bounds.Width < wideMonitor && window.Session.Display.Slots.Count == 5, "monitor resizes but skin row count stays fixed");
             window.Width = 1440; window.Height = 940;
+            for (int i = 0; i < 450; i++) { window.Pulse(timer, 50_000_000); }
+            Capture(window, "ui-preview-monitor-auto.png");
             window.SelectPage(1); Capture(window, "ui-preview-paper.png");
+            VerifyPaperEnd(window.CurrentPaper!);
             var root = (Control)window.Content!;
             double wideScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
             Require(window.CurrentPaper!.BlockCount == 50 && window.Settings.Parent is null, "complete paper snapshot with no settings controls");
@@ -75,14 +79,38 @@ internal static class DesignPreviewSmokeChecks
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");
     }
-    private static void VerifyClamping(LiveMonitorTrace trace)
+    private static void VerifyGapAndCalibration(LiveMonitorTrace trace)
     {
-        trace.Measure(new Size(800, 360)); trace.Arrange(new Rect(0, 0, 800, 360));
-        using var image = new RenderTargetBitmap(new PixelSize(800, 360), new Vector(96, 96)); image.Render(trace);
+        byte[] data = Raster(trace, 800, 600);
+        bool Green(int x, int y) => data[(y * 800 + x) * 4 + 1] > 130 && data[(y * 800 + x) * 4 + 1] > data[(y * 800 + x) * 4 + 2] * 1.3;
+        double gutter = 650 * .2 / 10.2;
+        int calibrationX = (int)Math.Round(132 + gutter / 2);
+        int calibrationPixels = Enumerable.Range(9, 100).Count(y => Green(calibrationX, y) || Green(calibrationX - 1, y));
+        Require(Math.Abs(calibrationPixels - 100 * 1000 / 2700d) < 4, "ECG calibration has a true 1mV height at current range");
+        double phase = trace.Session.FrontierNs % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
+        int headX = (int)(132 + gutter + phase * (650 - gutter));
+        Require(Enumerable.Range(10, 95).Count(y => Green(headX, y) || Green(headX + 1, y)) < 12, "no vertical sweep cursor");
+        Require(!Enumerable.Range(10, 95).Any(y => Green(headX + 4, y)), "erase gap contains no trace");
+    }
+    private static void VerifyPaperEnd(DesignPreviewTrace paper)
+    {
+        byte[] data = Raster(paper, 1094, 596);
+        bool Dark(int x, int y) => data[(y * 1094 + x) * 4] < 120 && data[(y * 1094 + x) * 4 + 1] < 120;
+        Require(Enumerable.Range(500, 70).Any(y => Dark(1060, y)), "long lead reaches within one sample of paper grid right edge");
+    }
+    private static byte[] Raster(Control control, int width, int height)
+    {
+        control.Measure(new Size(width, height)); control.Arrange(new Rect(0, 0, width, height));
+        using var image = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96)); image.Render(control);
         using var pixels = new WriteableBitmap(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
         using var buffer = pixels.Lock(); image.CopyPixels(buffer);
-        byte[] data = new byte[800 * 360 * 4];
-        for (int y = 0; y < 360; y++) { Marshal.Copy(buffer.Address + y * buffer.RowBytes, data, y * 800 * 4, 800 * 4); }
+        byte[] data = new byte[width * height * 4];
+        for (int y = 0; y < height; y++) { Marshal.Copy(buffer.Address + y * buffer.RowBytes, data, y * width * 4, width * 4); }
+        return data;
+    }
+    private static void VerifyClamping(LiveMonitorTrace trace)
+    {
+        byte[] data = Raster(trace, 800, 360);
         bool Green(int x, int y) => data[(y * 800 + x) * 4 + 1] > 130 && data[(y * 800 + x) * 4 + 1] > data[(y * 800 + x) * 4 + 2] * 1.3;
         Require(Enumerable.Range(145, 290).Count(x => Green(x, 9) || Green(x, 10)) > 20, "overrange ECG flattens to upper edge");
         Require(!Enumerable.Range(140, 600).Any(x => Green(x, 116) || Green(x, 119) || Green(x, 123)), "trace never invades row separator or next row");

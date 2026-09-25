@@ -15,6 +15,7 @@ public sealed record MonitorAmplitudeRange(double Minimum, double Maximum)
 public sealed record MonitorDisplaySlot(int Channel, bool Automatic, MonitorAmplitudeRange Range);
 public sealed class MonitorDisplayConfiguration
 {
+    public const double AutoOccupancy = .85;
     public const long SweepDurationNs = 10_000_000_000;
     public MonitorSkin Skin { get; }
     public IReadOnlyList<MonitorDisplaySlot> Slots { get; }
@@ -80,7 +81,9 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
             }
             if (count == 0) { continue; }
             double referenceSpan = configuration.Slots[slot].Range.Maximum - configuration.Slots[slot].Range.Minimum;
-            double padding = Math.Max((maximum - minimum) * .1, referenceSpan * .01);
+            if (configuration.Slots[slot].Channel == 0)
+            { minimum = Math.Min(minimum, 0); maximum = Math.Max(maximum, 1000); }
+            double padding = Math.Max((maximum - minimum) * (1 / MonitorDisplayConfiguration.AutoOccupancy - 1) / 2, referenceSpan * .01);
             next[slot] = new(minimum - padding, maximum + padding);
             next[slot].Validate();
         }

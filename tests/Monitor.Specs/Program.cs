@@ -5,6 +5,13 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        int shard = 0, shards = 1;
+        if (args.Length > 0 && args[0] == "--shard")
+        {
+            if (args.Length != 3 || !int.TryParse(args[1], out shard) || !int.TryParse(args[2], out shards) || shards is < 1 or > 32 || shard < 0 || shard >= shards)
+            { Console.Error.WriteLine("Usage: --shard INDEX COUNT (0 <= INDEX < COUNT <= 32)"); return 2; }
+            args = [];
+        }
         if (args.Length != 0)
         {
             using CancellationTokenSource cancellation = new();
@@ -208,11 +215,12 @@ internal static class Program
 
         for (int index = 0; index < specifications.Length; index++)
         {
+            if (index % shards != shard) { continue; }
             specifications[index].Body();
             Console.WriteLine($"ok {index + 1} - {specifications[index].Name}");
         }
 
-        Console.WriteLine($"ok: {specifications.Length} executable specifications passed");
+        Console.WriteLine($"ok: {Enumerable.Range(0, specifications.Length).Count(i => i % shards == shard)} executable specifications passed (shard {shard + 1}/{shards}; total {specifications.Length})");
         return 0;
     }
 }

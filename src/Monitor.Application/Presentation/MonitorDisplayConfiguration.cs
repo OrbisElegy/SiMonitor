@@ -72,7 +72,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
     {
         ArgumentNullException.ThrowIfNull(samples);
         if (frontierNs < _frontier) { throw new ArgumentException("MonitorDisplay.TimeRegression"); }
-        var nextCycles = configuration.Slots.Select(s => frontierNs / s.DurationNs).ToArray();
+        long[] nextCycles = configuration.Slots.Select(s => frontierNs / s.DurationNs).ToArray();
         var next = _ranges.ToArray(); var previous = _previous.ToArray();
         for (int slot = 0; slot < next.Length; slot++)
         {
@@ -91,7 +91,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
             if (count == 0) { continue; }
             double referenceSpan = configuration.Slots[slot].Range.Maximum - configuration.Slots[slot].Range.Minimum;
             if (configuration.Slots[slot].Channel == 0)
-            { minimum = Math.Min(minimum, 0); maximum = Math.Max(maximum, 1000); }
+            { minimum = Math.Min(minimum, -500); maximum = Math.Max(maximum, 500); }
             double padding = Math.Max((maximum - minimum) * (1 / MonitorDisplayConfiguration.AutoOccupancy - 1) / 2, referenceSpan * .01);
             next[slot] = new(minimum - padding, maximum + padding);
             next[slot].Validate();

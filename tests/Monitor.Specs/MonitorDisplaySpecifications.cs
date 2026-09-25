@@ -13,8 +13,8 @@ internal static class MonitorDisplaySpecifications
         new(nameof(ManualAndFailedAutoRangesPreserveTheirState), ManualAndFailedAutoRangesPreserveTheirState),
         new(nameof(LiveSessionKeepsBoundedHistoryAndProgressiveFrontier), LiveSessionKeepsBoundedHistoryAndProgressiveFrontier),
         new(nameof(AutomaticRangeReservesFifteenPercentAndCalibration), AutomaticRangeReservesFifteenPercentAndCalibration),
-        new(nameof(ContourSimplificationBoundsErrorAndPreservesTurningPoints), ContourSimplificationBoundsErrorAndPreservesTurningPoints),
-        new(nameof(CausalContoursNeverRefit), CausalContoursNeverRefit),
+        new(nameof(DenseContoursPreserveKnotsAndMonotonicity), DenseContoursPreserveKnotsAndMonotonicity),
+        new(nameof(DenseContourPrefixesRemainLocal), DenseContourPrefixesRemainLocal),
         new(nameof(IndependentSpeedsRetainPreviousScaleUntilOverwritten), IndependentSpeedsRetainPreviousScaleUntilOverwritten),
     ];
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
@@ -92,53 +92,42 @@ internal static class MonitorDisplaySpecifications
         Check.That(Math.Abs((gas.Normalize(40) - gas.Normalize(0)) - .85) < 1e-12,
             "nonflat content occupies 85 percent with symmetric headroom");
         var ecg = ranges.Range(0);
-        Check.That(ecg.Minimum < 0 && ecg.Maximum > 1000 &&
-            Math.Abs(ecg.Normalize(1000) - ecg.Normalize(0) - .85) < 1e-12,
+        Check.That(ecg.Minimum < -500 && ecg.Maximum > 500 &&
+            Math.Abs(ecg.Normalize(500) - ecg.Normalize(-500) - .85) < 1e-12,
             "ECG auto range reserves room for the true 1mV reference");
     }
-    private static void ContourSimplificationBoundsErrorAndPreservesTurningPoints()
+    private static void DenseContoursPreserveKnotsAndMonotonicity()
     {
-        var samples = Enumerable.Range(0, 401).Select(i => ((long)i, Math.Round(i / 10d) / 2)).ToArray();
-        var copy = samples.ToArray();
-        var displayed = PreviewContour.Simplify(samples, .3);
-        Check.That(displayed.Count < samples.Length / 4 && samples.SequenceEqual(copy), "quantized ramp simplifies without altering samples");
-        int segment = 0;
-        foreach (var (time, value) in samples)
+        (long TimeNs, double Value)[] raw = [(0, 0), (100, 10), (200, 10), (300, 3), (400, 3), (500, 6), (600, 0)];
+        var points = PreviewContour.Interpolate(raw);
+        Check.That(points.Count == 25 && raw.All(points.Contains), "more display points retain every original knot and extremum");
+        for (int i = 0; i < raw.Length - 1; i++)
         {
-            while (segment + 2 < displayed.Count && time > displayed[segment + 1].TimeNs) { segment++; }
-            var a = displayed[segment]; var b = displayed[segment + 1];
-            double expected = a.Value + (b.Value - a.Value) * (time - a.TimeNs) / (b.TimeNs - a.TimeNs);
-            Check.That(Math.Abs(expected - value) <= .3 + 1e-10, "every raw sample remains inside the declared display error");
+            var part = points.Where(p => p.TimeNs >= raw[i].TimeNs && p.TimeNs <= raw[i + 1].TimeNs).ToArray();
+            Check.That(part.All(p => p.Value >= Math.Min(raw[i].Value, raw[i + 1].Value) && p.Value <= Math.Max(raw[i].Value, raw[i + 1].Value)), "no invented overshoot or waves on plateaus");
+            for (int j = 1; j < part.Length; j++)
+                Check.That((part[j].Value - part[j - 1].Value) * (raw[i + 1].Value - raw[i].Value) >= 0, "each interpolated interval is monotone");
         }
-        (long, double)[] notch = [(0, 0), (1, 10), (2, 10), (3, 3), (4, 3), (5, 6), (6, 0)];
-        Check.That(PreviewContour.Simplify(notch, 1).SequenceEqual(notch), "peak and notch plateaus survive");
-        Check.That(PreviewContour.Simplify(samples, 0).SequenceEqual(samples), "ECG and zero-tolerance data are unchanged");
-        Reject(() => PreviewContour.Simplify([(0, double.NaN)], .3));
-        Reject(() => PreviewContour.Simplify([(0, 0), (0, 1)], .3));
+        Reject(() => PreviewContour.Interpolate([(0, double.NaN)]));
+        Reject(() => PreviewContour.Interpolate([(0, 1), (0, 2)]));
+        Reject(() => PreviewContour.Interpolate(raw, 0));
+        Check.That(PreviewContour.Interpolate([]).Count == 0, "empty input remains empty");
     }
-    private static void CausalContoursNeverRefit()
+    private static void DenseContourPrefixesRemainLocal()
     {
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default());
         while (session.SimulationTimeNs < 8_000_000_000) { session.Advance(50_000_000); }
-        foreach (int channel in new[] { 3, 4, 5 })
+        for (int channel = 1; channel < 7; channel++)
         {
-            var samples = session.Samples(channel, 0, 6_000_000_000).ToArray();
-            var all = PreviewContour.Stable(samples);
-            Check.That(all.Count == samples.Length && all.Zip(samples).All(pair => pair.First.TimeNs == pair.Second.TimeNs && Math.Abs(pair.First.Value - pair.Second.Value) <= .75 + 1e-10),
-                "causal display regression preserves sample times and caps every amplitude error");
-            for (long end = 2_200_000_000; end < 6_000_000_000; end += 200_000_000)
+            var raw = session.Samples(channel, 0, 6_000_000_000).ToArray();
+            var complete = PreviewContour.Interpolate(raw);
+            for (int count = 20; count < raw.Length; count += 20)
             {
-                long complete = end;
-                var prefix = PreviewContour.Stable(samples.Where(s => s.TimeNs < end).ToArray());
-                Check.That(prefix.Where(s => s.TimeNs < complete).SequenceEqual(all.Where(s => s.TimeNs < complete)),
-                    "CO2/ABP/PA committed slopes are independent of future samples and extrema");
+                var prefix = PreviewContour.Interpolate(raw.Take(count).ToArray());
+                long stableEnd = raw[count - 2].TimeNs;
+                Check.That(prefix.Where(p => p.TimeNs < stableEnd).SequenceEqual(complete.Where(p => p.TimeNs < stableEnd)), "all six non-ECG channels use local interpolation, not whole-curve refitting");
             }
         }
-        Reject(() => PreviewContour.Stable([(0, double.NaN)]));
-        Reject(() => PreviewContour.Stable([(0, 1), (0, 2)]));
-        Reject(() => PreviewContour.Stable([(-1, 1)]));
-        Check.That(PreviewContour.Stable([]).Count == 0 && PreviewContour.Stable([(0, 5)]).Single().Value == 5,
-            "empty and single-sample contours remain safe");
     }
     private static void IndependentSpeedsRetainPreviousScaleUntilOverwritten()
     {

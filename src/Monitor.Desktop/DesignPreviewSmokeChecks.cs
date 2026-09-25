@@ -32,6 +32,10 @@ internal static class DesignPreviewSmokeChecks
             for (int i = 0; i < 450; i++) { window.Pulse(timer, 50_000_000); }
             Capture(window, "ui-preview-monitor-auto.png");
             window.SelectPage(1); Capture(window, "ui-preview-paper.png");
+            window.Settings.PaperLayout.SelectedIndex = 1; window.SelectPage(1);
+            Capture(window, "ui-preview-paper-six-rows.png");
+            VerifySixRowPaper(window.CurrentPaper!);
+            window.Settings.PaperLayout.SelectedIndex = 0; window.SelectPage(1);
             VerifyPaperEnd(window.CurrentPaper!);
             var root = (Control)window.Content!;
             double wideScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
@@ -64,10 +68,7 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(button =>
                 AutomationProperties.GetName(button) == "窦性心律，当前分组" && button.Content?.ToString()?.Contains('✓') == true),
                 "group selection is labelled and not color-only");
-            var expansion = window.Settings.GetVisualDescendants().OfType<Expander>().Single();
-            expansion.IsExpanded = true;
-            Capture(window, "ui-preview-chooser-leads.png");
-            Require(window.Settings.GetVisualDescendants().OfType<EcgStyleLeadPreview>().Count() == 12, "selected ECG expands to twelve cached lead traces");
+            Require(!window.Settings.GetVisualDescendants().OfType<Expander>().Any(), "redundant twelve-lead chooser expansion is removed");
             window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回波形设置")
                 .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Capture(window, "ui-preview-settings-return.png");
@@ -85,7 +86,10 @@ internal static class DesignPreviewSmokeChecks
             window.Width = 1440; window.Height = 940;
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-audio.png");
             window.Settings.Tabs.SelectedIndex = 3; Capture(window, "ui-preview-alarms.png");
-            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 4, "generation/display/audio/alarms live in settings tabs");
+            window.Settings.Tabs.SelectedIndex = 4; Capture(window, "ui-preview-vitals.png");
+            window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-advanced.png");
+            Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "advanced parameters track current selected style");
+            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 6, "generation/display/audio/alarms/vitals/advanced live in settings tabs");
             var source = window.Session;
             window.Settings.Slots[0].Minimum.Text = "NaN";
             window.ApplySettings();
@@ -148,7 +152,7 @@ internal static class DesignPreviewSmokeChecks
             int right = (int)(132 + 850 * session.FrontierNs / 20_000_000_000d) - 3;
             session.Advance(200_000_000);
             var after = Raster(trace, 1000, 700);
-            foreach (int row in Enumerable.Range(0, slots.Length).Where(i => slots[i].Channel is 3 or 4 or 5))
+            foreach (int row in Enumerable.Range(0, slots.Length).Where(i => slots[i].Channel != 0))
                 for (int y = row * 100 + 10; y < row * 100 + 90; y++)
                     for (int x = 134; x < right; x++)
                     {
@@ -166,11 +170,28 @@ internal static class DesignPreviewSmokeChecks
         int calibrationX = (int)Math.Round(132 + 650 * .2 / 10);
         int calibrationPixels = Enumerable.Range(9, 100).Count(y => Green(calibrationX, y) || Green(calibrationX - 1, y));
         Require(Math.Abs(calibrationPixels - 100 * 1000 / 2700d) < 4, "ECG calibration has a true 1mV height at current range");
+        double baselineY = 9 + 100 * (1 - 1200 / 2700d);
+        var inkRows = Enumerable.Range(9, 100).Where(y => Green(calibrationX, y) || Green(calibrationX - 1, y)).ToArray();
+        Require(Math.Abs((inkRows[0] + inkRows[^1]) / 2d - baselineY) < 2,
+            "monitor calibration is centered on baseline, from minus to plus 0.5mV");
         data = Raster(trace, 800, 600);
         double phase = trace.Session.FrontierNs % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
         int headX = (int)(132 + gutter + phase * (650 - gutter));
         Require(Enumerable.Range(10, 95).Count(y => Green(headX, y) || Green(headX + 1, y)) < 12, "no vertical sweep cursor");
         Require(!Enumerable.Range(10, 95).Any(y => Green(headX + 4, y)), "erase gap contains no trace");
+    }
+    private static void VerifySixRowPaper(DesignPreviewTrace paper)
+    {
+        Require(paper.SixRows && paper.LongDurationNs == 10_300_000_000, "six-by-two paper retains five-second short leads and aligned long-II");
+        byte[] data = Raster(paper, 1124, 956);
+        bool Dark(int x, int y) => data[(y * 1124 + x) * 4] < 160 && data[(y * 1124 + x) * 4 + 1] < 160;
+        for (int column = 0; column < 2; column++)
+            for (int row = 0; row < 6; row++)
+            {
+                int x = 58 + column * 530, baseline = 136 + row * 120;
+                Require(Enumerable.Range(baseline - 39, 38).Count(y => Dark(x, y) || Dark(x - 1, y)) > 30, "all six rows have independent paper calibration");
+            }
+        Require(Enumerable.Range(855, 90).Any(y => Dark(1090, y)), "six-row long-II reaches the grid right edge");
     }
     private static void VerifyPaperEnd(DesignPreviewTrace paper)
     {

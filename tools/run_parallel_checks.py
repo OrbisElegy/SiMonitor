@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Run already-built specifications/desktop checks in isolated processes, up to 32 workers.
+On Linux use xvfb-run -a python3 tools/run_parallel_checks.py for desktop checks.
+"""
+import argparse
+import concurrent.futures
+import os
+import re
+from pathlib import Path
+import subprocess
+import time
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--jobs', type=int, default=min(32, os.cpu_count() or 1))
+    parser.add_argument('--configuration', choices=['Debug', 'Release'], default='Debug')
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument('--specs-only', action='store_true')
+    choice.add_argument('--desktop-only', '--native-only', dest='desktop_only', action='store_true',
+                        help='Run desktop checks using native windows (--native-only is a compatibility alias)')
+    args = parser.parse_args()
+    if not 1 <= args.jobs <= 32:
+        parser.error('--jobs must be between 1 and 32')
+    root = Path(__file__).resolve().parent.parent
+    output = root / 'artifacts' / 'parallel-checks'
+    output.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    for kind, folder, name, flag in [
+        ('specs', 'tests', 'Monitor.Specs', '--shard'),
+        ('desktop', 'src', 'Monitor.Desktop', '--smoke-shard'),
+    ]:
+        if (kind == 'desktop' and args.specs_only) or (kind == 'specs' and args.desktop_only):
+            continue
+        dll = root / folder / name / 'bin' / args.configuration / 'net10.0' / (name + '.dll')
+        if not dll.exists():
+            parser.error(f'Build the solution first: missing {dll}')
+        for shard in range(args.jobs):
+            tasks.append((f'{kind}-{shard:02}', ['dotnet', str(dll), flag, str(shard), str(args.jobs)]))
+
+    def run(task):
+        name, command = task
+        started = time.monotonic()
+        with (output / (name + '.log')).open('w') as stdout_log, \
+                (output / (name + '.stderr.log')).open('w') as stderr_log:
+            result = subprocess.run(command, cwd=root, stdout=stdout_log, stderr=stderr_log, check=False)
+        return name, result.returncode, time.monotonic() - started
+
+    started = time.monotonic()
+    failures = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        for name, status, seconds in pool.map(run, tasks):
+            print(f'{"PASS" if status == 0 else "FAIL"} {name}: {seconds:.1f}s', flush=True)
+            if status != 0:
+                failures.append(name)
+    for kind, id_pattern, total_pattern, first in [
+        ('specs', r'^ok (\d+) -', r'; total (\d+)\)', 1),
+        ('desktop', r'^ok: native scenario (\d+) ', r'^native scenarios total: (\d+)', 0),
+    ]:
+        logs = [output / (name + '.log') for name, _ in tasks if name.startswith(kind + '-')]
+        if not logs:
+            continue
+        ids, totals = [], []
+        for path in logs:
+            text = path.read_text()
+            ids.extend(map(int, re.findall(id_pattern, text, re.MULTILINE)))
+            totals.extend(map(int, re.findall(total_pattern, text, re.MULTILINE)))
+        if len(totals) != len(logs) or len(set(totals)) != 1 or sorted(ids) != list(range(first, first + totals[0])):
+            failures.append(kind + '-coverage')
+            print(f'FAIL {kind}: missing, duplicate or incomplete shard coverage')
+        else:
+            print(f'PASS {kind}: {totals[0]} checks, each executed exactly once')
+    print(f'{len(tasks)} shards, {args.jobs} workers, elapsed {time.monotonic() - started:.1f}s; logs: {output}')
+    return 1 if failures else 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

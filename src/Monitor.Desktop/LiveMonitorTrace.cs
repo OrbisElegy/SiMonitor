@@ -37,12 +37,12 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
                     bool started = false;
                     int channel = session.Display.Slots[row].Channel;
                     var samples = session.Samples(channel, from, from + duration).ToArray();
-                    var contour = channel is 3 or 4 or 5 ? PreviewContour.Stable(samples) : samples;
+                    var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
                         Point point = new((sample.TimeNs - from) / (double)duration,
                             1 - (age == 0 ? session.Ranges.Range(row) : session.Ranges.PreviousRange(row)).Normalize(sample.Value));
-                        if (channel is 3 or 4 or 5) { stablePoints.Add(point); }
+                        if (channel != 0) { stablePoints.Add(point); continue; }
                         if (!started) { geometry.BeginFigure(point, false); started = true; }
                         else { geometry.LineTo(point); }
                     }
@@ -76,11 +76,11 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
             Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
             if (channel == 0)
             {
-                if (range.Minimum <= 0 && range.Maximum >= 1000)
+                if (range.Minimum <= -500 && range.Maximum >= 500)
                 {
                     double x = left + width * 200_000_000 / duration;
-                    context.DrawLine(new Pen(color, 1.2), new(x, plot.Bottom - range.Normalize(0) * plot.Height),
-                        new(x, plot.Bottom - range.Normalize(1000) * plot.Height));
+                    context.DrawLine(new Pen(color, 1.2), new(x, plot.Bottom - range.Normalize(-500) * plot.Height),
+                        new(x, plot.Bottom - range.Normalize(500) * plot.Height));
                     Label(context, "1 mV", 12, top + 66, color, 11);
                 }
                 else { Label(context, "1 mV 超量程", 12, top + 66, color, 11); }
@@ -99,7 +99,10 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
                     var pen = new Pen(color, 1.2);
                     Point ToDevice(Point p) => new(plot.X + p.X * plot.Width, plot.Y + p.Y * plot.Height);
                     for (int i = 1; i < contour.Length; i++)
-                    { context.DrawLine(pen, ToDevice(contour[i - 1]), ToDevice(contour[i])); }
+                    {
+                        if (contour[i].X < begin || contour[i - 1].X > end) { continue; }
+                        context.DrawLine(pen, ToDevice(contour[i - 1]), ToDevice(contour[i]));
+                    }
                     continue;
                 }
                 // Geometry is cached in normalized units. Scale with the window;

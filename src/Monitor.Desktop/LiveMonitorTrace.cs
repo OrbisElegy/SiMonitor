@@ -15,12 +15,14 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
     private ulong _revision = ulong.MaxValue;
     private long _cycle = -1;
     private StreamGeometry?[,] _paths = new StreamGeometry?[0, 0];
+    private Point[]?[,] _contours = new Point[]?[0, 0];
     internal LocalMonitorPreviewSession Session => session;
     private void Build()
     {
         if (_revision == session.DataRevision && _cycle == session.Ranges.Cycle) { return; }
         _revision = session.DataRevision; _cycle = session.Ranges.Cycle;
         _paths = new StreamGeometry?[session.Display.Slots.Count, 2];
+        _contours = new Point[]?[session.Display.Slots.Count, 2];
         for (int row = 0; row < session.Display.Slots.Count; row++)
             for (int age = 0; age < 2; age++)
             {
@@ -28,24 +30,26 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
                 long duration = session.Display.Slots[row].DurationNs;
                 if (cycle < 0 || (age == 1 && !session.Ranges.ShowPrevious(row))) { continue; }
                 long from = cycle * duration;
+                List<Point> stablePoints = [];
                 var path = new StreamGeometry();
                 using (var geometry = path.Open())
                 {
                     bool started = false;
                     int channel = session.Display.Slots[row].Channel;
                     var samples = session.Samples(channel, from, from + duration).ToArray();
-                    double tolerance = channel is 3 or 4 or 5 && samples.Length > 0
-                        ? Math.Min(.75, (samples.Max(s => s.Value) - samples.Min(s => s.Value)) * .015) : 0;
-                    foreach (var sample in PreviewContour.Simplify(samples, tolerance))
+                    var contour = channel is 3 or 4 or 5 ? PreviewContour.Stable(samples) : samples;
+                    foreach (var sample in contour)
                     {
                         Point point = new((sample.TimeNs - from) / (double)duration,
                             1 - (age == 0 ? session.Ranges.Range(row) : session.Ranges.PreviousRange(row)).Normalize(sample.Value));
+                        if (channel is 3 or 4 or 5) { stablePoints.Add(point); }
                         if (!started) { geometry.BeginFigure(point, false); started = true; }
                         else { geometry.LineTo(point); }
                     }
                     if (started) { geometry.EndFigure(false); }
                 }
-                _paths[row, age] = path;
+                if (stablePoints.Count > 0) { _contours[row, age] = stablePoints.ToArray(); }
+                else { _paths[row, age] = path; }
             }
     }
     public override void Render(DrawingContext context)
@@ -83,15 +87,25 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
             }
             for (int age = 1; age >= 0; age--)
             {
-                if (_paths[row, age] is not { } path) { continue; }
+                var path = _paths[row, age];
+                var contour = _contours[row, age];
+                if (path is null && contour is null) { continue; }
                 double begin = age == 0 ? 0 : Math.Min(1, phase + .012);
                 double end = age == 0 ? phase : 1;
                 if (end <= begin) { continue; }
                 using var clip = context.PushClip(new Rect(plot.X + begin * plot.Width, plot.Y, (end - begin) * plot.Width, plot.Height));
+                if (contour is not null)
+                {
+                    var pen = new Pen(color, 1.2);
+                    Point ToDevice(Point p) => new(plot.X + p.X * plot.Width, plot.Y + p.Y * plot.Height);
+                    for (int i = 1; i < contour.Length; i++)
+                    { context.DrawLine(pen, ToDevice(contour[i - 1]), ToDevice(contour[i])); }
+                    continue;
+                }
                 // Geometry is cached in normalized units. Scale with the window;
                 // draw a device-space stroke so resize does not thicken the trace.
                 var matrix = new Matrix(plot.Width, 0, 0, plot.Height, plot.X, plot.Y);
-                if (path.Transform is null || !path.Transform.Value.Equals(matrix)) { path.Transform = new MatrixTransform(matrix); }
+                if (path!.Transform is null || !path.Transform.Value.Equals(matrix)) { path.Transform = new MatrixTransform(matrix); }
                 context.DrawGeometry(null, new Pen(color, 1.2), path);
             }
 

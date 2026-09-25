@@ -44,7 +44,7 @@ internal sealed class DesignPreviewWindow : Window
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
         _monitor = new(_session);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(CreateStylePreview, (e, r, j) => EcgStyleLeadPreview.Create(CapturePaper(ResolveStyle(e, r, j).Ecg)), ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        Settings = new(CreateStylePreview, CreateRespirationPreview, (e, r, j) => EcgStyleLeadPreview.Create(CapturePaper(ResolveStyle(e, r, j).Ecg)), ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -189,12 +189,33 @@ internal sealed class DesignPreviewWindow : Window
         for (int i = 0; i < 108; i++) { preview.Advance(50_000_000); }
         return preview;
     }
+    internal static (long TimeNs, double Value)[] CreateRespirationPreview(int resp)
+    {
+        // One cached 11-breath overview includes crescendo, decrescendo and
+        // pauses; use the exact same respiratory configuration as Apply.
+        var source = PhysiologyDemoSource.Create(ResolveStyle(0, resp, 0).Physiology);
+        List<(long, double)> samples = [];
+        for (int step = 1; step <= 217; step++)
+            foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+            {
+                var block = WaveformEnvelopeCodec.Decode(wire);
+                var plane = block.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(1));
+                long interval = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                for (int i = 0; i < plane.Samples.Count; i++)
+                {
+                    long time = block.StartSimTimeNs + i * interval;
+                    if (time < DesignPreviewSettings.RespirationPreviewDurationNs)
+                    { samples.Add((time, (double)plane.Samples[i] * plane.ScaleNumerator / plane.ScaleDenominator + (double)plane.OffsetNumerator / plane.OffsetDenominator)); }
+                }
+            }
+        return samples.ToArray();
+    }
     private static WaveformEnvelope[] CapturePaper(ProjectedEcgDemoConfiguration configuration)
     {
         var source = ProjectedEcgDemoSource.Create(configuration); List<WaveformEnvelope> output = [];
-        for (int step = 1; step <= 51; step++)
+        for (int step = 1; step <= 56; step++)
         { foreach (var bytes in source.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { output.Add(WaveformEnvelopeCodec.Decode(bytes)); } }
-        return output.Take(50).ToArray();
+        return output.Take(55).ToArray();
     }
     private static TextBlock Text(string value, double size, bool strong = false) => new()
     { Text = value, FontSize = size, FontWeight = strong ? FontWeight.SemiBold : FontWeight.Normal, TextWrapping = TextWrapping.Wrap };

@@ -13,7 +13,7 @@ internal sealed class DesignPreviewTrace : Control
 {
     private readonly WaveformEnvelope[] _blocks;
     internal int BlockCount => _blocks.Length;
-    internal const double PaperWidth = 1064;
+    internal const double PaperWidth = 1184;
     internal const double PixelsPerSecond = 100;
     internal const double PixelsPerMillivolt = 40;
     internal DesignPreviewTrace(WaveformEnvelope[] blocks)
@@ -22,7 +22,7 @@ internal sealed class DesignPreviewTrace : Control
         Width = PaperWidth;
         Height = 596;
         Avalonia.Automation.AutomationProperties.SetName(this,
-            "十二导联十秒合成快照，三行四列加II导联节律条");
+            "十二导联合成快照，短导联2.5秒、长II10.9秒，三行四列加II导联节律条");
     }
     public override void Render(DrawingContext context)
     {
@@ -33,25 +33,25 @@ internal sealed class DesignPreviewTrace : Control
     }
     private void DrawPaper(DrawingContext context)
     {
-        for (int x = 32; x <= 1032; x += 4)
+        for (int x = 32; x <= 1152; x += 4)
         { context.DrawLine(new Pen(Brush.Parse((x - 32) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(x, 52), new(x, 580)); }
         for (int y = 52; y <= 580; y += 4)
-        { context.DrawLine(new Pen(Brush.Parse((y - 52) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(32, y), new(1032, y)); }
-        Label(context, "25 mm/s    ·    10 mm/mV    ·    10 s", 32, 18, Brushes.Black, 14);
+        { context.DrawLine(new Pen(Brush.Parse((y - 52) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(32, y), new(1152, y)); }
+        Label(context, "25 mm/s · 10 mm/mV · 短导联 2.5 s / 长Ⅱ 10.9 s", 32, 18, Brushes.Black, 10);
         for (int column = 0; column < 4; column++)
             for (int row = 0; row < 3; row++)
             {
                 int lead = column * 3 + row;
-                double x = 32 + column * 250;
+                double x = 32 + column * 280;
                 double baseline = 136 + row * 120;
                 Label(context, ProjectedEcgDemoSource.LeadNames[lead], x + 4, baseline - 67, Brushes.Black, 15);
-                Calibration(context, x + 20, baseline);
+                Calibration(context, x + 26, baseline);
                 DrawSamples(context, ProjectedEcgDemoSource.ChannelId((EcgLead)lead), column * 2_500_000_000L,
-                    (column + 1) * 2_500_000_000L, x, baseline, PixelsPerSecond, .04, Brushes.Black);
+                    (column + 1) * 2_500_000_000L, x + 30, baseline, PixelsPerSecond, .04, Brushes.Black);
             }
         Label(context, "II", 36, 465, Brushes.Black, 15);
-        Calibration(context, 52, 536);
-        DrawSamples(context, ProjectedEcgDemoSource.ChannelId(EcgLead.II), 0, 10_000_000_000L, 32, 536, PixelsPerSecond, .04, Brushes.Black);
+        Calibration(context, 58, 536);
+        DrawSamples(context, ProjectedEcgDemoSource.ChannelId(EcgLead.II), 0, 10_900_000_000L, 62, 536, PixelsPerSecond, .04, Brushes.Black);
     }
     private static void Calibration(DrawingContext context, double x, double y)
     {

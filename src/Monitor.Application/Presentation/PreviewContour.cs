@@ -6,6 +6,56 @@ namespace Monitor.Application.Presentation;
 // local extrema, endpoints and the raw acquisition remain unchanged.
 public static class PreviewContour
 {
+    // Causal display-only regression: every point depends solely on a bounded
+    // preceding 250ms window. Appending data can never refit a displayed point.
+    // Keep steep edges and reversals raw; cap error at 0.75 physical units and
+    // the observed local range. No source samples or event times are modified.
+    public static IReadOnlyList<(long TimeNs, double Value)> Stable(
+        IReadOnlyList<(long TimeNs, double Value)> samples)
+    {
+        ArgumentNullException.ThrowIfNull(samples);
+        if (samples.Count > 10_000) { throw new ArgumentException("PreviewContour.InvalidInput"); }
+        List<(long TimeNs, double Value)> result = [];
+        int start = 0, direction = 0, preserveThrough = -1;
+        for (int i = 0; i < samples.Count; i++)
+        {
+            var current = samples[i];
+            if (current.TimeNs < 0 || !double.IsFinite(current.Value) || (i > 0 && current.TimeNs <= samples[i - 1].TimeNs))
+            { throw new ArgumentException("PreviewContour.InvalidSamples"); }
+            while (samples[start].TimeNs < current.TimeNs - 250_000_000) { start++; }
+            if (i > 0)
+            {
+                double change = current.Value - samples[i - 1].Value;
+                int next = Math.Sign(change);
+                if (Math.Abs(change) > 1.5 || (next != 0 && direction != 0 && next != direction)) { preserveThrough = i + 3; }
+                if (next != 0) { direction = next; }
+            }
+            double value = current.Value;
+            if (i - start >= 3 && i > preserveThrough)
+            {
+                double sx = 0, sy = 0, sxx = 0, sxy = 0;
+                double minimum = value, maximum = value;
+                int count = i - start + 1;
+                for (int j = start; j <= i; j++)
+                {
+                    double x = (samples[j].TimeNs - current.TimeNs) / 1e9, y = samples[j].Value;
+                    sx += x; sy += y; sxx += x * x; sxy += x * y;
+                    minimum = Math.Min(minimum, y); maximum = Math.Max(maximum, y);
+                }
+                double denominator = count * sxx - sx * sx;
+                if (denominator > 0)
+                {
+                    double slope = (count * sxy - sx * sy) / denominator;
+                    double fitted = (sy - slope * sx) / count;
+                    if (double.IsFinite(fitted))
+                    { value = Math.Clamp(fitted, Math.Max(minimum, value - .75), Math.Min(maximum, value + .75)); }
+                }
+            }
+            result.Add((current.TimeNs, value));
+        }
+        return result;
+    }
+
     public static IReadOnlyList<(long TimeNs, double Value)> Simplify(
         IReadOnlyList<(long TimeNs, double Value)> samples, double tolerance)
     {

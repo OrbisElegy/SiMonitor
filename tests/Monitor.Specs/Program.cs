@@ -51,6 +51,7 @@ internal static class Program
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
             .. EcgHeartRateMeasurementSpecifications.All,
+            .. PlethMeasurementSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

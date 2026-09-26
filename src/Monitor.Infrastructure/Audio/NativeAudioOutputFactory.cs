@@ -6,6 +6,9 @@ namespace Monitor.Infrastructure.Audio;
 public readonly record struct NativeAudioStatus(uint SampleRate, uint Channels, uint PeriodFrames,
     uint BufferFrames, uint RetiredReason, uint MissingFrames, bool LowLatencyQualified);
 
+public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint DefaultFrames, uint FundamentalFrames,
+    uint MinimumFrames, uint MaximumFrames, uint CurrentFrames, uint EngineSampleRate, uint HResult, uint EngineChannels);
+
 // Explicit absolute library path; no DLL search-path fallback. All methods and
 // Dispose belong to the serialized scheduler/control owner, never a callback.
 public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
@@ -52,6 +55,12 @@ public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
     public NativeAudioStatus? Status => _device is { } d ? new(
         _info(d.Handle, 1), _info(d.Handle, 2), _info(d.Handle, 4), _info(d.Handle, 5),
         _info(d.Handle, 6), _info(d.Handle, 7), _info(d.Handle, 9) != 0) : null;
+
+    // Optional keys return zero on older ABI1 libraries; zero is unavailable,
+    // never evidence of a zero-millisecond device period.
+    public NativeAudioPeriodSnapshot? PeriodSnapshot => _device is { } d ? new(
+        _info(d.Handle, 10), _info(d.Handle, 11), _info(d.Handle, 12), _info(d.Handle, 13),
+        _info(d.Handle, 14), _info(d.Handle, 15), _info(d.Handle, 16), _info(d.Handle, 17), _info(d.Handle, 18)) : null;
 
     // Bounded work: at most one queue capacity each invocation. The native
     // queue is the only latency target; managed PCM is drained immediately.

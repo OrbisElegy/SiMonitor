@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Specs;
@@ -10,13 +12,16 @@ internal static class NativeAudioCommand
     public static int Execute(string[] args, TextWriter output, TextWriter error, CancellationToken cancellation)
     {
         bool check = args.Length > 0 && args[0] == "--audio-native-check";
-        if (args.Length is < 2 or > 3 || !Path.IsPathFullyQualified(args[1]) || (check && args.Length != 2))
-        { error.WriteLine("Usage: --audio-native-audition ABSOLUTE_LIBRARY [DEVICE_ID] | --audio-native-check ABSOLUTE_TEST_LIBRARY"); return 2; }
+        if (args.Length is < 2 or > 3 || args[0] is not ("--audio-native-audition" or "--audio-native-diagnostics" or "--audio-native-check") ||
+            !Path.IsPathFullyQualified(args[1]) || (check && args.Length != 2))
+        { error.WriteLine("Usage: --audio-native-audition|--audio-native-diagnostics ABSOLUTE_LIBRARY [DEVICE_ID] | --audio-native-check ABSOLUTE_TEST_LIBRARY"); return 2; }
         try
         {
             cancellation.ThrowIfCancellationRequested();
             if (check) { VerifyBinding(args[1]); output.WriteLine("PASS managed/native PCM, single queue, retirement and unload ownership"); return 0; }
             var factory = new NativeAudioOutputFactory(args[1]);
+            if (args[0] == "--audio-native-diagnostics")
+            { return Diagnose(args, factory, output, error); }
             var lifecycle = new AudioOutputLifecycle(factory);
             int result = 1;
             try { result = Audition(args, output, error, factory, lifecycle, cancellation); }
@@ -29,8 +34,43 @@ internal static class NativeAudioCommand
             return result;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { return 130; }
-        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException)
         { error.WriteLine($"Native audio failed: {exception.Message}"); return 1; }
+    }
+
+    private static int Diagnose(string[] args, NativeAudioOutputFactory factory, TextWriter output, TextWriter error)
+    {
+        IAudioOutputDevice? device = null;
+        int result = 1;
+        try
+        {
+            device = factory.Open(args.Length == 3 ? args[2] : null, new AudioRenderSession(), 1);
+            if (device is null) { error.WriteLine("Audio diagnostics: device open failed."); }
+            else
+            {
+                // Deliberately never Start/Pump: capture open-time diagnostics
+                // without playing or producing PCM. I/O is outside callbacks.
+                output.WriteLine(JsonSerializer.Serialize(new
+                {
+                    Schema = "Monitor.AudioOpenDiagnostics@1",
+                    CapturedUtc = DateTimeOffset.UtcNow,
+                    LibrarySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[1]))),
+                    RequestedDevice = args.Length == 3 ? args[2] : "system-default",
+                    PlaybackStarted = false,
+                    EngineQueueMilliseconds = 40,
+                    Native = factory.Status,
+                    PeriodSnapshot = factory.PeriodSnapshot,
+                    PhysicalLatencyAssessment = "NotAssessed",
+                }));
+                result = 0;
+            }
+        }
+        finally
+        {
+            if (device is null || device.StopAndClose()) { factory.Dispose(); }
+            else { error.WriteLine("Diagnostics close failed; native handle retained until process exit."); result = 1; }
+        }
+        return result;
     }
 
     private static int Audition(string[] args, TextWriter output, TextWriter error,
@@ -65,6 +105,16 @@ internal static class NativeAudioCommand
         try { using var forbidden = new NativeAudioOutputFactory(path); }
         catch (InvalidOperationException) { rejected = true; }
         Check.That(rejected, "production loading rejects the null test library");
+        using var diagnostics = new StringWriter(); using var diagnosticsError = new StringWriter();
+        Check.That(Diagnose(["--audio-native-diagnostics", path], new NativeAudioOutputFactory(path, allowTestBackend: true),
+            diagnostics, diagnosticsError) == 0, "quiet diagnostics open and close test device");
+        using (var report = JsonDocument.Parse(diagnostics.ToString()))
+        {
+            Check.That(!report.RootElement.GetProperty("PlaybackStarted").GetBoolean() &&
+                report.RootElement.GetProperty("PeriodSnapshot").GetProperty("QueryStatus").GetUInt32() == 0 &&
+                report.RootElement.GetProperty("PhysicalLatencyAssessment").GetString() == "NotAssessed",
+                "unavailable test periods cannot imply zero latency or hardware qualification");
+        }
         nint library = NativeLibrary.Load(path);
         try
         {

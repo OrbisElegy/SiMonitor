@@ -27,6 +27,7 @@ lib.sa_test_render.argtypes = [c.c_void_p, c.POINTER(c.c_float), c.c_uint32]
 assert lib.sa_open(None, 40, c.byref(h)) == 0
 try:
     assert lib.sa_info(h, 8) == 1920 and lib.sa_info(h, 9) == 0
+    assert all(lib.sa_info(h, key) == 0 for key in range(10, 19))
     source = (c.c_float * 1500)(*[(i % 99 - 49) / 50 for i in range(1500)])
     assert lib.sa_submit(h, source, 1500) == 0
     assert lib.sa_submit(h, source, 1500) == -3

@@ -12,9 +12,9 @@ internal static class NativeAudioCommand
     public static int Execute(string[] args, TextWriter output, TextWriter error, CancellationToken cancellation)
     {
         bool check = args.Length > 0 && args[0] == "--audio-native-check";
-        if (args.Length is < 2 or > 3 || args[0] is not ("--audio-native-audition" or "--audio-native-diagnostics" or "--audio-native-check") ||
+        if (args.Length is < 2 or > 3 || args[0] is not ("--audio-native-audition" or "--audio-native-diagnostics" or "--audio-native-clock-probe" or "--audio-native-check") ||
             !Path.IsPathFullyQualified(args[1]) || (check && args.Length != 2))
-        { error.WriteLine("Usage: --audio-native-audition|--audio-native-diagnostics ABSOLUTE_LIBRARY [DEVICE_ID] | --audio-native-check ABSOLUTE_TEST_LIBRARY"); return 2; }
+        { error.WriteLine("Usage: --audio-native-audition|--audio-native-diagnostics|--audio-native-clock-probe ABSOLUTE_LIBRARY [DEVICE_ID] | --audio-native-check ABSOLUTE_TEST_LIBRARY"); return 2; }
         try
         {
             cancellation.ThrowIfCancellationRequested();
@@ -24,7 +24,12 @@ internal static class NativeAudioCommand
             { return Diagnose(args, factory, output, error); }
             var lifecycle = new AudioOutputLifecycle(factory);
             int result = 1;
-            try { result = Audition(args, output, error, factory, lifecycle, cancellation); }
+            try
+            {
+                result = args[0] == "--audio-native-clock-probe"
+                    ? ClockProbe(args, output, error, factory, lifecycle, cancellation)
+                    : Audition(args, output, error, factory, lifecycle, cancellation);
+            }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { result = 130; }
             finally
             {
@@ -36,6 +41,51 @@ internal static class NativeAudioCommand
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { return 130; }
         catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException)
         { error.WriteLine($"Native audio failed: {exception.Message}"); return 1; }
+    }
+
+    private readonly record struct ClockObservation(long RawStopwatchBefore, long RawStopwatchAfter,
+        long RenderedThroughFrame, NativeAudioClockSample Clock);
+
+    private static int ClockProbe(string[] args, TextWriter output, TextWriter error,
+        NativeAudioOutputFactory factory, AudioOutputLifecycle lifecycle, CancellationToken cancellation)
+    {
+        var samples = new ClockObservation[20];
+        if (!lifecycle.Replace(args.Length == 3 ? args[2] : null, 0))
+        { error.WriteLine($"Clock probe unavailable: {lifecycle.Failure}"); return 1; }
+        long start = Stopwatch.GetTimestamp();
+        for (int i = 0; i < samples.Length; i++)
+        {
+            do
+            {
+                cancellation.ThrowIfCancellationRequested();
+                if (!factory.Pump() || !lifecycle.CheckHealth())
+                { error.WriteLine($"Clock probe stopped: {factory.Status}"); return 1; }
+                if (Stopwatch.GetElapsedTime(start).TotalMilliseconds >= i * 50) { break; }
+                Thread.Sleep(1);
+            } while (true);
+            long before = Stopwatch.GetTimestamp();
+            var clock = factory.ReadClock();
+            long after = Stopwatch.GetTimestamp();
+            samples[i] = new(before, after, lifecycle.Session!.RenderedThroughFrame, clock);
+        }
+        var native = factory.Status; var periods = factory.PeriodSnapshot;
+        if (!lifecycle.Stop()) { error.WriteLine("Clock probe stop failed."); return 1; }
+        // Serialize only after stop so console/file I/O cannot starve playback.
+        output.WriteLine(JsonSerializer.Serialize(new
+        {
+            Schema = "Monitor.AudioClockProbe@1",
+            LibrarySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[1]))),
+            PlaybackStarted = true,
+            GeneratedTone = false,
+            EngineQueueMilliseconds = 40,
+            RawStopwatchFrequency = Stopwatch.Frequency,
+            DeviceQpcUnitsPerSecond = 10_000_000,
+            Native = native,
+            PeriodSnapshot = periods,
+            Samples = samples,
+            PhysicalLatencyAssessment = "NotAssessed",
+        }));
+        return 0;
     }
 
     private static int Diagnose(string[] args, NativeAudioOutputFactory factory, TextWriter output, TextWriter error)
@@ -128,6 +178,8 @@ internal static class NativeAudioCommand
             var device = factory.Open(null, session, 1)!;
             try
             {
+                Check.That(factory.ReadClock() is { Result: -2, DevicePosition: 0, DeviceFrequency: 0 } &&
+                    factory.ReadClock().Nominal48kElapsedFrames is null, "null backend does not invent hardware clock readings");
                 Check.That(factory.Pump() && session.RenderedThroughFrame == 1920 && session.BufferedFrames == 0,
                     "single40ms native queue; managed staging is drained");
                 Check.That(factory.Pump() && session.RenderedThroughFrame == 1920, "native full leaves tone phase untouched");

@@ -29,6 +29,12 @@ SA_API int32_t sa_close(sa_output* out);
    15 current engine period,16 engine rate,17 HRESULT bits,18 engine channels.
    11-18 are an open-time snapshot, NOT live values or physical latency. */
 SA_API uint32_t sa_info(sa_output* out, uint32_t key);
+/* Optional ABI1 extension. Owner thread only, never device callback.
+   Returns0 accurate,1 reduced accuracy(S_FALSE),-2 unavailable,-4 retired.
+   Device position units MUST be divided by frequency; QPC is already100ns,
+   not raw QueryPerformanceCounter ticks. Outputs zeroed on failure. */
+SA_API int32_t sa_clock_sample(sa_output* out, uint64_t* position,
+    uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult);
 #ifdef SIM_AUDIO_TEST
 /* Test-only build: no hardware. Runs the SAME PCM consumer as the callback. */
 SA_API void sa_test_render(sa_output* out, float* pcm, uint32_t frames);

@@ -15,6 +15,12 @@
 #define MA_NO_GENERATION
 #include "vendor/miniaudio.h"
 #include <math.h>
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+#include <audioclient.h>
+/* Local IID avoids an extra import-library dependency. */
+static const GUID sa_iid_audio_clock = {0xcd63314f, 0x3fba, 0x4a1b,
+    {0x81, 0x2c, 0xef, 0x96, 0x35, 0x87, 0x28, 0xe7}};
+#endif
 
 struct sa_output {
     ma_context context;
@@ -26,6 +32,10 @@ struct sa_output {
     ma_uint32 period_status, period_hr;
     ma_uint32 default_period, fundamental_period, minimum_period, maximum_period;
     ma_uint32 current_period, engine_rate, engine_channels;
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+    IAudioClock* clock;
+    HRESULT clock_hr;
+#endif
 };
 
 static void snapshot_periods(sa_output* s)
@@ -145,6 +155,11 @@ int32_t sa_open(const char* id, uint32_t capacity_ms, sa_output** out)
         ma_pcm_rb_uninit(&s->ring); ma_context_uninit(&s->context); free(s); return -2;
     }
     snapshot_periods(s);
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+    /* Own a reference for this stream generation, not a reroutable raw client. */
+    s->clock_hr = ma_IAudioClient_GetService((ma_IAudioClient*)s->device.wasapi.pAudioClientPlayback,
+        &sa_iid_audio_clock, (void**)&s->clock);
+#endif
     *out = s;
     return 0;
 }
@@ -177,6 +192,9 @@ int32_t sa_close(sa_output* s)
     ma_atomic_store_32(&s->retired, 2);
     if (ma_device_is_started(&s->device) && ma_device_stop(&s->device) != MA_SUCCESS) return -2;
     ma_device_uninit(&s->device); /* Stops/joins device worker before freeing PCM. */
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+    if (s->clock) s->clock->lpVtbl->Release(s->clock);
+#endif
     ma_pcm_rb_uninit(&s->ring);
     ma_context_uninit(&s->context);
     free(s);
@@ -215,6 +233,33 @@ uint32_t sa_info(sa_output* s, uint32_t key)
         case 18: return s->engine_channels;
         default: return 0;
     }
+}
+int32_t sa_clock_sample(sa_output* s, uint64_t* position,
+    uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult)
+{
+    if (!position || !frequency || !qpc_100ns || !hresult) return -1;
+    *position = 0; *frequency = 0; *qpc_100ns = 0; *hresult = 0;
+    if (!s) return -1;
+    if (ma_atomic_load_32(&s->retired)) return -4;
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+    {
+        IAudioClock* clock = s->clock;
+        UINT64 p = 0, f = 0, q = 0;
+        HRESULT hr = s->clock_hr;
+        if (SUCCEEDED(hr) && clock != NULL) {
+            hr = clock->lpVtbl->GetFrequency(clock, &f);
+            if (hr == S_OK) hr = clock->lpVtbl->GetPosition(clock, &p, &q);
+            if (SUCCEEDED(hr) && f != 0) {
+                *position = p; *frequency = f; *qpc_100ns = q;
+                *hresult = (uint32_t)hr;
+                return hr == S_OK ? 0 : 1;
+            }
+        }
+        if (SUCCEEDED(hr)) hr = E_UNEXPECTED;
+        *hresult = (uint32_t)hr;
+    }
+#endif
+    return -2;
 }
 #ifdef SIM_AUDIO_TEST
 void sa_test_render(sa_output* s, float* pcm, uint32_t frames) { consume(s, pcm, frames); }

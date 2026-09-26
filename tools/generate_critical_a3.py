@@ -9,7 +9,7 @@ from pathlib import Path
 from generate_alarm_auditions import ROOT, pulse, write_wave
 
 
-def generate(destination):
+def critical_track():
     config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text())
     candidate = next(c for c in config['candidates'] if c['id'] == 'A')
     rate = config['sample_rate_hz']
@@ -38,6 +38,12 @@ def generate(destination):
     assert max(abs(v) for v in samples) < config['peak_limit']
     # Underlying voices add linearly, retaining the previous tail at each onset.
     assert abs(samples[prelude + period + attack] - voice[period + attack] - voice[attack]) < 1e-12
+    return config, candidate, rate, samples
+
+
+def generate(destination):
+    config, candidate, rate, samples = critical_track()
+    period, prelude, count = round(1.5 * rate), round(.3 * rate), 6
     destination.mkdir(parents=True, exist_ok=True)
     main = destination / 'A3-Critical-natural-tail.wav'
     # Six attacks now form ONE connected audible region because tails overlap.

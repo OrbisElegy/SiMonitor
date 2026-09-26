@@ -24,8 +24,10 @@ internal sealed class DesignPreviewSettings : UserControl
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal TabControl Tabs { get; } = new();
     internal SoundSettingsPanel Sound { get; } = new();
+    internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
@@ -82,7 +84,7 @@ internal sealed class DesignPreviewSettings : UserControl
             new TabItem { Header = "波形生成", Content = Scroll(_generation) },
             new TabItem { Header = "显示", Content = Scroll(display) },
             new TabItem { Header = "声音", Content = Scroll(Sound) },
-            new TabItem { Header = "报警", Content = Scroll(Note("报警尚未启用", "报警阈值、确认与限时声音暂停将在此接入。未启用不表示不存在报警条件。")) },
+            new TabItem { Header = "报警", Content = Scroll(Alerts) },
             new TabItem { Header = "生命体征", Content = Scroll(VitalSigns()) },
             new TabItem { Header = "高级参数", Content = Scroll(_advancedParameters) },
         };
@@ -205,8 +207,10 @@ internal sealed class DesignPreviewSettings : UserControl
         panel.Children.Add(Text("指脉氧"));
         panel.Children.Add(OpticalEnabled);
         panel.Children.Add(Text("SpO₂ 教学目标（75–99%）")); panel.Children.Add(OpticalTarget);
+        panel.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); panel.Children.Add(OpticalModulation);
+        AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至99");
-        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalEnabled.IsChecked == true;
+        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalEnabled.IsChecked == true;
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
         foreach (string name in new[] { "心率（bpm）", "无创血压（mmHg）", "呼吸频率（次/分）", "体温（°C）", "EtCO₂（mmHg）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })

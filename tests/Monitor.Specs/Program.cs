@@ -56,6 +56,7 @@ internal static class Program
             .. ImpedanceRespirationMeasurementSpecifications.All,
             .. LiveWaveformMeasurementSpecifications.All,
             .. MeanPressureMeasurementSpecifications.All,
+            .. MonitorAlertSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

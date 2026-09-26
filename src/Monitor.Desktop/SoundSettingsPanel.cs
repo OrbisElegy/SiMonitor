@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Desktop;
@@ -13,6 +14,11 @@ internal sealed class SoundSettingsPanel : StackPanel
     private readonly Func<int, CancellationToken, Task<SoundPreviewResult>> _play;
     private CancellationTokenSource? _cancellation;
     private bool _closed;
+    private readonly MonitorAlarmPlayback _alarms = new(() => new NativeAudioOutputFactory(Path.Combine(AppContext.BaseDirectory, "sim_audio_native.dll")));
+    private CancellationTokenSource? _alarmCancellation;
+    private MonitorNoticeLevel? _alarmLevel;
+    private MonitorSoundTiming _timing = new();
+    internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Button Audition { get; } = Button("试听三声");
     internal Button Stop { get; } = Button("停止试听");
@@ -24,17 +30,23 @@ internal sealed class SoundSettingsPanel : StackPanel
         _play = play ?? playback.PlayAsync;
         Margin = new Thickness(20); Spacing = 16;
         Children.Add(Text("声音输出"));
-        Children.Add(Text("输出至系统默认音频设备。点击试听检查音量；不会随页面切换或波形重启自动发声。"));
-        var volumeLabel = Text("试听音量：50%"); Children.Add(volumeLabel); Children.Add(Volume);
-        AutomationProperties.SetName(Volume, "试听音量，百分比");
+        Children.Add(Text("输出至系统默认音频设备。点击试听检查音量；监护提示声音须另行启用。"));
+        var volumeLabel = Text("声音音量：50%"); Children.Add(volumeLabel); Children.Add(Volume);
+        AutomationProperties.SetName(Volume, "声音音量，百分比");
         Volume.PropertyChanged += (_, args) =>
         {
-            if (args.Property == Slider.ValueProperty) { volumeLabel.Text = $"试听音量：{Volume.Value:0}%"; }
+            if (args.Property == Slider.ValueProperty) { volumeLabel.Text = $"声音音量：{Volume.Value:0}%"; }
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         buttons.Children.Add(Audition); buttons.Children.Add(Stop); Children.Add(buttons);
         Stop.IsEnabled = false; Children.Add(Status);
-        Children.Add(Text("心搏提示音与报警声音尚未启用。试听为固定三声，与患者心率、脉率和报警状态无关。"));
+        Children.Add(AlarmEnabled);
+        Children.Add(Text("启用后按最高活动级别发声，节奏与间隔见报警页。暂停模拟时静音；心搏提示音尚未接入。试听三声仅用于检查输出。"));
+        AlarmEnabled.IsCheckedChanged += async (_, _) =>
+        {
+            if (AlarmEnabled.IsChecked == true) { await RunAlarmsAsync(); }
+            else { _alarmCancellation?.Cancel(); }
+        };
         Audition.Click += async (_, _) => await PreviewAsync();
         Stop.Click += (_, _) => StopPreview();
     }
@@ -43,13 +55,14 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         if (_closed || _cancellation is not null || !Audition.IsEnabled) { return; }
         using var cancellation = new CancellationTokenSource(); _cancellation = cancellation;
-        Audition.IsEnabled = false; Volume.IsEnabled = false; Stop.IsEnabled = true;
+        Audition.IsEnabled = false; Volume.IsEnabled = false; AlarmEnabled.IsEnabled = false; Stop.IsEnabled = true;
         Status.Text = "正在试听…";
         var result = await _play((int)Volume.Value, cancellation.Token);
         _cancellation = null;
         if (_closed) { return; }
         Volume.IsEnabled = true; Stop.IsEnabled = false;
         Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
+        AlarmEnabled.IsEnabled = result != SoundPreviewResult.StopFailed;
         Status.Text = result switch
         {
             SoundPreviewResult.Completed => "试听已结束",
@@ -65,7 +78,29 @@ internal sealed class SoundSettingsPanel : StackPanel
         _cancellation?.Cancel(); Stop.IsEnabled = false;
         if (_cancellation is not null) { Status.Text = "正在停止…"; }
     }
-    internal void Close() { _closed = true; StopPreview(); }
+    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing)
+    {
+        _alarmLevel = level; _timing = timing;
+        _alarms.SetRequest(level is { } active ? new(active, (int)Volume.Value, timing) : null);
+    }
+    private async Task RunAlarmsAsync()
+    {
+        if (_closed || _alarmCancellation is not null || _cancellation is not null) { return; }
+        using var cancellation = new CancellationTokenSource(); _alarmCancellation = cancellation;
+        Audition.IsEnabled = false; UpdateAlarm(_alarmLevel, _timing); Status.Text = "监护提示声音已启用";
+        var result = await _alarms.RunAsync(cancellation.Token);
+        _alarmCancellation = null;
+        if (_closed) { return; }
+        AlarmEnabled.IsChecked = false;
+        AlarmEnabled.IsEnabled = Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
+        Status.Text = result switch
+        {
+            SoundPreviewResult.Stopped => "监护提示声音已关闭",
+            SoundPreviewResult.StopFailed => "音频设备未能释放，请关闭并重新启动客户端。",
+            _ => "监护声音输出不可用或中断，请检查设备后重新启用。"
+        };
+    }
+    internal void Close() { _closed = true; StopPreview(); _alarmCancellation?.Cancel(); }
     private static Button Button(string content) => new()
     {
         Content = content,

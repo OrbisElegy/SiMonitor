@@ -27,7 +27,7 @@ public sealed class LocalMonitorPreviewSession
     public MonitorDisplayConfiguration Display { get; }
     public MonitorSweepRanges Ranges { get; }
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
-        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null)
+        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000)
     {
         ArgumentNullException.ThrowIfNull(display);
         _source = PhysiologyIllustrationSource.Create(configuration);
@@ -37,7 +37,7 @@ public sealed class LocalMonitorPreviewSession
         if (opticalSaturationMilliPercent is { } target)
         {
             _opticalSource = new(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
-                Guid.NewGuid(), target);
+                Guid.NewGuid(), target, opticalModulationPermille);
         }
         Display = display; Ranges = new(display);
     }

@@ -9,6 +9,7 @@ internal static class SoundPreviewSpecifications
     [
         new(nameof(SoundPreviewOwnsOutputOffCallerAndScalesVolume), SoundPreviewOwnsOutputOffCallerAndScalesVolume),
         new(nameof(SoundPreviewCancellationAndFailedJoinPreventReplay), SoundPreviewCancellationAndFailedJoinPreventReplay),
+        new(nameof(MonitorAlarmOutputRetainsFailedJoin), MonitorAlarmOutputRetainsFailedJoin),
     ];
 
     private static void SoundPreviewOwnsOutputOffCallerAndScalesVolume()
@@ -58,6 +59,25 @@ internal static class SoundPreviewSpecifications
             "successful close retry releases retained device without stale tones");
     }
 
+    private static void MonitorAlarmOutputRetainsFailedJoin()
+    {
+        using var cancel = new CancellationTokenSource();
+        var output = new Output(cancel); int opens = 0;
+        var player = new MonitorAlarmPlayback(() => { opens++; return output; });
+        player.SetRequest(new(Monitor.Application.Presentation.MonitorNoticeLevel.Critical, 50, new()));
+        Check.That(player.RunAsync(cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Peak > 0 && output.Disposed,
+            "live alarm worker emits PCM and joins before disposal");
+        using var failureCancel = new CancellationTokenSource();
+        output = new Output(failureCancel) { CanClose = false, FailPump = true };
+        player = new(() => { opens++; return output; });
+        Check.That(player.RunAsync(failureCancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.StopFailed && !output.Disposed,
+            "pump failure plus failed join retains native owner");
+        Check.That(player.RunAsync(failureCancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.StopFailed && opens == 2,
+            "failed join prevents replacement stream");
+        output.CanClose = true; failureCancel.Cancel();
+        Check.That(player.RunAsync(failureCancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Disposed,
+            "retry releases retained stream without new sound");
+    }
     private sealed class Output(CancellationTokenSource cancel) : IPumpedAudioOutput, IAudioOutputDevice
     {
         private AudioRenderSession? _session;
@@ -67,6 +87,7 @@ internal static class SoundPreviewSpecifications
         public bool Closed { get; private set; }
         public bool Disposed { get; private set; }
         public bool CanClose { get; set; } = true;
+        public bool FailPump { get; set; }
         public float Peak { get; private set; }
         public IAudioOutputDevice Open(string? deviceId, AudioRenderSession session, long generation)
         { Touch(); _session = session; return this; }
@@ -78,7 +99,7 @@ internal static class SoundPreviewSpecifications
             _session.Read(_pcm);
             foreach (float sample in _pcm) { Peak = Math.Max(Peak, Math.Abs(sample)); }
             if (++_pumps == 12) { cancel.Cancel(); }
-            return true;
+            return !FailPump;
         }
         public bool StopAndClose() { Touch(); Closed = CanClose; return CanClose; }
         public void Dispose() { Touch(); Check.That(Closed, "join before dispose"); Disposed = true; }

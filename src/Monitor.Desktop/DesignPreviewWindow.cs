@@ -46,9 +46,10 @@ internal sealed class DesignPreviewWindow : Window
         _monitor = new(_session);
         MonitorView = new(_monitor);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(CreateStylePreview, CreateRespirationPreview, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         MonitorView.AdditionalNotices = Settings.Alerts.Notices;
+        MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
@@ -127,6 +128,7 @@ internal sealed class DesignPreviewWindow : Window
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             MonitorView = new(_monitor);
             MonitorView.AdditionalNotices = Settings.Alerts.Notices;
+            MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -190,7 +192,7 @@ internal sealed class DesignPreviewWindow : Window
         if (ejection == 3) { config = config with { VentricularMechanicalEnabled = false }; }
         return (config, ecgConfig);
     }
-    private static LocalMonitorPreviewSession CreateStylePreview(int ecg, int resp, int ejection) =>
+    internal static LocalMonitorPreviewSession CreateStylePreview(int ecg, int resp, int ejection) =>
         CreateThumbnailSource(ResolveStyle(ecg, resp, ejection).Physiology);
     private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration)
     {

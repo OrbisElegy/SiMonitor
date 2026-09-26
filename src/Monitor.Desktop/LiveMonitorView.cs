@@ -20,8 +20,12 @@ internal sealed class LiveMonitorView : UserControl
     private readonly List<(TextBlock Pi, PulseIndicator Bar)> _opticalRows = [];
     private readonly MonitorNoticeRotation _rotation = new();
     private MonitorNotice[] _notices = [];
+    private MonitorNotice[]? _highlightNotices;
+    private bool? _highlightOn, _highlightNoticeColor;
     private double _pulseMinimum, _pulseMaximum;
     internal Func<LiveMeasurementSnapshot, IEnumerable<MonitorNotice>>? AdditionalNotices { get; set; }
+    internal Func<bool>? NoticeColorEnabled { get; set; }
+    internal IReadOnlyList<TextBlock> NumericBlocks => _rows.SelectMany(r => new[] { r.Primary, r.Secondary }).ToArray();
     internal MonitorNoticeLevel? HighestNotice => _rotation.Highest;
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
@@ -155,13 +159,50 @@ internal sealed class LiveMonitorView : UserControl
         Notice.Text = notice is null ? "" : $"{notice.Level} · {notice.Text}";
         _noticeBackground.Background = notice?.Level switch
         {
-            MonitorNoticeLevel.Notice => Brush.Parse("#145AA3"),
+            MonitorNoticeLevel.Notice when NoticeColorEnabled?.Invoke() != false => Brush.Parse("#145AA3"),
             MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
             MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
             _ => Brushes.Transparent
         };
         Notice.Foreground = notice?.Level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;
         ToolTip.SetTip(Notice, Notice.Text); AutomationProperties.SetName(Notice, Notice.Text);
+        RefreshNumericHighlights(_trace.Session.SimulationTimeNs);
+    }
+    internal void RefreshNumericHighlights(long timeNs)
+    {
+        // 1Hz cycle, half a second on/off; simulation clock freezes on pause.
+        bool on = timeNs % 1_000_000_000 < 500_000_000;
+        bool noticeColor = NoticeColorEnabled?.Invoke() != false;
+        if (ReferenceEquals(_highlightNotices, _notices) && _highlightOn == on && _highlightNoticeColor == noticeColor) { return; }
+        _highlightNotices = _notices; _highlightOn = on; _highlightNoticeColor = noticeColor;
+        void Paint(TextBlock text, MonitorNumeric? numeric, IBrush normal)
+        {
+            var level = _notices.Where(n => n.Numeric == numeric && numeric is not null && n.Level != MonitorNoticeLevel.Info)
+                .Select(n => (MonitorNoticeLevel?)n.Level).Max();
+            bool highlight = on && level is not null && (level != MonitorNoticeLevel.Notice || noticeColor);
+            text.Background = !highlight ? Brushes.Transparent : level switch
+            {
+                MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
+                MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
+                _ => Brush.Parse("#145AA3")
+            };
+            text.Foreground = !highlight ? normal : level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;
+        }
+        foreach (var (channel, primary, secondary) in _rows)
+        {
+            var normal = Brush.Parse(LiveMonitorTrace.Colors[channel]);
+            Paint(primary, channel switch
+            {
+                0 => MonitorNumeric.HeartRate,
+                1 => MonitorNumeric.RespirationRate,
+                2 => MonitorNumeric.SpO2,
+                3 => MonitorNumeric.AbpMean,
+                4 => MonitorNumeric.EtCo2,
+                5 => MonitorNumeric.PaMean,
+                _ => MonitorNumeric.CvpMean
+            }, normal);
+            Paint(secondary, channel switch { 2 => MonitorNumeric.PulseRate, 4 => MonitorNumeric.Co2RespirationRate, _ => (MonitorNumeric?)null }, normal);
+        }
     }
     private sealed class PulseIndicator : Control
     {

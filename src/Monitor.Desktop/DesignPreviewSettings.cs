@@ -36,19 +36,19 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly Dictionary<int, (long TimeNs, double Value)[]> _respirationPreviews = [];
     private readonly Func<int, (long TimeNs, double Value)[]> _respirationPreview;
     private readonly ContentControl _generation = new();
-    private readonly Dictionary<(int, int, int), LocalMonitorPreviewSession> _previews = [];
-    private readonly Func<int, int, int, LocalMonitorPreviewSession> _preview;
+    private readonly Dictionary<(int, int, int), StylePreviewData> _previews = [];
+    private readonly Func<int, int, int, StylePreviewData> _preview;
     private readonly StackPanel _advancedParameters = new() { Spacing = 16, Margin = new Thickness(20) };
     internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
     private Control? _home;
     private Button? _returnFocus;
     private readonly List<StyleThumbnail> _homeThumbnails = [];
     internal int PreviewCacheCount => _previews.Count;
-    internal DesignPreviewSettings(Func<int, int, int, LocalMonitorPreviewSession> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced)
+    internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced)
     {
         _preview = preview; _respirationPreview = respirationPreview;
         AutomationProperties.SetName(Skin, "监护皮肤与固定行数");
-        Func<LocalMonitorPreviewSession> session = () => Preview(EcgSelection, RespirationSelection, EjectionSelection);
+        Func<StylePreviewData> session = () => Preview(EcgSelection, RespirationSelection, EjectionSelection);
         var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
         var instruction = Text("点击黑底波形选择样式；修改保留为草稿，应用后重启监护并更新十二导联快照。");
         instruction.Height = 44; generation.Children.Add(instruction);
@@ -62,7 +62,7 @@ internal sealed class DesignPreviewSettings : UserControl
         generation.Children.Add(cards);
         var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         more.Click += (_, _) => advanced();
-        generation.Children.Add(Text("卡片与候选样式均为所选配置的缓存预览；应用前不会改变监护。现有开发窗口中的参数仍独立。"));
+        generation.Children.Add(Text("卡片与候选样式均为所选配置的预生成预览；应用前不会改变监护。现有开发窗口中的参数仍独立。"));
         _home = generation; _generation.Content = generation;
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(Text("监护皮肤决定固定槽位数；调整窗口不增减行数。每行可独立选通道和量程。"));
@@ -99,7 +99,7 @@ internal sealed class DesignPreviewSettings : UserControl
         root.Children.Add(Tabs); Grid.SetRow(controls, 1); root.Children.Add(controls);
         Status.Margin = new Thickness(20, 0, 20, 16); Grid.SetRow(Status, 2); root.Children.Add(Status); Content = root;
     }
-    private LocalMonitorPreviewSession Preview(int ecg, int resp, int ejection)
+    private StylePreviewData Preview(int ecg, int resp, int ejection)
     {
         var key = (ecg, resp, ejection);
         if (_previews.TryGetValue(key, out var cached)) { return cached; }
@@ -107,7 +107,7 @@ internal sealed class DesignPreviewSettings : UserControl
         if (_previews.Count >= 24) { _previews.Clear(); }
         _previews.Add(key, result); return result;
     }
-    private Button Card(string title, int channel, string[] choices, Func<int> read, Action<int> write, Func<LocalMonitorPreviewSession> session)
+    private Button Card(string title, int channel, string[] choices, Func<int> read, Action<int> write, Func<StylePreviewData> session)
     {
         var caption = new TextBlock { Height = 40, Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
         var content = new StackPanel { Spacing = 8 };
@@ -133,7 +133,7 @@ internal sealed class DesignPreviewSettings : UserControl
     }
     internal void OpenEcgChooser() => OpenChooser("心电图", 0, EcgChoices, () => EcgSelection, x => EcgSelection = x,
         () => Preview(EcgSelection, RespirationSelection, EjectionSelection));
-    private void OpenChooser(string title, int channel, string[] choices, Func<int> read, Action<int> write, Func<LocalMonitorPreviewSession> session, string? activeGroup = null, bool focusSelection = false, bool focusGroup = false)
+    private void OpenChooser(string title, int channel, string[] choices, Func<int> read, Action<int> write, Func<StylePreviewData> session, string? activeGroup = null, bool focusSelection = false, bool focusGroup = false)
     {
         string Group(int i) => channel == 0 ? i switch { 0 or 1 or 3 => "窦性心律", 4 => "房性心律", 5 => "交界性心律", _ => "室性心律" }
             : channel == 1 ? i == 0 ? "规则呼吸" : "异常呼吸示意" : i == 0 ? "节律相关" : "异常射血示意";
@@ -284,7 +284,7 @@ internal sealed class DesignPreviewSettings : UserControl
         var panel = new StackPanel { Spacing = 18, Margin = new Thickness(32) };
         panel.Children.Add(new TextBlock { Text = title, FontSize = 23 }); panel.Children.Add(Text(body)); return panel;
     }
-    private StyleThumbnail Thumbnail(Func<LocalMonitorPreviewSession> session, int channel, int? respiration = null) =>
+    private StyleThumbnail Thumbnail(Func<StylePreviewData> session, int channel, int? respiration = null) =>
         new(session, channel, () =>
         {
             int selected = respiration ?? RespirationSelection;
@@ -292,9 +292,9 @@ internal sealed class DesignPreviewSettings : UserControl
             { samples = _respirationPreview(selected); _respirationPreviews.Add(selected, samples); }
             return samples;
         });
-    private sealed class StyleThumbnail(Func<LocalMonitorPreviewSession> session, int channel, Func<(long TimeNs, double Value)[]> respiration) : Control
+    private sealed class StyleThumbnail(Func<StylePreviewData> session, int channel, Func<(long TimeNs, double Value)[]> respiration) : Control
     {
-        private LocalMonitorPreviewSession? _cachedSource;
+        private StylePreviewData? _cachedSource;
         private StreamGeometry? _geometry;
         private (long TimeNs, double Value)[]? _cachedRespiration;
         protected override Size MeasureOverride(Size availableSize) => new(210, 74);
@@ -305,7 +305,7 @@ internal sealed class DesignPreviewSettings : UserControl
             if (_geometry is null || !ReferenceEquals(source, _cachedSource) || !ReferenceEquals(respiratory, _cachedRespiration))
             {
                 _cachedSource = source; _cachedRespiration = respiratory;
-                var samples = respiratory ?? source!.Samples(channel, Math.Max(0, source.FrontierNs - 3_000_000_000), source.FrontierNs).ToArray();
+                var samples = respiratory ?? source!.Samples(channel);
                 double duration = channel == 1 ? RespirationPreviewDurationNs : 3e9;
                 _geometry = new StreamGeometry();
                 using var path = _geometry.Open();

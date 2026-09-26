@@ -130,6 +130,7 @@ internal static class DesignPreviewSmokeChecks
             var liveReading = window.Session.Measurements!;
             VerifyNumericAlarmHighlights(liveReading);
             VerifyHeartRateLimits(liveReading);
+            VerifyAdditionalLimits(liveReading);
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
             seven.RefreshReadings(liveReading);
@@ -315,6 +316,42 @@ internal static class DesignPreviewSmokeChecks
         Require(cached.Abp.SequenceEqual(reference.Samples(3, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)) &&
             cached.Ecg.SequenceEqual(reference.Samples(0, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)), "build-time samples match the actual selected physiology");
         Require(StylePreviewCatalog.Respiration(1).SequenceEqual(DesignPreviewWindow.CreateRespirationPreview(1)), "long respiration asset preserves full authored cycle");
+    }
+    private static void VerifyAdditionalLimits(LiveMeasurementSnapshot snapshot)
+    {
+        var settings = new MonitorAlertSettings();
+        var extra = settings.AdditionalLimits;
+        Require(!settings.Notices(snapshot).Any(), "all real limits remain opt-in");
+        for (int i = 0; i < MeasuredLimitNotice.Descriptors.Count; i++)
+        {
+            var d = MeasuredLimitNotice.Descriptors[i]; extra.Parameter.SelectedIndex = i;
+            var editor = extra.Editors[d.Numeric];
+            Require(editor.Parent is not null && editor.CriticalLow.Value == (decimal)d.TeachingDefaults.CriticalLow! / d.Divisor,
+                "each selected editor exposes correctly scaled units");
+            editor.Enabled.IsChecked = true;
+            editor.CriticalLow.Value = d.Minimum < 0 ? -10 : 0;
+            editor.WarningLow.Value = d.Minimum < 0 ? -5 : .25m;
+            editor.WarningHigh.Value = .5m; editor.CriticalHigh.Value = 1;
+        }
+        extra.Parameter.SelectedIndex = 0;
+        Require(extra.Editors[MonitorNumeric.RespirationRate].CriticalHigh.Value == 1, "switching editor retains prior limits");
+        var notices = settings.Notices(snapshot).ToArray();
+        Require(notices.Length == 7 && notices.All(n => n.Level == MonitorNoticeLevel.Critical) && notices.Select(n => n.Id).Distinct().Count() == 7,
+            "all enabled sampled measurements coexist with distinct IDs");
+        var view = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
+            PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))))
+        { AdditionalNotices = settings.Notices };
+        view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
+        var co2Rate = view.NumericBlocks.Single(b => b.IsVisible && AutomationProperties.GetName(b) == "RR · CO₂，次/分");
+        Require((co2Rate.Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
+            view.HighestNotice == MonitorNoticeLevel.Critical, "secondary CO2 rate binds flashing and sound severity");
+        var invalid = snapshot with { Capnography = new(new(WaveformMeasurementStatus.PoorSignal, null, null), new(WaveformMeasurementStatus.PoorSignal, null, null)) };
+        view.RefreshReadings(invalid); view.RefreshNumericHighlights(0);
+        Require((co2Rate.Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Colors.Transparent &&
+            view.ActiveNotices.Any(n => n.Numeric == MonitorNumeric.RespirationRate && n.Level == MonitorNoticeLevel.Critical),
+            "CO2 failure clears its highlight while independent RESP condition stays");
+        foreach (var editor in extra.Editors.Values) { editor.Enabled.IsChecked = false; }
+        Require(!settings.Notices(snapshot).Any(), "disabling limits clears conditions without editing samples");
     }
     private static void VerifyNumericAlarmHighlights(LiveMeasurementSnapshot snapshot)
     {

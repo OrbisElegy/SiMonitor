@@ -16,7 +16,51 @@ internal static class MonitorAlertSpecifications
         new(nameof(SelectedTonesRestoreAndMixIndependently), SelectedTonesRestoreAndMixIndependently),
         new(nameof(MeasuredBeatEventsCommitOnce), MeasuredBeatEventsCommitOnce),
         new(nameof(AlarmLevelDominatesRoutineHeartbeat), AlarmLevelDominatesRoutineHeartbeat),
+        new(nameof(OpticalRunoffCannotMasqueradeAsSaturation), OpticalRunoffCannotMasqueradeAsSaturation),
     ];
+    private static void OpticalRunoffCannotMasqueradeAsSaturation()
+    {
+        var estimator = new OpticalSaturationMeasurement("runoff-test", [new(400000, 100000), new(1600000, 70000)]);
+        foreach (int direction in new[] { -1, 1 })
+        {
+            var samples = Enumerable.Range(0, 500).Select(i => new OpticalSample(i * 8_000_000L,
+                10000 + direction * i, 20000 + direction * 2 * i)).ToArray();
+            var result = estimator.Estimate(samples, samples[^1].SampleTimeNs);
+            Check.That(result.Status == WaveformMeasurementStatus.PoorSignal && result.SaturationMilliPercent is null && result.PerfusionMilliPercent is null,
+                "large coherent monotonic drift/runoff cannot become saturation or apparent PI");
+            var jitter = samples.Select((s, i) => s with { Red = s.Red + i % 2 * 3, Infrared = s.Infrared + i % 3 * 3 }).ToArray();
+            Check.That(estimator.Estimate(jitter, jitter[^1].SampleTimeNs).SaturationMilliPercent is null, "quantization-scale reversals cannot qualify residual runoff");
+        }
+        var physical = PhysiologyIllustrationSource.Create();
+        var optical = new PulseOximeterIllustrationSource(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+            Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), 98000);
+        var measurement = PulseOximeterMeasurement.CreateIllustration(PhysiologyIllustrationSource.ChannelId(2));
+        bool normal = false, lost = false, recovered = false;
+        for (int step = 1; step <= 100; step++)
+            foreach (var wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+            {
+                var block = Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.Decode(wire);
+                long time = block.StartSimTimeNs;
+                if (time is >= 6_000_000_000 and < 14_000_000_000)
+                {
+                    block = block with
+                    {
+                        Planes = block.Planes.Select(p => p.ChannelId == PhysiologyIllustrationSource.ChannelId(2)
+                        ? p with { Samples = Enumerable.Range(0, p.Samples.Count).Select(i => (short)(1500 - (time - 6_000_000_000 + i * 8_000_000L) / 8_000_000)).ToArray() } : p).ToArray()
+                    };
+                }
+                var reading = measurement.Consume(optical.ConvertAcquiredPulse(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(block)));
+                if (time is >= 4_000_000_000 and < 6_000_000_000) { normal |= reading.SpO2.Status == WaveformMeasurementStatus.Valid; }
+                if (time is >= 10_000_000_000 and < 14_000_000_000)
+                {
+                    Check.That(reading.SpO2.Status == WaveformMeasurementStatus.PoorSignal && reading.SpO2.SaturationMilliPercent is null,
+                        "entire finite window without new pulsation expires optical percentage despite ongoing sample delivery");
+                    lost = true;
+                }
+                if (time >= 17_800_000_000) { recovered |= reading.SpO2.Status == WaveformMeasurementStatus.Valid; }
+            }
+        Check.That(normal && lost && recovered, "valid-pulse to prolonged runoff to recovery exercised without changing oxygen target");
+    }
     private static void AlarmLevelDominatesRoutineHeartbeat()
     {
         float[] Render(TonePreset preset)

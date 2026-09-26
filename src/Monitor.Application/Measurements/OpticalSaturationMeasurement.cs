@@ -72,15 +72,20 @@ public sealed class OpticalSaturationMeasurement
         BigInteger infraredVariance = WindowSamples * infraredSquares - infrared * infrared;
         BigInteger covariance = WindowSamples * products - red * infrared;
         bool coherent = covariance > 0 && covariance * covariance * 100 >= redVariance * infraredVariance * 81;
+        // A correlated runoff/drift is not pulsatile AC. Require a meaningful
+        // excursion in both directions on each wavelength inside the same4s
+        // window. This is a bounded quality gate, not a motion classifier.
+        bool pulsatile = HasReversal(samples, true, Math.Max(1, (int)((red + WindowSamples * 1000 - 1) / (WindowSamples * 1000)))) &&
+            HasReversal(samples, false, Math.Max(1, (int)((infrared + WindowSamples * 1000 - 1) / (WindowSamples * 1000))));
         OpticalSaturationReading Reading(WaveformMeasurementStatus status, int? saturation, int? ratio) => new(status, saturation, ratio, last)
         {
-            PerfusionMilliPercent = coherent || redVariance == 0 && infraredVariance == 0
+            PerfusionMilliPercent = coherent && pulsatile || redVariance == 0 && infraredVariance == 0
                 ? (int)FixedPointMath.RoundDivideTiesToEven((Int128)(irMaximum - irMinimum) * WindowSamples * 100_000, (Int128)infrared) : null
         };
         // AC rms / DC >=0.001 on both channels, positive correlation >=0.9.
         // These are explicit engineering quality gates, not motion rejection.
         if (redVariance * 1_000_000 < red * red || infraredVariance * 1_000_000 < infrared * infrared ||
-            !coherent)
+            !coherent || !pulsatile)
         { return Reading(WaveformMeasurementStatus.PoorSignal, null, null); }
         // R = (ACrms(red)/DC(red)) / (ACrms(IR)/DC(IR)).
         // Integer square root avoids a platform-dependent floating point path.
@@ -99,6 +104,32 @@ public sealed class OpticalSaturationMeasurement
             return Reading(WaveformMeasurementStatus.Valid, saturation, ratio);
         }
         throw new InvalidOperationException("Optical.CalibrationCoverage");
+    }
+
+    private static bool HasReversal(IReadOnlyList<OpticalSample> samples, bool red, int threshold)
+    {
+        int initial = red ? samples[0].Red : samples[0].Infrared;
+        int extreme = initial, direction = 0;
+        foreach (var sample in samples)
+        {
+            int value = red ? sample.Red : sample.Infrared;
+            if (direction == 0)
+            {
+                if (Math.Abs(value - initial) < threshold) { continue; }
+                direction = value > initial ? 1 : -1; extreme = value;
+            }
+            else if (direction > 0)
+            {
+                if (extreme - value >= threshold) { return true; }
+                extreme = Math.Max(extreme, value);
+            }
+            else
+            {
+                if (value - extreme >= threshold) { return true; }
+                extreme = Math.Min(extreme, value);
+            }
+        }
+        return false;
     }
 
     private static BigInteger SquareRoot(BigInteger value)

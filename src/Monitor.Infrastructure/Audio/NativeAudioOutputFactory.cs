@@ -19,6 +19,7 @@ public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
     private readonly HandleCall _start;
     private readonly HandleCall _close;
     private readonly InfoCall _info;
+    private readonly ClockCall? _clock;
     private Device? _device;
 
     public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false)
@@ -33,6 +34,8 @@ public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
             _open = Export<OpenCall>("sa_open"); _submit = Export<SubmitCall>("sa_submit");
             _start = Export<HandleCall>("sa_start"); _close = Export<HandleCall>("sa_close");
             _info = Export<InfoCall>("sa_info");
+            if (NativeLibrary.TryGetExport(_library, "sa_clock_sample", out nint clock))
+            { _clock = Marshal.GetDelegateForFunctionPointer<ClockCall>(clock); }
         }
         catch
         {
@@ -65,6 +68,13 @@ public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
     // Bounded work: at most one queue capacity each invocation. The native
     // queue is the only latency target; managed PCM is drained immediately.
     public bool Pump() => _device?.Pump() == true;
+
+    public NativeAudioClockSample ReadClock()
+    {
+        if (_device is null || _clock is null) { return new(-2, 0, 0, 0, 0); }
+        int result = _clock(_device.Handle, out ulong position, out ulong frequency, out ulong qpc, out uint hr);
+        return new(result, hr, position, frequency, qpc);
+    }
 
     public void Dispose()
     {
@@ -130,4 +140,6 @@ public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
     private delegate int HandleCall(nint handle);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate uint InfoCall(nint handle, uint key);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int ClockCall(nint handle, out ulong position, out ulong frequency, out ulong qpc100Ns, out uint hresult);
 }

@@ -15,6 +15,7 @@ lib.sa_start.argtypes = [c.c_void_p]
 lib.sa_close.argtypes = [c.c_void_p]
 lib.sa_info.argtypes = [c.c_void_p, c.c_uint32]
 lib.sa_info.restype = c.c_uint32
+lib.sa_clock_sample.argtypes = [c.c_void_p, c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint32)]
 assert lib.sa_abi_version() == 1
 h = c.c_void_p()
 assert lib.sa_open(None, 19, c.byref(h)) == -1 and not h.value
@@ -28,6 +29,9 @@ assert lib.sa_open(None, 40, c.byref(h)) == 0
 try:
     assert lib.sa_info(h, 8) == 1920 and lib.sa_info(h, 9) == 0
     assert all(lib.sa_info(h, key) == 0 for key in range(10, 19))
+    position, frequency, qpc, hr = c.c_uint64(9), c.c_uint64(9), c.c_uint64(9), c.c_uint32(9)
+    assert lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -2
+    assert (position.value, frequency.value, qpc.value, hr.value) == (0, 0, 0, 0)
     source = (c.c_float * 1500)(*[(i % 99 - 49) / 50 for i in range(1500)])
     assert lib.sa_submit(h, source, 1500) == 0
     assert lib.sa_submit(h, source, 1500) == -3
@@ -42,6 +46,7 @@ try:
     assert list(tail) == list(source)[1000:] + list(source)[:1000] + [0] * 500
     assert lib.sa_info(h, 6) == 1 and lib.sa_info(h, 7) == 500
     assert lib.sa_submit(h, source, 1) == -4 and lib.sa_start(h) == -4
+    assert lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -4
     lib.sa_test_render(h, tail, 2000)
     assert not any(tail)
 finally:

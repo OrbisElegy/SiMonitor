@@ -137,7 +137,7 @@ internal sealed class DesignPreviewSettings : UserControl
         var layout = new Grid { ColumnDefinitions = new("250,150,*"), Margin = new Thickness(0, 12, 0, 0) };
         Grid.SetRow(layout, 1); shell.Children.Add(layout);
         var selected = new StackPanel { Spacing = 12, Margin = new Thickness(0, 0, 12, 0) };
-        var back = new Button { Content = "返回波形设置", MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Right };
+        var back = new Button { Content = "返回波形设置", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
         shell.Children.Add(back);
         Button focusTarget = back;
         back.Click += (_, _) => { _generation.Content = _home; _home?.InvalidateVisual(); if (_returnFocus is { } origin) { RestoreFocus(origin); } };
@@ -145,7 +145,7 @@ internal sealed class DesignPreviewSettings : UserControl
         selectedContent.Children.Add(new TextBlock { Height = 40, Text = title + " · " + choices[read()], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
         selectedContent.Children.Add(Thumbnail(session, channel));
         selected.Children.Add(new Border { Name = "SelectedStyleCard", Width = 238, Height = 162, CornerRadius = new CornerRadius(8), Background = Brushes.Black, Padding = new Thickness(12), Child = selectedContent });
-        var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44 };
+        var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         parameters.Click += (_, _) => Tabs.SelectedIndex = 5;
         selected.Children.Add(parameters);
         layout.Children.Add(selected);

@@ -17,6 +17,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal CheckBox SpO2Enabled { get; } = new() { Content = "启用实测 SpO₂ 下限提示", IsChecked = false };
     internal NumericUpDown WarningSpO2 { get; } = Number(92, 1, 100);
     internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
+    internal AdditionalMeasurementLimits AdditionalLimits { get; } = new();
     internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
     internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
     internal CheckBox NoticeColorEnabled { get; } = new() { Content = "显示 Notice 蓝色提示与数值闪烁", IsChecked = true };
@@ -42,6 +43,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         Children.Add(SpO2Enabled);
         Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
         Children.Add(Text("低于下限才提示；Critical 下限须低于 Warning 下限。85% / 92% 仅作可调教学默认值。仅比较有效实测 SpO₂，信号质量不足或无数据时显示 ---，不推断低血氧或探头脱落。"));
+        Children.Add(AdditionalLimits);
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);
         Children.Add(NoticeColorEnabled);
@@ -71,6 +73,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         var saturationNotice = SpO2LimitNotice.Evaluate(SpO2Enabled.IsChecked == true,
             MilliPercent(WarningSpO2), MilliPercent(CriticalSpO2), snapshot.SpO2);
         if (saturationNotice is not null) { yield return saturationNotice; }
+        foreach (var notice in AdditionalLimits.Notices(snapshot)) { yield return notice; }
         if (TestLevel.SelectedIndex > 0)
         {
             yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))

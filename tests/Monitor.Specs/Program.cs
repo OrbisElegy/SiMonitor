@@ -19,6 +19,8 @@ internal static class Program
             Console.CancelKeyPress += handler;
             try
             {
+                if (args[0] is "--audio-native-audition" or "--audio-native-check")
+                { return NativeAudioCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 if (args[0] == "--audio-tone-fixture")
                 { return AudioFixtureCommand.Execute(args, Console.OpenStandardOutput(), Console.Error, cancellation.Token); }
                 return SvgFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token);
@@ -158,6 +160,7 @@ internal static class Program
             .. SampleToneRendererSpecifications.All,
             .. AudioRenderSessionSpecifications.All,
             .. AudioOutputLifecycleSpecifications.All,
+            .. NativeAudioCommandSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

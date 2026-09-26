@@ -21,6 +21,14 @@ public sealed class AudioRenderSession
 
     public bool RequiresReplacement => Volatile.Read(ref _retired) != 0;
     public long UnderrunFrames => Volatile.Read(ref _underrunFrames);
+    public int CapacityFrames => _buffer.CapacityFrames;
+    // Scheduler-only: native adapter drains this staging buffer immediately.
+    public int BufferedFrames => CapacityFrames - _buffer.WritableFrames;
+    internal void ReportNativeUnderrun(uint frames)
+    {
+        Interlocked.Add(ref _underrunFrames, frames);
+        Retire();
+    }
     // Producer-only position; never report this as a physical device cursor.
     public long RenderedThroughFrame => _renderer.Position;
 

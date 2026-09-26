@@ -16,6 +16,13 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown CriticalHeartRate { get; } = Number(180, 21, 350);
     internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
     internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
+    internal CheckBox NoticeColorEnabled { get; } = new() { Content = "显示 Notice 蓝色提示与数值闪烁", IsChecked = true };
+    internal ComboBox TestNumeric { get; } = new()
+    {
+        ItemsSource = new[] { "仅顶部提示", "HR", "RR · RESP", "SpO₂", "PR", "EtCO₂", "RR · CO₂", "ABP 平均压", "PA 平均压", "CVP 平均压" },
+        SelectedIndex = 0,
+        MinWidth = 220
+    };
     internal NumericUpDown InfoInterval { get; } = Number(30, 5, 120);
     internal NumericUpDown NoticeInterval { get; } = Number(10, 1.5m, 60);
     internal NumericUpDown WarningInterval { get; } = Number(5, 3.5m, 60);
@@ -30,6 +37,9 @@ internal sealed class MonitorAlertSettings : StackPanel
         Row("Warning HR 上限（bpm）", WarningHeartRate); Row("Critical HR 上限（bpm）", CriticalHeartRate);
         Children.Add(Text("阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认及声音限时暂停。"));
         Row("提示与声音联调（明确标为测试）", TestLevel);
+        Row("联调闪烁数值", TestNumeric);
+        Children.Add(NoticeColorEnabled);
+        Children.Add(Text("报警数值背景每秒闪烁一次。关闭 Notice 颜色仅取消蓝色着色，提示文字与声音继续保留。"));
         Children.Add(Text("联调不代表患者异常，不伪造探头脱落或更改测量值。声音须在声音页单独启用。"));
         Children.Add(InfoTone);
         Row("Info 单声间隔（秒）", InfoInterval); Row("Notice 三联音组间隔（秒）", NoticeInterval);
@@ -46,13 +56,17 @@ internal sealed class MonitorAlertSettings : StackPanel
             { yield return new("hr-settings", MonitorNoticeLevel.Info, "HR 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限"); }
             else if (snapshot.HeartRate.Status == Monitor.Application.Measurements.WaveformMeasurementStatus.Valid && snapshot.HeartRate.MilliBeatsPerMinute is { } rate)
             {
-                if (rate < criticalLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Critical, "HR 极低"); }
-                else if (rate < warningLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Warning, "HR 低"); }
-                else if (rate > critical * 1000) { yield return new("hr-high", MonitorNoticeLevel.Critical, "HR 极高"); }
-                else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "HR 高"); }
+                if (rate < criticalLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Critical, "HR 极低") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate < warningLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Warning, "HR 低") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate > critical * 1000) { yield return new("hr-high", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "HR 高") { Numeric = MonitorNumeric.HeartRate }; }
             }
         }
-        if (TestLevel.SelectedIndex > 0) { yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1)); }
+        if (TestLevel.SelectedIndex > 0)
+        {
+            yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))
+            { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null };
+        }
     }
     private static int Milliseconds(NumericUpDown number) => checked((int)((number.Value ?? number.Minimum) * 1000));
     private void Row(string label, Control control)

@@ -2,7 +2,11 @@
 namespace Monitor.Application.Presentation;
 
 public enum MonitorNoticeLevel { Info, Notice, Warning, Critical }
-public sealed record MonitorNotice(string Id, MonitorNoticeLevel Level, string Text);
+public enum MonitorNumeric { HeartRate, RespirationRate, SpO2, PulseRate, EtCo2, Co2RespirationRate, AbpMean, PaMean, CvpMean }
+public sealed record MonitorNotice(string Id, MonitorNoticeLevel Level, string Text)
+{
+    public MonitorNumeric? Numeric { get; init; }
+}
 
 // Local presentation arbitration, not patient alarm episode/acknowledgement state.
 // Each active level gets one turn (2/4/6/8 seconds); rotate messages within that
@@ -20,7 +24,7 @@ public sealed class MonitorNoticeRotation
         if (simulationTimeNs < _lastTime || simulationTimeNs > long.MaxValue - 8_000_000_000) { throw new ArgumentException("Notice.TimeRegression"); }
         var items = notices.Take(65).ToArray();
         if (items.Length > 64 || items.Any(n => n is null || !Enum.IsDefined(n.Level) || string.IsNullOrWhiteSpace(n.Id) ||
-            string.IsNullOrWhiteSpace(n.Text) || n.Id.Length > 128 || n.Text.Length > 512) || items.Select(n => n.Id).Distinct().Count() != items.Length)
+            string.IsNullOrWhiteSpace(n.Text) || n.Id.Length > 128 || n.Text.Length > 512 || n.Numeric is { } numeric && !Enum.IsDefined(numeric)) || items.Select(n => n.Id).Distinct().Count() != items.Length)
         { throw new ArgumentException("Notice.InvalidSet"); }
         _active = items.OrderBy(n => n.Id, StringComparer.Ordinal).ToArray(); _lastTime = simulationTimeNs;
         if (Highest is not { } highest) { Current = null; _until = simulationTimeNs; _previousHighest = MonitorNoticeLevel.Info; return; }

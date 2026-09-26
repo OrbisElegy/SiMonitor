@@ -80,6 +80,7 @@ internal static class DesignPreviewSmokeChecks
     {
         VerifyStableSlowContours();
         VerifyRespirationOverview();
+        VerifyPrebuiltStyles();
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
@@ -99,6 +100,7 @@ internal static class DesignPreviewSmokeChecks
             Capture(window, "ui-preview-monitor-auto.png");
             Require(window.MonitorView.NumericTexts[4] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
             var liveReading = window.Session.Measurements!;
+            VerifyNumericAlarmHighlights(liveReading);
             VerifyHeartRateLimits(liveReading);
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
@@ -245,10 +247,10 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyRespirationOverview()
     {
-        var regular = DesignPreviewWindow.CreateRespirationPreview(0);
-        var tidal = DesignPreviewWindow.CreateRespirationPreview(1);
-        var intermittent = DesignPreviewWindow.CreateRespirationPreview(2);
-        var absent = DesignPreviewWindow.CreateRespirationPreview(3);
+        var regular = StylePreviewCatalog.Respiration(0);
+        var tidal = StylePreviewCatalog.Respiration(1);
+        var intermittent = StylePreviewCatalog.Respiration(2);
+        var absent = StylePreviewCatalog.Respiration(3);
         Require(tidal[^1].TimeNs >= DesignPreviewSettings.RespirationPreviewDurationNs - 40_000_000,
             "respiration thumbnail includes the entire eleven-breath pattern");
         double Peak((long TimeNs, double Value)[] samples, int breath) => samples.Where(s => s.TimeNs >= breath * 3_750_000_000L && s.TimeNs < (breath + 1) * 3_750_000_000L).Max(s => Math.Abs(s.Value));
@@ -256,6 +258,60 @@ internal static class DesignPreviewSmokeChecks
             "cached tidal overview shows crescendo, decrescendo and the entire pause");
         Require(Peak(regular, 9) > 0 && Peak(intermittent, 3) == 0 && Peak(intermittent, 5) > 0 && absent.All(s => s.Value == 0),
             "all four respiratory choices remain distinguishable from actual source data");
+    }
+    private static void VerifyPrebuiltStyles()
+    {
+        int count = 0;
+        for (int ecg = 0; ecg < 6; ecg++)
+            for (int resp = 0; resp < 4; resp++)
+                for (int ejection = 0; ejection < 4; ejection++)
+                {
+                    bool valid = true;
+                    try { DesignPreviewWindow.ResolveStyle(ecg, resp, ejection); } catch (ArgumentException) { valid = false; }
+                    if (valid)
+                    {
+                        var data = StylePreviewCatalog.Get(ecg, resp, ejection); count++;
+                        Require(data.Ecg.Length == 750 && data.Abp.Length == 375 && ReferenceEquals(data, StylePreviewCatalog.Get(ecg, resp, ejection)),
+                            "every valid combination loads shared prebuilt samples without simulation");
+                    }
+                    else
+                    {
+                        bool rejected = false;
+                        try { StylePreviewCatalog.Get(ecg, resp, ejection); } catch (ArgumentException) { rejected = true; }
+                        Require(rejected, "invalid combinations remain disabled in prebuilt catalog");
+                    }
+                }
+        Require(count == 56, "catalog covers all current compatible combinations");
+        var reference = DesignPreviewWindow.CreateStylePreview(2, 1, 1);
+        var cached = StylePreviewCatalog.Get(2, 1, 1);
+        Require(cached.Abp.SequenceEqual(reference.Samples(3, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)) &&
+            cached.Ecg.SequenceEqual(reference.Samples(0, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)), "build-time samples match the actual selected physiology");
+        Require(StylePreviewCatalog.Respiration(1).SequenceEqual(DesignPreviewWindow.CreateRespirationPreview(1)), "long respiration asset preserves full authored cycle");
+    }
+    private static void VerifyNumericAlarmHighlights(LiveMeasurementSnapshot snapshot)
+    {
+        var view = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default())));
+        bool noticeColor = true; view.NoticeColorEnabled = () => noticeColor;
+        MonitorNotice[] notices = [new("hr", MonitorNoticeLevel.Warning, "HR 高") { Numeric = MonitorNumeric.HeartRate },
+            new("pr", MonitorNoticeLevel.Notice, "PR 测试") { Numeric = MonitorNumeric.PulseRate }];
+        view.AdditionalNotices = _ => notices;
+        Avalonia.Media.Color Color(Avalonia.Media.IBrush? brush) => (brush as Avalonia.Media.ISolidColorBrush)?.Color ?? default;
+        view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
+        var hr = view.NumericBlocks[0]; var spo2 = view.NumericBlocks[2]; var pr = view.NumericBlocks[3];
+        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ff000000"), "warning numeric uses yellow backing with black high-contrast text");
+        Require(Color(pr.Background) == Avalonia.Media.Color.Parse("#ff145aa3") && Color(pr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff") && Color(spo2.Background) == Avalonia.Media.Colors.Transparent,
+            "notice highlights its own secondary numeric, not unrelated SpO2 or banner-selected HR");
+        view.RefreshNumericHighlights(500_000_000);
+        Require(Color(hr.Background) == Avalonia.Media.Colors.Transparent && Color(hr.Foreground) == Avalonia.Media.Color.Parse(LiveMonitorTrace.Colors[0]), "half-cycle restores normal channel color");
+        view.RefreshNumericHighlights(1_000_000_000);
+        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c"), "one-second cycle repeats");
+        noticeColor = false; view.RefreshNumericHighlights(1_000_000_000);
+        Require(Color(pr.Background) == Avalonia.Media.Colors.Transparent && Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c") && view.ActiveNotices.Any(n => n.Id == "pr"), "Notice switch removes color without removing condition or Warning highlighting");
+        notices = [new("hr", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }];
+        view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
+        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#ffb51f2c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff"), "critical red backing uses white text");
+        notices = []; view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
+        Require(Color(hr.Background) == Avalonia.Media.Colors.Transparent, "cleared alarms immediately clear numeric highlighting");
     }
     private static void VerifyStableSlowContours()
     {

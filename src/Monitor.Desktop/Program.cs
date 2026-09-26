@@ -8,6 +8,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--generate-style-previews")
+        { return StylePreviewCatalog.Generate(Path.GetFullPath(args[1])); }
         if (args.Length > 0 && args[0] == "--smoke-shard")
         {
             if (!NativeSmokePartition.Configure(args)) { return 2; }

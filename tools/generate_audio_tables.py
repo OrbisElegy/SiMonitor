@@ -4,6 +4,7 @@
 import argparse
 from decimal import Decimal, localcontext
 from pathlib import Path
+from generate_monitor_tones import generate as generate_selected
 
 
 def generate():
@@ -42,3 +43,4 @@ if __name__ == '__main__':
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(expected)
+    generate_selected(args.check)

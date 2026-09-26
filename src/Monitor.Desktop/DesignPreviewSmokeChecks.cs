@@ -19,6 +19,8 @@ internal static class DesignPreviewSmokeChecks
         CancellationToken token = default; int calls = 0;
         var panel = new SoundSettingsPanel((volume, cancellation) =>
         { Require(volume == 50, "volume passed to output"); calls++; token = cancellation; return completion.Task; });
+        Require(panel.AlarmEnabled.IsChecked == false && panel.HeartbeatEnabled.IsChecked == true &&
+            new MonitorAlertSettings().CriticalInterval.Value == 1.5m, "selected mixing defaults preserve explicit master sound opt-in");
         var pending = panel.PreviewAsync();
         Require(!panel.Audition.IsEnabled && !panel.Volume.IsEnabled && panel.Stop.IsEnabled, "preview locks settings until output joined");
         panel.PreviewAsync().GetAwaiter().GetResult();

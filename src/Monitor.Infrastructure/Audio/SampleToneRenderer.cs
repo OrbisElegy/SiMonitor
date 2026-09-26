@@ -8,7 +8,7 @@ public enum ToneScheduleResult { Accepted, Expired, Duplicate, Full }
 // Position is the next unrendered 48kHz MONO frame, not the device play cursor.
 public sealed class SampleToneRenderer
 {
-    private const int VoiceLimit = 8;
+    private const int VoiceLimit = 32; // Includes overlapping3.5s tails at the minimum250ms period.
     private readonly Slot?[] _slots = new Slot[VoiceLimit];
 
     public SampleToneRenderer(long initialFrame = 0)

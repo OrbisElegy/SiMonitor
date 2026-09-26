@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Audio;
 
@@ -18,7 +19,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     private CancellationTokenSource? _alarmCancellation;
     private MonitorNoticeLevel? _alarmLevel;
     private MonitorSoundTiming _timing = new();
+    private bool _monitorRunning;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
+    internal CheckBox HeartbeatEnabled { get; } = new() { Content = "ECG 心搏提示音（与报警声独立重叠）", IsChecked = true };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Button Audition { get; } = Button("试听三声");
     internal Button Stop { get; } = Button("停止试听");
@@ -41,11 +44,13 @@ internal sealed class SoundSettingsPanel : StackPanel
         buttons.Children.Add(Audition); buttons.Children.Add(Stop); Children.Add(buttons);
         Stop.IsEnabled = false; Children.Add(Status);
         Children.Add(AlarmEnabled);
-        Children.Add(Text("启用后按最高活动级别发声，节奏与间隔见报警页。暂停模拟时静音；心搏提示音尚未接入。试听三声仅用于检查输出。"));
+        Children.Add(HeartbeatEnabled);
+        Children.Add(Text("报警按最高活动级别发声；心搏音由 ECG 检测到的搏动触发，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
+        HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
         {
             if (AlarmEnabled.IsChecked == true) { await RunAlarmsAsync(); }
-            else { _alarmCancellation?.Cancel(); }
+            else { _alarms.SetHeartbeatEnabled(false); _alarmCancellation?.Cancel(); }
         };
         Audition.Click += async (_, _) => await PreviewAsync();
         Stop.Click += (_, _) => StopPreview();
@@ -78,16 +83,28 @@ internal sealed class SoundSettingsPanel : StackPanel
         _cancellation?.Cancel(); Stop.IsEnabled = false;
         if (_cancellation is not null) { Status.Text = "正在停止…"; }
     }
-    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing)
+    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null)
     {
-        _alarmLevel = level; _timing = timing;
-        _alarms.SetRequest(level is { } active ? new(active, (int)Volume.Value, timing) : null);
+        _monitorRunning = true; _alarmLevel = level; _timing = timing;
+        Publish();
+        // Advance delivers new measurement events once, never extrapolated HR.
+        if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && beats is { Count: > 0 })
+        { _alarms.SubmitHeartbeat((int)Volume.Value); }
+    }
+    internal void PauseMonitor()
+    {
+        _monitorRunning = false; Publish();
+    }
+    private void Publish()
+    {
+        _alarms.SetRequest(_monitorRunning && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null);
+        _alarms.SetHeartbeatEnabled(_monitorRunning && AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true);
     }
     private async Task RunAlarmsAsync()
     {
         if (_closed || _alarmCancellation is not null || _cancellation is not null) { return; }
         using var cancellation = new CancellationTokenSource(); _alarmCancellation = cancellation;
-        Audition.IsEnabled = false; UpdateAlarm(_alarmLevel, _timing); Status.Text = "监护提示声音已启用";
+        Audition.IsEnabled = false; Publish(); Status.Text = "监护提示声音已启用";
         var result = await _alarms.RunAsync(cancellation.Token);
         _alarmCancellation = null;
         if (_closed) { return; }

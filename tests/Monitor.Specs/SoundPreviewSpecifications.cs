@@ -10,6 +10,7 @@ internal static class SoundPreviewSpecifications
         new(nameof(SoundPreviewOwnsOutputOffCallerAndScalesVolume), SoundPreviewOwnsOutputOffCallerAndScalesVolume),
         new(nameof(SoundPreviewCancellationAndFailedJoinPreventReplay), SoundPreviewCancellationAndFailedJoinPreventReplay),
         new(nameof(MonitorAlarmOutputRetainsFailedJoin), MonitorAlarmOutputRetainsFailedJoin),
+        new(nameof(HeartbeatWorkerDropsExpiredAndDisabledCues), HeartbeatWorkerDropsExpiredAndDisabledCues),
     ];
 
     private static void SoundPreviewOwnsOutputOffCallerAndScalesVolume()
@@ -78,6 +79,25 @@ internal static class SoundPreviewSpecifications
         Check.That(player.RunAsync(failureCancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Disposed,
             "retry releases retained stream without new sound");
     }
+    private static void HeartbeatWorkerDropsExpiredAndDisabledCues()
+    {
+        foreach (string mode in new[] { "fresh", "expired", "disabled" })
+        {
+            using var cancel = new CancellationTokenSource();
+            var output = new Output(cancel); var player = new MonitorAlarmPlayback(() => output);
+            player.SetHeartbeatEnabled(true);
+            output.BeforePump = count =>
+            {
+                if (count != 0) { return; }
+                player.SubmitHeartbeat(100);
+                if (mode == "expired") { Thread.Sleep(300); }
+                if (mode == "disabled") { player.SetHeartbeatEnabled(false); }
+            };
+            Check.That(player.RunAsync(cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Disposed,
+                "heartbeat-only stream closes normally");
+            Check.That((output.Peak > 0) == (mode == "fresh"), "fresh beats play without alarm; expired/disabled mailbox cannot replay");
+        }
+    }
     private sealed class Output(CancellationTokenSource cancel) : IPumpedAudioOutput, IAudioOutputDevice
     {
         private AudioRenderSession? _session;
@@ -89,12 +109,14 @@ internal static class SoundPreviewSpecifications
         public bool CanClose { get; set; } = true;
         public bool FailPump { get; set; }
         public float Peak { get; private set; }
+        public Action<int>? BeforePump { get; set; }
         public IAudioOutputDevice Open(string? deviceId, AudioRenderSession session, long generation)
         { Touch(); _session = session; return this; }
         public bool Start() { Touch(); return true; }
         public bool Pump()
         {
             Touch();
+            BeforePump?.Invoke(_pumps);
             if (_session!.BufferedFrames == 0) { _session.TryProduce(_pcm.Length); }
             _session.Read(_pcm);
             foreach (float sample in _pcm) { Peak = Math.Max(Peak, Math.Abs(sample)); }

@@ -143,7 +143,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         var old = _timer; _timer = null;
         if (old is not null) { old.Stop(); old.Tick -= OnTick; }
-        Settings?.Sound.UpdateAlarm(null, Settings.Alerts.Timing);
+        Settings?.Sound.PauseMonitor();
         UpdateState();
     }
     private void OnTick(object? sender, EventArgs args)
@@ -160,7 +160,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
             MonitorView.Refresh();
-            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing);
+            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

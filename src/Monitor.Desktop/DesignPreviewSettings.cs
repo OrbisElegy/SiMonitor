@@ -24,6 +24,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal TabControl Tabs { get; } = new();
     internal SoundSettingsPanel Sound { get; } = new();
+    internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
+    internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
@@ -195,12 +197,19 @@ internal sealed class DesignPreviewSettings : UserControl
         }
         Grid.SetColumn(candidates, 2); layout.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
     }
-    private static StackPanel VitalSigns()
+    internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true
+        ? checked((int)((OpticalTarget.Value ?? throw new ArgumentException("SpO2 target required")) * 1000)) : null;
+    private StackPanel VitalSigns()
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
-        panel.Children.Add(Text("生命体征设置 · 预留页面"));
-        panel.Children.Add(Text("以下数值编辑尚未接入生成与测量，不会应用到当前模拟。当前节律与呼吸样式在波形生成页选择。"));
-        foreach (string name in new[] { "心率（bpm）", "无创血压（mmHg）", "呼吸频率（次/分）", "SpO₂（%）", "体温（°C）", "EtCO₂（mmHg）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })
+        panel.Children.Add(Text("指脉氧"));
+        panel.Children.Add(OpticalEnabled);
+        panel.Children.Add(Text("SpO₂ 教学目标（75–99%）")); panel.Children.Add(OpticalTarget);
+        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至99");
+        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalEnabled.IsChecked == true;
+        panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
+        panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
+        foreach (string name in new[] { "心率（bpm）", "无创血压（mmHg）", "呼吸频率（次/分）", "体温（°C）", "EtCO₂（mmHg）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })
         {
             var row = new Grid { ColumnDefinitions = new("220,*") };
             row.Children.Add(Text(name));

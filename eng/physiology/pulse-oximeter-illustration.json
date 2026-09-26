@@ -1,0 +1,32 @@
+{
+  "id": "PulseOximeterLinearIllustration@1",
+  "status": "authored_teaching_model_not_human_calibration",
+  "references": [
+    {
+      "url": "https://www.ti.com/document-viewer/lit/html/SLAAE99",
+      "summary": [
+        "Dual wavelength transmission and AC/DC principle only; numeric coefficients below are project-authored."
+      ]
+    }
+  ],
+  "input": "AcqPleth125@1 acquired relative peripheral pulse, including existing perfusion and missing ejection effects",
+  "sample_rate_hz": 125,
+  "optical_target_milli_percent_range": [75000, 99000],
+  "ratio_ppm": "(110000 - target_milli_percent) * 40",
+  "red_adc": "16000 - round_ties_even(pulse_count * 32 * ratio_ppm / 100000000)",
+  "infrared_adc": "20000 - round_ties_even(pulse_count * 2 / 5)",
+  "accepted_pulse_count_range": [-10000, 10000],
+  "calibration_points": [
+    {"ratio_ppm": 400000, "saturation_milli_percent": 100000},
+    {"ratio_ppm": 1600000, "saturation_milli_percent": 70000}
+  ],
+  "measurement": "500 paired samples; independent window means and AC RMS ratio; no target passed to calculator",
+  "engineering_acceptance": "Acquired reference and 2:1 examples at75/90/98/99 percent recover within0.5 percentage point; not a clinical accuracy statement",
+  "limitations": [
+    "Affine small-modulation illustration; window mean and quantization cause target/measurement differences",
+    "No oxygen transport, tissue model, hardware calibration, motion rejection or extended saturation range",
+    "Quality flags are retained; clipped input becomes invalid optical input; constant light does not yield saturation",
+    "A new sensor instance is mandatory when target/model changes; does not define new frozen acquisition profiles",
+    "Preview UI, common live owner and sound/alarm integration remain separate"
+  ]
+}

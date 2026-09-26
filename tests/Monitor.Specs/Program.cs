@@ -50,6 +50,7 @@ internal static class Program
             .. MonitorDisplaySpecifications.All,
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
+            .. EcgHeartRateMeasurementSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

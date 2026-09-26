@@ -6,6 +6,7 @@ public enum MonitorNumeric { HeartRate, RespirationRate, SpO2, PulseRate, EtCo2,
 public sealed record MonitorNotice(string Id, MonitorNoticeLevel Level, string Text)
 {
     public MonitorNumeric? Numeric { get; init; }
+    public bool Audible { get; init; } = true;
 }
 
 // Local presentation arbitration, not patient alarm episode/acknowledgement state.

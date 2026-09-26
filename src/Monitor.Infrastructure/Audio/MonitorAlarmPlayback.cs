@@ -15,6 +15,9 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     private IPumpedAudioOutput? _output;
     private AudioOutputLifecycle? _owner;
     private bool _heartbeatEnabled;
+    private bool _outputActive;
+    // Reports successful output pumping, not physical sound or latency.
+    public bool OutputActive => Volatile.Read(ref _outputActive);
     private BeatSubmission? _beat;
     private sealed record BeatSubmission(int Volume, long SubmittedAt);
     public void SetHeartbeatEnabled(bool enabled)
@@ -63,6 +66,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                     int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
                     sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume);
                     if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
+                    Volatile.Write(ref _outputActive, true);
                     Thread.Sleep(1);
                 }
             }
@@ -71,6 +75,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
         { result = SoundPreviewResult.Unavailable; }
         finally
         {
+            Volatile.Write(ref _outputActive, false);
             if (!Close()) { result = SoundPreviewResult.StopFailed; }
             Interlocked.Exchange(ref _beat, null);
             Volatile.Write(ref _busy, 0);

@@ -11,6 +11,7 @@ internal static class SoundPreviewSpecifications
         new(nameof(SoundPreviewCancellationAndFailedJoinPreventReplay), SoundPreviewCancellationAndFailedJoinPreventReplay),
         new(nameof(MonitorAlarmOutputRetainsFailedJoin), MonitorAlarmOutputRetainsFailedJoin),
         new(nameof(HeartbeatWorkerDropsExpiredAndDisabledCues), HeartbeatWorkerDropsExpiredAndDisabledCues),
+        new(nameof(OutputHealthRequiresSuccessfulPump), OutputHealthRequiresSuccessfulPump),
     ];
 
     private static void SoundPreviewOwnsOutputOffCallerAndScalesVolume()
@@ -97,6 +98,31 @@ internal static class SoundPreviewSpecifications
                 "heartbeat-only stream closes normally");
             Check.That((output.Peak > 0) == (mode == "fresh"), "fresh beats play without alarm; expired/disabled mailbox cannot replay");
         }
+    }
+    private static void OutputHealthRequiresSuccessfulPump()
+    {
+        foreach (bool fail in new[] { false, true })
+        {
+            using var cancel = new CancellationTokenSource();
+            var output = new Output(cancel);
+            var player = new MonitorAlarmPlayback(() => output);
+            bool sawActive = false;
+            output.BeforePump = count =>
+            {
+                if (count == 0) { Check.That(!player.OutputActive, "opening alone does not prove pumping"); }
+                else
+                {
+                    sawActive |= player.OutputActive;
+                    if (fail) { output.FailPump = true; }
+                }
+            };
+            var result = player.RunAsync(cancel.Token).GetAwaiter().GetResult();
+            Check.That(sawActive && !player.OutputActive && result == (fail ? SoundPreviewResult.Interrupted : SoundPreviewResult.Stopped),
+                "healthy pump is observable; both stop and interruption clear health");
+        }
+        var missing = new MonitorAlarmPlayback(() => throw new DllNotFoundException());
+        Check.That(missing.RunAsync(CancellationToken.None).GetAwaiter().GetResult() == SoundPreviewResult.Unavailable && !missing.OutputActive,
+            "missing backend never reports active output");
     }
     private sealed class Output(CancellationTokenSource cancel) : IPumpedAudioOutput, IAudioOutputDevice
     {

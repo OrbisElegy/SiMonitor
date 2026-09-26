@@ -20,6 +20,8 @@ internal sealed class SoundSettingsPanel : StackPanel
     private MonitorNoticeLevel? _alarmLevel;
     private MonitorSoundTiming _timing = new();
     private bool _monitorRunning;
+    internal MonitorNotice? OutputNotice { get; private set; }
+    internal event Action? OutputNoticeChanged;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
     internal CheckBox HeartbeatEnabled { get; } = new() { Content = "ECG 心搏提示音（与报警声独立重叠）", IsChecked = true };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
@@ -65,6 +67,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         var result = await _play((int)Volume.Value, cancellation.Token);
         _cancellation = null;
         if (_closed) { return; }
+        RecordOutputResult(result);
         Volume.IsEnabled = true; Stop.IsEnabled = false;
         Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
         AlarmEnabled.IsEnabled = result != SoundPreviewResult.StopFailed;
@@ -85,6 +88,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     }
     internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null)
     {
+        if (_alarms.OutputActive) { SetOutputNotice(null); }
         _monitorRunning = true; _alarmLevel = level; _timing = timing;
         Publish();
         // Advance delivers new measurement events once, never extrapolated HR.
@@ -108,6 +112,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         var result = await _alarms.RunAsync(cancellation.Token);
         _alarmCancellation = null;
         if (_closed) { return; }
+        RecordOutputResult(result);
         AlarmEnabled.IsChecked = false;
         AlarmEnabled.IsEnabled = Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
         Status.Text = result switch
@@ -116,6 +121,26 @@ internal sealed class SoundSettingsPanel : StackPanel
             SoundPreviewResult.StopFailed => "音频设备未能释放，请关闭并重新启动客户端。",
             _ => "监护声音输出不可用或中断，请检查设备后重新启用。"
         };
+    }
+    private void RecordOutputResult(SoundPreviewResult result)
+    {
+        if (result == SoundPreviewResult.Completed) { SetOutputNotice(null); }
+        else if (result is SoundPreviewResult.Unavailable or SoundPreviewResult.Interrupted or SoundPreviewResult.StopFailed)
+        {
+            string text = result switch
+            {
+                SoundPreviewResult.Interrupted => "监护声音输出已中断，请检查设备并重新启用",
+                SoundPreviewResult.StopFailed => "音频设备未能释放，请重新启动客户端",
+                _ => "声音输出不可用，请检查音频组件与输出设备"
+            };
+            SetOutputNotice(new("audio-output", MonitorNoticeLevel.Notice, text) { Audible = false });
+        }
+        // A cancelled attempt does not prove that output has recovered.
+    }
+    private void SetOutputNotice(MonitorNotice? notice)
+    {
+        if (OutputNotice == notice) { return; }
+        OutputNotice = notice; OutputNoticeChanged?.Invoke();
     }
     internal void Close() { _closed = true; StopPreview(); _alarmCancellation?.Cancel(); }
     private static Button Button(string content) => new()

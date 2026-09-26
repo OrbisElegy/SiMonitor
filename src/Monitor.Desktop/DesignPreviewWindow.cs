@@ -48,7 +48,11 @@ internal sealed class DesignPreviewWindow : Window
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
-        MonitorView.AdditionalNotices = Settings.Alerts.Notices;
+        MonitorView.AdditionalNotices = CurrentNotices;
+        Settings.Sound.OutputNoticeChanged += () =>
+        {
+            if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
+        };
         MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -127,12 +131,17 @@ internal sealed class DesignPreviewWindow : Window
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             MonitorView = new(_monitor);
-            MonitorView.AdditionalNotices = Settings.Alerts.Notices;
+            MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Settings.Status.Text = "未应用：检查样式组合、通道和量程上下限。原运行与画面保持不变。"; }
+    }
+    private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
+    {
+        foreach (var notice in Settings.Alerts.Notices(snapshot)) { yield return notice; }
+        if (Settings.Sound.OutputNotice is { } fault) { yield return fault; }
     }
     internal void Start()
     {

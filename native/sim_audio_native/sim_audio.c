@@ -22,7 +22,45 @@ struct sa_output {
     ma_pcm_rb ring;
     ma_uint32 retired;
     ma_uint32 missing;
+    /* Immutable open-time diagnostic snapshot, never queried in callback. */
+    ma_uint32 period_status, period_hr;
+    ma_uint32 default_period, fundamental_period, minimum_period, maximum_period;
+    ma_uint32 current_period, engine_rate, engine_channels;
 };
+
+static void snapshot_periods(sa_output* s)
+{
+#if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
+    ma_IAudioClient3* client = NULL;
+    MA_WAVEFORMATEX* format = NULL;
+    ma_uint32 current = 0, normal = 0, fundamental = 0, minimum = 0, maximum = 0;
+    HRESULT hr;
+    s->period_status = 2;
+    hr = ma_IAudioClient_QueryInterface((ma_IAudioClient*)s->device.wasapi.pAudioClientPlayback,
+        &MA_IID_IAudioClient3, (void**)&client);
+    if (SUCCEEDED(hr)) {
+        hr = ma_IAudioClient3_GetCurrentSharedModeEnginePeriod(client, &format, &current);
+        if (SUCCEEDED(hr) && format == NULL) hr = E_POINTER;
+        if (SUCCEEDED(hr) && format != NULL) {
+            hr = ma_IAudioClient3_GetSharedModeEnginePeriod(client, format,
+                &normal, &fundamental, &minimum, &maximum);
+            if (SUCCEEDED(hr)) {
+                s->default_period = normal; s->fundamental_period = fundamental;
+                s->minimum_period = minimum; s->maximum_period = maximum;
+                s->current_period = current;
+                s->engine_rate = format->nSamplesPerSec;
+                s->engine_channels = format->nChannels;
+                s->period_status = 1;
+            }
+        }
+        if (format != NULL) ma_CoTaskMemFree((&s->context), format);
+        ma_IAudioClient3_Release(client);
+    }
+    s->period_hr = (ma_uint32)hr;
+#else
+    (void)s; /* Unsupported/test builds never synthesize Windows periods. */
+#endif
+}
 
 static void consume(sa_output* s, float* pcm, ma_uint32 frames)
 {
@@ -106,6 +144,7 @@ int32_t sa_open(const char* id, uint32_t capacity_ms, sa_output** out)
     if (ma_device_init(&s->context, &config, &s->device) != MA_SUCCESS) {
         ma_pcm_rb_uninit(&s->ring); ma_context_uninit(&s->context); free(s); return -2;
     }
+    snapshot_periods(s);
     *out = s;
     return 0;
 }
@@ -165,6 +204,15 @@ uint32_t sa_info(sa_output* s, uint32_t key)
         case 6: return ma_atomic_load_32(&s->retired);
         case 7: return ma_atomic_load_32(&s->missing);
         case 8: return ma_pcm_rb_available_write(&s->ring); /* Producer only. */
+        case 10: return s->period_status;
+        case 11: return s->default_period;
+        case 12: return s->fundamental_period;
+        case 13: return s->minimum_period;
+        case 14: return s->maximum_period;
+        case 15: return s->current_period;
+        case 16: return s->engine_rate;
+        case 17: return s->period_hr;
+        case 18: return s->engine_channels;
         default: return 0;
     }
 }

@@ -23,5 +23,9 @@ internal static class NativeAudioCommandSpecifications
         bool rejected = false;
         try { using var factory = new NativeAudioOutputFactory("relative.dll"); } catch (ArgumentException) { rejected = true; }
         Check.That(rejected, "library search-path fallback is forbidden");
+        Check.That(NativeAudioCommand.Execute(["--audio-native-diagnostics", missing], output, error, new CancellationToken(true)) == 130,
+            "cancelled diagnostics cannot open device");
+        Check.That(NativeAudioCommand.Execute(["--audio-native-unknown", missing], output, error, default) == 2,
+            "unknown command cannot fall through to audible audition");
     }
 }

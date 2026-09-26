@@ -11,6 +11,12 @@ import sys
 root = Path(__file__).resolve().parent.parent
 source = root / 'native/sim_audio_native'
 rows = []
+syntax_command = None
+if '--windows-syntax' in sys.argv:
+    syntax_command = ['clang', '--target=x86_64-w64-windows-gnu',
+                      '-isystem', '/usr/share/mingw-w64/include', '-fsyntax-only',
+                      str(source / 'sim_audio.c')]
+    subprocess.run(syntax_command, check=True)
 for testing in (False, True):
     folder = root / 'artifacts' / ('native-audio-test' if testing else 'native-audio')
     commands = [
@@ -33,6 +39,7 @@ for testing in (False, True):
                  'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
                  'test_only': testing, 'configure_and_build': commands})
 manifest = {'host_os': platform.system(), 'host_arch': platform.machine(),
+            'windows_syntax_only_command': syntax_command,
             'compiler_configuration': 'See adjacent CMakeCache.txt and CMakeFiles compiler metadata',
             'miniaudio_commit': 'f40cf03f80cdb7e741d43e53b7e706e8c1394bcf',
             'hardware_qualified': False, 'binaries': rows}

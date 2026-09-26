@@ -34,6 +34,7 @@ def main():
     check(lib.sa_open(None, 40, c.byref(h)) == 0, 'A fresh test output must open after retirement')
     try:
         check(lib.sa_info(h, 8) == 1920 and lib.sa_info(h, 9) == 0, 'Fresh ring must expose its capacity and no submitted frames')
+        check(all(lib.sa_info(h, key) == 0 for key in range(10, 19)), 'Test backend must not report hardware diagnostics')
         source = (c.c_float * 1500)(*[(i % 99 - 49) / 50 for i in range(1500)])
         check(lib.sa_submit(h, source, 1500) == 0, 'Initial PCM submission must succeed')
         check(lib.sa_submit(h, source, 1500) == -3, 'PCM exceeding ring capacity must be rejected')

@@ -23,7 +23,11 @@ SA_API int32_t sa_close(sa_output* out);
 /* Scalar keys:1 native rate,2 channels,3 format(1 f32,2 s16,3 s24,4 s32,5 u8),
    4 reported period frames(NOT latency),5 actual WASAPI buffer frames,
    6 retired reason(0 none,1 underrun,2 device change/stop),7 missing frames,
-   8 writable engine frames,9 low-latency qualified(always0 until measured). */
+   8 writable engine frames,9 low-latency qualified(always0 until measured).
+   Optional ABI1 extension:10 period snapshot status(0 unavailable/older DLL,
+   1 available,2 query failed),11 default,12 fundamental,13 minimum,14 maximum,
+   15 current engine period,16 engine rate,17 HRESULT bits,18 engine channels.
+   11-18 are an open-time snapshot, NOT live values or physical latency. */
 SA_API uint32_t sa_info(sa_output* out, uint32_t key);
 #ifdef SIM_AUDIO_TEST
 /* Test-only build: no hardware. Runs the SAME PCM consumer as the callback. */

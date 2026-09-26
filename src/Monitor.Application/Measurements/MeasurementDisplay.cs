@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Application.Measurements;
 
-public enum MeasurementSource { Ecg, Pleth, ImpedanceRespiration, Co2 }
+public enum MeasurementSource { Ecg, Pleth, ImpedanceRespiration, Co2, Pressure, SpO2 }
 public enum MeasurementTechnicalFault { None, ExcessiveInterference, SensorDisconnected, LeadsDisconnected }
 public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
 {
@@ -18,6 +18,8 @@ public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
             MeasurementSource.Ecg => "ECG",
             MeasurementSource.Pleth => "Pleth",
             MeasurementSource.ImpedanceRespiration => "Resp",
+            MeasurementSource.Pressure => "压力",
+            MeasurementSource.SpO2 => "SpO₂",
             _ => "CO2"
         };
         if (fault != MeasurementTechnicalFault.None)

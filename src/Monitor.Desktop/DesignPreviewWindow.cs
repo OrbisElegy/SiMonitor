@@ -13,7 +13,7 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-// Local preview integration. No numeric estimator, alarm engine or diagnostic export.
+// Local preview with sample-derived numerics; alarm/audio scheduling remains separate.
 internal sealed class DesignPreviewWindow : Window
 {
     internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
@@ -24,6 +24,7 @@ internal sealed class DesignPreviewWindow : Window
     private readonly Button[] _navigation = new Button[3];
     private WaveformEnvelope[] _ecg;
     private LiveMonitorTrace _monitor;
+    internal LiveMonitorView MonitorView { get; private set; }
     private LocalMonitorPreviewSession _session;
     private DispatcherTimer? _timer;
     private long _lastTick;
@@ -43,6 +44,7 @@ internal sealed class DesignPreviewWindow : Window
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(), enableMeasurements: true);
         _monitor = new(_session);
+        MonitorView = new(_monitor);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings = new(CreateStylePreview, CreateRespirationPreview, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
@@ -108,7 +110,7 @@ internal sealed class DesignPreviewWindow : Window
         };
         _workspace.Content = page switch
         {
-            0 => _monitor,
+            0 => MonitorView,
             1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
             _ => Settings
         };
@@ -118,9 +120,11 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
-            var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true);
+            var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
+                opticalSaturationMilliPercent: Settings.ReadOpticalTarget());
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
+            MonitorView = new(_monitor);
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -152,6 +156,7 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
+            MonitorView.Refresh();
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

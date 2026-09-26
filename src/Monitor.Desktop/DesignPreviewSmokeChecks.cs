@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.VisualTree;
+using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
@@ -51,9 +52,11 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
+            Require(window.MonitorView.NumericTexts.All(t => t == "---"), "no configured targets displayed before acquisition");
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Page == 0 && window.Session.FrontierNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");
+            Require(window.MonitorView.NumericTexts[0] == "75" && window.MonitorView.NumericTexts[1] == "---", "sample-derived HR visible, absent optical source not invented");
             VerifyGapAndCalibration(window.MonitorTrace);
             Capture(window, "ui-preview-monitor.png");
             double wideMonitor = window.MonitorTrace.Bounds.Width;
@@ -63,6 +66,23 @@ internal static class DesignPreviewSmokeChecks
             window.Width = 1440; window.Height = 940;
             for (int i = 0; i < 450; i++) { window.Pulse(timer, 50_000_000); }
             Capture(window, "ui-preview-monitor-auto.png");
+            Require(window.MonitorView.NumericTexts[4] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
+            var liveReading = window.Session.Measurements!;
+            var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
+                PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
+            seven.RefreshReadings(liveReading);
+            string Mean(MeanPressureReading reading) => ((decimal)reading.MeanCentiMmHg! / 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+            Require(seven.NumericTexts[2] == Mean(liveReading.AbpMean) && seven.NumericTexts[5] == Mean(liveReading.PaMean) &&
+                seven.NumericTexts[6] == Mean(liveReading.CvpMean), "all three pressure channels bind independent measured means");
+            _ = Raster(seven, 700, 480);
+            window.MonitorView.RefreshReadings(liveReading with
+            {
+                HeartRate = new(WaveformMeasurementStatus.Uncountable, null, null),
+                Capnography = new(new(WaveformMeasurementStatus.PoorSignal, null, null), liveReading.Capnography.RespirationsMilliPerMinute)
+            });
+            Require(window.MonitorView.NumericTexts[0] == "-?-" && window.MonitorView.NumericTexts[3] == "---" &&
+                window.MonitorView.Notice.Text!.Contains("信号质量不足", StringComparison.Ordinal), "invalid values and technical status replace digits without preset classification");
+            window.MonitorView.RefreshReadings(liveReading);
             window.SelectPage(1); Capture(window, "ui-preview-paper.png");
             window.Settings.PaperLayout.SelectedIndex = 1; window.SelectPage(1);
             Capture(window, "ui-preview-paper-six-rows.png");
@@ -128,6 +148,8 @@ internal static class DesignPreviewSmokeChecks
             window.ApplySettings();
             Require(ReferenceEquals(window.Session, source) && ReferenceEquals(window.ActiveTimer, timer), "invalid settings preserve live session and timer");
             window.Settings.Skin.SelectedIndex = 0;
+            window.Settings.OpticalEnabled.IsChecked = true;
+            window.Settings.OpticalTarget.Value = 98;
             window.Settings.Slots[0].Auto.IsChecked = false;
             window.Settings.Slots[0].Minimum.Text = "-0.01";
             window.Settings.Slots[0].Maximum.Text = "0.01";
@@ -135,16 +157,20 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Slots[2].Speed.SelectedIndex = 0;
             window.ApplySettings();
             Require(!ReferenceEquals(source, window.Session) && window.Session.Display.Slots.Count == 3, "apply changes fixed skin and restarts");
+            Require(window.MonitorView.NumericTexts.All(t => t == "---"), "apply clears previous numeric readings until newly acquired");
             window.Pulse(timer, 50_000_000);
             Require(window.Session.SimulationTimeNs == 0, "callbacks from old run are fenced");
             timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
+            Require(window.MonitorView.NumericTexts[1] == "98", "explicit optical source reaches measured on-screen SpO2");
             VerifyClamping(window.MonitorTrace);
             for (int i = 0; i < 300; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Session.Ranges.RowCycle(0) == 2 && window.Session.Ranges.RowCycle(1) == 4 && window.Session.Ranges.RowCycle(2) == 1, "native sweep wraps twice with boundary range updates");
             window.SelectPage(0); Capture(window, "ui-preview-monitor-wrap.png");
             window.Pause(); long paused = window.Session.SimulationTimeNs;
+            var held = window.MonitorView.NumericTexts.ToArray();
             window.Pulse(timer, 50_000_000); Require(window.Session.SimulationTimeNs == paused, "pause holds simulation");
+            Require(held.SequenceEqual(window.MonitorView.NumericTexts), "paused numerics hold with patient time");
             window.Start(); window.SelectPage(0); Require(window.Session.SimulationTimeNs == paused, "navigation/resume never regenerates history");
             foreach (var choice in new[] { (1, 1, 0), (2, 2, 1), (0, 0, 2), (0, 3, 3), (3, 0, 0), (4, 0, 0), (5, 0, 0) })
             {

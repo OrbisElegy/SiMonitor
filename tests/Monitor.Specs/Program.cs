@@ -54,6 +54,7 @@ internal static class Program
             .. PlethMeasurementSpecifications.All,
             .. PulseOximeterChainSpecifications.All,
             .. ImpedanceRespirationMeasurementSpecifications.All,
+            .. LiveWaveformMeasurementSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

@@ -41,7 +41,7 @@ internal sealed class DesignPreviewWindow : Window
         RequestedThemeVariant = ThemeVariant.Light;
         Background = Brush.Parse("#F5F6F8"); Foreground = Brush.Parse("#202C39");
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
+        _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(), enableMeasurements: true);
         _monitor = new(_session);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings = new(CreateStylePreview, CreateRespirationPreview, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
@@ -102,7 +102,7 @@ internal sealed class DesignPreviewWindow : Window
         _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", _ => "设置" };
         _subtitle.Text = page switch
         {
-            0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速 · 测量与报警未启用",
+            0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速",
             1 => "监护采样快照",
             _ => "波形生成、显示、声音与报警"
         };
@@ -118,7 +118,7 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
-            var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay());
+            var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true);
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();

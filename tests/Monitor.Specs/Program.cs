@@ -48,6 +48,7 @@ internal static class Program
             .. PhysiologyWaveformGroupSpecifications.All,
             .. PhysiologyIllustrationSpecifications.All,
             .. MonitorDisplaySpecifications.All,
+            .. CapnographyMeasurementSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

@@ -45,7 +45,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         Stop.IsEnabled = false; Children.Add(Status);
         Children.Add(AlarmEnabled);
         Children.Add(HeartbeatEnabled);
-        Children.Add(Text("报警按最高活动级别发声；心搏音由 ECG 检测到的搏动触发，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
+        Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由 ECG 检测到的搏动触发，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
         {

@@ -49,6 +49,7 @@ internal static class Program
             .. PhysiologyIllustrationSpecifications.All,
             .. MonitorDisplaySpecifications.All,
             .. CapnographyMeasurementSpecifications.All,
+            .. MeasurementDisplaySpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

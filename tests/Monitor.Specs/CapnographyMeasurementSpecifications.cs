@@ -14,6 +14,7 @@ internal static class CapnographyMeasurementSpecifications
         new(nameof(CapnographyMeasuresAcquiredSamplesRatherThanSettings), CapnographyMeasuresAcquiredSamplesRatherThanSettings),
         new(nameof(CapnographyHandlesAbsenceQualityAndAtomicRejection), CapnographyHandlesAbsenceQualityAndAtomicRejection),
         new(nameof(CapnographyRestoresMidBreathAndResetsDiscontinuities), CapnographyRestoresMidBreathAndResetsDiscontinuities),
+        new(nameof(CapnographyUsesBoundedIntervalsAndRetainsRespiratoryPauses), CapnographyUsesBoundedIntervalsAndRetainsRespiratoryPauses),
     ];
 
     private static void CapnographyMeasuresAcquiredSamplesRatherThanSettings()
@@ -94,9 +95,40 @@ internal static class CapnographyMeasurementSpecifications
         for (int i = 0; i < 10; i++) { Check.That(spike.Consume(Wire(i, flat: true, spike: true)).Count == 0, "median and persistence reject isolated spike"); }
     }
 
-    private static byte[] Wire(int block, bool flat = false, bool badQuality = false, int scale = 1, ulong epoch = 1, bool spike = false, ulong revision = 1)
+    private static void CapnographyUsesBoundedIntervalsAndRetainsRespiratoryPauses()
     {
-        short[] samples = Enumerable.Range(block * 20, 20).Select(i => (short)(spike && i % 200 == 40 ? 8000 : !flat && i % 200 is >= 40 and < 100 ? 3950 : -50)).ToArray();
+        int[] onsets = [40, 240, 440, 640, 1040, 1440, 1840, 2240];
+        var m = new CapnographyMeasurement(Channel);
+        var expected = new Dictionary<int, int> { [55] = 24000, [75] = 20000, [95] = 17143, [115] = 15000 };
+        for (int block = 0; block <= 115; block++)
+        {
+            m.Consume(Wire(block, onsetSamples: onsets));
+            if (expected.TryGetValue(block, out int rate))
+            { Check.That(m.Read(block * 200_000_000L + 190_000_000).RespirationsMilliPerMinute.Value == rate, "finite pooled intervals respond gradually, oldest intervals disappear"); }
+        }
+        int[] paused = [40, 240, 440, 1640];
+        var p = new CapnographyMeasurement(Channel);
+        for (int block = 0; block <= 85; block++) { p.Consume(Wire(block, onsetSamples: paused)); }
+        Check.That(p.Read(17_190_000_000).RespirationsMilliPerMinute.Value == 11250,
+            "12-second gap remains a measured interval, not discarded as an outlier");
+        var checkpoint = p.Capture();
+        var copy = CapnographyMeasurement.Restore(checkpoint);
+        for (int block = 86; block <= 105; block++)
+        { p.Consume(Wire(block, onsetSamples: paused)); copy.Consume(Wire(block, onsetSamples: paused)); }
+        Check.That(p.Read(21_190_000_000).RespirationsMilliPerMinute.Value == 8571 && p.Read(21_190_000_000) == copy.Read(21_190_000_000),
+            "20-second sample-time window expires old endpoints without requiring a new breath; checkpoint agrees");
+        for (int block = 106; block <= 140; block++) { p.Consume(Wire(block, onsetSamples: paused)); }
+        Check.That(p.Read(28_190_000_000).RespirationsMilliPerMinute is { Status: WaveformMeasurementStatus.Stale, Value: null },
+            "old average cannot mask prolonged absence of detected respiration");
+        Check.That(CapnographyMeasurement.Restore(checkpoint).Read(17_190_000_000).RespirationsMilliPerMinute.Value == 11250,
+            "subsequent history replacement does not mutate the saved interval window");
+    }
+
+    private static byte[] Wire(int block, bool flat = false, bool badQuality = false, int scale = 1, ulong epoch = 1, bool spike = false, ulong revision = 1, int[]? onsetSamples = null)
+    {
+        short[] samples = Enumerable.Range(block * 20, 20).Select(i => (short)(onsetSamples is not null
+            ? onsetSamples.Any(start => i >= start && i < start + 60) ? 3950 : -50
+            : spike && i % 200 == 40 ? 8000 : !flat && i % 200 is >= 40 and < 100 ? 3950 : -50)).ToArray();
         var plane = new WaveformPlane(Channel, 100, 1, (ulong)block * 20, scale, 100, 1, 2,
             badQuality ? WaveformQualityEncoding.Ranges : WaveformQualityEncoding.None, samples,
             badQuality ? [new(0, 20, 1)] : []);

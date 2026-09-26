@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Infrastructure.Audio;
+
+namespace Monitor.Specs;
+
+internal static class SoundPreviewSpecifications
+{
+    public static Specification[] All =>
+    [
+        new(nameof(SoundPreviewOwnsOutputOffCallerAndScalesVolume), SoundPreviewOwnsOutputOffCallerAndScalesVolume),
+        new(nameof(SoundPreviewCancellationAndFailedJoinPreventReplay), SoundPreviewCancellationAndFailedJoinPreventReplay),
+    ];
+
+    private static void SoundPreviewOwnsOutputOffCallerAndScalesVolume()
+    {
+        int caller = Environment.CurrentManagedThreadId;
+        float Measure(int volume)
+        {
+            using var cancel = new CancellationTokenSource();
+            var output = new Output(cancel);
+            var playback = new SoundPreviewPlayback(() => output);
+            Check.That(playback.PlayAsync(volume, cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped,
+                "explicit stop ends preview");
+            Check.That(output.Threads.Count == 1 && !output.Threads.Contains(caller) && output.Closed && output.Disposed,
+                "open/pump/close/dispose share background owner and join before unload");
+            return output.Peak;
+        }
+        float full = Measure(100), half = Measure(50), zero = Measure(0);
+        Check.That(full > 0.1f && half == full / 2 && zero == 0, "volume scales rendered PCM including mute");
+    }
+
+    private static void SoundPreviewCancellationAndFailedJoinPreventReplay()
+    {
+        using var cancel = new CancellationTokenSource(); cancel.Cancel();
+        int opens = 0;
+        var player = new SoundPreviewPlayback(() => { opens++; return new Output(cancel); });
+        Check.That(player.PlayAsync(50, cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && opens == 0,
+            "cancel before start opens no device");
+        bool invalid = false;
+        try { player.PlayAsync(101, cancel.Token).GetAwaiter().GetResult(); } catch (ArgumentOutOfRangeException) { invalid = true; }
+        Check.That(invalid && opens == 0, "invalid volume has no output effects");
+        using var stop = new CancellationTokenSource();
+        using var entered = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
+        var output = new Output(stop) { CanClose = false };
+        player = new(() => { opens++; entered.Set(); release.Wait(); return output; });
+        var running = player.PlayAsync(50, stop.Token);
+        entered.Wait();
+        bool duplicate = false;
+        try { player.PlayAsync(50, stop.Token).GetAwaiter().GetResult(); }
+        catch (InvalidOperationException) { duplicate = true; }
+        finally { release.Set(); }
+        Check.That(duplicate && running.GetAwaiter().GetResult() == SoundPreviewResult.StopFailed && !output.Disposed,
+            "concurrent play rejected; unjoined device retained");
+        Check.That(player.PlayAsync(50, CancellationToken.None).GetAwaiter().GetResult() == SoundPreviewResult.StopFailed && opens == 1,
+            "failed join blocks second output");
+        output.CanClose = true;
+        Check.That(player.PlayAsync(50, cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Disposed && opens == 1,
+            "successful close retry releases retained device without stale tones");
+    }
+
+    private sealed class Output(CancellationTokenSource cancel) : IPumpedAudioOutput, IAudioOutputDevice
+    {
+        private AudioRenderSession? _session;
+        private readonly float[] _pcm = new float[1920];
+        private int _pumps;
+        public HashSet<int> Threads { get; } = [];
+        public bool Closed { get; private set; }
+        public bool Disposed { get; private set; }
+        public bool CanClose { get; set; } = true;
+        public float Peak { get; private set; }
+        public IAudioOutputDevice Open(string? deviceId, AudioRenderSession session, long generation)
+        { Touch(); _session = session; return this; }
+        public bool Start() { Touch(); return true; }
+        public bool Pump()
+        {
+            Touch();
+            if (_session!.BufferedFrames == 0) { _session.TryProduce(_pcm.Length); }
+            _session.Read(_pcm);
+            foreach (float sample in _pcm) { Peak = Math.Max(Peak, Math.Abs(sample)); }
+            if (++_pumps == 12) { cancel.Cancel(); }
+            return true;
+        }
+        public bool StopAndClose() { Touch(); Closed = CanClose; return CanClose; }
+        public void Dispose() { Touch(); Check.That(Closed, "join before dispose"); Disposed = true; }
+        private void Touch() => Threads.Add(Environment.CurrentManagedThreadId);
+    }
+}

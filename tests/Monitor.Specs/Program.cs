@@ -160,6 +160,7 @@ internal static class Program
             .. SampleToneRendererSpecifications.All,
             .. AudioRenderSessionSpecifications.All,
             .. AudioOutputLifecycleSpecifications.All,
+            .. SoundPreviewSpecifications.All,
             .. NativeAudioCommandSpecifications.All,
             .. NativeAudioClockSpecifications.All,
             .. ElectrodeForkSpecifications.All,

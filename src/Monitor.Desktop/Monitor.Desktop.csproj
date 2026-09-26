@@ -8,6 +8,14 @@
   <ItemGroup>
     <ProjectReference Include="../Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
   </ItemGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <NativeAudioBinary Condition="Exists('../../artifacts/native-audio/Release/sim_audio_native.dll')">../../artifacts/native-audio/Release/sim_audio_native.dll</NativeAudioBinary>
+    <NativeAudioBinary Condition="'$(NativeAudioBinary)' == '' And Exists('../../artifacts/native-audio/sim_audio_native.dll')">../../artifacts/native-audio/sim_audio_native.dll</NativeAudioBinary>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NativeAudioBinary)' != ''">
+    <None Include="$(NativeAudioBinary)" Link="sim_audio_native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../native/sim_audio_native/vendor/LICENSE.miniaudio" Link="LICENSE.miniaudio" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />

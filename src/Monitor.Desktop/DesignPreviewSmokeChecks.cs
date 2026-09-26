@@ -81,7 +81,23 @@ internal static class DesignPreviewSmokeChecks
                 Capnography = new(new(WaveformMeasurementStatus.PoorSignal, null, null), liveReading.Capnography.RespirationsMilliPerMinute)
             });
             Require(window.MonitorView.NumericTexts[0] == "-?-" && window.MonitorView.NumericTexts[3] == "---" &&
-                window.MonitorView.Notice.Text!.Contains("信号质量不足", StringComparison.Ordinal), "invalid values and technical status replace digits without preset classification");
+                window.MonitorView.ActiveNotices.Any(n => n.Text.Contains("信号质量不足", StringComparison.Ordinal)), "invalid values and technical status replace digits without preset classification");
+            window.MonitorView.RefreshReadings(liveReading);
+            window.Settings.Alerts.HeartRateEnabled.IsChecked = true;
+            window.Settings.Alerts.WarningHeartRate.Value = 60;
+            window.Settings.Alerts.CriticalHeartRate.Value = 70;
+            window.MonitorView.RefreshReadings(liveReading);
+            Require(window.MonitorView.HighestNotice == MonitorNoticeLevel.Critical && window.MonitorView.Notice.Text == "Critical · HR 极高",
+                "valid measured HR triggers the configured critical threshold and one banner");
+            Capture(window, "ui-preview-critical.png");
+            window.Settings.Alerts.HeartRateEnabled.IsChecked = false;
+            foreach (int level in new[] { 1, 2, 3, 4 })
+            {
+                window.Settings.Alerts.TestLevel.SelectedIndex = level;
+                window.MonitorView.RefreshReadings(liveReading);
+                Require(window.MonitorView.HighestNotice == (MonitorNoticeLevel)(level - 1), "explicit four-level test is available without hardware output");
+            }
+            window.Settings.Alerts.TestLevel.SelectedIndex = 0;
             window.MonitorView.RefreshReadings(liveReading);
             window.SelectPage(1); Capture(window, "ui-preview-paper.png");
             window.Settings.PaperLayout.SelectedIndex = 1; window.SelectPage(1);
@@ -163,6 +179,11 @@ internal static class DesignPreviewSmokeChecks
             timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.MonitorView.NumericTexts[1] == "98", "explicit optical source reaches measured on-screen SpO2");
+            window.SelectPage(0); Capture(window, "ui-preview-optical-pi.png");
+            Require(window.MonitorView.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("PI ", StringComparison.Ordinal) == true && !t.Text.Contains("---", StringComparison.Ordinal)), "measured PI is visible beside saturation");
+            List<double> levels = [];
+            for (int i = 0; i < 16; i++) { window.Pulse(timer, 50_000_000); levels.Add(window.MonitorView.PulseLevels[0]); }
+            Require(levels.Max() - levels.Min() > .5, "perfusion bar follows sampled pulse excursion");
             VerifyClamping(window.MonitorTrace);
             for (int i = 0; i < 300; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Session.Ranges.RowCycle(0) == 2 && window.Session.Ranges.RowCycle(1) == 4 && window.Session.Ranges.RowCycle(2) == 1, "native sweep wraps twice with boundary range updates");
@@ -181,6 +202,11 @@ internal static class DesignPreviewSmokeChecks
                 window.ApplySettings();
                 Require(!ReferenceEquals(source, window.Session), "supported rhythm/breathing/ejection combination applies");
             }
+            window.Settings.Skin.SelectedIndex = 2;
+            window.Settings.EcgSelection = window.Settings.RespirationSelection = window.Settings.EjectionSelection = 0;
+            window.ApplySettings(); window.SelectPage(0);
+            for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Capture(window, "ui-preview-perfusion.png");
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

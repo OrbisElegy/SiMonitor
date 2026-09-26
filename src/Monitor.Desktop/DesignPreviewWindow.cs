@@ -48,6 +48,7 @@ internal sealed class DesignPreviewWindow : Window
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings = new(CreateStylePreview, CreateRespirationPreview, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
+        MonitorView.AdditionalNotices = Settings.Alerts.Notices;
         Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
@@ -121,10 +122,11 @@ internal sealed class DesignPreviewWindow : Window
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-                opticalSaturationMilliPercent: Settings.ReadOpticalTarget());
+                opticalSaturationMilliPercent: Settings.ReadOpticalTarget(), opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)));
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             MonitorView = new(_monitor);
+            MonitorView.AdditionalNotices = Settings.Alerts.Notices;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -141,6 +143,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         var old = _timer; _timer = null;
         if (old is not null) { old.Stop(); old.Tick -= OnTick; }
+        Settings?.Sound.UpdateAlarm(null, Settings.Alerts.Timing);
         UpdateState();
     }
     private void OnTick(object? sender, EventArgs args)
@@ -157,6 +160,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
             MonitorView.Refresh();
+            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

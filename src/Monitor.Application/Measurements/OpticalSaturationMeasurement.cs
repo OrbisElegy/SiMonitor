@@ -10,7 +10,11 @@ namespace Monitor.Application.Measurements;
 public sealed record OpticalSample(long SampleTimeNs, int Red, int Infrared, uint QualityFlags = 0);
 public sealed record SaturationCalibrationPoint(int RatioPpm, int SaturationMilliPercent);
 public sealed record OpticalSaturationReading(WaveformMeasurementStatus Status,
-    int? SaturationMilliPercent, int? RatioPpm, long? MeasuredAtNs);
+    int? SaturationMilliPercent, int? RatioPpm, long? MeasuredAtNs)
+{
+    // Teaching PI: IR peak-to-peak / window mean *100%, not vendor calibration.
+    public int? PerfusionMilliPercent { get; init; }
+}
 
 // A bounded-window engineering estimator, not a clinically qualified oximeter.
 // Calibration is mandatory and caller-owned; there is no universal/default curve.
@@ -46,6 +50,7 @@ public sealed class OpticalSaturationMeasurement
         long? last = null;
         BigInteger red = 0, infrared = 0, redSquares = 0, infraredSquares = 0, products = 0;
         bool poor = false;
+        int irMinimum = int.MaxValue, irMaximum = int.MinValue;
         foreach (var sample in samples)
         {
             if (sample is null || sample.SampleTimeNs < 0 || sample.SampleTimeNs > asOfSampleTimeNs ||
@@ -57,6 +62,7 @@ public sealed class OpticalSaturationMeasurement
             redSquares += (BigInteger)sample.Red * sample.Red;
             infraredSquares += (BigInteger)sample.Infrared * sample.Infrared;
             products += (BigInteger)sample.Red * sample.Infrared;
+            irMinimum = Math.Min(irMinimum, sample.Infrared); irMaximum = Math.Max(irMaximum, sample.Infrared);
         }
         if (last is null || asOfSampleTimeNs - last.Value > 500_000_000)
         { return new(WaveformMeasurementStatus.NoData, null, null, last); }
@@ -65,18 +71,24 @@ public sealed class OpticalSaturationMeasurement
         BigInteger redVariance = WindowSamples * redSquares - red * red;
         BigInteger infraredVariance = WindowSamples * infraredSquares - infrared * infrared;
         BigInteger covariance = WindowSamples * products - red * infrared;
+        bool coherent = covariance > 0 && covariance * covariance * 100 >= redVariance * infraredVariance * 81;
+        OpticalSaturationReading Reading(WaveformMeasurementStatus status, int? saturation, int? ratio) => new(status, saturation, ratio, last)
+        {
+            PerfusionMilliPercent = coherent || redVariance == 0 && infraredVariance == 0
+                ? (int)FixedPointMath.RoundDivideTiesToEven((Int128)(irMaximum - irMinimum) * WindowSamples * 100_000, (Int128)infrared) : null
+        };
         // AC rms / DC >=0.001 on both channels, positive correlation >=0.9.
         // These are explicit engineering quality gates, not motion rejection.
         if (redVariance * 1_000_000 < red * red || infraredVariance * 1_000_000 < infrared * infrared ||
-            covariance <= 0 || covariance * covariance * 100 < redVariance * infraredVariance * 81)
-        { return new(WaveformMeasurementStatus.PoorSignal, null, null, last); }
+            !coherent)
+        { return Reading(WaveformMeasurementStatus.PoorSignal, null, null); }
         // R = (ACrms(red)/DC(red)) / (ACrms(IR)/DC(IR)).
         // Integer square root avoids a platform-dependent floating point path.
         BigInteger squaredPpm = redVariance * infrared * infrared * 1_000_000_000_000L /
             (infraredVariance * red * red);
         BigInteger root = SquareRoot(squaredPpm);
         if (root < _calibration[0].RatioPpm || root > _calibration[^1].RatioPpm)
-        { return new(WaveformMeasurementStatus.PoorSignal, null, null, last); }
+        { return Reading(WaveformMeasurementStatus.PoorSignal, null, null); }
         int ratio = (int)root;
         for (int i = 1; i < _calibration.Length; i++)
         {
@@ -84,7 +96,7 @@ public sealed class OpticalSaturationMeasurement
             if (ratio > b.RatioPpm) { continue; }
             int saturation = a.SaturationMilliPercent + (int)FixedPointMath.RoundDivideTiesToEven(
                 (Int128)(ratio - a.RatioPpm) * (b.SaturationMilliPercent - a.SaturationMilliPercent), b.RatioPpm - a.RatioPpm);
-            return new(WaveformMeasurementStatus.Valid, saturation, ratio, last);
+            return Reading(WaveformMeasurementStatus.Valid, saturation, ratio);
         }
         throw new InvalidOperationException("Optical.CalibrationCoverage");
     }

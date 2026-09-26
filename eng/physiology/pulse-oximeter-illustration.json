@@ -11,14 +11,26 @@
   ],
   "input": "AcqPleth125@1 acquired relative peripheral pulse, including existing perfusion and missing ejection effects",
   "sample_rate_hz": 125,
-  "optical_target_milli_percent_range": [75000, 99000],
+  "optical_target_milli_percent_range": [
+    75000,
+    99000
+  ],
   "ratio_ppm": "(110000 - target_milli_percent) * 40",
-  "red_adc": "16000 - round_ties_even(pulse_count * 32 * ratio_ppm / 100000000)",
-  "infrared_adc": "20000 - round_ties_even(pulse_count * 2 / 5)",
-  "accepted_pulse_count_range": [-10000, 10000],
+  "red_adc": "16000 - round_ties_even(pulse_count * 32 * ratio_ppm * modulation_permille / 100000000000)",
+  "infrared_adc": "20000 - round_ties_even(pulse_count * 2 * modulation_permille / 5000)",
+  "accepted_pulse_count_range": [
+    -10000,
+    10000
+  ],
   "calibration_points": [
-    {"ratio_ppm": 400000, "saturation_milli_percent": 100000},
-    {"ratio_ppm": 1600000, "saturation_milli_percent": 70000}
+    {
+      "ratio_ppm": 400000,
+      "saturation_milli_percent": 100000
+    },
+    {
+      "ratio_ppm": 1600000,
+      "saturation_milli_percent": 70000
+    }
   ],
   "measurement": "500 paired samples; independent window means and AC RMS ratio; no target passed to calculator",
   "engineering_acceptance": "Acquired reference and 2:1 examples at75/90/98/99 percent recover within0.5 percentage point; not a clinical accuracy statement",
@@ -28,5 +40,11 @@
     "Quality flags are retained; clipped input becomes invalid optical input; constant light does not yield saturation",
     "A new sensor instance is mandatory when target/model changes; does not define new frozen acquisition profiles",
     "Preview UI, common live owner and sound/alarm integration remain separate"
-  ]
+  ],
+  "optical_modulation_permille": {
+    "default": 1000,
+    "minimum": 100,
+    "maximum": 2000
+  },
+  "perfusion_index": "IR peak-to-peak / IR window mean * 100 percent, 500 samples; teaching estimate, not vendor algorithm"
 }

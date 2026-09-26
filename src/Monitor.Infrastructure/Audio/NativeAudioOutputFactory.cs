@@ -11,7 +11,7 @@ public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint D
 
 // Explicit absolute library path; no DLL search-path fallback. All methods and
 // Dispose belong to the serialized scheduler/control owner, never a callback.
-public sealed class NativeAudioOutputFactory : IAudioOutputFactory, IDisposable
+public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 {
     private nint _library;
     private readonly OpenCall _open;

@@ -23,6 +23,7 @@ internal sealed class DesignPreviewSettings : UserControl
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal TabControl Tabs { get; } = new();
+    internal SoundSettingsPanel Sound { get; } = new();
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
@@ -78,7 +79,7 @@ internal sealed class DesignPreviewSettings : UserControl
         {
             new TabItem { Header = "波形生成", Content = Scroll(_generation) },
             new TabItem { Header = "显示", Content = Scroll(display) },
-            new TabItem { Header = "声音", Content = Scroll(Note("声音尚未启用", "心搏提示音来源、音量等设置将在此接入。当前不会发声。")) },
+            new TabItem { Header = "声音", Content = Scroll(Sound) },
             new TabItem { Header = "报警", Content = Scroll(Note("报警尚未启用", "报警阈值、确认与限时声音暂停将在此接入。未启用不表示不存在报警条件。")) },
             new TabItem { Header = "生命体征", Content = Scroll(VitalSigns()) },
             new TabItem { Header = "高级参数", Content = Scroll(_advancedParameters) },

@@ -12,6 +12,38 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    private static void VerifySoundSettings()
+    {
+        var completion = new TaskCompletionSource<Monitor.Infrastructure.Audio.SoundPreviewResult>();
+        CancellationToken token = default; int calls = 0;
+        var panel = new SoundSettingsPanel((volume, cancellation) =>
+        { Require(volume == 50, "volume passed to output"); calls++; token = cancellation; return completion.Task; });
+        var pending = panel.PreviewAsync();
+        Require(!panel.Audition.IsEnabled && !panel.Volume.IsEnabled && panel.Stop.IsEnabled, "preview locks settings until output joined");
+        panel.PreviewAsync().GetAwaiter().GetResult();
+        Require(calls == 1, "double click does not start second output");
+        panel.StopPreview(); Require(token.IsCancellationRequested, "stop requests background cancellation");
+        completion.SetResult(Monitor.Infrastructure.Audio.SoundPreviewResult.Stopped);
+        Require(pending.IsCompleted && panel.Audition.IsEnabled && !panel.Stop.IsEnabled, "joined output restores controls");
+        Require(panel.Audition.HorizontalContentAlignment == Avalonia.Layout.HorizontalAlignment.Center && panel.Stop.MinHeight == 44,
+            "sound controls preserve centered accessible target sizes");
+        var failed = new SoundSettingsPanel((_, _) => Task.FromResult(Monitor.Infrastructure.Audio.SoundPreviewResult.StopFailed));
+        failed.PreviewAsync().GetAwaiter().GetResult();
+        Require(!failed.Audition.IsEnabled, "failed join blocks new UI playback");
+        panel.Close(); panel.PreviewAsync().GetAwaiter().GetResult(); Require(calls == 1, "closed view cannot replay");
+        var late = new TaskCompletionSource<Monitor.Infrastructure.Audio.SoundPreviewResult>();
+        var closing = new SoundSettingsPanel((_, cancellation) => { token = cancellation; return late.Task; });
+        var closingTask = closing.PreviewAsync(); closing.Close();
+        Require(token.IsCancellationRequested, "window close cancels active output");
+        string? closingStatus = closing.Status.Text;
+        late.SetResult(Monitor.Infrastructure.Audio.SoundPreviewResult.Completed);
+        Require(closingTask.IsCompleted && closing.Status.Text == closingStatus && !closing.Audition.IsEnabled,
+            "late completion cannot revive a closed sound page");
+        var unavailable = new SoundSettingsPanel((_, _) => Task.FromResult(Monitor.Infrastructure.Audio.SoundPreviewResult.Unavailable));
+        unavailable.PreviewAsync().GetAwaiter().GetResult();
+        Require(unavailable.Audition.IsEnabled && unavailable.Status.Text!.Contains("不可用", StringComparison.Ordinal),
+            "missing output is visible and retryable");
+    }
     internal static void Verify()
     {
         VerifyStableSlowContours();
@@ -85,6 +117,7 @@ internal static class DesignPreviewSmokeChecks
             window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-display-compact.png");
             window.Width = 1440; window.Height = 940;
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-audio.png");
+            VerifySoundSettings();
             window.Settings.Tabs.SelectedIndex = 3; Capture(window, "ui-preview-alarms.png");
             window.Settings.Tabs.SelectedIndex = 4; Capture(window, "ui-preview-vitals.png");
             window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-advanced.png");

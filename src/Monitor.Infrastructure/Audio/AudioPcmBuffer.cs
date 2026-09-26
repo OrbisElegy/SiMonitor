@@ -24,6 +24,9 @@ public sealed class AudioPcmBuffer
     public int Channels { get; }
     public int CapacityFrames { get; }
 
+    // Producer-only snapshot. The consumer can only increase this capacity.
+    public int WritableFrames => CapacityFrames - (int)(_writtenFrames - Volatile.Read(ref _readFrames));
+
     // Producer only. Whole frames and whole submissions: rejection never
     // overwrites unread audio or publishes a partial block. No retry/wait here.
     public bool TryWrite(ReadOnlySpan<float> interleaved)

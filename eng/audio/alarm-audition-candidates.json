@@ -1,0 +1,63 @@
+{
+  "schema": "Monitor.AlarmAuditionCandidates@1",
+  "status": "original_offline_candidates_unqualified",
+  "design_references": {
+    "urls": [
+      "https://www.ti.com/lit/ta/sszt261/sszt261.pdf",
+      "https://www.ti.com/document-viewer/lit/html/SLAA961"
+    ],
+    "scope": "Alarm families, harmonics and envelope design principles only."
+  },
+  "synthesis_provenance": "Frequencies, mixtures and envelopes are original project choices, not manufacturer measurements or licensed recordings.",
+  "compliance_note": "No standards compliance claim.",
+  "sample_rate_hz": 48000,
+  "active_rms_dbfs": -24,
+  "peak_limit": 0.45,
+  "levels": {
+    "Info": {"onsets_ms": [0], "default_repeat_ms": 30000},
+    "Notice": {"onsets_ms": [0, 250, 500], "default_repeat_ms": 10000},
+    "Warning": {"onsets_ms": [0, 200, 400, 800, 1000, 1600, 1800, 2000, 2400, 2600], "default_repeat_ms": 5000},
+    "Critical": {"onsets_ms": [0, 500, 1000, 1500, 2000, 2500, 3000, 3500], "default_repeat_ms": 500}
+  },
+  "candidates": [
+    {
+      "id": "A",
+      "label": "Clear multiharmonic electronic tone",
+      "description": "Grouped pulses at the same pitch with a short, flat-topped envelope; a more buzzer-like timbre than the existing pure sine tone.",
+      "frequencies_hz": [440, 550, 660, 800],
+      "partials": [[1, 1], [2, 0.65], [3, 0.5], [4, 0.35], [5, 0.25]],
+      "durations_ms": [180, 160, 130, 170],
+      "attack_ms": 12,
+      "release_ms": 35,
+      "decay": false,
+      "pitch_multipliers": {}
+    },
+    {
+      "id": "B",
+      "label": "Soft two-pitch notification",
+      "description": "Weaker upper harmonics with gradual attack and release. The middle Notice pulse is higher in pitch; the final two pulses of each Warning group are higher.",
+      "frequencies_hz": [440, 600, 640, 900],
+      "partials": [[1, 1], [2, 0.35], [3, 0.18], [4, 0.08]],
+      "durations_ms": [220, 200, 160, 220],
+      "attack_ms": 25,
+      "release_ms": 80,
+      "decay": false,
+      "pitch_multipliers": {
+        "Notice": [1, 1.25, 1],
+        "Warning": [1, 1, 1, 1.25, 1.25, 1, 1, 1, 1.25, 1.25]
+      }
+    },
+    {
+      "id": "C",
+      "label": "Decaying chime notification",
+      "description": "Unevenly spaced overtones with a gradually decaying tail; Critical sounds more like a short ding.",
+      "frequencies_hz": [550, 700, 800, 1000],
+      "partials": [[1, 1], [2.02, 0.32], [2.76, 0.24], [4.07, 0.16]],
+      "durations_ms": [260, 210, 170, 350],
+      "attack_ms": 8,
+      "release_ms": 35,
+      "decay": true,
+      "pitch_multipliers": {}
+    }
+  ]
+}

@@ -15,6 +15,7 @@ internal static class DesignPreviewSmokeChecks
 {
     private static void VerifySoundSettings()
     {
+        VerifyOutputFaultNotice();
         var completion = new TaskCompletionSource<Monitor.Infrastructure.Audio.SoundPreviewResult>();
         CancellationToken token = default; int calls = 0;
         var panel = new SoundSettingsPanel((volume, cancellation) =>
@@ -46,6 +47,39 @@ internal static class DesignPreviewSmokeChecks
         unavailable.PreviewAsync().GetAwaiter().GetResult();
         Require(unavailable.Audition.IsEnabled && unavailable.Status.Text!.Contains("不可用", StringComparison.Ordinal),
             "missing output is visible and retryable");
+    }
+    private static void VerifyOutputFaultNotice()
+    {
+        var result = Monitor.Infrastructure.Audio.SoundPreviewResult.Unavailable;
+        var sound = new SoundSettingsPanel((_, _) => Task.FromResult(result));
+        var snapshot = LiveWaveformMeasurements.CreateIllustration().Read(0);
+        var view = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default())));
+        view.AdditionalNotices = _ => sound.OutputNotice is { } notice ? [notice] : [];
+        int updates = 0;
+        sound.OutputNoticeChanged += () => { updates++; view.RefreshReadings(snapshot); };
+        Require(sound.OutputNotice is null, "untried opt-in output does not invent a fault");
+        sound.PreviewAsync().GetAwaiter().GetResult();
+        Require(sound.OutputNotice is { Level: MonitorNoticeLevel.Notice, Audible: false, Numeric: null } &&
+            view.Notice.Text!.Contains("声音输出不可用", StringComparison.Ordinal) && view.HighestNotice == MonitorNoticeLevel.Info,
+            "failed output reaches monitor banner immediately without sounding its own failure");
+        Require(view.NumericTexts.All(t => t == "---"), "system output fault never fabricates or changes patient readings");
+        result = Monitor.Infrastructure.Audio.SoundPreviewResult.Stopped;
+        sound.PreviewAsync().GetAwaiter().GetResult();
+        Require(sound.OutputNotice is not null && updates == 1, "cancelled retry does not prove recovery");
+        result = Monitor.Infrastructure.Audio.SoundPreviewResult.Completed;
+        sound.PreviewAsync().GetAwaiter().GetResult();
+        Require(sound.OutputNotice is null && updates == 2 && !view.ActiveNotices.Any(n => n.Id == "audio-output"), "successful audition clears fault without a simulation tick");
+        result = Monitor.Infrastructure.Audio.SoundPreviewResult.Interrupted;
+        sound.PreviewAsync().GetAwaiter().GetResult();
+        Require(sound.OutputNotice!.Text.Contains("已中断", StringComparison.Ordinal), "interruption is distinct from unavailable output");
+        view.AdditionalNotices = _ => [sound.OutputNotice!, new("patient", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }];
+        view.RefreshReadings(snapshot);
+        Require(view.HighestNotice == MonitorNoticeLevel.Critical, "silent output notice does not suppress independent patient alarm severity");
+        result = Monitor.Infrastructure.Audio.SoundPreviewResult.StopFailed;
+        sound.PreviewAsync().GetAwaiter().GetResult();
+        Require(sound.OutputNotice!.Text.Contains("重新启动", StringComparison.Ordinal) && !sound.Audition.IsEnabled,
+            "failed release stays visible and blocks reopening");
+        sound.Close();
     }
     private static void VerifyHeartRateLimits(LiveMeasurementSnapshot snapshot)
     {

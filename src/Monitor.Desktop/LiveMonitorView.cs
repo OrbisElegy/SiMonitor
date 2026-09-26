@@ -26,7 +26,7 @@ internal sealed class LiveMonitorView : UserControl
     internal Func<LiveMeasurementSnapshot, IEnumerable<MonitorNotice>>? AdditionalNotices { get; set; }
     internal Func<bool>? NoticeColorEnabled { get; set; }
     internal IReadOnlyList<TextBlock> NumericBlocks => _rows.SelectMany(r => new[] { r.Primary, r.Secondary }).ToArray();
-    internal MonitorNoticeLevel? HighestNotice => _rotation.Highest;
+    internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
     private readonly Border _noticeBackground = new() { Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(3) };

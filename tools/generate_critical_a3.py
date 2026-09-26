@@ -9,7 +9,7 @@ from pathlib import Path
 from generate_alarm_auditions import ROOT, pulse, write_wave
 
 
-def critical_track():
+def critical_voice():
     config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text())
     candidate = next(c for c in config['candidates'] if c['id'] == 'A')
     rate = config['sample_rate_hz']
@@ -30,6 +30,13 @@ def critical_track():
     voice = [v * gain for v in voice]
     assert max(abs(v) for v in voice[-end_fade:]) < 1 / 32767
     assert any(abs(v) > .00025 for v in voice[rate:period]), 'Tail continues across old gap'
+    return config, candidate, rate, voice
+
+
+def critical_track():
+    config, candidate, rate, voice = critical_voice()
+    length, period, prelude, count = len(voice), round(1.5 * rate), round(.3 * rate), 6
+    attack = round(.012 * rate)
     samples = [0.0] * (prelude + (count - 1) * period + length + rate // 2)
     for n in range(count):
         start = prelude + n * period

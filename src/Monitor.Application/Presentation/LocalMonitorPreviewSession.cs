@@ -23,6 +23,7 @@ public sealed class LocalMonitorPreviewSession
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
+    public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
     public MonitorDisplayConfiguration Display { get; }
     public MonitorSweepRanges Ranges { get; }
@@ -44,6 +45,8 @@ public sealed class LocalMonitorPreviewSession
     public void Advance(long deltaNs)
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
+        List<DetectedEcgBeat> beats = [];
+        DetectedBeats = [];
         while (deltaNs > 0)
         {
             long chunk = Math.Min(deltaNs, 50_000_000);
@@ -65,7 +68,11 @@ public sealed class LocalMonitorPreviewSession
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
                         });
                     }
-                    _measurementFrontier = _measurements.Consume(measurementWire).SampleTimeNs;
+                    var measured = _measurements.Consume(measurementWire, out var detected);
+                    _measurementFrontier = measured.SampleTimeNs;
+                    if (measured.HeartRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp)
+                    { beats.AddRange(detected); }
+                    else { beats.Clear(); }
                 }
                 _blocks = _blocks.Concat(wires.Select(b => WaveformEnvelopeCodec.Decode(b))).TakeLast(RetainedBlockCount).ToArray();
                 DataRevision++;
@@ -76,6 +83,7 @@ public sealed class LocalMonitorPreviewSession
             Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
             deltaNs -= chunk;
         }
+        DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
     }
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long from, long to)
     {

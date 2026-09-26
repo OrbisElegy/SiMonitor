@@ -17,7 +17,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown InfoInterval { get; } = Number(30, 5, 120);
     internal NumericUpDown NoticeInterval { get; } = Number(10, 1.5m, 60);
     internal NumericUpDown WarningInterval { get; } = Number(5, 3.5m, 60);
-    internal NumericUpDown CriticalInterval { get; } = Number(.5m, .25m, 2);
+    internal NumericUpDown CriticalInterval { get; } = Number(1.5m, .25m, 2);
     internal MonitorAlertSettings()
     {
         Margin = new Thickness(20); Spacing = 12;

@@ -39,11 +39,11 @@ internal static class SampleToneRendererSpecifications
         Check.That(renderer.Schedule(1, TonePreset.BeatAudition, 0, 12000) == ToneScheduleResult.Expired, "250ms beat example expires exactly at deadline");
         Check.That(renderer.Schedule(1, TonePreset.BeatAudition, 0, 12001) == ToneScheduleResult.Accepted, "valid late cue starts at current frontier");
         Check.That(renderer.Schedule(1, TonePreset.BeatAudition, 12000, 24000) == ToneScheduleResult.Duplicate, "active command key is not queued twice");
-        for (int i = 2; i <= 8; i++) { renderer.Schedule(i, TonePreset.BeatAudition, 12000, 24000); }
-        Check.That(renderer.Schedule(9, TonePreset.BeatAudition, 12000, 24000) == ToneScheduleResult.Full, "ninth voice rejects without evicting existing cues");
+        for (int i = 2; i <= 32; i++) { renderer.Schedule(i, TonePreset.BeatAudition, 12000, 24000); }
+        Check.That(renderer.Schedule(33, TonePreset.BeatAudition, 12000, 24000) == ToneScheduleResult.Full, "thirty-third voice rejects without evicting existing cues");
         float[] mixed = new float[7000]; renderer.Render(mixed);
         Check.That(mixed.All(v => float.IsFinite(v) && Math.Abs(v) <= 1) && mixed.Any(v => Math.Abs(v) == 1), "overlap saturates safely");
-        Check.That(renderer.Schedule(9, TonePreset.BeatAudition, 19000, 31000) == ToneScheduleResult.Accepted, "finished voices release bounded slots");
+        Check.That(renderer.Schedule(33, TonePreset.BeatAudition, 19000, 31000) == ToneScheduleResult.Accepted, "finished voices release bounded slots");
         long before = renderer.Position; bool rejected = false;
         try { renderer.Schedule(10, TonePreset.BeatAudition, 20000, 20000); } catch (ArgumentOutOfRangeException) { rejected = true; }
         Check.That(rejected && renderer.Position == before, "invalid deadline cannot mutate clock");

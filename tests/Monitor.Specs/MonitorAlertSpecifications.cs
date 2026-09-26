@@ -13,7 +13,103 @@ internal static class MonitorAlertSpecifications
         new(nameof(RotationWeightsAndPreemption), RotationWeightsAndPreemption),
         new(nameof(AlarmPcmMatchesGroupedPatterns), AlarmPcmMatchesGroupedPatterns),
         new(nameof(PerfusionUsesOpticalSamples), PerfusionUsesOpticalSamples),
+        new(nameof(SelectedTonesRestoreAndMixIndependently), SelectedTonesRestoreAndMixIndependently),
+        new(nameof(MeasuredBeatEventsCommitOnce), MeasuredBeatEventsCommitOnce),
     ];
+    private static void SelectedTonesRestoreAndMixIndependently()
+    {
+        var preset = SelectedMonitorTones.Alarm(MonitorNoticeLevel.Critical, 100);
+        Check.That(preset.TotalFrames == 168000 && new MonitorSoundTiming().CriticalMilliseconds == 1500, "selected3.5s tail and1.5s default");
+        float[] whole = new float[preset.TotalFrames]; new ToneVoice(preset).Render(whole);
+        var voice = new ToneVoice(preset); voice.Render(new float[72000]);
+        var restored = ToneVoice.Restore(voice.CaptureState()); float[] tail = new float[whole.Length - 72000]; restored.Render(tail);
+        Check.That(tail.SequenceEqual(whole.Skip(72000)) && whole.Skip(48000).Take(24000).Any(v => Math.Abs(v) > .00025), "restoration preserves natural decay through former silent gap");
+        var measured = new ToneVoice(preset); float[] scratch = new float[480]; measured.Render(scratch);
+        long allocation = GC.GetAllocatedBytesForCurrentThread();
+        while (!measured.Finished) { measured.Render(scratch); }
+        Check.That(GC.GetAllocatedBytesForCurrentThread() == allocation, "selected voice rendering allocates nothing");
+
+        float[] Render(bool alarms, bool beats, int period = 1500)
+        {
+            var session = new AudioRenderSession(); var sequencer = new MonitorAlarmSequencer(session);
+            var request = alarms ? new MonitorAlarmSoundRequest(MonitorNoticeLevel.Critical, 100, new(CriticalMilliseconds: period)) : null;
+            float[] result = new float[240000];
+            for (int tick = 0; tick < 500; tick++)
+            {
+                sequencer.Update(request);
+                sequencer.UpdateHeartbeat(beats, beats && tick % 80 == 0 ? 100 : null);
+                session.TryProduce(480); session.Read(result.AsSpan(tick * 480, 480));
+            }
+            return result;
+        }
+        var alarm = Render(true, false); var beat = Render(false, true); var mix = Render(true, true);
+        Check.That(mix.Select((v, i) => Math.Abs(v - alarm[i] - beat[i])).Max() < .000001f && mix.Max(Math.Abs) < 1,
+            "independent800ms beat clock adds even at simultaneous starts, no ducking or clipping");
+        var rapid = Render(true, false, 250);
+        float[] expected = new float[rapid.Length];
+        for (int start = 480; start < expected.Length; start += 12000)
+            for (int i = 0; i < whole.Length && start + i < expected.Length; i++) { expected[start + i] += whole[i]; }
+        Check.That(expected.Zip(rapid).All(p => Math.Abs(p.First - p.Second) < .000001f), "minimum interval retains every overlapping tail within bounded voice capacity");
+
+        var cancel = new AudioRenderSession(); var owner = new MonitorAlarmSequencer(cancel);
+        owner.Update(new(MonitorNoticeLevel.Critical, 100, new())); owner.UpdateHeartbeat(true, 100);
+        cancel.TryProduce(480); cancel.Read(scratch); cancel.TryProduce(480); cancel.Read(scratch);
+        owner.Update(null);
+        cancel.TryProduce(480); cancel.Read(scratch); cancel.TryProduce(480); cancel.Read(scratch);
+        Check.That(scratch.Any(v => v != 0), "alarm cancellation leaves independent heartbeat sounding");
+        owner.UpdateHeartbeat(false, null); cancel.TryProduce(480); cancel.Read(scratch);
+        cancel.TryProduce(480); cancel.Read(scratch);
+        Check.That(scratch.All(v => v == 0), "pause/disable fades heartbeat without replay");
+    }
+    private static void MeasuredBeatEventsCommitOnce()
+    {
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true);
+        var observed = new List<DetectedEcgBeat>();
+        for (int i = 0; i < 400; i++)
+        {
+            session.Advance(25_000_000); observed.AddRange(session.DetectedBeats);
+        }
+        Check.That(observed.Count >= 8 && observed.Select(b => b.PeakTimeNs).Distinct().Count() == observed.Count,
+            "acquired ECG emits actual detections once rather than extrapolating rate");
+        Check.That(observed.All(b => b.ConfirmedAtNs > b.PeakTimeNs), "detector confirmation is not a fabricated zero-latency event");
+        var source = PhysiologyIllustrationSource.Create(); var owner = LiveWaveformMeasurements.CreateIllustration();
+        var flat = LiveWaveformMeasurements.CreateIllustration();
+        int events = 0;
+        for (int tick = 1; tick <= 40; tick++)
+            foreach (var wire in source.AdvanceTo(tick * 200_000_000L, 50, 1, 100))
+            {
+                var before = owner.Capture();
+                var block = Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.Decode(wire);
+                var zero = block with
+                {
+                    Planes = block.Planes.Select(p => p.ChannelId == PhysiologyIllustrationSource.ChannelId(0)
+                        ? p with { Samples = new short[p.Samples.Count] } : p).ToArray()
+                };
+                flat.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(zero), out var noBeats);
+                Check.That(noBeats.Count == 0, "flat acquired ECG produces no beep despite unchanged generator heart-rate settings");
+                owner.Consume(wire, out var beats); events += beats.Count;
+                var restored = LiveWaveformMeasurements.Restore(before);
+                restored.Consume(wire, out var replay);
+                Check.That(beats.SequenceEqual(replay), "checkpoint detector continuation preserves confirmed event identity");
+                if (beats.Count > 0)
+                {
+                    var broken = block with { Planes = block.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(6)).ToArray() };
+                    var atomic = LiveWaveformMeasurements.Restore(before);
+                    IReadOnlyList<DetectedEcgBeat> leaked = [];
+                    bool lateFailure = false;
+                    try { atomic.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(broken), out leaked); }
+                    catch (ArgumentException) { lateFailure = true; }
+                    Check.That(lateFailure && leaked.Count == 0, "late CVP rejection cannot publish earlier ECG detections");
+                    atomic.Consume(wire, out var retry);
+                    Check.That(retry.SequenceEqual(beats), "valid retry publishes detector events once after rollback");
+                }
+                IReadOnlyList<DetectedEcgBeat> rejected = beats;
+                bool failed = false;
+                try { owner.Consume(wire, out rejected); } catch (ArgumentException) { failed = true; }
+                Check.That(failed && rejected.Count == 0, "rejected duplicate packet cannot leak or replay a beat");
+            }
+        Check.That(events > 0, "real detector events exercised");
+    }
     private static void RotationWeightsAndPreemption()
     {
         var rotation = new MonitorNoticeRotation();
@@ -43,7 +139,7 @@ internal static class MonitorAlertSpecifications
         foreach (var (level, seconds, expected) in new[]
         {
             (MonitorNoticeLevel.Info, 2, 0), (MonitorNoticeLevel.Notice, 2, 3),
-            (MonitorNoticeLevel.Warning, 4, 10), (MonitorNoticeLevel.Critical, 2, 4)
+            (MonitorNoticeLevel.Warning, 4, 10), (MonitorNoticeLevel.Critical, 2, 1)
         })
         {
             var session = new AudioRenderSession(); var sequencer = new MonitorAlarmSequencer(session);

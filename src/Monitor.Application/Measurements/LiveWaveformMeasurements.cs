@@ -34,8 +34,12 @@ public sealed class LiveWaveformMeasurements
     private OpticalSaturationAcquisition NewOptical() => new(PulseOximeterIllustrationSource.RedChannelId,
         PulseOximeterIllustrationSource.InfraredChannelId, _calibration);
 
-    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire)
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire) => Consume(wire, out _);
+    // Publish events only after the entire acquired packet commits; Read and
+    // checkpoint restoration never replay a previous batch of cues.
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats)
     {
+        detectedBeats = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         if (block.DurationNs != 200_000_000) { throw new ArgumentException("LiveMeasurement.BlockDuration", nameof(wire)); }
         long sampleTime = checked(block.StartSimTimeNs + block.DurationNs - 1);
@@ -56,13 +60,14 @@ public sealed class LiveWaveformMeasurements
         var pa = MeanPressureMeasurement.Restore(_pa.Capture());
         var cvp = MeanPressureMeasurement.Restore(_cvp.Capture());
         var optical = red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
-        ecg.Consume(wire); resp.Consume(wire); pleth.Consume(wire); co2.Consume(wire);
+        var beats = ecg.Consume(wire); resp.Consume(wire); pleth.Consume(wire); co2.Consume(wire);
         if (red is not null) { optical.Consume(wire); }
         abp.Consume(wire); pa.Consume(wire); cvp.Consume(wire);
         var snapshot = new LiveMeasurementSnapshot(sampleTime, ecg.Read(sampleTime), resp.Read(sampleTime),
             pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime));
         _ecg = ecg; _resp = resp; _pleth = pleth; _co2 = co2; _optical = optical; _lastSampleTime = sampleTime;
         _abp = abp; _pa = pa; _cvp = cvp;
+        detectedBeats = beats;
         return snapshot;
     }
 

@@ -2,7 +2,7 @@
 namespace Monitor.Application.Presentation;
 
 public sealed record MonitorSoundTiming(bool InfoTone = false, int InfoMilliseconds = 30000,
-    int NoticeMilliseconds = 10000, int WarningMilliseconds = 5000, int CriticalMilliseconds = 500)
+    int NoticeMilliseconds = 10000, int WarningMilliseconds = 5000, int CriticalMilliseconds = 1500)
 {
     public void Validate()
     {

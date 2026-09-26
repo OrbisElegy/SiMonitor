@@ -8,11 +8,12 @@ public sealed record TonePreset(string Id, int FrequencyMilliHz, int AttackFrame
     // The audition uses a project-authored 795 Hz tone. Envelope and
     // gain are explicit engineering audition choices, not an approved profile.
     public static TonePreset BeatAudition { get; } = new("BeatAuditionDraft@1", 795_000, 240, 4800, 720, 8192);
-    public int TotalFrames => checked(AttackFrames + HoldFrames + ReleaseFrames);
+    public MonitorToneSample Sample { get; init; }
+    public int TotalFrames => Sample == MonitorToneSample.None ? checked(AttackFrames + HoldFrames + ReleaseFrames) : SelectedMonitorTones.Get(Sample).Length;
 
     internal void Validate()
     {
-        if (string.IsNullOrWhiteSpace(Id) || Id.Length > 128 || FrequencyMilliHz is < 20_000 or > 20_000_000 ||
+        if (!Enum.IsDefined(Sample) || string.IsNullOrWhiteSpace(Id) || Id.Length > 128 || FrequencyMilliHz is < 20_000 or > 20_000_000 ||
             AttackFrames < 1 || HoldFrames < 0 || ReleaseFrames < 1 ||
             (long)AttackFrames + HoldFrames + ReleaseFrames > 480_000 || GainQ15 is < 0 or > 16384)
         { throw new ArgumentException("AudioTone.InvalidPreset", nameof(TonePreset)); }
@@ -37,6 +38,7 @@ public sealed class ToneVoice
         ArgumentNullException.ThrowIfNull(preset);
         preset.Validate(); _preset = preset;
         _ = SineTable.Quarter[0]; // Prepare table storage outside Render/callback.
+        if (preset.Sample != MonitorToneSample.None) { _ = SelectedMonitorTones.Get(preset.Sample)[0]; }
     }
 
     public bool Finished => _frame == EndFrame;
@@ -60,6 +62,15 @@ public sealed class ToneVoice
         int count = Math.Min(destination.Length, EndFrame - _frame);
         for (int i = 0; i < count; i++, _frame++)
         {
+            if (_preset.Sample != MonitorToneSample.None)
+            {
+                long sample = SelectedMonitorTones.Get(_preset.Sample)[_frame];
+                long selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)sample * 65536 * _preset.GainQ15, 16384);
+                if (_cancelFrame is { } stop)
+                { selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)selected * (EndFrame - 1 - _frame), EndFrame - stop); }
+                destination[i] = selected / 2147483648f;
+                continue;
+            }
             long phase = (long)_frame * _preset.FrequencyMilliHz % PhaseDenominator * 1024;
             int index = (int)(phase / PhaseDenominator);
             long fraction = phase % PhaseDenominator;

@@ -1,0 +1,26 @@
+{
+  "sample_rate": 48000,
+  "format": "signed_pcm16_le_mono",
+  "voices": {
+    "Info": {
+      "frames": 8640,
+      "sha256": "2b1c07d38d39c74cc227bb1fa134b29bfaaadc479d6379c31a690cc02cffd2c3"
+    },
+    "Notice": {
+      "frames": 7680,
+      "sha256": "9595a852fe88555c2aae4991aa62851bd8b67b084c98e7f6e5504f0c423a28fb"
+    },
+    "Warning": {
+      "frames": 6240,
+      "sha256": "3ec673808b842ebea7981485701eeb3affe36aa88ec22f0e1747fd49f5b11b46"
+    },
+    "Critical": {
+      "frames": 168000,
+      "sha256": "70c6d93567a4979ebd866a65b55f83be15816a8a1010dc9bf0d6000140b67526"
+    },
+    "Heartbeat": {
+      "frames": 4800,
+      "sha256": "616ff6c24b63397c4e66dd2401b61fe0f7b3ed55faf98cc20e9d9c03e5ba29ae"
+    }
+  }
+}

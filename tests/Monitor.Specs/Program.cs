@@ -155,6 +155,7 @@ internal static class Program
             .. QrsContributionSpecifications.All,
             .. ToneVoiceSpecifications.All,
             .. AudioPcmBufferSpecifications.All,
+            .. SampleToneRendererSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

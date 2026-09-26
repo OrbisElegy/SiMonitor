@@ -2,6 +2,7 @@
 using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Audio;
+using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 
 namespace Monitor.Specs;
@@ -17,7 +18,63 @@ internal static class MonitorAlertSpecifications
         new(nameof(MeasuredBeatEventsCommitOnce), MeasuredBeatEventsCommitOnce),
         new(nameof(AlarmLevelDominatesRoutineHeartbeat), AlarmLevelDominatesRoutineHeartbeat),
         new(nameof(OpticalRunoffCannotMasqueradeAsSaturation), OpticalRunoffCannotMasqueradeAsSaturation),
+        new(nameof(SaturationLimitsUseValidMeasurements), SaturationLimitsUseValidMeasurements),
+        new(nameof(SaturationLimitsFollowAcquiredOptics), SaturationLimitsFollowAcquiredOptics),
     ];
+    private static void SaturationLimitsUseValidMeasurements()
+    {
+        OpticalSaturationReading Reading(int? value, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) => new(status, value, null, 0);
+        foreach (var (value, expected) in new (int, MonitorNoticeLevel?)[]
+        { (0, MonitorNoticeLevel.Critical), (84999, MonitorNoticeLevel.Critical), (85000, MonitorNoticeLevel.Warning),
+            (91999, MonitorNoticeLevel.Warning), (92000, null), (100000, null) })
+        {
+            var notice = SpO2LimitNotice.Evaluate(true, 92000, 85000, Reading(value));
+            Check.That(notice?.Level == expected && (notice is null || notice.Id == "spo2-low" && notice.Numeric == MonitorNumeric.SpO2),
+                "strict unrounded measured limits bind only SpO2 numerical field");
+            Check.That(SpO2LimitNotice.Evaluate(false, 92000, 85000, Reading(value)) is null, "explicit opt-in required");
+        }
+        foreach (var status in Enum.GetValues<WaveformMeasurementStatus>().Where(s => s != WaveformMeasurementStatus.Valid))
+        { Check.That(SpO2LimitNotice.Evaluate(true, 92000, 85000, Reading(80000, status)) is null, "invalid measurement clears previous low condition"); }
+        foreach (int? value in new int?[] { null, -1, 100001 })
+        { Check.That(SpO2LimitNotice.Evaluate(true, 92000, 85000, Reading(value)) is null, "missing/out-of-range reading cannot trigger physiological alert"); }
+        foreach (var (warning, critical) in new (int?, int?)[] { (null, 85000), (92000, null), (85000, 85000), (84000, 85000), (100001, 85000), (92000, 999) })
+        {
+            var notice = SpO2LimitNotice.Evaluate(true, warning, critical, Reading(80000));
+            Check.That(notice?.Id == "spo2-settings" && notice.Level == MonitorNoticeLevel.Info && notice.Numeric is null,
+                "bad settings yield only unbound configuration info");
+        }
+        Check.That(SpO2LimitNotice.Evaluate(true, 90250, 85250, Reading(90249))?.Level == MonitorNoticeLevel.Warning &&
+            SpO2LimitNotice.Evaluate(true, 90250, 85250, Reading(90250)) is null, "fractional thresholds do not round through displayed integer");
+    }
+    private static void SaturationLimitsFollowAcquiredOptics()
+    {
+        foreach (var (target, expected) in new (int, MonitorNoticeLevel?)[]
+        { (98000, null), (90000, MonitorNoticeLevel.Warning), (80000, MonitorNoticeLevel.Critical) })
+        {
+            var physical = PhysiologyIllustrationSource.Create();
+            var optical = new PulseOximeterIllustrationSource(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+                Guid.NewGuid(), target);
+            var measurement = LiveWaveformMeasurements.CreateIllustration();
+            LiveMeasurementSnapshot? snapshot = null;
+            for (int step = 1; step <= 45; step++)
+                foreach (var wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                {
+                    var original = WaveformEnvelopeCodec.Decode(wire);
+                    var light = WaveformEnvelopeCodec.Decode(optical.ConvertAcquiredPulse(wire));
+                    var combined = original with
+                    {
+                        InstanceId = light.InstanceId,
+                        Planes = original.Planes.Concat(light.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
+                    };
+                    snapshot = measurement.Consume(WaveformEnvelopeCodec.EncodeRaw(combined));
+                }
+            Check.That(snapshot?.SpO2.Status == WaveformMeasurementStatus.Valid, "actual paired sensor path reaches a measured saturation");
+            var notice = SpO2LimitNotice.Evaluate(true, 92000, 85000, snapshot!.SpO2);
+            Check.That(notice?.Level == expected, "alarm consumes estimated optical ratio, not configured target");
+            var expired = measurement.Read(snapshot.SampleTimeNs + 600_000_000);
+            Check.That(SpO2LimitNotice.Evaluate(true, 92000, 85000, expired.SpO2) is null, "loss of samples clears low alert without inventing a sensor disconnection");
+        }
+    }
     private static void OpticalRunoffCannotMasqueradeAsSaturation()
     {
         var estimator = new OpticalSaturationMeasurement("runoff-test", [new(400000, 100000), new(1600000, 70000)]);

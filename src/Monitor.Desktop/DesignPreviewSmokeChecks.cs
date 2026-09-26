@@ -49,6 +49,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyHeartRateLimits(LiveMeasurementSnapshot snapshot)
     {
+        VerifySaturationLimits(snapshot);
         var settings = new MonitorAlertSettings();
         MonitorNotice[] At(int rate, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) =>
             settings.Notices(snapshot with { HeartRate = new(status, rate, null) }).ToArray();
@@ -75,6 +76,33 @@ internal static class DesignPreviewSmokeChecks
         Require(At(30000).Single().Id == "hr-settings", "crossed low/high thresholds reject");
         settings.WarningLowHeartRate.Value = 50; settings.CriticalHeartRate.Value = 120;
         Require(At(200000).Single().Id == "hr-settings", "equal upper thresholds reject");
+    }
+    private static void VerifySaturationLimits(LiveMeasurementSnapshot snapshot)
+    {
+        var settings = new MonitorAlertSettings();
+        LiveMeasurementSnapshot At(int? value, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) =>
+            snapshot with { SpO2 = new(status, value, null, snapshot.SampleTimeNs) };
+        Require(!settings.Notices(At(80000)).Any(), "SpO2 alarm remains opt-in");
+        settings.SpO2Enabled.IsChecked = true;
+        Require(settings.Notices(At(80000)).Single().Level == MonitorNoticeLevel.Critical &&
+            settings.Notices(At(90000)).Single().Numeric == MonitorNumeric.SpO2, "SpO2 controls feed real severity and numeric binding");
+        settings.CriticalSpO2.Value = 80; settings.WarningSpO2.Value = 90;
+        Require(!settings.Notices(At(90000)).Any() && settings.Notices(At(80000)).Single().Level == MonitorNoticeLevel.Warning,
+            "edited thresholds use strict bounds");
+        settings.CriticalSpO2.Value = 90;
+        Require(settings.Notices(At(80000)).Single().Id == "spo2-settings", "crossed UI limits report configuration error only");
+        settings.CriticalSpO2.Value = 85; settings.WarningSpO2.Value = 92;
+        var session = new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
+        var view = new LiveMonitorView(new LiveMonitorTrace(session)) { AdditionalNotices = settings.Notices };
+        view.RefreshReadings(At(80000)); view.RefreshNumericHighlights(0);
+        Require(view.NumericTexts[1] == "80" && (view.NumericBlocks[2].Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
+            view.HighestNotice == MonitorNoticeLevel.Critical, "measured low SpO2 drives displayed number, red backing and audio severity");
+        view.RefreshReadings(At(null, WaveformMeasurementStatus.PoorSignal)); view.RefreshNumericHighlights(0);
+        Require(view.NumericTexts[1] == "---" && view.HighestNotice == MonitorNoticeLevel.Info,
+            "poor optics clear physiological severity and keep technical info");
+        view.RefreshReadings(At(98000)); view.RefreshNumericHighlights(0);
+        Require(view.NumericTexts[1] == "98" && view.HighestNotice != MonitorNoticeLevel.Critical,
+            "normal recovery does not latch old low saturation");
     }
     internal static void Verify()
     {

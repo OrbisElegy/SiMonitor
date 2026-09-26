@@ -14,6 +14,9 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown CriticalLowHeartRate { get; } = Number(40, 1, 298);
     internal NumericUpDown WarningHeartRate { get; } = Number(120, 20, 300);
     internal NumericUpDown CriticalHeartRate { get; } = Number(180, 21, 350);
+    internal CheckBox SpO2Enabled { get; } = new() { Content = "启用实测 SpO₂ 下限提示", IsChecked = false };
+    internal NumericUpDown WarningSpO2 { get; } = Number(92, 1, 100);
+    internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
     internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
     internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
     internal CheckBox NoticeColorEnabled { get; } = new() { Content = "显示 Notice 蓝色提示与数值闪烁", IsChecked = true };
@@ -36,6 +39,9 @@ internal sealed class MonitorAlertSettings : StackPanel
         Row("Critical HR 下限（bpm）", CriticalLowHeartRate); Row("Warning HR 下限（bpm）", WarningLowHeartRate);
         Row("Warning HR 上限（bpm）", WarningHeartRate); Row("Critical HR 上限（bpm）", CriticalHeartRate);
         Children.Add(Text("阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认及声音限时暂停。"));
+        Children.Add(SpO2Enabled);
+        Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
+        Children.Add(Text("低于下限才提示；Critical 下限须低于 Warning 下限。85% / 92% 仅作可调教学默认值。仅比较有效实测 SpO₂，信号质量不足或无数据时显示 ---，不推断低血氧或探头脱落。"));
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);
         Children.Add(NoticeColorEnabled);
@@ -62,6 +68,9 @@ internal sealed class MonitorAlertSettings : StackPanel
                 else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "HR 高") { Numeric = MonitorNumeric.HeartRate }; }
             }
         }
+        var saturationNotice = SpO2LimitNotice.Evaluate(SpO2Enabled.IsChecked == true,
+            MilliPercent(WarningSpO2), MilliPercent(CriticalSpO2), snapshot.SpO2);
+        if (saturationNotice is not null) { yield return saturationNotice; }
         if (TestLevel.SelectedIndex > 0)
         {
             yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))
@@ -69,6 +78,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         }
     }
     private static int Milliseconds(NumericUpDown number) => checked((int)((number.Value ?? number.Minimum) * 1000));
+    private static int? MilliPercent(NumericUpDown number) => number.Value is { } value ? checked((int)(value * 1000)) : null;
     private void Row(string label, Control control)
     {
         var row = new StackPanel { Spacing = 4 }; row.Children.Add(Text(label)); row.Children.Add(control); Children.Add(row);

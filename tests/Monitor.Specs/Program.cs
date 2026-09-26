@@ -157,6 +157,7 @@ internal static class Program
             .. AudioPcmBufferSpecifications.All,
             .. SampleToneRendererSpecifications.All,
             .. AudioRenderSessionSpecifications.All,
+            .. AudioOutputLifecycleSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,
             .. MechanicalTransitionSpecifications.All,

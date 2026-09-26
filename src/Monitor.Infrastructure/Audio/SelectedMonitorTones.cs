@@ -15,7 +15,13 @@ public static class SelectedMonitorTones
     internal static ReadOnlySpan<short> Get(MonitorToneSample sample) => Samples[(int)sample];
     public static TonePreset Alarm(MonitorNoticeLevel level, int volumePercent) =>
         Create((MonitorToneSample)((int)level + 1), volumePercent);
-    public static TonePreset Heartbeat(int volumePercent) => Create(MonitorToneSample.Heartbeat, volumePercent);
+    public static TonePreset Heartbeat(int volumePercent)
+    {
+        var tone = Create(MonitorToneSample.Heartbeat, volumePercent);
+        // Keep alarm headroom/timbre intact; routine beats are12dB quieter
+        // than the selected audition level, independently of master volume.
+        return tone with { GainQ15 = tone.GainQ15 / 4 };
+    }
     private static TonePreset Create(MonitorToneSample sample, int volume)
     {
         if (sample is < MonitorToneSample.Info or > MonitorToneSample.Heartbeat || volume is < 0 or > 100)

@@ -15,7 +15,28 @@ internal static class MonitorAlertSpecifications
         new(nameof(PerfusionUsesOpticalSamples), PerfusionUsesOpticalSamples),
         new(nameof(SelectedTonesRestoreAndMixIndependently), SelectedTonesRestoreAndMixIndependently),
         new(nameof(MeasuredBeatEventsCommitOnce), MeasuredBeatEventsCommitOnce),
+        new(nameof(AlarmLevelDominatesRoutineHeartbeat), AlarmLevelDominatesRoutineHeartbeat),
     ];
+    private static void AlarmLevelDominatesRoutineHeartbeat()
+    {
+        float[] Render(TonePreset preset)
+        {
+            float[] pcm = new float[4800]; new ToneVoice(preset).Render(pcm); return pcm;
+        }
+        double Rms(float[] pcm) => Math.Sqrt(pcm.Average(v => (double)v * v));
+        foreach (int volume in new[] { 25, 50, 100 })
+        {
+            var beat = Render(SelectedMonitorTones.Heartbeat(volume));
+            foreach (var level in Enum.GetValues<MonitorNoticeLevel>())
+            {
+                var alarm = Render(SelectedMonitorTones.Alarm(level, volume));
+                Check.That(Rms(alarm) >= 4 * Rms(beat), "every alarm attack exceeds routine beep by at least12dB RMS over100ms");
+                Check.That(alarm.Zip(beat).All(p => Math.Abs(p.First + p.Second) < 1), "simultaneous alarm and heartbeat retain headroom");
+            }
+        }
+        Check.That(Render(SelectedMonitorTones.Heartbeat(0)).All(v => v == 0) &&
+            Render(SelectedMonitorTones.Alarm(MonitorNoticeLevel.Critical, 0)).All(v => v == 0), "master mute silences both voices");
+    }
     private static void SelectedTonesRestoreAndMixIndependently()
     {
         var preset = SelectedMonitorTones.Alarm(MonitorNoticeLevel.Critical, 100);

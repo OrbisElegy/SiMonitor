@@ -47,6 +47,35 @@ internal static class DesignPreviewSmokeChecks
         Require(unavailable.Audition.IsEnabled && unavailable.Status.Text!.Contains("不可用", StringComparison.Ordinal),
             "missing output is visible and retryable");
     }
+    private static void VerifyHeartRateLimits(LiveMeasurementSnapshot snapshot)
+    {
+        var settings = new MonitorAlertSettings();
+        MonitorNotice[] At(int rate, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) =>
+            settings.Notices(snapshot with { HeartRate = new(status, rate, null) }).ToArray();
+        Require(At(30000).Length == 0, "HR thresholds remain opt-in");
+        settings.HeartRateEnabled.IsChecked = true;
+        foreach (var (rate, level, text) in new[]
+        {
+            (39999, MonitorNoticeLevel.Critical, "HR 极低"), (40000, MonitorNoticeLevel.Warning, "HR 低"),
+            (49999, MonitorNoticeLevel.Warning, "HR 低"), (120001, MonitorNoticeLevel.Warning, "HR 高"),
+            (180000, MonitorNoticeLevel.Warning, "HR 高"), (180001, MonitorNoticeLevel.Critical, "HR 极高")
+        })
+        {
+            var notices = At(rate);
+            Require(notices.Length == 1 && notices[0].Level == level && notices[0].Text == text,
+                "measured HR uses strict limits and correct low/high severity");
+        }
+        foreach (int rate in new[] { 50000, 75000, 120000 })
+        { Require(At(rate).Length == 0, "normal range and warning boundaries clear HR alarm"); }
+        foreach (var status in Enum.GetValues<WaveformMeasurementStatus>().Where(s => s != WaveformMeasurementStatus.Valid))
+        { Require(At(30000, status).Length == 0, "invalid HR cannot become bradycardia alarm"); }
+        settings.CriticalLowHeartRate.Value = 50;
+        Require(At(30000).Single().Id == "hr-settings", "equal low thresholds reject without patient alarm");
+        settings.CriticalLowHeartRate.Value = 40; settings.WarningLowHeartRate.Value = 121;
+        Require(At(30000).Single().Id == "hr-settings", "crossed low/high thresholds reject");
+        settings.WarningLowHeartRate.Value = 50; settings.CriticalHeartRate.Value = 120;
+        Require(At(200000).Single().Id == "hr-settings", "equal upper thresholds reject");
+    }
     internal static void Verify()
     {
         VerifyStableSlowContours();
@@ -70,6 +99,7 @@ internal static class DesignPreviewSmokeChecks
             Capture(window, "ui-preview-monitor-auto.png");
             Require(window.MonitorView.NumericTexts[4] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
             var liveReading = window.Session.Measurements!;
+            VerifyHeartRateLimits(liveReading);
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
             seven.RefreshReadings(liveReading);

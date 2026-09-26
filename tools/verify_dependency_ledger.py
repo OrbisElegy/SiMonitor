@@ -90,6 +90,13 @@ def main():
     if not seen or seen != entries.keys():
         raise ValueError(f'Unreferenced ledger packages: {entries.keys() - seen}')
     print(f'ok: {len(seen)} locked dependency versions match license/hash ledger')
+    for entry in ledger['native_dependencies']:
+        for source in entry.get('source_files', []):
+            if not entry.get('license') or not entry.get('commit'):
+                raise ValueError(f'Unpinned native source: {entry["id"]}')
+            if hashlib.sha256((root / source['path']).read_bytes()).hexdigest() != source['sha256']:
+                raise ValueError(f'Native source hash mismatch: {source["path"]}')
+    print('ok: vendored native source hashes and license selections verified')
 
 
 if __name__ == '__main__':

@@ -5,3 +5,5 @@
 *.json text eol=lf
 *.md text eol=lf
 
+# Preserve byte-identical upstream source and notices for hash verification.
+native/sim_audio_native/vendor/* -text -whitespace

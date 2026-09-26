@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+cmake_minimum_required(VERSION 3.20)
+project(sim_audio_native VERSION 1.0 LANGUAGES C)
+option(SIM_AUDIO_TEST "Build explicitly non-hardware test adapter" OFF)
+add_library(sim_audio_native SHARED sim_audio.c)
+set_target_properties(sim_audio_native PROPERTIES C_STANDARD 99 C_VISIBILITY_PRESET hidden)
+if(SIM_AUDIO_TEST)
+  target_compile_definitions(sim_audio_native PRIVATE SIM_AUDIO_TEST)
+endif()
+if(NOT WIN32)
+  target_link_libraries(sim_audio_native PRIVATE m pthread dl)
+endif()

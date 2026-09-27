@@ -335,6 +335,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
         VerifyBlockProductStyles();
+        VerifyDisorganizedProductStyles();
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -623,6 +624,40 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyDisorganizedProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 20, 10, 21, 18, 22, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "disorganized and conducted presets can replace each other");
+                for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                if (choice >= 20)
+                {
+                    Require(reading.HeartRate.Status == WaveformMeasurementStatus.Uncountable &&
+                        reading.HeartRate.MilliBeatsPerMinute is null && window.Session.DetectedBeats.Count == 0,
+                        "disorganized ECG is uncountable and emits no heartbeat cues");
+                    var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                    Require(!pair.Physiology.VentricularMechanicalEnabled && pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern,
+                        "monitor and paper share disorganized pattern without effective ejection");
+                    var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                    var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - 3_000_000_000, source.FrontierNs)) &&
+                        cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - 3_000_000_000, source.FrontierNs)),
+                        "disorganized preview matches actual electrical and mechanical samples");
+                    window.SelectPage(1); Capture(window, $"ui-preview-disorganized-{choice}-paper.png");
+                    Require(window.CurrentPaper!.BlockCount == 55, "disorganized twelve-lead capture is complete");
+                    window.SelectPage(0);
+                }
+                else { Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid, "organized rate recovers after disorganized preset"); }
+            }
         }
         finally { window.Close(); }
     }

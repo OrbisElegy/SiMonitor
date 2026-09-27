@@ -13,7 +13,7 @@ namespace Monitor.Desktop;
 
 internal sealed class DesignPreviewSettings : UserControl
 {
-    private static readonly string[] EcgChoices = ["窦性参考", "窦性停搏（无逸搏）", "单形室早", "窦性心律不齐", "房性早搏", "交界性早搏", "房颤（粗波）", "房颤（细波）", "房扑（2:1下传）", "房扑（4:1下传）", "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不分型）", "二度Ⅱ型4:3＋RBBB", "二度Ⅱ型4:3＋LBBB", "三度AVB（交界性逸搏）", "三度AVB（室性逸搏）", "室扑", "室颤（粗波）", "室颤（细波）", "室上速（窄QRS）", "室上速伴RBBB", "室上速伴LBBB"];
+    private static readonly string[] EcgChoices = ["窦性参考", "窦性停搏（无逸搏）", "单形室早", "窦性心律不齐", "房性早搏", "交界性早搏", "房颤（粗波）", "房颤（细波）", "房扑（2:1下传）", "房扑（4:1下传）", "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不分型）", "二度Ⅱ型4:3＋RBBB", "二度Ⅱ型4:3＋LBBB", "三度AVB（交界性逸搏）", "三度AVB（室性逸搏）", "室扑", "室颤（粗波）", "室颤（细波）", "室上速（窄QRS）", "室上速伴RBBB", "室上速伴LBBB", "单形室速", "室速伴融合波", "室速伴心室夺获"];
     internal static int EcgChoiceCount => EcgChoices.Length;
     private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量"];
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];

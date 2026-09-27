@@ -8,12 +8,17 @@ namespace Monitor.Simulation.Physiology;
 public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long InspiratoryFallNs,
     int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0, long DispersionStepNs = 0)
 {
+    public SeededExpirationPressure? SeededPressure { get; init; }
     public const string EvidenceId = "InfirmaryCapnogramDraft@1";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
+        if (SeededPressure is { } seeded && (seeded.TargetMmHg != EndExpiratoryMmHg || BaselineMmHg != 0 ||
+            physiology.RespiratoryPattern != RespiratoryPattern.Regular || physiology.RespiratoryActivity != RespiratoryActivity.Breathing ||
+            physiology.ActivityAfterBreaths is not null))
+        { throw new EventWaveformException("Capnogram.SeededPressureRequiresRegularBreathing", "plan"); }
         long expiration = physiology.BreathPeriodNs - physiology.InspirationDurationNs;
         if (DeadSpaceNs <= 0 || RiseNs <= 0 || DeadSpaceNs >= expiration || RiseNs >= expiration - DeadSpaceNs ||
             InspiratoryFallNs <= 0 || InspiratoryFallNs > physiology.InspirationDurationNs ||
@@ -83,6 +88,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
             { throw new EventWaveformException("Capnogram.Co2ResponseOutOfRange", "EndExpiratoryMmHg"); }
             bands = Array.AsReadOnly(bands.Select(band => band with { ExpirationCycleGainsPermille = gains }).ToArray());
         }
+        if (SeededPressure is { AmplitudeCentiMmHg: > 0 } variation)
+        { bands = Array.AsReadOnly(bands.Select(band => band with { ExpirationCycleGainsPermille = variation.Gains }).ToArray()); }
         if (physiology.ActivityAfterBreaths is { } limit)
         {
             ulong? resume = physiology.ActivityDurationBreaths is { } durationBreaths ? limit + durationBreaths : null;

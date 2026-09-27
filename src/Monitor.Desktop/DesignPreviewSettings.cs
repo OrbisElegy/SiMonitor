@@ -31,6 +31,7 @@ internal sealed class DesignPreviewSettings : UserControl
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
     internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
+    internal NumericUpDown EtCo2Variation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
@@ -217,6 +218,8 @@ internal sealed class DesignPreviewSettings : UserControl
         Add("波动共用种子（64位小写十六进制）", RateSeed);
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
+        Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
+        panel.Children.Add(Text("CO₂使用共用种子的独立随机流，64次呼吸循环，同次呼气保持同一目标。仅规则呼吸可用；目标±幅度须在5–80 mmHg内，显示值仍由波形测量。"));
         panel.Children.Add(Text("应用后从头生成并重新测量。波动为256搏循环的种子序列；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
         void Add(string label, Control control)
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }

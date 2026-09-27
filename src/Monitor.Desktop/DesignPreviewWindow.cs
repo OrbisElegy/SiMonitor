@@ -50,6 +50,8 @@ internal sealed class DesignPreviewWindow : Window
         Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         MonitorView.AdditionalNotices = CurrentNotices;
+        MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
+        Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
         Settings.Sound.AudioPauseChanged += () => MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
         Settings.Sound.OutputNoticeChanged += () =>
         {
@@ -163,8 +165,9 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView = new(_monitor);
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
+            MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
-            Settings.Sound.ResetPitchState();
+            Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")

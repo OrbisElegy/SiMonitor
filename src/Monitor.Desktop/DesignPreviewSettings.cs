@@ -30,6 +30,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
+    internal NumericUpDown InspirationPercent { get; } = new() { Minimum = 10, Maximum = 90, Value = 50, Increment = 1, Width = 180 };
+    internal TextBlock BreathingTiming { get; } = Text("");
     internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
     internal NumericUpDown EtCo2Variation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
@@ -210,6 +212,28 @@ internal sealed class DesignPreviewSettings : UserControl
     }
     internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true
         ? checked((int)((OpticalTarget.Value ?? throw new ArgumentException("SpO2 target required")) * 1000)) : null;
+    internal (int Period, int Inspiration) ReadBreathingTiming()
+    {
+        decimal rate = RespiratoryRate.Value ?? throw new ArgumentException("Preview.InvalidBreathingTiming");
+        decimal fraction = InspirationPercent.Value ?? throw new ArgumentException("Preview.InvalidBreathingTiming");
+        if (rate is < 6 or > 60 || fraction is < 10 or > 90) { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
+        int period = checked((int)decimal.Round(60000 / rate, 0, MidpointRounding.ToEven));
+        int inspiration = checked((int)decimal.Round(period * fraction / 100, 0, MidpointRounding.ToEven));
+        var reference = PhysiologyDemoConfiguration.Default;
+        if (inspiration < reference.Co2FallMilliseconds || period - inspiration <= reference.Co2DeadSpaceMilliseconds + reference.Co2RiseMilliseconds)
+        { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
+        return (period, inspiration);
+    }
+    private void RefreshBreathingTiming()
+    {
+        try
+        {
+            var timing = ReadBreathingTiming();
+            BreathingTiming.Text = $"吸气 {timing.Inspiration} ms · 呼气 {timing.Period - timing.Inspiration} ms · 周期 {timing.Period} ms（设置预览，非实测）";
+        }
+        catch (ArgumentException)
+        { BreathingTiming.Text = "当前组合不可用：吸气须至少200 ms，呼气须大于375 ms。请调整呼吸频率或吸气占比。"; }
+    }
     private StackPanel VitalSigns()
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
@@ -218,6 +242,11 @@ internal sealed class DesignPreviewSettings : UserControl
         Add("逐搏周期波动上限（±%，0–5）", RateVariation);
         Add("波动共用种子（64位小写十六进制）", RateSeed);
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
+        Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
+        panel.Children.Add(BreathingTiming);
+        RespiratoryRate.ValueChanged += (_, _) => RefreshBreathingTiming();
+        InspirationPercent.ValueChanged += (_, _) => RefreshBreathingTiming();
+        RefreshBreathingTiming();
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
         Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
         panel.Children.Add(Text("CO₂使用共用种子的独立随机流，64次呼吸循环，同次呼气保持同一目标。仅规则呼吸可用；目标±幅度须在5–80 mmHg内，显示值仍由波形测量。"));
@@ -250,7 +279,7 @@ internal sealed class DesignPreviewSettings : UserControl
     {
         _advancedParameters.Children.Clear();
         _advancedParameters.Children.Add(Text("当前波形高级参数 · 预留编辑入口"));
-        _advancedParameters.Children.Add(Text("下列为模板默认参数，不代表生命体征页调整后的运行值；心率、周期波动、呼吸频率与EtCO₂请在生命体征页设置。固定病理模板不开放与其不兼容的时序修改。"));
+        _advancedParameters.Children.Add(Text("下列为模板默认参数，不代表生命体征页调整后的运行值；心率、周期波动、呼吸频率、吸气占比与EtCO₂请在生命体征页设置。固定病理模板不开放与其不兼容的时序修改。"));
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         _advancedParameters.Children.Add(Text($"P {config.Ecg.PDurationMilliseconds} ms · PR {config.Ecg.PrIntervalMilliseconds} ms · QRS {config.Ecg.QrsDurationMilliseconds} ms · QTc {config.Ecg.QtcMilliseconds} ms"));

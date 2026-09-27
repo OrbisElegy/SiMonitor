@@ -127,11 +127,11 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
-            int breathPeriod = checked((int)decimal.Round(60000 / (Settings.RespiratoryRate.Value ?? throw new ArgumentException("RR required")), 0, MidpointRounding.ToEven));
+            var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
             config = config with
             {
                 BreathPeriodMilliseconds = breathPeriod,
-                InspirationMilliseconds = breathPeriod / 2,
+                InspirationMilliseconds = inspiration,
                 CvpBaselineCentiMmHg = checked((int)((Settings.CvpBaseline.Value ?? throw new ArgumentException("CVP baseline required")) * 100)),
                 Co2EndExpiratoryMmHg = checked((int)(Settings.EtCo2Target.Value ?? throw new ArgumentException("EtCO2 required")))
             };
@@ -162,6 +162,8 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
+        { Settings.Status.Text = "未应用：吸气须至少200 ms，呼气须大于375 ms；请调整呼吸频率或吸气占比。原运行与画面保持不变。"; }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。"; }
     }

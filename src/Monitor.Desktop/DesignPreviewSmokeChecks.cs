@@ -76,6 +76,37 @@ internal static class DesignPreviewSmokeChecks
         for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(oldMean.HasValue && window.Session.Measurements!.CvpMean.MeanCentiMmHg == oldMean + 600,
             "native CVP mean derives shifted waveform, with identical seeded phase");
+        var oldEcg = window.Session.Samples(0, 0, 35_000_000_000).ToArray();
+        var oldResp = window.Session.Samples(1, 0, 35_000_000_000).ToArray();
+        var oldCo2 = window.Session.Samples(4, 0, 35_000_000_000).ToArray();
+        var oldCvp = window.Session.Samples(6, 0, 35_000_000_000).ToArray();
+        window.Settings.InspirationPercent.Value = 33;
+        Require(window.Settings.ReadBreathingTiming() == (3000, 990) && window.Settings.BreathingTiming.Text!.Contains("2010", StringComparison.Ordinal),
+            "draft inspiration percentage previews actual millisecond timing");
+        previous = window.Session;
+        window.ApplySettings();
+        Require(!ReferenceEquals(previous, window.Session), "changed inspiration applies");
+        for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        Require(oldEcg.SequenceEqual(window.Session.Samples(0, 0, 35_000_000_000)) &&
+            !oldResp.SequenceEqual(window.Session.Samples(1, 0, 35_000_000_000)) &&
+            !oldCo2.SequenceEqual(window.Session.Samples(4, 0, 35_000_000_000)) &&
+            !oldCvp.SequenceEqual(window.Session.Samples(6, 0, 35_000_000_000)),
+            "inspiration timing moves all respiratory components while preserving cardiac samples");
+        Require(window.Session.Measurements!.Capnography.RespirationsMilliPerMinute.Value is >= 19500 and <= 20500,
+            "independent CO2 RR retains breathing frequency with new ratio");
+        previous = window.Session; timer = window.ActiveTimer;
+        window.Settings.RespiratoryRate.Value = 60;
+        foreach (decimal? invalid in new decimal?[] { 10, 62.5m, 90, null })
+        {
+            window.Settings.InspirationPercent.Value = invalid;
+            window.ApplySettings();
+            Require(ReferenceEquals(previous, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                window.Settings.Status.Text!.Contains("375", StringComparison.Ordinal), "invalid timing preserves live source and gives actionable constraint");
+        }
+        window.Settings.InspirationPercent.Value = 20;
+        Require(window.Settings.ReadBreathingTiming() == (1000, 200), "exact minimum inspiration accepted");
+        window.Settings.RespiratoryRate.Value = 20;
+        window.Settings.InspirationPercent.Value = 33;
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }

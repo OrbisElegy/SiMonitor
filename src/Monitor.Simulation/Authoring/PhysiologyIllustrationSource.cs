@@ -25,6 +25,8 @@ public static class PhysiologyIllustrationSource
         { throw new ArgumentException("Pressure demo offset must be within +/-10 mmHg."); }
         if (configuration.CvpBaselineCentiMmHg is < -500 or > 3000)
         { throw new ArgumentException("Physiology.CvpBaselineOutOfRange"); }
+        if (configuration.AbpPulsePermille is < 500 or > 2000 || configuration.PaPulsePermille is < 500 or > 2000)
+        { throw new ArgumentException("Physiology.PressurePulseOutOfRange"); }
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
@@ -80,6 +82,17 @@ public static class PhysiologyIllustrationSource
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
                  new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+        foreach (var (row, gain) in new[] { (3, configuration.AbpPulsePermille), (5, configuration.PaPulsePermille) })
+        {
+            if (gain == 1000) { continue; }
+            var pressure = channels[row].VascularPressure;
+            if (pressure?.Morphology is not { } morphology)
+            { throw new ArgumentException("Physiology.PressurePulseRequiresReservoirMorphology"); }
+            int height = checked((int)Monitor.Simulation.Determinism.FixedPointMath.RoundDivideTiesToEven(
+                (Int128)morphology.PulseHeightCentiMmHg * gain, 1000));
+            channels[row] = (pressure with { Morphology = morphology with { PulseHeightCentiMmHg = height } })
+                .CreateChannel(plan, ChannelId(row), channels[row].QualityFlags);
+        }
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);

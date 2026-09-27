@@ -132,6 +132,8 @@ internal sealed class DesignPreviewWindow : Window
             {
                 BreathPeriodMilliseconds = breathPeriod,
                 InspirationMilliseconds = inspiration,
+                AbpPulsePermille = checked((int)((Settings.AbpPulseGain.Value ?? throw new ArgumentException("ABP pulse gain required")) * 1000)),
+                PaPulsePermille = checked((int)((Settings.PaPulseGain.Value ?? throw new ArgumentException("PA pulse gain required")) * 1000)),
                 CvpBaselineCentiMmHg = checked((int)((Settings.CvpBaseline.Value ?? throw new ArgumentException("CVP baseline required")) * 100)),
                 Co2EndExpiratoryMmHg = checked((int)(Settings.EtCo2Target.Value ?? throw new ArgumentException("EtCO2 required")))
             };

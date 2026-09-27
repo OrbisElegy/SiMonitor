@@ -96,6 +96,19 @@ internal static class DesignPreviewSmokeChecks
         var saturation = window.Session.Measurements!.SpO2;
         Require(saturation.Status == WaveformMeasurementStatus.Valid && saturation.SaturationMilliPercent is >= 92500 and <= 97500,
             "native monitor receives independently measured seeded optical variation");
+        var oldAbp = window.Session.Measurements!.AbpMean.MeanCentiMmHg;
+        var oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
+        window.Settings.AbpPulseGain.Value = 1.5m;
+        window.Settings.PaPulseGain.Value = .5m;
+        window.ApplySettings();
+        for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        Require(window.Session.Measurements!.AbpMean.MeanCentiMmHg > oldAbp && window.Session.Measurements!.PaMean.MeanCentiMmHg < oldPa,
+            "ABP and PA controls change waveform-derived means independently");
+        previous = window.Session;
+        window.Settings.AbpPulseGain.Value = null;
+        window.ApplySettings();
+        Require(ReferenceEquals(previous, window.Session), "missing pressure gain preserves live session");
+        window.Settings.AbpPulseGain.Value = 1.5m;
         var oldMean = window.Session.Measurements!.CvpMean.MeanCentiMmHg;
         previous = window.Session;
         window.Settings.CvpBaseline.Value = null;

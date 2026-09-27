@@ -333,6 +333,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyStableSlowContours();
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();
+        VerifyAtrialProductStyles();
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -598,10 +599,36 @@ internal static class DesignPreviewSmokeChecks
         Require(Peak(regular, 9) > 0 && Peak(intermittent, 3) == 0 && Peak(intermittent, 5) > 0 && absent.All(s => s.Value == 0),
             "all four respiratory choices remain distinguishable from actual source data");
     }
+    private static void VerifyAtrialProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 6, 7, 8, 9 })
+            {
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "atrial product preset applies atomically");
+                for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                Require(window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.Valid, "atrial product ECG reaches measured HR");
+                if (choice >= 8)
+                {
+                    int expected = choice == 8 ? 150000 : 75000;
+                    Require(Math.Abs(window.Session.Measurements.HeartRate.MilliBeatsPerMinute!.Value - expected) <= 1000,
+                        "flutter HR is measured from conducted QRS rather than atrial300bpm");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-atrial-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "atrial product paper contains complete twelve-lead acquisition");
+                window.SelectPage(0);
+            }
+            var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyPrebuiltStyles()
     {
         int count = 0;
-        for (int ecg = 0; ecg < 6; ecg++)
+        for (int ecg = 0; ecg < DesignPreviewSettings.EcgChoiceCount; ecg++)
             for (int resp = 0; resp < 4; resp++)
                 for (int ejection = 0; ejection < 4; ejection++)
                 {
@@ -620,11 +647,21 @@ internal static class DesignPreviewSmokeChecks
                         Require(rejected, "invalid combinations remain disabled in prebuilt catalog");
                     }
                 }
-        Require(count == 56, "catalog covers all current compatible combinations");
+        Require(count == StylePreviewCatalog.CombinationCount, "catalog covers all current compatible combinations");
         var reference = DesignPreviewWindow.CreateStylePreview(2, 1, 1);
         var cached = StylePreviewCatalog.Get(2, 1, 1);
         Require(cached.Abp.SequenceEqual(reference.Samples(3, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)) &&
             cached.Ecg.SequenceEqual(reference.Samples(0, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)), "build-time samples match the actual selected physiology");
+        for (int choice = 6; choice < 10; choice++)
+        {
+            var atrial = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+            var asset = StylePreviewCatalog.Get(choice, 0, 0);
+            Require(asset.Ecg.SequenceEqual(atrial.Samples(0, atrial.FrontierNs - 3_000_000_000, atrial.FrontierNs)) &&
+                asset.Abp.SequenceEqual(atrial.Samples(3, atrial.FrontierNs - 3_000_000_000, atrial.FrontierNs)), "atrial rhythm cached ECG and pressure match live authoring");
+            var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+            Require(pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern && pair.Physiology.VentricularConductionRatio == pair.Ecg.VentricularConductionRatio,
+                "monitor and twelve-lead share atrial rhythm and conduction ratio");
+        }
         Require(StylePreviewCatalog.Respiration(1).SequenceEqual(DesignPreviewWindow.CreateRespirationPreview(1)), "long respiration asset preserves full authored cycle");
     }
     private static void VerifyAdditionalLimits(LiveMeasurementSnapshot snapshot)

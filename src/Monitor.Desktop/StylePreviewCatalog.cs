@@ -12,6 +12,7 @@ internal sealed record StylePreviewData((long TimeNs, double Value)[] Ecg, (long
 // Build-generated finite sample catalog. UI loading never invokes simulation.
 internal sealed class StylePreviewCatalog
 {
+    internal const int CombinationCount = 88;
     private const string FileName = "style-previews.bin";
     private readonly Dictionary<(int, int, int), StylePreviewData> _styles = [];
     private readonly (long TimeNs, double Value)[][] _respiration = new (long, double)[4][];
@@ -23,7 +24,7 @@ internal sealed class StylePreviewCatalog
     private static StylePreviewCatalog Load(string path)
     {
         using var file = File.OpenRead(path); using var reader = new BinaryReader(file, Encoding.UTF8);
-        if (reader.ReadInt32() != 0x31565053 || reader.ReadInt32() != 56) { throw new InvalidDataException("Preview.InvalidCatalog"); }
+        if (reader.ReadInt32() != 0x31565053 || reader.ReadInt32() != CombinationCount) { throw new InvalidDataException("Preview.InvalidCatalog"); }
         var catalog = new StylePreviewCatalog();
         (long, double)[] ReadSamples()
         {
@@ -38,10 +39,10 @@ internal sealed class StylePreviewCatalog
             }
             return samples;
         }
-        for (int i = 0; i < 56; i++)
+        for (int i = 0; i < CombinationCount; i++)
         {
             var key = (reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
-            if (key.Item1 is < 0 or > 5 || key.Item2 is < 0 or > 3 || key.Item3 is < 0 or > 3 ||
+            if ((key.Item1 < 0 || key.Item1 >= DesignPreviewSettings.EcgChoiceCount) || key.Item2 is < 0 or > 3 || key.Item3 is < 0 or > 3 ||
                 !catalog._styles.TryAdd(key, new(ReadSamples(), ReadSamples())))
             { throw new InvalidDataException("Preview.InvalidKey"); }
         }
@@ -54,7 +55,7 @@ internal sealed class StylePreviewCatalog
     internal static int Generate(string destination)
     {
         var keys = new List<(int Ecg, int Resp, int Ejection)>();
-        for (int ecg = 0; ecg < 6; ecg++)
+        for (int ecg = 0; ecg < DesignPreviewSettings.EcgChoiceCount; ecg++)
             for (int resp = 0; resp < 4; resp++)
                 for (int ejection = 0; ejection < 4; ejection++)
                 {

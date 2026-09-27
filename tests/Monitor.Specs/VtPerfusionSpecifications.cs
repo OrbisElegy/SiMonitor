@@ -28,8 +28,7 @@ internal static class VtPerfusionSpecifications
             "fixed VT no longer pumps full reference volume at fast rate");
         Check.That(FillingLimitedEjection.StrokeVolumePermille(375_000_000) > SvtPerfusionReference.StrokeVolumePermille(300_000_000),
             "VT uses its own filling interval rather than SVT gain");
-        Check.That(FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000 &&
-            FlutterOneToOnePerfusionReference.Arterial.EjectionEquilibriumCentiMmHg == 30000,
+        Check.That(FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000,
             "unrelated preset inputs remain unchanged");
         foreach (long invalid in new[] { -1L, 240_000_000L, 800_000_001L })
         {

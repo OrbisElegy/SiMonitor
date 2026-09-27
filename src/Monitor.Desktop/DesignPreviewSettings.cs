@@ -90,14 +90,14 @@ internal sealed class DesignPreviewSettings : UserControl
         display.Children.Add(Skin);
         display.Children.Add(Text("纸质十二导联排布")); display.Children.Add(PaperLayout);
         AutomationProperties.SetName(PaperLayout, "纸质十二导联排布");
-        display.Children.Add(DesktopInformationPages.Help("波形与显示", "自动：每行自己的扫屏起点，以前一轮样本更新量程，目标占用85%（ECG含1mV标定）。旧轨迹保留旧比例。固定：输入上下限。超界压平到边界，各行用实线隔开。"));
+        display.Children.Add(DesktopInformationPages.Help("topic-1"));
         var headings = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
         string[] labels = ["行", "通道 / 单位", "量程", "下限", "上限", "扫速 mm/s* "];
         for (int column = 0; column < labels.Length; column++)
         { var label = Text(labels[column]); Grid.SetColumn(label, column); headings.Children.Add(label); }
         display.Children.Add(headings);
         display.Children.Add(_slotRows);
-        display.Children.Add(DesktopInformationPages.Help("波形与显示", "* 相对纸面速度：12.5 / 25 / 50 对应20 / 10 / 5秒时间窗，整区仍随窗口适配，不校准真实毫米。"));
+        display.Children.Add(DesktopInformationPages.Help("topic-2"));
         display.Children.Add(Text("十二导联：整张纸按显示区等比适配，保持纸格/波形/标定的相对比例；不校准屏幕毫米，允许高幅波形跨导联区域。"));
         Skin.SelectionChanged += (_, _) => BuildRows(); BuildRows();
         var vitals = (StackPanel)VitalSigns();
@@ -297,8 +297,8 @@ internal sealed class DesignPreviewSettings : UserControl
         RefreshBreathingTiming();
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
         Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
-        panel.Children.Add(DesktopInformationPages.Help("生命体征", "CO₂使用共用种子的独立随机流，64次呼吸循环，同次呼气保持同一目标。仅规则呼吸可用；目标±幅度须在5–80 mmHg内，显示值仍由波形测量。"));
-        panel.Children.Add(DesktopInformationPages.Help("生命体征", "应用后从头生成并重新测量。波动为256搏循环的种子序列，连续16个间期逐渐偏长或偏短；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
+        panel.Children.Add(DesktopInformationPages.Help("topic-3"));
+        panel.Children.Add(DesktopInformationPages.Help("topic-4"));
         void Add(string label, Control control)
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
         panel.Children.Add(Text("指脉氧"));
@@ -309,13 +309,13 @@ internal sealed class DesignPreviewSettings : UserControl
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至100");
         Add("SpO₂波动幅度（±百分点，0–2.5；0关闭）", OpticalVariation);
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
-        panel.Children.Add(DesktopInformationPages.Help("生命体征", "血氧使用共用种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；波动端点限制在75–100%内；97.5% ±2.5覆盖95–100%，98% ±2.5覆盖95.5–100%。此为教学变化，不模拟氧输送或停搏耗氧。"));
-        panel.Children.Add(DesktopInformationPages.Help("生命体征", "应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
+        panel.Children.Add(DesktopInformationPages.Help("topic-5"));
+        panel.Children.Add(DesktopInformationPages.Help("topic-6"));
         Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
         Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);
         panel.Children.Add(Text("调整压力波形的脉搏分量，保留长间期回落；均压仍从采样计算。此项不是收缩压/舒张压目标，也不是显示缩放。"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
-        panel.Children.Add(DesktopInformationPages.Help("生命体征", "基线叠加原有心搏与呼吸分量后再采样计算均压，因此实测CVP不必等于设置值。此处调整模拟源，不是传感器调零，也不改变射血或动脉压。"));
+        panel.Children.Add(DesktopInformationPages.Help("topic-7"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
         foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP收缩压/舒张压（mmHg）", "PA收缩压/舒张压（mmHg）" })
         {
@@ -330,7 +330,7 @@ internal sealed class DesignPreviewSettings : UserControl
     {
         _advancedParameters.Children.Clear();
         _advancedParameters.Children.Add(Text("当前波形高级参数 · 模板默认值（非运行值）"));
-        _advancedParameters.Children.Add(DesktopInformationPages.Help("波形与显示", "下列为模板默认参数，不代表生命体征页调整后的运行值；心率、周期波动、呼吸频率、吸气占比与EtCO₂请在生命体征页设置。固定病理模板不开放与其不兼容的时序修改。"));
+        _advancedParameters.Children.Add(DesktopInformationPages.Help("topic-8"));
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         _advancedParameters.Children.Add(Text($"P {config.Ecg.PDurationMilliseconds} ms · PR {config.Ecg.PrIntervalMilliseconds} ms · QRS {config.Ecg.QrsDurationMilliseconds} ms · QTc {config.Ecg.QtcMilliseconds} ms"));

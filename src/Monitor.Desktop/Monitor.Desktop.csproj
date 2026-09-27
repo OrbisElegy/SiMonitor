@@ -23,6 +23,7 @@
     <PackageReference Include="Avalonia.BuildServices" Version="11.3.2" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="help-topics.json" LogicalName="Monitor.Help.Topics" />
     <EmbeddedResource Include="../../LICENSE" LogicalName="Monitor.Legal.LICENSE" />
     <EmbeddedResource Include="../../eng/dependencies.json" LogicalName="Monitor.Legal.dependencies.json" />
     <EmbeddedResource Include="../../eng/licenses/*" LogicalName="Monitor.Legal.%(Filename)%(Extension)" />

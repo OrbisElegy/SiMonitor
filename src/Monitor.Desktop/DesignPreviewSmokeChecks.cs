@@ -448,6 +448,14 @@ internal static class DesignPreviewSmokeChecks
             var helpSession = window.Session;
             window.SelectPage(3); Capture(window, "ui-preview-help.png");
             Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("声音始终跟随最高") == true), "help contains relocated alarm instructions");
+            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("模板默认参数") == true), "help catalog includes advanced instructions before visiting advanced settings");
+            var helpSearch = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "搜索帮助");
+            helpSearch.Text = "CO₂ 共用"; Capture(window, "ui-preview-help-search.png");
+            var found = window.GetVisualDescendants().OfType<SelectableTextBlock>().ToArray();
+            Require(found.Length == 1 && found[0].Text!.Contains("CO₂使用共用种子", StringComparison.Ordinal), "multiple search words intersect and retain matching help");
+            helpSearch.Text = "不存在的说明xyz"; Capture(window, "ui-preview-help-empty.png");
+            Require(!window.GetVisualDescendants().OfType<SelectableTextBlock>().Any() && window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("没有匹配说明", StringComparison.Ordinal) == true), "empty search explains how to recover");
+            helpSearch.Text = "";
             window.SelectPage(4); Capture(window, "ui-preview-about.png");
             var legal = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "许可文档正文");
             Require(legal.IsReadOnly && legal.Text?.Contains("GNU AFFERO GENERAL PUBLIC LICENSE") == true, "about embeds offline project license text");

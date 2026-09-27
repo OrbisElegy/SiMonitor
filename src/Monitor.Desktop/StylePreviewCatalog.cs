@@ -12,7 +12,8 @@ internal sealed record StylePreviewData((long TimeNs, double Value)[] Ecg, (long
 // Build-generated finite sample catalog. UI loading never invokes simulation.
 internal sealed class StylePreviewCatalog
 {
-    internal const int CombinationCount = 88;
+    internal const int CombinationCount = 168;
+    internal static long DurationNs(int ecg) => ecg >= 10 ? 5_000_000_000 : 3_000_000_000;
     private const string FileName = "style-previews.bin";
     private readonly Dictionary<(int, int, int), StylePreviewData> _styles = [];
     private readonly (long TimeNs, double Value)[][] _respiration = new (long, double)[4][];
@@ -66,8 +67,8 @@ internal sealed class StylePreviewCatalog
         Parallel.For(0, keys.Count, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(32, Environment.ProcessorCount) }, i =>
         {
             var key = keys[i]; var source = DesignPreviewWindow.CreateStylePreview(key.Ecg, key.Resp, key.Ejection);
-            data[i] = new(source.Samples(0, source.FrontierNs - 3_000_000_000, source.FrontierNs).ToArray(),
-                source.Samples(3, source.FrontierNs - 3_000_000_000, source.FrontierNs).ToArray());
+            data[i] = new(source.Samples(0, source.FrontierNs - DurationNs(key.Ecg), source.FrontierNs).ToArray(),
+                source.Samples(3, source.FrontierNs - DurationNs(key.Ecg), source.FrontierNs).ToArray());
         });
         string temporary = destination + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary), Encoding.UTF8))

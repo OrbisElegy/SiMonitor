@@ -111,6 +111,7 @@ internal static class Program
             .. AcceleratedJunctionalPerfusionSpecifications.All,
             .. AcceleratedAtrialPerfusionSpecifications.All,
             .. FlutterOneToOnePerfusionSpecifications.All,
+            .. ConductedFlutterPerfusionSpecifications.All,
             .. SvtPerfusionSpecifications.All,
             .. PrematureAtrialSpecifications.All,
             .. BlockedPrematureAtrialSpecifications.All,

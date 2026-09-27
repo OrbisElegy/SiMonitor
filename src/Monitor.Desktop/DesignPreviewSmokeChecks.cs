@@ -641,8 +641,8 @@ internal static class DesignPreviewSmokeChecks
                         "monitor and paper share fixed or variable flutter conduction and reset old pattern");
                     Require(window.Session.Measurements.AbpMean.Status == WaveformMeasurementStatus.Valid,
                         "flutter pressure remains sample-derived and available");
-                    // Only the one-to-one model has received the separate filling correction.
-                    // Existing two-to-one pressure is high and needs its own model review.
+                    Require(window.Session.Measurements.AbpMean.MeanCentiMmHg is > 7000 and < 15000,
+                        "all flutter product examples use filling-limited pressure input");
                     if (choice == 37)
                     {
                         Require(window.Session.Measurements.AbpMean.MeanCentiMmHg is > 9000 and < 12000,

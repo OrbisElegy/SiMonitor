@@ -37,12 +37,12 @@ def frequency(curve, saturation):
 
 def voice(hz):
     # Same original 100ms/8ms attack/20ms release as selected Heartbeat.pcm.
-    # Apply current runtime full-master heartbeat gain (4096/16384, i.e.1/4, on the selected-sample path).
+    # Apply current runtime full-master heartbeat gain (16384/16384, original gain, on the selected-sample path).
     length = RATE // 10
     source = [round(.055 * min(1, i / (RATE * .008), (length - 1 - i) / (RATE * .02))
                     * math.sin(2 * math.pi * hz * i / RATE) * 32767) for i in range(length)]
     assert source[0] == source[-1] == 0
-    return source, [round(v / 4) for v in source]
+    return source, source.copy()
 
 
 def wav(samples):
@@ -72,7 +72,7 @@ def track(curve, bpm):
             events.append({'frame': start, 'saturation_percent': saturation, 'frequency_hz': hz})
     assert all(b['frame'] - a['frame'] == period for a, b in zip(events, events[1:]))
     assert len(events) == (30 if bpm == 75 else 60)
-    assert max(abs(v) for v in samples) <= 451
+    assert max(abs(v) for v in samples) <= 1803
     return wav(samples), events
 
 
@@ -83,7 +83,7 @@ def generate(folder, check):
     files = {}
     manifest = {'schema': 'Monitor.BeatPitchAudition@1', 'sample_rate': RATE,
                 'status': 'candidates-not-selected', 'levels_percent': LEVELS,
-                'segment_seconds': 2.4, 'runtime_gain_q15': 4096, 'selected_sample_gain_denominator': 16384, 'curves': CURVES, 'tracks': {}}
+                'segment_seconds': 2.4, 'runtime_gain_q15': 16384, 'selected_sample_gain_denominator': 16384, 'curves': CURVES, 'tracks': {}}
     for name, curve in CURVES.items():
         values = [frequency(curve, value / 10) for value in range(700, 1001)]
         assert all(a <= b for a, b in zip(values, values[1:])), 'Non-monotonic curve'

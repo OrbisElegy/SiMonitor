@@ -19,7 +19,7 @@ internal static class MonitorAlertSpecifications
         new(nameof(PerfusionUsesOpticalSamples), PerfusionUsesOpticalSamples),
         new(nameof(SelectedTonesRestoreAndMixIndependently), SelectedTonesRestoreAndMixIndependently),
         new(nameof(MeasuredBeatEventsCommitOnce), MeasuredBeatEventsCommitOnce),
-        new(nameof(AlarmLevelDominatesRoutineHeartbeat), AlarmLevelDominatesRoutineHeartbeat),
+        new(nameof(RestoredHeartbeatGainPreservesMixing), RestoredHeartbeatGainPreservesMixing),
         new(nameof(OpticalRunoffCannotMasqueradeAsSaturation), OpticalRunoffCannotMasqueradeAsSaturation),
         new(nameof(SaturationLimitsUseValidMeasurements), SaturationLimitsUseValidMeasurements),
         new(nameof(SaturationLimitsFollowAcquiredOptics), SaturationLimitsFollowAcquiredOptics),
@@ -63,7 +63,7 @@ internal static class MonitorAlertSpecifications
             var voice = new ToneVoice(preset); float[] full = new float[4800]; voice.Render(full);
             int crossings = Enumerable.Range(1, full.Length - 1).Count(i => full[i - 1] <= 0 && full[i] > 0);
             Check.That(Math.Abs(crossings * 10000 - preset.FrequencyMilliHz) <= 10000, "rendered pitch follows selected curve");
-            Check.That(full[0] == 0 && full[^1] == 0 && full.Max(Math.Abs) < .014, "same click-free envelope and routine beat gain");
+            Check.That(full[0] == 0 && full[^1] == 0 && full.Max(Math.Abs) < .056, "same click-free envelope and routine beat gain");
             var split = new ToneVoice(preset); float[] prefix = new float[1234]; split.Render(prefix);
             var restored = ToneVoice.Restore(split.CaptureState()); float[] tail = new float[3566]; restored.Render(tail);
             Check.That(prefix.Concat(tail).SequenceEqual(full), "pitch bank restores sample-exact continuation");
@@ -169,7 +169,7 @@ internal static class MonitorAlertSpecifications
             }
         Check.That(normal && lost && recovered, "valid-pulse to prolonged runoff to recovery exercised without changing oxygen target");
     }
-    private static void AlarmLevelDominatesRoutineHeartbeat()
+    private static void RestoredHeartbeatGainPreservesMixing()
     {
         float[] Render(TonePreset preset)
         {
@@ -178,11 +178,12 @@ internal static class MonitorAlertSpecifications
         double Rms(float[] pcm) => Math.Sqrt(pcm.Average(v => (double)v * v));
         foreach (int volume in new[] { 25, 50, 100 })
         {
+            Check.That(SelectedMonitorTones.Heartbeat(volume).GainQ15 == 16384 * volume / 100, "original heartbeat gain restored without hidden attenuation");
             var beat = Render(SelectedMonitorTones.Heartbeat(volume));
             foreach (var level in Enum.GetValues<MonitorNoticeLevel>())
             {
                 var alarm = Render(SelectedMonitorTones.Alarm(level, volume));
-                Check.That(Rms(alarm) >= 4 * Rms(beat), "every alarm attack exceeds routine beep by at least12dB RMS over100ms");
+                Check.That(Rms(alarm) > Rms(beat), "alarm attack remains louder after restoring original beat gain");
                 Check.That(alarm.Zip(beat).All(p => Math.Abs(p.First + p.Second) < 1), "simultaneous alarm and heartbeat retain headroom");
             }
         }

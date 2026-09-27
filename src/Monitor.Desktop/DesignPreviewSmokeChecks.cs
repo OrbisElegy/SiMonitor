@@ -178,6 +178,13 @@ internal static class DesignPreviewSmokeChecks
         timed.UpdateAlarm(MonitorNoticeLevel.Warning, new());
         Require(timed.BeatPitchPercent == 97, "missing measurement uses neutral pitch");
         Require(timed.BeatSource.SelectedIndex == 0, "default beat source remains ECG");
+        Require(timed.HeartbeatVolume.Value == 100 && timed.EffectiveHeartbeatVolume == 50, "default heartbeat uses original gain under master volume");
+        var alarmBeforeBeatVolume = timed.PublishedAlarm;
+        timed.HeartbeatVolume.Value = 0;
+        Require(timed.EffectiveHeartbeatVolume == 0 && timed.PublishedAlarm == alarmBeforeBeatVolume, "muting routine beats preserves alarm request");
+        timed.Volume.Value = 40; timed.HeartbeatVolume.Value = 25;
+        Require(timed.EffectiveHeartbeatVolume == 10 && timed.BeatPitchPercent == 97, "relative beat volume multiplies master without changing pitch");
+        timed.HeartbeatVolume.Value = 100; timed.Volume.Value = 50;
         timed.StartAudioPause(120);
         timed.BeatSource.SelectedIndex = 1;
         Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pulse source selection preserves independent audio pause");

@@ -21,9 +21,9 @@ public static class SelectedMonitorTones
     {
         if (saturationPercent is < 70 or > 97) { throw new ArgumentOutOfRangeException(nameof(saturationPercent)); }
         var tone = Create(MonitorToneSample.Heartbeat, volumePercent);
-        // Keep alarm headroom/timbre intact; routine beats are12dB quieter
-        // than the selected audition level, independently of master volume.
-        return tone with { GainQ15 = tone.GainQ15 / 4, FrequencyMilliHz = PitchFrequencyMilliHz(saturationPercent), Sample = saturationPercent == 97 ? MonitorToneSample.Heartbeat : MonitorToneSample.HeartbeatPitchA, BeatPitchPercent = saturationPercent };
+        // Restore the original selected heartbeat gain; independent UI attenuation
+        // can reduce routine beats without changing alarm gain.
+        return tone with { FrequencyMilliHz = PitchFrequencyMilliHz(saturationPercent), Sample = saturationPercent == 97 ? MonitorToneSample.Heartbeat : MonitorToneSample.HeartbeatPitchA, BeatPitchPercent = saturationPercent };
     }
     private static int PitchFrequencyMilliHz(int value) => value switch
     {

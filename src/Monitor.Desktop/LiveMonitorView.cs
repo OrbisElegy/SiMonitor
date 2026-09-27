@@ -60,9 +60,9 @@ internal sealed class LiveMonitorView : UserControl
                 _ => "CVP 平均压   mmHg"
             };
             var primary = new TextBlock { Text = "---", FontSize = 52, FontWeight = FontWeight.SemiBold, Foreground = color };
-            var secondary = new TextBlock { FontSize = 17, Foreground = color, IsVisible = slot.Channel is 2 or 4 };
+            var secondary = new TextBlock { FontSize = 17, Foreground = color, IsVisible = slot.Channel is 2 or 3 or 4 or 5 };
             AutomationProperties.SetName(primary, label);
-            AutomationProperties.SetName(secondary, slot.Channel == 2 ? "PR · PLETH，bpm" : "RR · CO₂，次/分");
+            AutomationProperties.SetName(secondary, slot.Channel switch { 2 => "PR · PLETH，bpm", 3 => "ABP收缩压/舒张压，mmHg", 5 => "PA收缩压/舒张压，mmHg", _ => "RR · CO₂，次/分" });
             var content = new StackPanel { Width = 166, Spacing = 2 };
             content.Children.Add(new TextBlock { Text = label, Foreground = color, FontSize = 13 });
             if (slot.Channel == 2)
@@ -143,7 +143,14 @@ internal sealed class LiveMonitorView : UserControl
                     secondary.Text = "RR  " + Value(MeasurementSource.Co2, snapshot.Capnography.RespirationsMilliPerMinute.Status, snapshot.Capnography.RespirationsMilliPerMinute.Value, 1000, "RR-CO₂") + " 次/分"; break;
                 default:
                     var pressure = channel == 3 ? snapshot.AbpMean : channel == 5 ? snapshot.PaMean : snapshot.CvpMean;
-                    primary.Text = Value(MeasurementSource.Pressure, pressure.Status, pressure.MeanCentiMmHg, 100, LiveMonitorTrace.Names[channel]); break;
+                    primary.Text = Value(MeasurementSource.Pressure, pressure.Status, pressure.MeanCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
+                    if (channel is 3 or 5 && pressure.Pulse is { } pulse)
+                    {
+                        string sys = Value(MeasurementSource.Pressure, pulse.Status, pulse.SystolicCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
+                        string dia = Value(MeasurementSource.Pressure, pulse.Status, pulse.DiastolicCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
+                        secondary.Text = "SYS/DIA " + sys + "/" + dia;
+                    }
+                    break;
             }
         }
         foreach (var (pi, _) in _opticalRows)

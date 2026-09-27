@@ -96,6 +96,15 @@ internal static class DesignPreviewSmokeChecks
         var saturation = window.Session.Measurements!.SpO2;
         Require(saturation.Status == WaveformMeasurementStatus.Valid && saturation.SaturationMilliPercent is >= 92500 and <= 97500,
             "native monitor receives independently measured seeded optical variation");
+        foreach (int channel in new[] { 3, 5 })
+        {
+            var display = MonitorDisplayConfiguration.Default();
+            var pressureView = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default,
+                new MonitorDisplayConfiguration(display.Skin, display.Slots.Select(slot => slot with { Channel = channel }).ToArray()))));
+            pressureView.RefreshReadings(window.Session.Measurements!);
+            Require(pressureView.NumericBlocks[1].Text!.StartsWith("SYS/DIA ", StringComparison.Ordinal) && !pressureView.NumericBlocks[1].Text!.Contains("---", StringComparison.Ordinal),
+                "pressure secondary line presents waveform-derived systolic/diastolic values");
+        }
         var oldAbp = window.Session.Measurements!.AbpMean.MeanCentiMmHg;
         var oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
         window.Settings.AbpPulseGain.Value = 1.5m;

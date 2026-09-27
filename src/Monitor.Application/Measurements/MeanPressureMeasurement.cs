@@ -5,20 +5,24 @@ using Monitor.Simulation.Determinism;
 namespace Monitor.Application.Measurements;
 
 public sealed record MeanPressureReading(WaveformMeasurementStatus Status, int? MeanCentiMmHg,
-    long? WindowStartTimeNs, long? MeasuredAtNs);
+    long? WindowStartTimeNs, long? MeasuredAtNs)
+{
+    public PulsePressureReading? Pulse { get; init; }
+}
 
 // Mean of the latest four seconds of uniform125Hz pressure samples in mmHg.
-// No pulse detector, configured pressure, or systolic/diastolic approximation.
+// Optional pulse extrema use a separate bounded detector; no configured pressure.
 public sealed class MeanPressureMeasurement
 {
     private const long StepNs = 8_000_000;
     public const int WindowSamples = 500;
     private State _state = new();
     public Guid ChannelId { get; }
-    public MeanPressureMeasurement(Guid channelId)
+    public bool DetectPulse { get; }
+    public MeanPressureMeasurement(Guid channelId, bool detectPulse = false)
     {
         if (channelId == Guid.Empty) { throw new ArgumentException("MeanPressure.EmptyChannel", nameof(channelId)); }
-        ChannelId = channelId;
+        ChannelId = channelId; DetectPulse = detectPulse;
     }
     public MeanPressureReading Consume(ReadOnlySpan<byte> wire)
     {
@@ -55,7 +59,8 @@ public sealed class MeanPressureMeasurement
                 !plane.QualityRanges.Any(r => (uint)i >= r.FirstSampleOffset && (ulong)i < (ulong)r.FirstSampleOffset + r.Count && r.QualityFlags != 0);
             next.LastSample = block.StartSimTimeNs + i * StepNs;
             if (!usable)
-            { next.Count = next.Cursor = 0; next.Sum = 0; next.Poor = true; continue; }
+            { next.Count = next.Cursor = 0; next.Sum = 0; next.Poor = true; next.Pulse = new(); continue; }
+            if (DetectPulse) { next.Pulse.Sample(next.LastSample.Value, value); }
             if (next.Count == WindowSamples) { next.Sum -= next.Values[next.Cursor]; }
             next.Values[next.Cursor] = value;
             next.Sum += value; next.Cursor = (next.Cursor + 1) % WindowSamples;
@@ -74,21 +79,23 @@ public sealed class MeanPressureMeasurement
         var status = _state.LastSample is null || asOfSampleTimeNs - _state.LastSample > 500_000_000 ? WaveformMeasurementStatus.NoData :
             _state.Poor ? WaveformMeasurementStatus.PoorSignal : _state.Count < WindowSamples ? WaveformMeasurementStatus.WarmingUp : WaveformMeasurementStatus.Valid;
         return new(status, status == WaveformMeasurementStatus.Valid ? (int)FixedPointMath.RoundDivideTiesToEven(_state.Sum, WindowSamples) : null,
-            status == WaveformMeasurementStatus.Valid ? _state.LastSample - (WindowSamples - 1) * StepNs : null, _state.LastSample);
+            status == WaveformMeasurementStatus.Valid ? _state.LastSample - (WindowSamples - 1) * StepNs : null, _state.LastSample)
+        { Pulse = DetectPulse ? _state.Pulse.Read(asOfSampleTimeNs, status) : null };
     }
-    public Checkpoint Capture() => new(ChannelId, Copy(_state));
+    public Checkpoint Capture() => new(ChannelId, DetectPulse, Copy(_state));
     public static MeanPressureMeasurement Restore(Checkpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        return new(checkpoint.Channel) { _state = Copy(checkpoint.Value) };
+        return new(checkpoint.Channel, checkpoint.DetectPulse) { _state = Copy(checkpoint.Value) };
     }
     public sealed class Checkpoint
     {
         internal Guid Channel { get; }
+        internal bool DetectPulse { get; }
         internal State Value { get; }
-        internal Checkpoint(Guid channel, State value) { Channel = channel; Value = value; }
+        internal Checkpoint(Guid channel, bool detectPulse, State value) { Channel = channel; DetectPulse = detectPulse; Value = value; }
     }
-    private static State Copy(State state) => state with { Values = (int[])state.Values.Clone() };
+    private static State Copy(State state) => state with { Values = (int[])state.Values.Clone(), Pulse = state.Pulse.Copy() };
     internal sealed record Identity(Guid Session, Guid Instance, ulong Timebase, ulong Stream, ulong Revision);
     internal sealed record State
     {
@@ -99,5 +106,6 @@ public sealed class MeanPressureMeasurement
         internal int[] Values = new int[WindowSamples];
         internal int Count, Cursor;
         internal bool Poor;
+        internal PressurePulseTracker Pulse = new();
     }
 }

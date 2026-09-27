@@ -166,6 +166,23 @@ internal static class DesignPreviewSmokeChecks
     private static void VerifySoundSettings()
     {
         VerifyOutputFaultNotice();
+        long authority = 0;
+        var timed = new SoundSettingsPanel(authorityNow: () => authority);
+        timed.UpdateAlarm(MonitorNoticeLevel.Warning, new());
+        timed.StartAudioPause(120);
+        Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pause suppresses alarm request and shows countdown");
+        timed.UpdateAlarm(MonitorNoticeLevel.Critical, new());
+        Require(timed.PublishedAlarm is null && timed.HeartbeatEnabled.IsChecked == true, "new critical condition is retained while heartbeat preference stays independent");
+        authority = 60_000_000_000; timed.PauseMonitor(); timed.RefreshAudioPause();
+        Require(timed.AudioPauseText.Contains("60s", StringComparison.Ordinal), "simulation pause does not freeze audio deadline");
+        authority = 120_000_000_000; timed.RefreshAudioPause();
+        Require(timed.AudioPauseText == "" && timed.PublishedAlarm is null, "expiry does not restart a paused simulation");
+        timed.UpdateAlarm(MonitorNoticeLevel.Critical, new());
+        Require(timed.PublishedAlarm?.Level == MonitorNoticeLevel.Critical, "current critical resumes instead of old warning");
+        timed.StartAudioPause(10); timed.UpdateAlarm(null, new());
+        timed.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(timed.PublishedAlarm is null && !timed.ResumeAlarmAudio.IsEnabled, "cleared alarm is not replayed by explicit resume");
+        timed.Close();
         var completion = new TaskCompletionSource<Monitor.Infrastructure.Audio.SoundPreviewResult>();
         CancellationToken token = default; int calls = 0;
         var panel = new SoundSettingsPanel((volume, cancellation) =>
@@ -299,6 +316,10 @@ internal static class DesignPreviewSmokeChecks
         var window = (DesignPreviewWindow)launched; window.Show();
         try
         {
+            window.Settings.Sound.StartAudioPause(120);
+            Require(window.MonitorView.AudioPauseStatus.Text!.Contains("报警声音暂停", StringComparison.Ordinal), "pause state is visible outside rotating patient messages");
+            window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(window.MonitorView.AudioPauseStatus.Text == "", "explicit resume clears persistent header");
             Require(window.MonitorView.NumericTexts.All(t => t == "---"), "no configured targets displayed before acquisition");
             Require(window.Title!.Contains("Standalone", StringComparison.Ordinal) && window.Settings.Sound.AlarmEnabled.IsChecked == false,
                 "standalone starts with explicit sound opt-in and truthful development title");

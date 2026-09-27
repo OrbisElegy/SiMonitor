@@ -50,6 +50,7 @@ internal sealed class DesignPreviewWindow : Window
         Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         MonitorView.AdditionalNotices = CurrentNotices;
+        Settings.Sound.AudioPauseChanged += () => MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
         Settings.Sound.OutputNoticeChanged += () =>
         {
             if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
@@ -160,6 +161,7 @@ internal sealed class DesignPreviewWindow : Window
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             MonitorView = new(_monitor);
+            MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();

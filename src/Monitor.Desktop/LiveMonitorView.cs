@@ -30,6 +30,7 @@ internal sealed class LiveMonitorView : UserControl
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
     private readonly Border _noticeBackground = new() { Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(3) };
+    internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0) };
     internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13 };
     internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
@@ -37,9 +38,9 @@ internal sealed class LiveMonitorView : UserControl
     {
         _trace = trace;
         var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
-        var header = new Grid { ColumnDefinitions = new("Auto,*"), Margin = new Thickness(12, 10) };
+        var header = new Grid { ColumnDefinitions = new("Auto,*,Auto"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
-        header.Children.Add(Clock); Grid.SetColumn(_noticeBackground, 1); _noticeBackground.Child = Notice; header.Children.Add(_noticeBackground); root.Children.Add(header);
+        header.Children.Add(Clock); Grid.SetColumn(_noticeBackground, 1); _noticeBackground.Child = Notice; header.Children.Add(_noticeBackground); Grid.SetColumn(AudioPauseStatus, 2); header.Children.Add(AudioPauseStatus); root.Children.Add(header);
         var body = new Grid { ColumnDefinitions = new("*,190") };
         Grid.SetRow(body, 1); root.Children.Add(body); body.Children.Add(trace);
         var numbers = new Grid();

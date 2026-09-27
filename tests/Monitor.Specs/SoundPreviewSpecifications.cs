@@ -7,12 +7,39 @@ internal static class SoundPreviewSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(AudioPauseUsesIndependentBoundedAuthorityDeadline), AudioPauseUsesIndependentBoundedAuthorityDeadline),
         new(nameof(SoundPreviewOwnsOutputOffCallerAndScalesVolume), SoundPreviewOwnsOutputOffCallerAndScalesVolume),
         new(nameof(SoundPreviewCancellationAndFailedJoinPreventReplay), SoundPreviewCancellationAndFailedJoinPreventReplay),
         new(nameof(MonitorAlarmOutputRetainsFailedJoin), MonitorAlarmOutputRetainsFailedJoin),
         new(nameof(HeartbeatWorkerDropsExpiredAndDisabledCues), HeartbeatWorkerDropsExpiredAndDisabledCues),
         new(nameof(OutputHealthRequiresSuccessfulPump), OutputHealthRequiresSuccessfulPump),
     ];
+
+    private static void AudioPauseUsesIndependentBoundedAuthorityDeadline()
+    {
+        var pause = new Monitor.Application.Presentation.MonitorAudioPause();
+        Check.That(pause.RemainingSeconds(0) == 0, "audio starts unpaused");
+        pause.Start(0, 120);
+        Check.That(pause.RemainingSeconds(1) == 120 && pause.RemainingSeconds(60_000_000_000) == 60, "countdown rounds up using supplied authority time");
+        long? deadline = pause.PausedUntilNs;
+        foreach (int invalid in new[] { 0, 3601 })
+        {
+            bool rejected = false;
+            try { pause.Start(60_000_000_000, invalid); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected && pause.PausedUntilNs == deadline, "invalid duration preserves pause");
+        }
+        bool overflow = false;
+        try { pause.Start(long.MaxValue, 1); } catch (OverflowException) { overflow = true; }
+        Check.That(overflow && pause.RemainingSeconds(60_000_000_000) == 60, "deadline overflow preserves monotonic frontier and pause");
+        bool backwards = false;
+        try { pause.Resume(0); } catch (ArgumentException) { backwards = true; }
+        Check.That(backwards && pause.PausedUntilNs == deadline, "backwards authority cannot resume audio");
+        Check.That(pause.RemainingSeconds(119_999_999_999) == 1 && pause.RemainingSeconds(120_000_000_000) == 0 && pause.PausedUntilNs is null, "exclusive deadline expires exactly");
+        pause.Start(120_000_000_000, 3600); pause.Resume(120_000_000_001);
+        Check.That(pause.RemainingSeconds(120_000_000_001) == 0, "explicit resume ends pause immediately");
+        pause.Start(120_000_000_001, 1); pause.Start(120_000_000_001, 10);
+        Check.That(pause.RemainingSeconds(120_000_000_001) == 10, "explicit start replaces deadline without toggling");
+    }
 
     private static void SoundPreviewOwnsOutputOffCallerAndScalesVolume()
     {

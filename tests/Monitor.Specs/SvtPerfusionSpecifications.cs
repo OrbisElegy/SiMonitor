@@ -9,9 +9,36 @@ internal static class SvtPerfusionSpecifications
     private const long Q = FixedPointMath.Q32One;
     public static Specification[] All =>
     [
+        new(nameof(SvtFillingLimitsInputRatherThanClippingPressure), SvtFillingLimitsInputRatherThanClippingPressure),
         new(nameof(SvtPerfusionPreservesSupportsAndBoundsOverlap), SvtPerfusionPreservesSupportsAndBoundsOverlap),
         new(nameof(SvtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff), SvtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff),
     ];
+    private static void SvtFillingLimitsInputRatherThanClippingPressure()
+    {
+        Check.That(SvtPerfusionReference.StrokeVolumePermille(800_000_000) == 1000, "reference filling retains stroke volume");
+        int previous = 0;
+        foreach (long rr in new long[] { 250_000_000, 300_000_000, 375_000_000, 600_000_000, 800_000_000 })
+        {
+            int gain = SvtPerfusionReference.StrokeVolumePermille(rr);
+            Check.That(gain > previous, "shorter filling reduces input monotonically"); previous = gain;
+        }
+        var plan = SupraventricularTachycardiaReference.CreatePlan();
+        var corrected = VascularPressureSource.Create(plan, SvtPerfusionReference.Arterial);
+        // Reconstruct the former fixed-strength input, not a different renderer.
+        var old = VascularPressureSource.Create(plan, SvtPerfusionReference.Arterial with
+        { EjectionEquilibriumCentiMmHg = 30000, Morphology = SvtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
+        var before = new List<double>(); var after = new List<double>();
+        for (long t = 300_000_000_000; t < 300_300_000_000; t += 1_000_000)
+        { before.Add(old.EvaluateAt(t) / (double)Q / 100); after.Add(corrected.EvaluateAt(t) / (double)Q / 100); }
+        Console.WriteLine($"SVT steady ABP old {before.Min():F2}-{before.Max():F2}, filling-limited {after.Min():F2}-{after.Max():F2} mmHg");
+        Check.That(before.Max() > 270 && after.Max() < 130 && after.Min() > 60 && after.Max() - after.Min() > 5,
+            "reproduced near300mmHg defect is removed at source while retaining pulsatility");
+        var stopped = VascularPressureSource.Create(plan with { VentricularMechanicalEnabled = false }, SvtPerfusionReference.Arterial);
+        Check.That(stopped.EvaluateAt(20_000_000_000) < stopped.EvaluateAt(5_000_000_000), "no ejection still runs down without a pressure floor clamp");
+        Check.That(VtPerfusionReference.Arterial.EjectionEquilibriumCentiMmHg == 30000 &&
+            FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000,
+            "SVT correction cannot silently alter unrelated fixed presets");
+    }
     private static void SvtPerfusionPreservesSupportsAndBoundsOverlap()
     {
         var plan = SupraventricularTachycardiaReference.CreatePlan();

@@ -6,10 +6,10 @@ namespace Monitor.Simulation.Physiology;
 public static class VtPerfusionReference
 {
     public const string EvidenceId = "VtPerfusionIllustration@1";
-    public static PlethRunoffPlan Pleth { get; } = SvtPerfusionReference.Pleth;
-    public static VascularPressurePlan Arterial { get; } = SvtPerfusionReference.Arterial;
-    public static VascularPressurePlan Pulmonary { get; } = SvtPerfusionReference.Pulmonary with
-    { Morphology = SvtPerfusionReference.Pulmonary.Morphology! with { MaximumPulseOverlap = 2 } };
+    public static PlethRunoffPlan Pleth { get; } = SvtPerfusionReference.ReferencePleth;
+    public static VascularPressurePlan Arterial { get; } = SvtPerfusionReference.ReferenceArterial;
+    public static VascularPressurePlan Pulmonary { get; } = SvtPerfusionReference.ReferencePulmonary with
+    { Morphology = SvtPerfusionReference.ReferencePulmonary.Morphology! with { MaximumPulseOverlap = 2 } };
     // A follows800ms atrial cycles; ventricular components last at most320ms.
     // This does not model atrial contraction against a closed valve (cannon a).
     public static CentralVenousPressurePlan Venous { get; } = SvtPerfusionReference.Venous with

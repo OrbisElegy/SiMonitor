@@ -11,6 +11,8 @@ internal static class PhysiologyIllustrationSpecifications
 {
     // Captured from632acca before the refactor: concatenate returned raw wire
     // envelopes from40 advances of200ms (30 completed blocks after delay).
+    // SVT golden is updated for the documented filling-limited correction;
+    // the other thirteen remain the original pre-refactor outputs.
     // Independent expected bytes guard against shared test/source drift.
     public static Specification[] All =>
     [
@@ -50,7 +52,7 @@ internal static class PhysiologyIllustrationSpecifications
             ("AjrPreset", PhysiologyDemoConfiguration.AjrPreset, 30, "01a473cad6b807d769519a45dcc04c7341d8617d6b9c310f4eba24f69f64f294"),
             ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "227cc44d118c39fb186017ab19918f74da2bb9b8229a00f598081643a033357b"),
             ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "88157f5e1a59b4e69aa47b8b2fc844ca8562760ace3af0ed4bca2922d1f6d1cb"),
-            ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "9b171af6045bfe3971a95346fbdd22d2e6bd5815789504c350e98952118f1406"),
+            ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "1e3020ff3b1ffc6ffa93937eabab421a425c514feec76140aed370b9f2316630"),
             ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "c4ae9df61ddf8ec848e74e7b19e096566d620dbf6e4acdbad29a6dbfcd721565"),
             ("PrematureAtrial", PhysiologyDemoConfiguration.PrematureAtrial, 30, "345d15d40686708b415f206ca172a39f567952a98625e073a6be6cedec5f1d03"),
             ("PrematureJunctional", PhysiologyDemoConfiguration.PrematureJunctional, 30, "6bf12ba27510575cdda201b40e5ad6c79b77b714e5cca430b550ce245db7109a"),
@@ -65,8 +67,9 @@ internal static class PhysiologyIllustrationSpecifications
             for (long time = 200_000_000; time <= 8_000_000_000; time += 200_000_000)
                 foreach (var wire in source.AdvanceTo(time, 50, 1, 100))
                 { hash.AppendData(wire); count++; }
-            if (count != item.Envelopes || Convert.ToHexStringLower(hash.GetHashAndReset()) != item.Sha256)
-            { throw new InvalidOperationException(item.Name + " changed the pre-refactor seven-channel wire output."); }
+            string actual = Convert.ToHexStringLower(hash.GetHashAndReset());
+            if (count != item.Envelopes || actual != item.Sha256)
+            { throw new InvalidOperationException(item.Name + " changed the recorded seven-channel wire output: " + actual); }
         }
     }
 }

@@ -643,6 +643,10 @@ internal static class DesignPreviewSmokeChecks
                 var rate = window.Session.Measurements!.HeartRate;
                 Require(rate.Status == WaveformMeasurementStatus.Valid && Math.Abs(rate.MilliBeatsPerMinute!.Value - 200000) <= 1000,
                     "narrow and broad SVT produce acquired 200 bpm");
+                var pressure = window.Session.Measurements.AbpMean;
+                Require(pressure.Status == WaveformMeasurementStatus.Valid && pressure.MeanCentiMmHg is > 6000 and < 13000 &&
+                    pressure.Pulse is { Status: WaveformMeasurementStatus.Valid, SystolicCentiMmHg: < 13000 },
+                    "SVT pressure is measured from filling-limited samples without near300mmHg accumulation");
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
                 Require(pair.Physiology.Svt && pair.Ecg.Svt && pair.Physiology.SvtRbbb == pair.Ecg.SvtRbbb &&
                     pair.Physiology.SvtLbbb == pair.Ecg.SvtLbbb, "SVT monitor and paper use identical bundle variant");

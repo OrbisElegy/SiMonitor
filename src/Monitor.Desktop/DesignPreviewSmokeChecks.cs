@@ -634,7 +634,7 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in new[] { 21, 26, 27, 28, 29, 26 })
+            foreach (int choice in new[] { 21, 26, 27, 28, 29, 30, 26 })
             {
                 var previous = window.Session;
                 window.Settings.EcgSelection = choice; window.ApplySettings();
@@ -642,9 +642,23 @@ internal static class DesignPreviewSmokeChecks
                 if (choice == 21) { continue; }
                 for (int i = 0; i < 320; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
                 var reading = window.Session.Measurements!;
-                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
-                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 160000) <= 5000,
-                    $"VT product rate choice={choice}: {reading.HeartRate}");
+                if (choice == 30)
+                {
+                    // User accepts morphology-dependent single-lead fluctuations;
+                    // never replace measured HR with the authored ventricular rate.
+                    var independent = new LocalMonitorPreviewSession(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Physiology,
+                        MonitorDisplayConfiguration.Default(), enableMeasurements: true);
+                    while (independent.SimulationTimeNs < window.Session.SimulationTimeNs) { independent.Advance(50_000_000); }
+                    Require(reading.HeartRate.Status != WaveformMeasurementStatus.Uncountable &&
+                        reading.HeartRate == independent.Measurements!.HeartRate,
+                        "twisting product retains sample-derived rate and quality without forcing preset HR");
+                }
+                else
+                {
+                    Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                        Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 160000) <= 5000,
+                        $"VT product rate choice={choice}: {reading.HeartRate}");
+                }
                 Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.MeanCentiMmHg is > 6000 and < 16000,
                     "VT product uses filling-limited pressure input");
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);

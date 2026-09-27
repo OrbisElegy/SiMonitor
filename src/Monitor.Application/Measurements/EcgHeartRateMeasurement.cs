@@ -126,7 +126,13 @@ public sealed class EcgHeartRateMeasurement
         if (distance > s.PeakDistance) { s.PeakDistance = distance; s.PeakTime = time; }
         if (slope >= Math.Max(threshold / 2, s.MaxSlope / 4)) { s.LastActive = time; }
         if (time - s.Start > 240_000_000)
-        { s.Uncountable = true; s.Peaks = []; s.LastBeat = null; s.Active = false; s.LastSlope = 0; return; }
+        {
+            // A merged wide complex is not evidence of an uncountable rhythm.
+            // Require sustained activity without a recent discrete confirmation.
+            if (time - (s.LastBeat ?? s.FirstSample!.Value) >= 2_000_000_000)
+            { s.Uncountable = true; s.Peaks = []; }
+            s.Active = false; s.LastSlope = 0; return;
+        }
         if (time - s.LastActive < 64_000_000) { return; }
         s.Active = false;
         long width = s.LastActive - s.Start;

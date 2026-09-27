@@ -11,10 +11,54 @@ internal static class EcgHeartRateMeasurementSpecifications
     private static readonly Guid Channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
     public static Specification[] All =>
     [
+        new(nameof(TwistingMorphologyPreservesMeasuredFluctuationAndRecovery), TwistingMorphologyPreservesMeasuredFluctuationAndRecovery),
         new(nameof(EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates), EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates),
         new(nameof(EcgContinuousDisorganizationDoesNotBecomeANormalRate), EcgContinuousDisorganizationDoesNotBecomeANormalRate),
         new(nameof(EcgMeasurementFencesBadInputAndRestoresPartialCandidates), EcgMeasurementFencesBadInputAndRestoresPartialCandidates),
     ];
+
+    private static void TwistingMorphologyPreservesMeasuredFluctuationAndRecovery()
+    {
+        foreach (var configuration in new[]
+        {
+            PhysiologyIllustrationConfiguration.AarPreset,
+            PhysiologyIllustrationConfiguration.SvtPreset,
+            PhysiologyIllustrationConfiguration.SvtPreset with { SvtRbbb = true },
+            PhysiologyIllustrationConfiguration.SvtPreset with { SvtLbbb = true },
+            PhysiologyIllustrationConfiguration.VtPreset,
+            PhysiologyIllustrationConfiguration.VtPreset with { VtFusion = true },
+            PhysiologyIllustrationConfiguration.VtPreset with { VtCapture = true },
+            PhysiologyIllustrationConfiguration.VtPreset with { VtBidirectional = true },
+            PhysiologyIllustrationConfiguration.VtPreset with { VtTwisting = true }
+        })
+        {
+            var source = PhysiologyIllustrationSource.Create(configuration);
+            var detector = new EcgHeartRateMeasurement(Channel);
+            EcgHeartRateMeasurement? restored = null;
+            var rates = new HashSet<int>();
+            for (int step = 1; step <= 210; step++)
+                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                {
+                    var events = detector.Consume(wire);
+                    long last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
+                    var reading = detector.Read(last);
+                    if (restored is not null)
+                    {
+                        Check.That(events.SequenceEqual(restored.Consume(wire)) && reading == restored.Read(last),
+                            "twisting measurement fluctuations and beat confirmations survive checkpoint recovery");
+                    }
+                    else if (last >= 12_000_000_000) { restored = EcgHeartRateMeasurement.Restore(detector.Capture()); }
+                    Check.That(reading.Status != WaveformMeasurementStatus.Uncountable,
+                        "twisting discrete complexes must not be classified as ventricular disorganization");
+                    if (last < 10_000_000_000) { continue; }
+                    if (reading.Status == WaveformMeasurementStatus.Valid)
+                    { Check.That(reading.MilliBeatsPerMinute > 0, "valid measurement retains a numeric rate"); rates.Add(reading.MilliBeatsPerMinute!.Value); }
+                }
+            Check.That(rates.Count > 0, "organized rhythm retains measured numeric rates");
+            if (configuration.VtTwisting)
+            { Check.That(rates.Count > 1, "single-lead morphology variation retains measured fluctuations"); }
+        }
+    }
 
     private static void EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates()
     {

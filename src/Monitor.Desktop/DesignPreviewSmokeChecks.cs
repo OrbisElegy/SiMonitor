@@ -337,6 +337,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyBlockProductStyles();
         VerifyDisorganizedProductStyles();
         VerifySvtProductStyles();
+        VerifyVtProductStyles();
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -625,6 +626,51 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyVtProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 26, 27, 28, 26 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "VT preset can replace VF and clear fusion/capture state");
+                if (choice == 21) { continue; }
+                for (int i = 0; i < 320; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 160000) <= 5000,
+                    "VT product rate is acquired through fusion and capture cycles");
+                Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.MeanCentiMmHg is > 6000 and < 16000,
+                    "VT product uses filling-limited pressure input");
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.Vt && pair.Ecg.Vt && pair.Physiology.VtFusion == pair.Ecg.VtFusion &&
+                    pair.Physiology.VtCapture == pair.Ecg.VtCapture, "monitor and paper share VT variant");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "VT preview samples match selected electrical and perfusion source");
+                if (choice > 26)
+                {
+                    Require(duration == 12_000_000_000, "fusion/capture previews cover their complete authored group");
+                    var regular = DesignPreviewWindow.CreateStylePreview(26, 0, 0);
+                    while (regular.SimulationTimeNs < source.SimulationTimeNs) { regular.Advance(50_000_000); }
+                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.FrontierNs - duration, source.FrontierNs)),
+                        "long preview actually contains the selected variant");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-vt-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "VT paper capture is complete");
+                window.SelectPage(0);
+            }
+            var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only rate override cannot alter VT");
         }
         finally { window.Close(); }
     }

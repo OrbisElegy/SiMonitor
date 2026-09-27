@@ -11,12 +11,67 @@ internal static class PulseOximeterChainSpecifications
     private static readonly Guid Sensor = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     public static Specification[] All =>
     [
+        new(nameof(SeededOpticalVariationReproducesMeasuredSignals), SeededOpticalVariationReproducesMeasuredSignals),
         new(nameof(AcquiredPeripheralSourceProducesPulseAndSaturation), AcquiredPeripheralSourceProducesPulseAndSaturation),
         new(nameof(OpticalStreamFencesIdentityQualityAndContinuity), OpticalStreamFencesIdentityQualityAndContinuity),
         new(nameof(OximeterRestoreAndFailureAreAtomic), OximeterRestoreAndFailureAreAtomic),
     ];
     private static PulseOximeterIllustrationSource Source(int saturation = 98000, Guid? sensor = null) => new(Pleth, Pleth, sensor ?? Sensor, saturation);
     private static PulseOximeterMeasurement Measurement() => PulseOximeterMeasurement.CreateIllustration(Pleth);
+
+    private static void SeededOpticalVariationReproducesMeasuredSignals()
+    {
+        string seed = new('1', 64);
+        var plan = new SeededOpticalSaturation(95000, 2000, seed);
+        var same = new SeededOpticalSaturation(95000, 2000, seed);
+        var other = new SeededOpticalSaturation(95000, 2000, new string('2', 64));
+        long loop = SeededOpticalSaturation.KnotPeriodNs * SeededOpticalSaturation.KnotCount;
+        Check.That(plan.PreparedState == same.PreparedState && plan.At(0) == 95000, "same seed retains full preparation state and starts at nominal");
+        bool differs = false;
+        for (long t = 0; t <= loop; t += 1_000_000_000)
+        {
+            int value = plan.At(t);
+            Check.That(value is >= 93000 and <= 97000 && value == same.At(t) && value == plan.At(t + loop), "bounded periodic deterministic target");
+            Check.That(Math.Abs(value - plan.At(t + 8_000_000)) <= 2, "125Hz target steps remain smooth");
+            differs |= value != other.At(t);
+        }
+        Check.That(differs && plan.At(long.MaxValue) is >= 93000 and <= 97000, "different seeds differ; late lookup is bounded and overflow-safe");
+        Reject(() => _ = new SeededOpticalSaturation(98000, 2000, seed), "upper excursion outside source calibration rejects");
+        Reject(() => _ = new SeededOpticalSaturation(75000, 1, seed), "lower excursion outside source calibration rejects");
+        Reject(() => _ = new SeededOpticalSaturation(95000, 2001, seed), "excess amplitude rejects");
+        Reject(() => _ = new SeededOpticalSaturation(95000, 1000, "invalid"), "invalid seed rejects");
+        Reject(() => plan.At(-1), "negative time rejects");
+        Reject(() => _ = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 98000, variation: plan), "target mismatch rejects");
+        var varied = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: plan);
+        var zero = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: new(95000, 0, seed));
+        var measured = Measurement(); var restored = Measurement(); List<int> values = [];
+        for (int i = 0; i < 600; i++)
+        {
+            var input = Input(i);
+            Check.That(zero.ConvertAcquiredPulse(input).SequenceEqual(Source(95000).ConvertAcquiredPulse(input)), "zero amplitude preserves old bytes");
+            byte[] wire = varied.ConvertAcquiredPulse(input);
+            var replay = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: same);
+            Check.That(wire.SequenceEqual(replay.ConvertAcquiredPulse(input)), "arbitrary-time conversion needs no prior random draws");
+            var result = measured.Consume(wire);
+            Check.That(result == restored.Consume(wire), "measurement checkpoint continuation is unchanged under drift");
+            if (i == 301) { restored = PulseOximeterMeasurement.Restore(restored.Capture()); }
+            if (i > 25)
+            {
+                Check.That(result.SpO2.Status == WaveformMeasurementStatus.Valid, "slow drift retains valid optical signal");
+                int value = result.SpO2.SaturationMilliPercent!.Value;
+                values.Add(value);
+                Check.That(Math.Abs(value - plan.At(i * 200_000_000L - 2_000_000_000)) < 700, "measured four-second optical window follows authored target within teaching tolerance");
+            }
+        }
+        Check.That(values.Max() - values.Min() > 1000, "independent measured saturation changes by more than one percentage point");
+        var flatMeasurement = Measurement();
+        for (int i = 0; i < 40; i++) { flatMeasurement.Consume(varied.ConvertAcquiredPulse(Input(i, flat: true))); }
+        Check.That(flatMeasurement.Read(7_992_000_000).SpO2.Status == WaveformMeasurementStatus.PoorSignal,
+            "target drift cannot manufacture valid saturation without peripheral pulses");
+        var bad = Rewrite(Input(600), b => b with { InstanceId = Sensor });
+        Reject(() => varied.ConvertAcquiredPulse(bad), "bad source rejected during variation");
+        Check.That(varied.ConvertAcquiredPulse(Input(600)).SequenceEqual(new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: same).ConvertAcquiredPulse(Input(600))), "failure consumes no random state");
+    }
 
     private static void AcquiredPeripheralSourceProducesPulseAndSaturation()
     {

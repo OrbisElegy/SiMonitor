@@ -10,6 +10,7 @@ internal static class MeanPressureMeasurementSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(3);
     public static Specification[] All =>
     [
+        new(nameof(PressurePulseRecoversAfterAmplitudeDrop), PressurePulseRecoversAfterAmplitudeDrop),
         new(nameof(PulsePressureMeasuresCyclesAndExpires), PulsePressureMeasuresCyclesAndExpires),
         new(nameof(PressurePulseControlsPreserveRunoffAndOtherChannels), PressurePulseControlsPreserveRunoffAndOtherChannels),
         new(nameof(CvpBaselineChangesSamplesAndMeasuredMean), CvpBaselineChangesSamplesAndMeasuredMean),
@@ -17,6 +18,35 @@ internal static class MeanPressureMeasurementSpecifications
         new(nameof(PressureMeanRejectsBadInputAndRestores), PressureMeanRejectsBadInputAndRestores),
         new(nameof(RealPressureChannelsJoinAtomicLiveReadings), RealPressureChannelsJoinAtomicLiveReadings),
     ];
+    private static void PressurePulseRecoversAfterAmplitudeDrop()
+    {
+        foreach (int weakAmplitude in new[] { 400, 100, 0 })
+        {
+            var measurement = new MeanPressureMeasurement(Channel, detectPulse: true);
+            MeanPressureMeasurement? restored = null;
+            for (int block = 0; block < 120; block++)
+            {
+                var packet = WaveformEnvelopeCodec.Decode(Wire(block));
+                int amplitude = block < 60 ? 4000 : weakAmplitude;
+                short[] values = Enumerable.Range(block * 25, 25).Select(i =>
+                {
+                    int phase = i % 125;
+                    int fraction = phase < 20 ? phase * 5 : phase < 25 ? 100 : phase < 65 ? 100 - (phase - 25) * 5 / 2 : 0;
+                    return (short)(8000 + amplitude * fraction / 100);
+                }).ToArray();
+                byte[] wire = WaveformEnvelopeCodec.EncodeRaw(packet with { Planes = [packet.Planes[0] with { Samples = values }] });
+                var reading = measurement.Consume(wire);
+                if (restored is not null) { Check.That(reading == restored.Consume(wire), "adaptive pressure threshold survives checkpoint during reacquisition"); }
+                if (block == 64) { restored = MeanPressureMeasurement.Restore(measurement.Capture()); }
+                if (block == 79 && weakAmplitude == 400)
+                { Check.That(reading.Pulse is { Status: WaveformMeasurementStatus.Valid, LastPeakTimeNs: >= 14_000_000_000 }, "40-to4mmHg pulse drop reacquires before five-second stale timeout: " + reading.Pulse); }
+            }
+            if (weakAmplitude == 400)
+            { Check.That(measurement.Read(23_992_000_000).Pulse is { SystolicCentiMmHg: 8400, DiastolicCentiMmHg: 8000 }, "bounded pulse history replaces previous large peaks with measured weak pulses"); }
+            else { Check.That(measurement.Read(23_992_000_000).Pulse is { Status: WaveformMeasurementStatus.Stale, SystolicCentiMmHg: null }, "adaptive search must not report subthreshold ripples or flat pressure"); }
+        }
+    }
+
     private static void PulsePressureMeasuresCyclesAndExpires()
     {
         byte[] PulseWire(int block, bool quality = false, int offset = 0)
@@ -54,7 +84,7 @@ internal static class MeanPressureMeasurementSpecifications
         for (int b = 0; b < 40; b++)
         {
             var packet = WaveformEnvelopeCodec.Decode(Wire(b, constant: 8000));
-            var plane = packet.Planes[0]; var values = plane.Samples.ToArray(); values[12] = 20000;
+            var plane = packet.Planes[0]; short[] values = plane.Samples.ToArray(); values[12] = 20000;
             spikes.Consume(WaveformEnvelopeCodec.EncodeRaw(packet with { Planes = [plane with { Samples = values }] }));
         }
         Check.That(spikes.Read(7_992_000_000).Pulse is { Status: WaveformMeasurementStatus.Stale, SystolicCentiMmHg: null }, "isolated sample spikes cannot manufacture pressure pulses");
@@ -189,7 +219,7 @@ internal static class MeanPressureMeasurementSpecifications
         for (int b = 7; b < 40; b++) { Check.That(m.Consume(Wire(b)) == restored.Consume(Wire(b)), "partial ring restoration preserves sum and cursor"); }
         Check.That(MeanPressureMeasurement.Restore(checkpoint).Read(1_392_000_000).Status == WaveformMeasurementStatus.WarmingUp, "captured array not overwritten by future ring wraps");
         var before = m.Read(7_992_000_000);
-        foreach (var bad in new[] { Wire(39), Wire(40, offset: int.MaxValue), Wire(40, epoch: 0) })
+        foreach (byte[]? bad in new[] { Wire(39), Wire(40, offset: int.MaxValue), Wire(40, epoch: 0) })
         {
             Reject(() => m.Consume(bad));
             Check.That(before == m.Read(7_992_000_000), "bad delivery leaves complete mean unchanged");
@@ -212,7 +242,7 @@ internal static class MeanPressureMeasurementSpecifications
             Dictionary<int, List<decimal>> samples = new() { [3] = [], [5] = [], [6] = [] };
             LiveMeasurementSnapshot? reading = null;
             for (int step = 1; step <= 60; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     reading = owner.Consume(wire);
                     var packet = WaveformEnvelopeCodec.Decode(wire);
@@ -236,13 +266,13 @@ internal static class MeanPressureMeasurementSpecifications
             }
             if (!mechanical) { Check.That(reading!.AbpMean.MeanCentiMmHg is >= 1000 and < 4000, "no ejection still reports sampled reservoir runoff rather than an old normal pressure"); }
             var previous = reading;
-            var next = source.AdvanceTo(12_200_000_000, 50, 1, 100).Single();
+            byte[] next = source.AdvanceTo(12_200_000_000, 50, 1, 100).Single();
             var decoded = WaveformEnvelopeCodec.Decode(next);
-            var bad = WaveformEnvelopeCodec.EncodeRaw(decoded with
+            byte[] bad = WaveformEnvelopeCodec.EncodeRaw(decoded with
             { Planes = decoded.Planes.Select(p => p.ChannelId == PhysiologyIllustrationSource.ChannelId(6) ? p with { OffsetNumerator = int.MaxValue, OffsetDenominator = 1 } : p).ToArray() });
             Reject(() => owner.Consume(bad));
             Check.That(owner.Read(previous!.SampleTimeNs) == previous, "late CVP overflow rolls back every detector including ABP/PA");
-            var flagged = WaveformEnvelopeCodec.EncodeRaw(decoded with
+            byte[] flagged = WaveformEnvelopeCodec.EncodeRaw(decoded with
             {
                 Planes = decoded.Planes.Select(p => p.ChannelId != Channel ? p : p with
                 { QualityEncoding = WaveformQualityEncoding.Ranges, QualityRanges = [new(0, (uint)p.Samples.Count, 1)] }).ToArray()

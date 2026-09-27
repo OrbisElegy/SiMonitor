@@ -10,10 +10,54 @@ internal static class MeanPressureMeasurementSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(3);
     public static Specification[] All =>
     [
+        new(nameof(CvpBaselineChangesSamplesAndMeasuredMean), CvpBaselineChangesSamplesAndMeasuredMean),
         new(nameof(PressureMeanUsesTimeSamplesAndFiniteHistory), PressureMeanUsesTimeSamplesAndFiniteHistory),
         new(nameof(PressureMeanRejectsBadInputAndRestores), PressureMeanRejectsBadInputAndRestores),
         new(nameof(RealPressureChannelsJoinAtomicLiveReadings), RealPressureChannelsJoinAtomicLiveReadings),
     ];
+    private static void CvpBaselineChangesSamplesAndMeasuredMean()
+    {
+        foreach (var config in new[] { PhysiologyIllustrationConfiguration.Default, PhysiologyIllustrationConfiguration.SinusArrestPreset,
+            PhysiologyIllustrationConfiguration.Default with { VentricularMechanicalEnabled = false }, PhysiologyIllustrationConfiguration.SvtPreset })
+        {
+            var original = PhysiologyIllustrationSource.Create(config);
+            var shifted = PhysiologyIllustrationSource.Create(config with { CvpBaselineCentiMmHg = -500 });
+            var restored = PhysiologyIllustrationSource.Create(config with { CvpBaselineCentiMmHg = -500 });
+            var left = LiveWaveformMeasurements.CreateIllustration(); var right = LiveWaveformMeasurements.CreateIllustration();
+            for (int step = 1; step <= 45; step++)
+            {
+                long time = step * 200_000_000L;
+                var a = original.AdvanceTo(time, 50, 1, 100); var b = shifted.AdvanceTo(time, 50, 1, 100);
+                var c = restored.AdvanceTo(time, 50, 1, 100);
+                Check.That(a.Count == b.Count && b.Count == c.Count, "CVP baseline preserves acquisition timing");
+                for (int i = 0; i < a.Count; i++)
+                {
+                    Check.That(b[i].SequenceEqual(c[i]), "restoration preserves changed CVP baseline");
+                    var old = WaveformEnvelopeCodec.Decode(a[i]); var changed = WaveformEnvelopeCodec.Decode(b[i]);
+                    foreach (var plane in old.Planes)
+                    {
+                        var next = changed.Planes.Single(p => p.ChannelId == plane.ChannelId);
+                        Check.That(plane.Samples.SequenceEqual(next.Samples), "baseline adjustment preserves pulsatile components");
+                        if (plane.ChannelId != PhysiologyIllustrationSource.ChannelId(6))
+                        { Check.That(plane.OffsetNumerator == next.OffsetNumerator && plane.OffsetDenominator == next.OffsetDenominator, "other channels retain physical pressure/voltage"); }
+                    }
+                    var x = left.Consume(a[i]); var y = right.Consume(b[i]);
+                    if (x.CvpMean.Status == WaveformMeasurementStatus.Valid)
+                    { Check.That(y.CvpMean.Status == WaveformMeasurementStatus.Valid && y.CvpMean.MeanCentiMmHg == x.CvpMean.MeanCentiMmHg - 1100, "actual sampled mean shifts by baseline delta in normal/fixed/no-ejection rhythms"); }
+                }
+                if (step == 21) { restored = Monitor.Simulation.Physiology.PhysiologyWaveformGroup.Restore(restored.CaptureState()); }
+            }
+        }
+        foreach (int value in new[] { -501, 3001, int.MaxValue })
+        {
+            bool rejected = false;
+            try { _ = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { CvpBaselineCentiMmHg = value }); }
+            catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "baseline outside authored range rejects");
+        }
+        _ = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { CvpBaselineCentiMmHg = 3000 });
+    }
+
     private static void PressureMeanUsesTimeSamplesAndFiniteHistory()
     {
         var measurement = new MeanPressureMeasurement(Channel);

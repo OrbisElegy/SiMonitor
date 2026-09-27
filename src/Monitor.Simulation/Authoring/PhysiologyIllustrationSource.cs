@@ -23,6 +23,8 @@ public static class PhysiologyIllustrationSource
         // Preserve the existing authored control range, not a clinical range.
         if (new[] { abpZeroOffsetCentiMmHg, paZeroOffsetCentiMmHg, cvpZeroOffsetCentiMmHg }.Any(value => value is < -1000 or > 1000))
         { throw new ArgumentException("Pressure demo offset must be within +/-10 mmHg."); }
+        if (configuration.CvpBaselineCentiMmHg is < -500 or > 3000)
+        { throw new ArgumentException("Physiology.CvpBaselineOutOfRange"); }
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
@@ -74,10 +76,10 @@ public static class PhysiologyIllustrationSource
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0)),
-             fixedPerfusion?.Venous.CreateChannel(plan, ChannelId(6), 0) ?? (new CentralVenousPressurePlan(600,
+             ((fixedPerfusion?.Venous ?? new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))];
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);

@@ -362,6 +362,16 @@ internal static class DesignPreviewSmokeChecks
             var liveReading = window.Session.Measurements!;
             VerifyNumericAlarmHighlights(liveReading);
             VerifyHeartRateLimits(liveReading);
+            window.Settings.Alerts.NoExpirationEnabled.IsChecked = true;
+            var absent = liveReading with
+            {
+                SampleTimeNs = 20_000_000_000,
+                Capnography = liveReading.Capnography with
+                { Activity = new(Monitor.Application.Measurements.WaveformMeasurementStatus.Valid, 0, null, 20_000_000_000) }
+            };
+            Require(window.Settings.Alerts.Notices(absent).Any(n => n.Id == "co2-no-expiration" && n.Level == MonitorNoticeLevel.Critical), "CO2 absence control projects real condition into alarm path");
+            window.Settings.Alerts.NoExpirationEnabled.IsChecked = false;
+            Require(window.Settings.Alerts.Notices(absent).All(n => n.Id != "co2-no-expiration"), "CO2 absence remains opt-in");
             VerifyAdditionalLimits(liveReading);
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));

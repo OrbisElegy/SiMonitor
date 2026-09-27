@@ -17,6 +17,8 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal CheckBox SpO2Enabled { get; } = new() { Content = "启用实测 SpO₂ 下限提示", IsChecked = false };
     internal NumericUpDown WarningSpO2 { get; } = Number(92, 1, 100);
     internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
+    internal CheckBox NoExpirationEnabled { get; } = new() { Content = "启用 CO₂ 持续未检出呼吸提示", IsChecked = false };
+    internal NumericUpDown NoExpirationSeconds { get; } = new() { Minimum = 5, Maximum = 120, Value = 20, Increment = 1, Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
     internal AdditionalMeasurementLimits AdditionalLimits { get; } = new();
     internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
     internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
@@ -39,11 +41,13 @@ internal sealed class MonitorAlertSettings : StackPanel
         Children.Add(HeartRateEnabled);
         Row("Critical HR 下限（bpm）", CriticalLowHeartRate); Row("Warning HR 下限（bpm）", WarningLowHeartRate);
         Row("Warning HR 上限（bpm）", WarningHeartRate); Row("Critical HR 上限（bpm）", CriticalHeartRate);
-        Children.Add(Text("阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认及声音限时暂停。"));
+        Children.Add(Text("阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认。声音可独立定时暂停。"));
         Children.Add(SpO2Enabled);
         Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
         Children.Add(Text("低于下限才提示；Critical 下限须低于 Warning 下限。85% / 92% 仅作可调教学默认值。仅比较有效实测 SpO₂，信号质量不足或无数据时显示 ---，不推断低血氧或探头脱落。"));
         Children.Add(AdditionalLimits);
+        Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds);
+        Children.Add(Text("默认20秒仅作可调教学设置。连续有效CO₂采样超过时限未检出完整呼气后提示Critical；无数据或质量差时不据此判为呼吸暂停。恢复检出呼气后解除。"));
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);
         Children.Add(NoticeColorEnabled);
@@ -74,6 +78,9 @@ internal sealed class MonitorAlertSettings : StackPanel
             MilliPercent(WarningSpO2), MilliPercent(CriticalSpO2), snapshot.SpO2);
         if (saturationNotice is not null) { yield return saturationNotice; }
         foreach (var notice in AdditionalLimits.Notices(snapshot)) { yield return notice; }
+        int? delay = NoExpirationSeconds.Value is { } seconds && seconds == decimal.Truncate(seconds) ? checked((int)seconds) : null;
+        if (NoExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, delay, snapshot.SampleTimeNs, snapshot.Capnography.Activity) is { } absence)
+        { yield return absence; }
         if (TestLevel.SelectedIndex > 0)
         {
             yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))

@@ -7,6 +7,7 @@ namespace Monitor.Simulation.Authoring;
 // Preparation is deterministic; evaluation has no mutable cursor/random state.
 public sealed class SeededOpticalSaturation
 {
+    public const string PatternId = "SeededOpticalExcursions@2";
     public const long KnotPeriodNs = 30_000_000_000;
     public const int KnotCount = 64;
     private readonly int[] _offsets = new int[KnotCount];
@@ -22,8 +23,16 @@ public sealed class SeededOpticalSaturation
         using var factory = DeterministicStreamFactory.FromLowercaseHex(seedHex);
         var random = factory.CreateStream("physiology.optical.saturation");
         TargetMilliPercent = targetMilliPercent; AmplitudeMilliPercent = amplitudeMilliPercent;
-        for (int i = 1; i < KnotCount; i++)
-        { _offsets[i] = (int)random.UniformBelow((ulong)(2 * amplitudeMilliPercent + 1)) - amplitudeMilliPercent; }
+        // Opposite excursions reach80..100% of the requested amplitude rather
+        // than letting the first90 seconds accidentally stay near the center.
+        // Keep nominal endpoints and the same smooth30-second transitions.
+        int minimum = (amplitudeMilliPercent * 4 + 4) / 5;
+        for (int i = 1; i < KnotCount - 1; i += 2)
+        {
+            int sign = random.UniformBelow(2) == 0 ? -1 : 1;
+            _offsets[i] = sign * (minimum + (int)random.UniformBelow((ulong)(amplitudeMilliPercent - minimum + 1)));
+            _offsets[i + 1] = -sign * (minimum + (int)random.UniformBelow((ulong)(amplitudeMilliPercent - minimum + 1)));
+        }
         PreparedState = random.CaptureState();
     }
 

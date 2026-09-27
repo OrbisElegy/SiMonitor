@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Reflection;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -11,23 +12,46 @@ namespace Monitor.Desktop;
 
 internal static class DesktopInformationPages
 {
-    private static readonly Dictionary<string, HashSet<string>> Instructions = [];
-    internal static Control Help(string category, string text)
+    internal sealed record Topic(string Id, string Category, string Text);
+    private static readonly Lazy<Topic[]> Topics = new(() =>
     {
-        if (!Instructions.TryGetValue(category, out var entries)) { Instructions[category] = entries = []; }
-        entries.Add(text);
-        // Keep section anchors intact without reserving explanatory space.
+        using var stream = typeof(DesktopInformationPages).Assembly.GetManifestResourceStream("Monitor.Help.Topics")!;
+        return JsonSerializer.Deserialize<Topic[]>(stream)!;
+    });
+    internal static Control Help(string id)
+    {
+        if (!Topics.Value.Any(t => t.Id == id)) { throw new InvalidOperationException("Unknown help topic: " + id); }
+        // Keep existing section anchors without reserving explanatory space.
         return new Border { IsVisible = false };
     }
     internal static Control CreateHelp()
     {
-        var panel = new StackPanel { Spacing = 16, Margin = new Thickness(24) };
-        foreach (var (category, entries) in Instructions)
+        var root = new Grid { RowDefinitions = new("Auto,Auto,*"), Margin = new Thickness(24) };
+        var filters = new Grid { ColumnDefinitions = new("200,*") };
+        var categories = Topics.Value.Select(t => t.Category).Distinct().Prepend("全部分类").ToArray();
+        var category = new ComboBox { ItemsSource = categories, SelectedIndex = 0, MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 12, 0) };
+        var search = new TextBox { PlaceholderText = "搜索说明，例如：心率、量程、声音", MinHeight = 44 };
+        AutomationProperties.SetName(category, "帮助分类"); AutomationProperties.SetName(search, "搜索帮助");
+        filters.Children.Add(category); Grid.SetColumn(search, 1); filters.Children.Add(search); root.Children.Add(filters);
+        var count = new TextBlock { Margin = new Thickness(0, 12) }; AutomationProperties.SetName(count, "帮助搜索结果"); Grid.SetRow(count, 1); root.Children.Add(count);
+        var panel = new StackPanel { Spacing = 16 };
+        var scroll = new ScrollViewer { Content = panel, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Grid.SetRow(scroll, 2); root.Children.Add(scroll);
+        void Refresh()
         {
-            panel.Children.Add(new TextBlock { Text = category, FontSize = 20, FontWeight = FontWeight.SemiBold });
-            foreach (string entry in entries) { panel.Children.Add(new SelectableTextBlock { Text = entry, TextWrapping = TextWrapping.Wrap }); }
+            string[] words = (search.Text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var matches = Topics.Value.Where(t => (category.SelectedIndex <= 0 || t.Category == categories[category.SelectedIndex]) &&
+                words.All(word => (t.Category + " " + t.Text).Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
+            panel.Children.Clear(); scroll.Offset = default;
+            count.Text = matches.Length == 0 ? "没有匹配说明，请更换关键词或分类。" : $"找到 {matches.Length} 条说明";
+            foreach (var group in matches.GroupBy(t => t.Category))
+            {
+                panel.Children.Add(new TextBlock { Text = group.Key, FontSize = 20, FontWeight = FontWeight.SemiBold });
+                foreach (var entry in group) { panel.Children.Add(new SelectableTextBlock { Text = entry.Text, TextWrapping = TextWrapping.Wrap }); }
+            }
         }
-        return new ScrollViewer { Content = panel, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        search.TextChanged += (_, _) => Refresh(); category.SelectionChanged += (_, _) => Refresh(); Refresh();
+        return root;
     }
     internal static Control CreateAbout()
     {

@@ -98,7 +98,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         var pauseButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         pauseButtons.Children.Add(PauseAlarmAudio); pauseButtons.Children.Add(ResumeAlarmAudio); Children.Add(pauseButtons);
         ResumeAlarmAudio.IsEnabled = false; Children.Add(PauseStatus);
-        Children.Add(DesktopInformationPages.Help("声音", "定时暂停只影响报警声音，视觉报警与心搏音继续。倒计时按真实经过时间进行，暂停模拟不会延长；到期恢复当前仍活动的报警。"));
+        Children.Add(DesktopInformationPages.Help("topic-9"));
         PauseAlarmAudio.Click += (_, _) =>
         {
             if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds))
@@ -106,7 +106,7 @@ internal sealed class SoundSettingsPanel : StackPanel
             StartAudioPause(checked((int)seconds));
         };
         ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
-        Children.Add(DesktopInformationPages.Help("声音", "主音量同时调整心搏与报警音。报警按最高活动级别发声；心搏音由所选来源的检测事件触发，不按设置值或平均心率补播；SpO₂音高可用于任一节拍来源，血氧不可用时采用固定音高并提示，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
+        Children.Add(DesktopInformationPages.Help("topic-10"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
         {

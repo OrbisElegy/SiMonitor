@@ -22,7 +22,16 @@ internal sealed class DesignPreviewSettings : UserControl
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
-    internal TabControl Tabs { get; } = new();
+    internal ListBox Tabs { get; } = new();
+    internal Dictionary<int, SettingsSections> SectionPages { get; } = [];
+    private readonly ComboBox _compactCategory = new() { MinHeight = 44, MinWidth = 220 };
+    private Action<double>? _adaptNavigation;
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        _adaptNavigation?.Invoke(availableSize.Width);
+        return base.MeasureOverride(availableSize);
+    }
+    internal bool CompactNavigation => _compactCategory.IsVisible;
     internal SoundSettingsPanel Sound { get; } = new();
     internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
@@ -93,25 +102,53 @@ internal sealed class DesignPreviewSettings : UserControl
         display.Children.Add(Text("* 相对纸面速度：12.5 / 25 / 50 对应20 / 10 / 5秒时间窗，整区仍随窗口适配，不校准真实毫米。"));
         display.Children.Add(Text("十二导联：整张纸按显示区等比适配，保持纸格/波形/标定的相对比例；不校准屏幕毫米，允许高幅波形跨导联区域。"));
         Skin.SelectionChanged += (_, _) => BuildRows(); BuildRows();
-        Tabs.ItemsSource = new[]
+        var vitals = (StackPanel)VitalSigns();
+        Control Before(StackPanel panel, Control control) => panel.Children[panel.Children.IndexOf(control) - 1];
+        var paper = new StackPanel { Spacing = 16 };
+        Control paperLabel = Before(display, PaperLayout), paperHelp = display.Children[^1];
+        foreach (var control in new[] { paperLabel, PaperLayout, paperHelp }) { display.Children.Remove(control); paper.Children.Add(control); }
+        display.Margin = new Thickness(0);
+        SectionPages[1] = new SettingsSections("显示", ("监护波形", display), ("十二导联纸图", paper));
+        SectionPages[2] = SettingsSections.Split("声音", Sound,
+            ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
+            ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
+        SectionPages[3] = SettingsSections.Split("报警", Alerts,
+            ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled),
+            ("其他测量参数", Alerts.AdditionalLimits), ("CO₂ 呼吸检测", Alerts.NoExpirationEnabled),
+            ("显示与联调", (Control)Alerts.TestLevel.Parent!), ("声音节奏", Alerts.InfoTone));
+        SectionPages[4] = SettingsSections.Split("生命体征", vitals,
+            ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
+            ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),
+            ("压力", Before(vitals, AbpPulseGain)));
+        string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
+        Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], Scroll(_advancedParameters)];
+        var detail = new ContentControl();
+        var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
+        Tabs.ItemsSource = categories.Select(SettingsSections.Item).ToArray();
+        AutomationProperties.SetName(Tabs, "设置分类"); AutomationProperties.SetName(_compactCategory, "设置分类");
+        _compactCategory.ItemsSource = categories;
+        navigation.Children.Add(Tabs); Grid.SetColumn(detail, 1); navigation.Children.Add(detail);
+        Tabs.SelectionChanged += (_, args) =>
         {
-            new TabItem { Header = "波形生成", Content = Scroll(_generation) },
-            new TabItem { Header = "显示", Content = Scroll(display) },
-            new TabItem { Header = "声音", Content = Scroll(Sound) },
-            new TabItem { Header = "报警", Content = Scroll(Alerts) },
-            new TabItem { Header = "生命体征", Content = Scroll(VitalSigns()) },
-            new TabItem { Header = "高级参数", Content = Scroll(_advancedParameters) },
+            if (!ReferenceEquals(args.Source, Tabs) || Tabs.SelectedIndex < 0) { return; }
+            int selected = Tabs.SelectedIndex; _compactCategory.SelectedIndex = selected;
+            if (selected == 5) { RefreshAdvanced(more); }
+            detail.Content = pages[selected];
         };
-        Tabs.SelectionChanged += (_, _) =>
+        _compactCategory.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compactCategory) && _compactCategory.SelectedIndex >= 0) { Tabs.SelectedIndex = _compactCategory.SelectedIndex; } };
+        _adaptNavigation = width =>
         {
-            if (Tabs.SelectedIndex == 5) { RefreshAdvanced(more); }
+            bool compact = width < 1040; Tabs.IsVisible = !compact; _compactCategory.IsVisible = compact;
+            navigation.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 160);
         };
+        Tabs.SelectedIndex = 0;
         var controls = new WrapPanel { Margin = new Thickness(20, 12), Orientation = Orientation.Horizontal };
         Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run);
         Apply.Click += (_, _) => apply(); Run.Click += (_, _) => run();
-        var root = new Grid { RowDefinitions = new("*,Auto,Auto") };
-        root.Children.Add(Tabs); Grid.SetRow(controls, 1); root.Children.Add(controls);
-        Status.Margin = new Thickness(20, 0, 20, 16); Grid.SetRow(Status, 2); root.Children.Add(Status); Content = root;
+        var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
+        _compactCategory.Margin = new Thickness(20, 12); root.Children.Add(_compactCategory);
+        Grid.SetRow(navigation, 1); root.Children.Add(navigation); Grid.SetRow(controls, 2); root.Children.Add(controls);
+        Status.Margin = new Thickness(20, 0, 20, 16); Grid.SetRow(Status, 3); root.Children.Add(Status); Content = root;
     }
     private StylePreviewData Preview(int ecg, int resp, int ejection)
     {
@@ -267,7 +304,7 @@ internal sealed class DesignPreviewSettings : UserControl
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至100");
         Add("SpO₂波动幅度（±百分点，0–2.5；0关闭）", OpticalVariation);
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
-        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；波动端点限制在75–100%内；97.5% ±2.5覆盖95–100%，98% ±2.5覆盖95.5–100%。此为教学变化，不模拟氧输送或停搏耗氧。"));
+        panel.Children.Add(Text("血氧使用共用种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；波动端点限制在75–100%内；97.5% ±2.5覆盖95–100%，98% ±2.5覆盖95.5–100%。此为教学变化，不模拟氧输送或停搏耗氧。"));
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
         Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);

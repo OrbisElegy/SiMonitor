@@ -11,6 +11,7 @@ internal static class MonitorAlertSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(CriticalDurationSurvivesRotationAndClearsIndependently), CriticalDurationSurvivesRotationAndClearsIndependently),
         new(nameof(RotationWeightsAndPreemption), RotationWeightsAndPreemption),
         new(nameof(AlarmPcmMatchesGroupedPatterns), AlarmPcmMatchesGroupedPatterns),
         new(nameof(PerfusionUsesOpticalSamples), PerfusionUsesOpticalSamples),
@@ -232,6 +233,27 @@ internal static class MonitorAlertSpecifications
             }
         Check.That(events > 0, "real detector events exercised");
     }
+    private static void CriticalDurationSurvivesRotationAndClearsIndependently()
+    {
+        var rotation = new MonitorNoticeRotation();
+        var first = new MonitorNotice("spo2", MonitorNoticeLevel.Critical, "SpO₂ 极低");
+        var second = new MonitorNotice("hr", MonitorNoticeLevel.Critical, "HR 极高");
+        rotation.Update([first], 10_000_000_000);
+        rotation.Update([first, second], 15_000_000_000);
+        Check.That(rotation.CriticalElapsedNs("spo2") == 5_000_000_000 && rotation.CriticalElapsedNs("hr") == 0, "each critical starts when first active, not when displayed");
+        rotation.Update([first with { Text = "changed", Audible = false }, second], 75_000_000_000);
+        Check.That(rotation.CriticalElapsedNs("spo2") == 65_000_000_000 && rotation.CriticalElapsedNs("hr") == 60_000_000_000, "rotation/text/audio eligibility do not restart critical timing");
+        bool rejected = false;
+        try { rotation.Update([first, first], 76_000_000_000); } catch (ArgumentException) { rejected = true; }
+        Check.That(rejected && rotation.CriticalElapsedNs("spo2") == 65_000_000_000, "invalid notice set preserves timing atomically");
+        rotation.Update([first with { Level = MonitorNoticeLevel.Warning }, second], 76_000_000_000);
+        Check.That(rotation.CriticalElapsedNs("spo2") is null && rotation.CriticalElapsedNs("hr") == 61_000_000_000, "downgrade clears only that critical timer");
+        rotation.Update([first, second], 77_000_000_000);
+        Check.That(rotation.CriticalElapsedNs("spo2") == 0, "re-escalation starts new critical interval");
+        rotation.Update([], 78_000_000_000);
+        Check.That(rotation.CriticalElapsedNs("hr") is null, "clearing removes critical history");
+    }
+
     private static void RotationWeightsAndPreemption()
     {
         var rotation = new MonitorNoticeRotation();

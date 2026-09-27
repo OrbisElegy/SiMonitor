@@ -29,16 +29,17 @@ internal sealed class LiveMonitorView : UserControl
     internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
-    private readonly Border _noticeBackground = new() { Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(3) };
-    internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0) };
+    private readonly Border _noticeBackground = new() { Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(3), MaxWidth = 480, MinHeight = 28 };
+    internal Border NoticeRegion => _noticeBackground;
+    internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
     internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13 };
-    internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
+    internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
     internal LiveMonitorView(LiveMonitorTrace trace)
     {
         _trace = trace;
         var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
-        var header = new Grid { ColumnDefinitions = new("Auto,*,Auto"), Margin = new Thickness(12, 10) };
+        var header = new Grid { ColumnDefinitions = new("*,2*,*"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
         header.Children.Add(Clock); Grid.SetColumn(_noticeBackground, 1); _noticeBackground.Child = Notice; header.Children.Add(_noticeBackground); Grid.SetColumn(AudioPauseStatus, 2); header.Children.Add(AudioPauseStatus); root.Children.Add(header);
         var body = new Grid { ColumnDefinitions = new("*,190") };
@@ -164,7 +165,12 @@ internal sealed class LiveMonitorView : UserControl
     {
         _rotation.Update(_notices, _trace.Session.SimulationTimeNs);
         var notice = _rotation.Current;
-        Notice.Text = notice is null ? "" : $"{notice.Level} · {notice.Text}";
+        Notice.Text = notice?.Text ?? "";
+        if (notice is not null && _rotation.CriticalElapsedNs(notice.Id) is { } elapsed)
+        {
+            long seconds = elapsed / 1_000_000_000;
+            Notice.Text += $"（{seconds / 60:00}:{seconds % 60:00}）";
+        }
         _noticeBackground.Background = notice?.Level switch
         {
             MonitorNoticeLevel.Notice when NoticeColorEnabled?.Invoke() != false => Brush.Parse("#145AA3"),

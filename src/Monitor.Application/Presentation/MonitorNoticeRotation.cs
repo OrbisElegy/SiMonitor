@@ -17,6 +17,8 @@ public sealed class MonitorNoticeRotation
     private readonly int[] _next = new int[4];
     private MonitorNotice[] _active = [];
     private long _lastTime, _until;
+    private Dictionary<string, long> _criticalStarts = new(StringComparer.Ordinal);
+    public long? CriticalElapsedNs(string id) => _criticalStarts.TryGetValue(id, out long start) ? _lastTime - start : null;
     public MonitorNotice? Current { get; private set; }
     public MonitorNoticeLevel? Highest => _active.Length == 0 ? null : _active.Max(n => n.Level);
     public void Update(IEnumerable<MonitorNotice> notices, long simulationTimeNs)
@@ -27,6 +29,11 @@ public sealed class MonitorNoticeRotation
         if (items.Length > 64 || items.Any(n => n is null || !Enum.IsDefined(n.Level) || string.IsNullOrWhiteSpace(n.Id) ||
             string.IsNullOrWhiteSpace(n.Text) || n.Id.Length > 128 || n.Text.Length > 512 || n.Numeric is { } numeric && !Enum.IsDefined(numeric)) || items.Select(n => n.Id).Distinct().Count() != items.Length)
         { throw new ArgumentException("Notice.InvalidSet"); }
+        // Track every Critical condition, including messages not currently
+        // visible. A downgrade/clear ends its interval; re-escalation starts anew.
+        var starts = items.Where(n => n.Level == MonitorNoticeLevel.Critical).ToDictionary(
+            n => n.Id, n => _criticalStarts.TryGetValue(n.Id, out long start) ? start : simulationTimeNs, StringComparer.Ordinal);
+        _criticalStarts = starts;
         _active = items.OrderBy(n => n.Id, StringComparer.Ordinal).ToArray(); _lastTime = simulationTimeNs;
         if (Highest is not { } highest) { Current = null; _until = simulationTimeNs; _previousHighest = MonitorNoticeLevel.Info; return; }
         bool lost = Current is null || !_active.Any(n => n.Id == Current.Id && n.Level == Current.Level);

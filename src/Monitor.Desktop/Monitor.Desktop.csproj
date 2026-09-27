@@ -22,6 +22,13 @@
     <!-- Exclude optional build telemetry targets from this development shell. -->
     <PackageReference Include="Avalonia.BuildServices" Version="11.3.2" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../LICENSE" LogicalName="Monitor.Legal.LICENSE" />
+    <EmbeddedResource Include="../../eng/dependencies.json" LogicalName="Monitor.Legal.dependencies.json" />
+    <EmbeddedResource Include="../../eng/licenses/*" LogicalName="Monitor.Legal.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../native/sim_audio_native/vendor/LICENSE.miniaudio" LogicalName="Monitor.Legal.LICENSE.miniaudio" />
+    <EmbeddedResource Include="../../docs/license-scope.md" LogicalName="Monitor.Legal.license-scope.md" />
+  </ItemGroup>
   <Target Name="GenerateStylePreviews" AfterTargets="Build"
           Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)"
           Outputs="$(TargetDir)style-previews.bin"

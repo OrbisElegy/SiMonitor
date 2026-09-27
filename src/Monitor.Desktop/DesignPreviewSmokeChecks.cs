@@ -445,6 +445,15 @@ internal static class DesignPreviewSmokeChecks
                 !window.Settings.Tabs.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains('✓') == true), "settings chevrons persist independently of selection");
             Require(window.Settings.Tabs.Background == Avalonia.Media.Brushes.Transparent && window.Settings.Tabs.Bounds.Height < window.Settings.Bounds.Height * .75,
                 "settings navigation is a compact transparent list rather than a full-height slab");
+            var helpSession = window.Session;
+            window.SelectPage(3); Capture(window, "ui-preview-help.png");
+            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("声音始终跟随最高") == true), "help contains relocated alarm instructions");
+            window.SelectPage(4); Capture(window, "ui-preview-about.png");
+            var legal = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "许可文档正文");
+            Require(legal.IsReadOnly && legal.Text?.Contains("GNU AFFERO GENERAL PUBLIC LICENSE") == true, "about embeds offline project license text");
+            var documents = window.GetVisualDescendants().OfType<ComboBox>().Single(t => AutomationProperties.GetName(t) == "开源许可与依赖文档");
+            Require(documents.ItemCount >= 5 && ReferenceEquals(helpSession, window.Session), "legal documents and informational navigation preserve running session");
+            window.SelectPage(2); Capture(window, "ui-preview-settings.png");
             var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
             int navigationCacheCount = window.Settings.PreviewCacheCount;
             Require(!window.Settings.GetVisualDescendants().OfType<Button>().Any(b => b.Bounds.Size == new Size(238, 162)), "signal navigation has no preview cards");
@@ -714,6 +723,7 @@ internal static class DesignPreviewSmokeChecks
     private static void VerifySixRowPaper(DesignPreviewTrace paper)
     {
         Require(paper.SixRows && paper.LongDurationNs == 10_300_000_000, "six-by-two paper retains five-second short leads and aligned long-II");
+        Require(paper.ColumnStartNs(1) == 5_300_000_000, "second calibration masks300ms instead of shifting paper time");
         byte[] data = Raster(paper, 1124, 956);
         bool Dark(int x, int y) => data[(y * 1124 + x) * 4] < 160 && data[(y * 1124 + x) * 4 + 1] < 160;
         for (int column = 0; column < 2; column++)
@@ -726,6 +736,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyPaperEnd(DesignPreviewTrace paper)
     {
+        Require(Enumerable.Range(0, 4).Select(paper.ColumnStartNs).SequenceEqual(new long[] { 0, 2_800_000_000, 5_600_000_000, 8_400_000_000 }), "short leads retain the common long-II time axis across calibration masks");
         byte[] data = Raster(paper, 1184, 596);
         bool Dark(int x, int y) => data[(y * 1184 + x) * 4] < 160 && data[(y * 1184 + x) * 4 + 1] < 160;
         for (int column = 0; column < 4; column++)

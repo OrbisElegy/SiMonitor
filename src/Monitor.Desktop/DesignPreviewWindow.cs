@@ -67,7 +67,7 @@ internal sealed class DesignPreviewWindow : Window
         var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
         footer.Children.Add(_state); footer.Children.Add(Text("离线教学模拟\n不得用于临床决策", 12));
         DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
-        string[] labels = ["监护波形", "十二导联", "设置"];
+        string[] labels = ["监护波形", "十二导联", "设置", "帮助", "关于"];
         SettingsSections.StyleNavigation(_navigation);
         _navigation.ItemsSource = labels.Select(title => SettingsSections.Item(title, showChevron: false)).ToArray();
         AutomationProperties.SetName(_navigation, "主导航");
@@ -97,21 +97,25 @@ internal sealed class DesignPreviewWindow : Window
     }
     internal void SelectPage(int page)
     {
-        if (page is < 0 or > 2) { throw new ArgumentOutOfRangeException(nameof(page)); }
+        if (page is < 0 or > 4) { throw new ArgumentOutOfRangeException(nameof(page)); }
         Page = page;
         _navigation.SelectedIndex = page;
-        _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", _ => "设置" };
+        _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", 2 => "设置", 3 => "帮助", _ => "关于" };
         _subtitle.Text = page switch
         {
             0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速",
             1 => "监护采样快照",
-            _ => "按分类与参数组浏览设置"
+            2 => "按分类与参数组浏览设置",
+            3 => "操作说明与参数说明",
+            _ => "版本与开源许可"
         };
         _workspace.Content = page switch
         {
             0 => MonitorView,
             1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
-            _ => Settings
+            2 => Settings,
+            3 => DesktopInformationPages.CreateHelp(),
+            _ => DesktopInformationPages.CreateAbout()
         };
     }
     internal void ApplySettings()

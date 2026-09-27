@@ -6,7 +6,11 @@ namespace Monitor.Application.Measurements;
 
 public enum WaveformMeasurementStatus { WarmingUp, Valid, Stale, NoData, PoorSignal, Uncountable }
 public sealed record CapnographyReading(WaveformMeasurementStatus Status, int? Value, long? MeasuredAtNs);
-public sealed record CapnographyResult(CapnographyReading EndTidalCentiMmHg, CapnographyReading RespirationsMilliPerMinute);
+public sealed record CapnographyActivity(WaveformMeasurementStatus Status, long? ContinuousUsableSinceNs, long? LastExpirationNs, long? LastSampleNs);
+public sealed record CapnographyResult(CapnographyReading EndTidalCentiMmHg, CapnographyReading RespirationsMilliPerMinute)
+{
+    public CapnographyActivity? Activity { get; init; }
+}
 public sealed record MeasuredExpiration(long RiseTimeNs, long PeakTimeNs, long ConfirmedAtNs, int EndTidalCentiMmHg);
 
 // Initial engineering estimator for AcqCO2_100@1, baseline <=2mmHg and
@@ -63,7 +67,10 @@ public sealed class CapnographyMeasurement
                 !plane.QualityRanges.Any(r => (uint)i >= r.FirstSampleOffset && (ulong)i < (ulong)r.FirstSampleOffset + r.Count && r.QualityFlags != 0);
             Sample(next, block.StartSimTimeNs + i * StepNs, value, usable, events);
         }
-        next.Identity = identity; next.NextTime = end; next.NextIndex = nextIndex; next.Sequence = block.BlockSequence;
+        next.Identity = identity;
+        next.NextTime = end;
+        next.NextIndex = nextIndex;
+        next.Sequence = block.BlockSequence;
         _state = next;
         return events.AsReadOnly();
     }
@@ -86,7 +93,8 @@ public sealed class CapnographyMeasurement
         var intervals = _state.Intervals.Where(i => i.StartNs >= asOfSampleTimeNs - RateWindowNs).ToArray();
         int? rate = intervals.Length == 0 ? null : checked((int)FixedPointMath.RoundDivideTiesToEven(
             (Int128)60_000_000_000_000L * intervals.Length, intervals.Sum(i => i.EndNs - i.StartNs)));
-        return new(Reading(_state.EndTidal), Reading(rate, _state.Intervals.Length > 0 && intervals.Length == 0));
+        return new(Reading(_state.EndTidal), Reading(rate, _state.Intervals.Length > 0 && intervals.Length == 0))
+        { Activity = new(unavailable ?? WaveformMeasurementStatus.Valid, _state.UsableSince, _state.CompletedAt, _state.LastSample) };
     }
 
     // Opaque, immutable in-process continuation; no externally editable state
@@ -101,44 +109,87 @@ public sealed class CapnographyMeasurement
     {
         internal Guid Channel { get; }
         internal State Value { get; }
-        internal Checkpoint(Guid channel, State value) { Channel = channel; Value = value; }
+        internal Checkpoint(Guid channel, State value)
+        {
+            Channel = channel;
+            Value = value;
+        }
     }
 
     private static void Sample(State s, long time, int raw, bool usable, List<MeasuredExpiration> events)
     {
-        s.FirstSample ??= time; s.LastSample = time;
+        s.FirstSample ??= time;
+        s.LastSample = time;
         if (!usable)
         {
-            ClearCycle(s); s.Poor = true; s.EndTidal = null; s.Intervals = []; s.CompletedAt = s.PreviousStart = null;
-            s.FilterCount = 0; return;
+            ClearCycle(s);
+            s.Poor = true;
+            s.EndTidal = null;
+            s.Intervals = [];
+            s.CompletedAt = s.PreviousStart = null;
+            s.FilterCount = 0;
+            s.UsableSince = null;
+            return;
         }
+        if (!s.Poor) { s.UsableSince ??= time; }
         // A causal three-sample median rejects isolated one-sample spikes;
         // source samples are untouched. Detection time includes confirmation.
         int value = raw;
         if (s.FilterCount >= 2) { value = Math.Max(Math.Min(raw, s.Previous1), Math.Min(Math.Max(raw, s.Previous1), s.Previous2)); }
-        s.Previous2 = s.Previous1; s.Previous1 = raw; s.FilterCount = Math.Min(2, s.FilterCount + 1);
+        s.Previous2 = s.Previous1;
+        s.Previous1 = raw;
+        s.FilterCount = Math.Min(2, s.FilterCount + 1);
         if (s.FilterCount < 2) { return; }
         if (!s.Active)
         {
             if (value <= 200)
             {
                 s.LowCount = Math.Min(10, s.LowCount + 1);
-                if (s.LowCount >= 10) { s.Armed = true; s.Poor = false; }
+                if (s.LowCount >= 10)
+                {
+                    s.Armed = true;
+                    s.Poor = false;
+                    s.UsableSince ??= time;
+                }
                 s.HighCount = 0;
             }
             else if (s.Armed && value >= 500)
             {
-                if (s.HighCount++ == 0) { s.Start = time; s.Peak = value; }
-                if (value >= s.Peak) { s.Peak = value; s.PeakTime = time; }
-                if (s.HighCount >= 10) { s.Active = true; s.LowCount = 0; }
+                if (s.HighCount++ == 0)
+                {
+                    s.Start = time;
+                    s.Peak = value;
+                }
+                if (value >= s.Peak)
+                {
+                    s.Peak = value;
+                    s.PeakTime = time;
+                }
+                if (s.HighCount >= 10)
+                {
+                    s.Active = true;
+                    s.LowCount = 0;
+                }
             }
             else { s.LowCount = s.HighCount = 0; }
             return;
         }
-        if (value >= s.Peak) { s.Peak = value; s.PeakTime = time; }
+        if (value >= s.Peak)
+        {
+            s.Peak = value;
+            s.PeakTime = time;
+        }
         if (value <= 200) { s.LowCount++; } else { s.LowCount = 0; }
         if (time - s.Start >= FreshnessNs)
-        { ClearCycle(s); s.Poor = true; s.EndTidal = null; s.Intervals = []; s.PreviousStart = s.CompletedAt = null; return; }
+        {
+            ClearCycle(s);
+            s.Poor = true;
+            s.UsableSince = null;
+            s.EndTidal = null;
+            s.Intervals = [];
+            s.PreviousStart = s.CompletedAt = null;
+            return;
+        }
         if (s.LowCount < 10) { return; }
         if (time - s.Start >= 300_000_000)
         {
@@ -146,13 +197,20 @@ public sealed class CapnographyMeasurement
             s.Intervals = interval is >= 500_000_000 and <= RateWindowNs
                 ? s.Intervals.Append(new Interval(s.PreviousStart!.Value, s.Start))
                     .Where(i => i.StartNs >= time - RateWindowNs).TakeLast(MaximumRateIntervals).ToArray() : [];
-            s.EndTidal = s.Peak; s.CompletedAt = time; s.PreviousStart = s.Start;
+            s.EndTidal = s.Peak;
+            s.CompletedAt = time;
+            s.PreviousStart = s.Start;
             events.Add(new(s.Start, s.PeakTime, time, s.Peak));
         }
-        ClearCycle(s); s.Armed = true;
+        ClearCycle(s);
+        s.Armed = true;
     }
 
-    private static void ClearCycle(State s) { s.Active = s.Armed = false; s.HighCount = s.LowCount = 0; }
+    private static void ClearCycle(State s)
+    {
+        s.Active = s.Armed = false;
+        s.HighCount = s.LowCount = 0;
+    }
     internal sealed record Identity(Guid Session, Guid Instance, ulong Timebase, ulong Stream, ulong Revision);
     internal sealed record Interval(long StartNs, long EndNs);
     internal sealed record State
@@ -160,7 +218,7 @@ public sealed class CapnographyMeasurement
         internal Identity? Identity;
         internal long NextTime, Start, PeakTime;
         internal ulong NextIndex, Sequence;
-        internal long? FirstSample, LastSample, PreviousStart, CompletedAt;
+        internal long? FirstSample, LastSample, PreviousStart, CompletedAt, UsableSince;
         internal int? EndTidal;
         // Replace rather than mutate arrays, preserving checkpoint ownership.
         internal Interval[] Intervals = [];

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Application.Measurements;
+using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
@@ -11,6 +12,7 @@ internal static class CapnographyMeasurementSpecifications
     private static readonly Guid Channel = Guid.Parse("55555555-5555-4555-8555-555555555555");
     public static Specification[] All =>
     [
+        new(nameof(NoExpirationUsesContinuousAcquisitionAndResetsOnFaults), NoExpirationUsesContinuousAcquisitionAndResetsOnFaults),
         new(nameof(CapnographyMeasuresAcquiredSamplesRatherThanSettings), CapnographyMeasuresAcquiredSamplesRatherThanSettings),
         new(nameof(CapnographyHandlesAbsenceQualityAndAtomicRejection), CapnographyHandlesAbsenceQualityAndAtomicRejection),
         new(nameof(CapnographyRestoresMidBreathAndResetsDiscontinuities), CapnographyRestoresMidBreathAndResetsDiscontinuities),
@@ -25,7 +27,7 @@ internal static class CapnographyMeasurementSpecifications
             var measurement = new CapnographyMeasurement(Channel);
             var measured = new List<MeasuredExpiration>(); long end = 0;
             for (int step = 1; step <= 110; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 { measured.AddRange(measurement.Consume(wire)); end = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 190_000_000; }
             var result = measurement.Read(end);
             Check.That(result.EndTidalCentiMmHg.Status == WaveformMeasurementStatus.Valid && Math.Abs(result.EndTidalCentiMmHg.Value!.Value - concentration * 100) < 100,
@@ -44,7 +46,7 @@ internal static class CapnographyMeasurementSpecifications
         var cyclic = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { RespiratoryPattern = RespiratoryPattern.CheyneStokesIllustration });
         var detector = new CapnographyMeasurement(Channel); List<MeasuredExpiration> breaths = [];
         for (int step = 1; step <= 260; step++)
-            foreach (var wire in cyclic.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { breaths.AddRange(detector.Consume(wire)); }
+            foreach (byte[] wire in cyclic.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { breaths.AddRange(detector.Consume(wire)); }
         Check.That(breaths.Count >= 9 && breaths.Max(b => b.EndTidalCentiMmHg) - breaths.Min(b => b.EndTidalCentiMmHg) > 200,
             "measured CO2 follows the existing variable-depth capnogram instead of staying at its configured nominal value");
         Check.That(breaths.Zip(breaths.Skip(1), (a, b) => b.RiseTimeNs - a.RiseTimeNs).Any(interval => interval > 7_000_000_000),
@@ -60,7 +62,7 @@ internal static class CapnographyMeasurementSpecifications
             "one expiration cannot establish a respiratory rate");
         for (int i = 10; i < 30; i++) { m.Consume(Wire(i)); }
         var before = m.Read(5_990_000_000);
-        foreach (var bad in new[] { Wire(29), Wire(29, revision: 2), Wire(30, scale: int.MaxValue) })
+        foreach (byte[]? bad in new[] { Wire(29), Wire(29, revision: 2), Wire(30, scale: int.MaxValue) })
         {
             bool rejected = false;
             try { m.Consume(bad); } catch (Exception error) when (error is ArgumentException or OverflowException) { rejected = true; }
@@ -122,6 +124,35 @@ internal static class CapnographyMeasurementSpecifications
             "old average cannot mask prolonged absence of detected respiration");
         Check.That(CapnographyMeasurement.Restore(checkpoint).Read(17_190_000_000).RespirationsMilliPerMinute.Value == 11250,
             "subsequent history replacement does not mutate the saved interval window");
+    }
+
+    private static void NoExpirationUsesContinuousAcquisitionAndResetsOnFaults()
+    {
+        var measurement = new CapnographyMeasurement(Channel);
+        MonitorNotice? Notice(CapnographyMeasurement owner, long now) => NoExpirationNotice.Evaluate(true, 20, now, owner.Read(now).Activity);
+        for (int block = 0; block < 100; block++) { measurement.Consume(Wire(block, flat: true)); }
+        Check.That(Notice(measurement, 19_990_000_000) is null, "no early absence condition before configured sample duration");
+        Check.That(Notice(measurement, 20_100_000_000) is null, "read time alone cannot extend acquired absence interval");
+        measurement.Consume(Wire(100, flat: true));
+        Check.That(Notice(measurement, 20_190_000_000) is { Level: MonitorNoticeLevel.Critical, Numeric: MonitorNumeric.Co2RespirationRate }, "continuous clean flat CO2 triggers observed absence despite expired numeric rate");
+        var restored = CapnographyMeasurement.Restore(measurement.Capture());
+        Check.That(Notice(restored, 20_190_000_000) == Notice(measurement, 20_190_000_000), "checkpoint retains continuous signal evidence");
+        Check.That(Notice(measurement, 20_700_000_001) is null, "missing samples are not apnea evidence");
+        bool rejected = false;
+        try { measurement.Consume(Wire(100, flat: true)); } catch (ArgumentException) { rejected = true; }
+        Check.That(rejected && Notice(measurement, 20_190_000_000) is not null, "duplicate rejection leaves absence evidence intact");
+        measurement.Consume(Wire(101, flat: true, badQuality: true));
+        Check.That(Notice(measurement, 20_390_000_000) is null, "poor signal suppresses absence condition");
+        for (int block = 102; block <= 201; block++) { measurement.Consume(Wire(block, flat: true)); }
+        Check.That(Notice(measurement, 40_390_000_000) is null, "recovered quality must build a new complete duration");
+        measurement.Consume(Wire(202, flat: true));
+        Check.That(Notice(measurement, 40_590_000_000) is not null, "new clean absence interval can trigger again");
+        measurement.Consume(Wire(250, flat: true));
+        Check.That(Notice(measurement, 50_190_000_000) is null, "gap resets continuous evidence");
+        for (int block = 101; block <= 106; block++) { restored.Consume(Wire(block)); }
+        Check.That(Notice(restored, 21_390_000_000) is null, "confirmed expiration clears absence immediately");
+        Check.That(NoExpirationNotice.Evaluate(false, 20, 0, null) is null &&
+            NoExpirationNotice.Evaluate(true, null, 0, null) is { Level: MonitorNoticeLevel.Info, Audible: false }, "disabled and invalid threshold paths remain explicit");
     }
 
     private static byte[] Wire(int block, bool flat = false, bool badQuality = false, int scale = 1, ulong epoch = 1, bool spike = false, ulong revision = 1, int[]? onsetSamples = null)

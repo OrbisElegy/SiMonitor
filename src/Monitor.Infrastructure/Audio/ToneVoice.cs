@@ -9,11 +9,12 @@ public sealed record TonePreset(string Id, int FrequencyMilliHz, int AttackFrame
     // gain are explicit engineering audition choices, not an approved profile.
     public static TonePreset BeatAudition { get; } = new("BeatAuditionDraft@1", 795_000, 240, 4800, 720, 8192);
     public MonitorToneSample Sample { get; init; }
-    public int TotalFrames => Sample == MonitorToneSample.None ? checked(AttackFrames + HoldFrames + ReleaseFrames) : SelectedMonitorTones.Get(Sample).Length;
+    public int BeatPitchPercent { get; init; } = 97;
+    public int TotalFrames => Sample == MonitorToneSample.None ? checked(AttackFrames + HoldFrames + ReleaseFrames) : SelectedMonitorTones.Get(Sample, BeatPitchPercent).Length;
 
     internal void Validate()
     {
-        if (!Enum.IsDefined(Sample) || string.IsNullOrWhiteSpace(Id) || Id.Length > 128 || FrequencyMilliHz is < 20_000 or > 20_000_000 ||
+        if (BeatPitchPercent is < 70 or > 97 || !Enum.IsDefined(Sample) || string.IsNullOrWhiteSpace(Id) || Id.Length > 128 || FrequencyMilliHz is < 20_000 or > 20_000_000 ||
             AttackFrames < 1 || HoldFrames < 0 || ReleaseFrames < 1 ||
             (long)AttackFrames + HoldFrames + ReleaseFrames > 480_000 || GainQ15 is < 0 or > 16384)
         { throw new ArgumentException("AudioTone.InvalidPreset", nameof(TonePreset)); }
@@ -38,7 +39,7 @@ public sealed class ToneVoice
         ArgumentNullException.ThrowIfNull(preset);
         preset.Validate(); _preset = preset;
         _ = SineTable.Quarter[0]; // Prepare table storage outside Render/callback.
-        if (preset.Sample != MonitorToneSample.None) { _ = SelectedMonitorTones.Get(preset.Sample)[0]; }
+        if (preset.Sample != MonitorToneSample.None) { _ = SelectedMonitorTones.Get(preset.Sample, preset.BeatPitchPercent)[0]; }
     }
 
     public bool Finished => _frame == EndFrame;
@@ -64,7 +65,7 @@ public sealed class ToneVoice
         {
             if (_preset.Sample != MonitorToneSample.None)
             {
-                long sample = SelectedMonitorTones.Get(_preset.Sample)[_frame];
+                long sample = SelectedMonitorTones.Get(_preset.Sample, _preset.BeatPitchPercent)[_frame];
                 long selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)sample * 65536 * _preset.GainQ15, 16384);
                 if (_cancelFrame is { } stop)
                 { selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)selected * (EndFrame - 1 - _frame), EndFrame - stop); }

@@ -9,6 +9,7 @@ import struct
 
 from generate_alarm_auditions import ROOT, pulse
 from generate_critical_a3 import critical_voice
+from generate_beat_pitch_bank import build_pitch_bank, manifest_entry
 
 
 def generate(check):
@@ -32,6 +33,15 @@ def generate(check):
         else:
             path.write_bytes(data)
         manifest['voices'][name] = {'frames': len(samples), 'sha256': hashlib.sha256(data).hexdigest()}
+    bank = build_pitch_bank()
+    path = folder / 'HeartbeatPitchA.pcm'
+    if check:
+        assert path.read_bytes() == bank, path
+    else:
+        path.write_bytes(bank)
+    manifest['voices']['HeartbeatPitchA'] = manifest_entry(bank)
+    if check:
+        assert {path.stem for path in folder.glob('*.pcm')} == set(manifest['voices']), 'Unlisted PCM asset'
     path = folder / 'manifest.json'
     data = json.dumps(manifest, indent=2) + '\n'
     if check:

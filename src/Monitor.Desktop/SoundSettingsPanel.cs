@@ -22,6 +22,11 @@ internal sealed class SoundSettingsPanel : StackPanel
     private MonitorNoticeLevel? _alarmLevel;
     private MonitorSoundTiming _timing = new();
     private bool _monitorRunning;
+    private readonly MonitorBeatPitch _pitch = new();
+    internal int BeatPitchPercent => PitchSource.SelectedIndex == 1 ? _pitch.SaturationPercent : 97;
+    internal MonitorNotice? PitchNotice => AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && PitchSource.SelectedIndex == 1 && _pitch.Unavailable
+        ? new("beat-pitch-unavailable", MonitorNoticeLevel.Info, "SpO₂音高不可用 · 固定音高") { Audible = false } : null;
+    internal ComboBox PitchSource { get; } = new() { ItemsSource = new[] { "固定音高", "SpO₂ · A曲线" }, SelectedIndex = 1, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly MonitorAudioPause _audioPause = new();
     private readonly Func<long> _authorityNow;
     private readonly DispatcherTimer _pauseTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
@@ -66,6 +71,9 @@ internal sealed class SoundSettingsPanel : StackPanel
         Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
         AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG或PLETH");
         BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); Publish(); };
+        Children.Add(Text("心搏音高来源")); Children.Add(PitchSource);
+        AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或SpO2 A曲线");
+        PitchSource.SelectionChanged += (_, _) => { ResetPitchState(); OutputNoticeChanged?.Invoke(); };
         Children.Add(Text("报警声音暂停时长（秒，1–3600）")); Children.Add(PauseSeconds);
         AutomationProperties.SetName(PauseSeconds, "报警声音暂停时长，秒");
         var pauseButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
@@ -79,7 +87,7 @@ internal sealed class SoundSettingsPanel : StackPanel
             StartAudioPause(checked((int)seconds));
         };
         ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
-        Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由所选来源的检测事件触发，不按设置值或平均心率补播；PLETH暂无血氧音高映射，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
+        Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由所选来源的检测事件触发，不按设置值或平均心率补播；SpO₂音高可用于任一节拍来源，血氧不可用时采用固定音高并提示，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
         {
@@ -118,16 +126,18 @@ internal sealed class SoundSettingsPanel : StackPanel
         _cancellation?.Cancel(); Stop.IsEnabled = false;
         if (_cancellation is not null) { Status.Text = "正在停止…"; }
     }
-    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null, IReadOnlyList<DetectedPlethPulse>? pulses = null)
+    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null, IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null)
     {
+        if (PitchSource.SelectedIndex == 1) { _pitch.Update(measurement?.SpO2, measurement?.SampleTimeNs ?? 0); }
         if (_alarms.OutputActive) { SetOutputNotice(null); }
         _monitorRunning = true; _alarmLevel = level; _timing = timing;
         Publish();
         // Advance delivers new measurement events once, never extrapolated HR.
         if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true &&
             (BeatSource.SelectedIndex == 0 ? beats is { Count: > 0 } : BeatSource.SelectedIndex == 1 && pulses is { Count: > 0 }))
-        { _alarms.SubmitHeartbeat((int)Volume.Value); }
+        { _alarms.SubmitHeartbeat((int)Volume.Value, BeatPitchPercent); }
     }
+    internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }
     internal void PauseMonitor()
     {
         _monitorRunning = false; Publish();

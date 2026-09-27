@@ -168,7 +168,15 @@ internal static class DesignPreviewSmokeChecks
         VerifyOutputFaultNotice();
         long authority = 0;
         var timed = new SoundSettingsPanel(authorityNow: () => authority);
+        var pitchMeasurement = new Monitor.Application.Measurements.LiveMeasurementSnapshot(0, null!, null!, null!, null!,
+            new(Monitor.Application.Measurements.WaveformMeasurementStatus.Valid, 85000, null, 0), null!, null!, null!);
+        timed.UpdateAlarm(MonitorNoticeLevel.Warning, new(), measurement: pitchMeasurement);
+        Require(timed.PitchSource.SelectedIndex == 1 && timed.BeatPitchPercent == 85, "selected A pitch derives from measured saturation");
+        timed.PitchSource.SelectedIndex = 0;
+        Require(timed.BeatPitchPercent == 97, "fixed pitch independent of selected beat source");
+        timed.PitchSource.SelectedIndex = 1;
         timed.UpdateAlarm(MonitorNoticeLevel.Warning, new());
+        Require(timed.BeatPitchPercent == 97, "missing measurement uses neutral pitch");
         Require(timed.BeatSource.SelectedIndex == 0, "default beat source remains ECG");
         timed.StartAudioPause(120);
         timed.BeatSource.SelectedIndex = 1;

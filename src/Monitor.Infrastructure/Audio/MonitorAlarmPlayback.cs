@@ -19,18 +19,19 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     // Reports successful output pumping, not physical sound or latency.
     public bool OutputActive => Volatile.Read(ref _outputActive);
     private BeatSubmission? _beat;
-    private sealed record BeatSubmission(int Volume, long SubmittedAt);
+    private sealed record BeatSubmission(int Volume, int PitchPercent, long SubmittedAt);
     public void SetHeartbeatEnabled(bool enabled)
     {
         Volatile.Write(ref _heartbeatEnabled, enabled);
         if (!enabled) { Interlocked.Exchange(ref _beat, null); }
     }
     // Single-slot mailbox: a delayed worker drops old cues instead of catching up.
-    public void SubmitHeartbeat(int volumePercent)
+    public void SubmitHeartbeat(int volumePercent, int pitchPercent = 97)
     {
+        if (pitchPercent is < 70 or > 97) { throw new ArgumentOutOfRangeException(nameof(pitchPercent)); }
         if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
         if (Volatile.Read(ref _heartbeatEnabled) && Volatile.Read(ref _busy) != 0)
-        { Interlocked.Exchange(ref _beat, new(volumePercent, Stopwatch.GetTimestamp())); }
+        { Interlocked.Exchange(ref _beat, new(volumePercent, pitchPercent, Stopwatch.GetTimestamp())); }
     }
     public void SetRequest(MonitorAlarmSoundRequest? request)
     {
@@ -64,7 +65,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                     sequencer.Update(Volatile.Read(ref _request));
                     var beat = Interlocked.Exchange(ref _beat, null);
                     int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
-                    sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume);
+                    sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
                     if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
                     Volatile.Write(ref _outputActive, true);
                     Thread.Sleep(1);
@@ -130,8 +131,9 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session)
                 }
             }
     }
-    public void UpdateHeartbeat(bool enabled, int? volumePercent)
+    public void UpdateHeartbeat(bool enabled, int? volumePercent, int pitchPercent = 97)
     {
+        if (pitchPercent is < 70 or > 97) { throw new ArgumentOutOfRangeException(nameof(pitchPercent)); }
         if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
         if (!enabled)
         {
@@ -141,7 +143,7 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session)
         if (volumePercent is not { } volume || volume == 0) { return; }
         long target = session.RenderedThroughFrame + 480;
         long keyValue = checked(--_beatKey); // Separate namespace from alarm keys.
-        if (session.Schedule(keyValue, SelectedMonitorTones.Heartbeat(volume), target, target + 12000) == ToneScheduleResult.Accepted)
+        if (session.Schedule(keyValue, SelectedMonitorTones.Heartbeat(volume, pitchPercent), target, target + 12000) == ToneScheduleResult.Accepted)
         {
             _beatKeys.Enqueue(keyValue);
             if (_beatKeys.Count > 4) { _beatKeys.Dequeue(); }

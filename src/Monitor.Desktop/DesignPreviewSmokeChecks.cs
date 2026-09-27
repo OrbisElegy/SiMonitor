@@ -431,12 +431,14 @@ internal static class DesignPreviewSmokeChecks
             window.Width = 1440; window.Height = 940; window.SelectPage(2);
             Capture(window, "ui-preview-settings.png");
             var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
-            var homeOrigin = homeCard.TranslatePoint(default, root)!.Value;
-            var homeSize = homeCard.Bounds.Size;
-            window.Settings.OpenEcgChooser(); Capture(window, "ui-preview-chooser.png");
-            var chosenCard = window.Settings.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SelectedStyleCard");
-            Require(chosenCard.Bounds.Size == homeSize && chosenCard.TranslatePoint(default, root)!.Value == homeOrigin,
-                "selected card preserves home size and top-left position independently of back button");
+            int navigationCacheCount = window.Settings.PreviewCacheCount;
+            Require(!window.Settings.GetVisualDescendants().OfType<Button>().Any(b => b.Bounds.Size == new Size(238, 162)), "signal navigation has no preview cards");
+            homeCard.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Capture(window, "ui-preview-waveform-groups.png");
+            Require(window.Settings.PreviewCacheCount == navigationCacheCount, "group navigation defers preview loading to leaf choices");
+            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "窦性心律，当前分组")
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Capture(window, "ui-preview-chooser.png");
             Require(window.Settings.PreviewCacheCount >= 3, "grouped choices own distinct cached source configurations");
             var candidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
                 button.Content is StackPanel panel && panel.Children.OfType<TextBlock>().Any(text => text.Text == "窦性停搏（无逸搏）"));
@@ -447,12 +449,17 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "candidate updates draft preview without replacing live source");
             var selectedCandidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
                 AutomationProperties.GetName(button) == "窦性停搏（无逸搏），已选择");
-            Require(selectedCandidate.Bounds.Size == candidateSize && candidateSize == homeSize, "candidate sizes stay equal before and after selection");
+            Require(selectedCandidate.Bounds.Size == candidateSize && candidateSize == new Size(238, 162), "candidate sizes stay equal before and after selection");
             Require(selectedCandidate.IsFocused, "keyboard focus follows rebuilt selected candidate");
-            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(button =>
-                AutomationProperties.GetName(button) == "窦性心律，当前分组" && button.Content?.ToString()?.Contains('✓') == true),
-                "group selection is labelled and not color-only");
+            window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-waveform-compact.png");
+            Require(selectedCandidate.TranslatePoint(default, root)!.Value.X + selectedCandidate.Bounds.Width < window.Width, "leaf preview fits compact window");
+            window.Width = 1440; window.Height = 940;
             Require(!window.Settings.GetVisualDescendants().OfType<Expander>().Any(), "redundant twelve-lead chooser expansion is removed");
+            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回心电图分组")
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Capture(window, "ui-preview-waveform-parent.png");
+            Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "returning to group preserves draft and live session");
+            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "窦性心律，当前分组" && b.IsFocused), "return restores focus to current group");
             window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回波形设置")
                 .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Capture(window, "ui-preview-settings-return.png");

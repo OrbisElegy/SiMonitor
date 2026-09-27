@@ -609,17 +609,53 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in new[] { 6, 7, 8, 9 })
+            foreach (int choice in new[] { 6, 7, 8, 9, 37, 38, 39, 8 })
             {
                 var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
                 Require(!ReferenceEquals(previous, window.Session), "atrial product preset applies atomically");
-                for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var rates = new HashSet<int>();
+                for (int i = 0; i < 400; i++)
+                {
+                    window.Pulse(window.ActiveTimer, 50_000_000);
+                    if (i >= 200 && window.Session.Measurements!.HeartRate.MilliBeatsPerMinute is int rate) { rates.Add(rate); }
+                }
                 Require(window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.Valid, "atrial product ECG reaches measured HR");
                 if (choice >= 8)
                 {
-                    int expected = choice == 8 ? 150000 : 75000;
-                    Require(Math.Abs(window.Session.Measurements.HeartRate.MilliBeatsPerMinute!.Value - expected) <= 1000,
-                        "flutter HR is measured from conducted QRS rather than atrial300bpm");
+                    if (choice == 39)
+                    {
+                        Require(rates.Count > 1 && rates.All(rate => rate is >= 95000 and <= 105000),
+                            "variable flutter preserves finite-window measured ventricular rate fluctuations");
+                    }
+                    else
+                    {
+                        int expected = choice switch { 8 => 150000, 9 => 75000, 37 => 300000, _ => 100000 };
+                        Require(rates.Count > 0 && rates.All(rate => Math.Abs(rate - expected) <= 1000),
+                            "flutter HR follows acquired conducted QRS including one-to-one and three-to-one");
+                    }
+                    var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                    int ratio = choice switch { 9 => 4, 37 => 1, 38 => 3, _ => 2 };
+                    Require(pair.Physiology.VentricularConductionRatio == ratio && pair.Ecg.VentricularConductionRatio == ratio &&
+                        pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern &&
+                        (pair.Ecg.ConductionPattern == Monitor.Simulation.Physiology.AvConductionPattern.VariableAtrialFlutterIllustration) == (choice == 39),
+                        "monitor and paper share fixed or variable flutter conduction and reset old pattern");
+                    Require(window.Session.Measurements.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                        "flutter pressure remains sample-derived and available");
+                    // Only the one-to-one model has received the separate filling correction.
+                    // Existing two-to-one pressure is high and needs its own model review.
+                    if (choice == 37)
+                    {
+                        Require(window.Session.Measurements.AbpMean.MeanCentiMmHg is > 9000 and < 12000,
+                        $"one-to-one flutter reuses corrected perfusion: {window.Session.Measurements.AbpMean}");
+                    }
+                    var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                    var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                    long duration = StylePreviewCatalog.DurationNs(choice);
+                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                        cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        "flutter card uses the selected waveform and its perfusion source");
+                    if (choice == 39)
+                    { Require(duration == 3_600_000_000, "variable flutter preview spans two complete conduction groups"); }
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-atrial-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "atrial product paper contains complete twelve-lead acquisition");

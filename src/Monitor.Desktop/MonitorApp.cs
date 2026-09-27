@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
@@ -11,24 +12,27 @@ public sealed class MonitorApp : Avalonia.Application
 {
     public override void Initialize() => Styles.Add(new FluentTheme());
 
+    // Default product entry and the retained preview alias share one runtime.
+    internal static Window CreateLaunchWindow(string[]? arguments) => arguments switch
+    {
+        null or [] or ["--ui-preview"] => new DesignPreviewWindow(),
+        ["--waveform-demo"] => new WaveformDemoWindow(),
+        ["--physiology-demo"] => new WaveformDemoWindow(physiology: true),
+        ["--electrode-demo"] => new WaveformDemoWindow(projected: true),
+        ["--study-demo"] or ["--smoke-test"] => new MainWindow(),
+        _ => throw new ArgumentException("Desktop.UnsupportedLaunch", nameof(arguments))
+    };
+
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            if (desktop.Args is ["--ui-preview"])
+            desktop.MainWindow = CreateLaunchWindow(desktop.Args);
+            if (desktop.MainWindow is not MainWindow window)
             {
-                desktop.MainWindow = new DesignPreviewWindow();
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
-            if (desktop.Args is ["--waveform-demo" or "--physiology-demo" or "--electrode-demo"])
-            {
-                desktop.MainWindow = new WaveformDemoWindow(desktop.Args[0] == "--physiology-demo", desktop.Args[0] == "--electrode-demo");
-                base.OnFrameworkInitializationCompleted();
-                return;
-            }
-            MainWindow window = new();
-            desktop.MainWindow = window;
             if (desktop.Args is ["--study-demo"]) { DesktopStudyDemo.Start(window); }
             if (desktop.Args is ["--smoke-test"])
             {

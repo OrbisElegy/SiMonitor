@@ -143,10 +143,14 @@ internal static class DesignPreviewSmokeChecks
         VerifyStableSlowContours();
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();
-        var window = new DesignPreviewWindow(); window.Show();
+        var launched = MonitorApp.CreateLaunchWindow([]);
+        Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
+        var window = (DesignPreviewWindow)launched; window.Show();
         try
         {
             Require(window.MonitorView.NumericTexts.All(t => t == "---"), "no configured targets displayed before acquisition");
+            Require(window.Title!.Contains("Standalone", StringComparison.Ordinal) && window.Settings.Sound.AlarmEnabled.IsChecked == false,
+                "standalone starts with explicit sound opt-in and truthful development title");
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Page == 0 && window.Session.FrontierNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");

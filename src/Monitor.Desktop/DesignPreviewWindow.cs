@@ -142,6 +142,9 @@ internal sealed class DesignPreviewWindow : Window
                     Settings.RateSeed.Text ?? "", checked((int)((Settings.RateVariation.Value ?? throw new ArgumentException("variation required")) * 10)));
                 config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
             }
+            decimal co2Amplitude = Settings.EtCo2Variation.Value ?? throw new ArgumentException("CO2 variation required");
+            if (co2Amplitude > 0)
+            { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, checked((int)(co2Amplitude * 100)), Settings.RateSeed.Text ?? "") }; }
             int? opticalTarget = Settings.ReadOpticalTarget();
             SeededOpticalSaturation? opticalVariation = null;
             if (opticalTarget is { } target)
@@ -159,7 +162,7 @@ internal sealed class DesignPreviewWindow : Window
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
-        { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传。原运行与画面保持不变。"; }
+        { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。"; }
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {

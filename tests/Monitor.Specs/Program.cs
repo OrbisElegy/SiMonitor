@@ -58,6 +58,7 @@ internal static class Program
             .. MeanPressureMeasurementSpecifications.All,
             .. MonitorAlertSpecifications.All,
             .. SeededRateSpecifications.All,
+            .. SeededCo2Specifications.All,
             .. MeasuredLimitSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,

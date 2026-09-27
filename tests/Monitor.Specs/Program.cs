@@ -57,6 +57,7 @@ internal static class Program
             .. LiveWaveformMeasurementSpecifications.All,
             .. MeanPressureMeasurementSpecifications.All,
             .. MonitorAlertSpecifications.All,
+            .. SeededRateSpecifications.All,
             .. MeasuredLimitSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,

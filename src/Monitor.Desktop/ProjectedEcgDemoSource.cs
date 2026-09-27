@@ -3,11 +3,70 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMilliseconds, string? MethodId, int VentricularConductionRatio = 1,
-    int PDurationMilliseconds = 100, int PrIntervalMilliseconds = 160,
-    int QrsDurationMilliseconds = 80, int TDurationMilliseconds = 180,
-    ProjectedEcgUConfiguration? UWave = null, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, EcgLimbPlacement Placement = EcgLimbPlacement.Standard, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, ProjectedEcgTConfiguration? TWave = null, int ChestJMicrovolts = 0, int ChestStEndMicrovolts = 0, EcgPWaveComponents? ChestP = null, int ChestStArchMicrovolts = 0, ProjectedEcgFusionConfiguration? Fusion = null, EcgChestInfarctionPlan? Infarction = null, EcgInfarctionZones? Zones = null, EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? TContour = null, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfAberrancy = false, bool HyperkalemiaRepolarization = false, bool HypokalemiaRepolarization = false, bool HypokalemiaTuFusion = false, bool HyperkalemiaConduction = false, bool HyperkalemiaAbsentP = false, bool HyperkalemiaFusion = false, bool HypokalemiaInvertedT = false, bool HypokalemiaConduction = false, CalciumIllustration Calcium = CalciumIllustration.Reference, bool DigitalisEffect = false, DigitalisTShape DigitalisShape = DigitalisTShape.FishHook, QuinidineIllustration Quinidine = QuinidineIllustration.Reference, bool QuinidineNotchedP = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
+internal sealed record ProjectedEcgDemoConfiguration(
+    int HeartRateBpm,
+    int QtcMilliseconds,
+    string? MethodId,
+    int VentricularConductionRatio = 1,
+    int PDurationMilliseconds = 100,
+    int PrIntervalMilliseconds = 160,
+    int QrsDurationMilliseconds = 80,
+    int TDurationMilliseconds = 180,
+    ProjectedEcgUConfiguration? UWave = null,
+    CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular,
+    EcgLimbPlacement Placement = EcgLimbPlacement.Standard,
+    int? IndependentVentricularPeriodMilliseconds = null,
+    int? IndependentVentricularOffsetMilliseconds = null,
+    ProjectedEcgTConfiguration? TWave = null,
+    int ChestJMicrovolts = 0,
+    int ChestStEndMicrovolts = 0,
+    EcgPWaveComponents? ChestP = null,
+    int ChestStArchMicrovolts = 0,
+    ProjectedEcgFusionConfiguration? Fusion = null,
+    EcgChestInfarctionPlan? Infarction = null,
+    EcgInfarctionZones? Zones = null,
+    EcgAtrialIllustration Atrial = EcgAtrialIllustration.Reference,
+    EcgVentricularIllustration Ventricular = EcgVentricularIllustration.Reference,
+    EcgTContourPlan? TContour = null,
+    int ConductedBeatsPerGroup = 1,
+    AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr,
+    EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference,
+    bool IllustrateAfAberrancy = false,
+    bool HyperkalemiaRepolarization = false,
+    bool HypokalemiaRepolarization = false,
+    bool HypokalemiaTuFusion = false,
+    bool HyperkalemiaConduction = false,
+    bool HyperkalemiaAbsentP = false,
+    bool HyperkalemiaFusion = false,
+    bool HypokalemiaInvertedT = false,
+    bool HypokalemiaConduction = false,
+    CalciumIllustration Calcium = CalciumIllustration.Reference,
+    bool DigitalisEffect = false,
+    DigitalisTShape DigitalisShape = DigitalisTShape.FishHook,
+    QuinidineIllustration Quinidine = QuinidineIllustration.Reference,
+    bool QuinidineNotchedP = false,
+    bool Wpw = false,
+    bool WpwNegativeV1 = false,
+    bool ShortPr = false,
+    bool NormalPrDelta = false,
+    bool WpwSmallerDelta = false,
+    bool ProlongedPrDelta = false,
+    bool Svt = false,
+    bool Vt = false,
+    bool VtFusion = false,
+    bool VtCapture = false,
+    bool VtBidirectional = false,
+    bool VtTwisting = false,
+    bool Aivr = false,
+    bool Ajr = false,
+    bool Aar = false,
+    bool SvtRbbb = false,
+    bool SvtLbbb = false,
+    bool AivrFusion = false,
+    bool AivrCapture = false,
+    bool AtrialEscape = false)
 {
+    internal SeededCardiacRate? SeededRate { get; init; }
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
     internal static ProjectedEcgDemoConfiguration CalciumPreset(CalciumIllustration mode)
@@ -154,6 +213,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal long ResolveAtrialPeriodNs()
     {
+        if (SeededRate is { } seeded) { return seeded.PeriodNs; }
         if (AtrialFlutterReference.IsPattern(ConductionPattern)) { return 200_000_000; }
         if (HeartRateBpm is < 30 or > 200) { throw new ArgumentException("Invalid base rate."); }
         return (long)Monitor.Simulation.Determinism.FixedPointMath.RoundDivideTiesToEven(60_000_000_000, HeartRateBpm);
@@ -161,6 +221,7 @@ internal sealed record ProjectedEcgDemoConfiguration(int HeartRateBpm, int QtcMi
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (SeededRate is { } seeded) { return seeded.Timing; }
         if (ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration)
         {
             if (this != SinusArrhythmiaPreset) { throw new ArgumentException("Sinus arrhythmia requires its fixed illustration."); }
@@ -382,6 +443,8 @@ internal static class ProjectedEcgDemoSource
     internal static ElectrodeWaveformGroup Create(ProjectedEcgDemoConfiguration? configuration = null)
     {
         configuration ??= ProjectedEcgDemoConfiguration.Default;
+        if (configuration.SeededRate is not null && (configuration with { SeededRate = null }) != ProjectedEcgDemoConfiguration.Default)
+        { throw new ArgumentException("SeededRate.RequiresReferenceSinus"); }
         var timing = configuration.ResolveTiming();
         long offset = configuration.Svt ? 0 : DemoVentricularTiming.ResolveOffset(configuration.IndependentVentricularPeriodMilliseconds, configuration.IndependentVentricularOffsetMilliseconds, timing.PrIntervalNs);
         EcgStSegmentPlan? st = configuration.ChestJMicrovolts == 0 && configuration.ChestStEndMicrovolts == 0 && configuration.ChestStArchMicrovolts == 0 ? null : new(
@@ -429,7 +492,8 @@ internal static class ProjectedEcgDemoSource
             80_000_000, offset + 80_000_000, 3_750_000_000, 1_875_000_000,
             VentricularConductionRatio: configuration.VentricularConductionRatio, CardiacActivity: configuration.CardiacActivity,
             VentricularMechanicalEnabled: !VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern),
-            IndependentVentricularPeriodNs: configuration.IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, ConductedBeatsPerGroup: configuration.ConductedBeatsPerGroup, ConductionPattern: configuration.ConductionPattern);
+            IndependentVentricularPeriodNs: configuration.IndependentVentricularPeriodMilliseconds is { } period ? period * 1_000_000L : null, ConductedBeatsPerGroup: configuration.ConductedBeatsPerGroup, ConductionPattern: configuration.ConductionPattern)
+        { SeededRate = configuration.SeededRate };
         if (configuration.ConductionPattern == AvConductionPattern.AtrialFlutterIllustration) { plan = AtrialFlutterReference.CreatePlan(configuration.VentricularConductionRatio); }
         if (configuration.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration) { plan = SinusArrhythmiaReference.CreatePlan(); }
         if (configuration.ConductionPattern == AvConductionPattern.SinusArrestIllustration) { plan = SinusArrestReference.CreatePlan(); }

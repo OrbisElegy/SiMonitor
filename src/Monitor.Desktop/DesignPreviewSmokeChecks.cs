@@ -634,7 +634,7 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in new[] { 21, 26, 27, 28, 26 })
+            foreach (int choice in new[] { 21, 26, 27, 28, 29, 26 })
             {
                 var previous = window.Session;
                 window.Settings.EcgSelection = choice; window.ApplySettings();
@@ -644,12 +644,13 @@ internal static class DesignPreviewSmokeChecks
                 var reading = window.Session.Measurements!;
                 Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
                     Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 160000) <= 5000,
-                    "VT product rate is acquired through fusion and capture cycles");
+                    $"VT product rate choice={choice}: {reading.HeartRate}");
                 Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.MeanCentiMmHg is > 6000 and < 16000,
                     "VT product uses filling-limited pressure input");
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
                 Require(pair.Physiology.Vt && pair.Ecg.Vt && pair.Physiology.VtFusion == pair.Ecg.VtFusion &&
-                    pair.Physiology.VtCapture == pair.Ecg.VtCapture, "monitor and paper share VT variant");
+                    pair.Physiology.VtCapture == pair.Ecg.VtCapture && pair.Physiology.VtBidirectional == pair.Ecg.VtBidirectional &&
+                    pair.Physiology.VtTwisting == pair.Ecg.VtTwisting, "monitor and paper share VT variant");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
@@ -658,11 +659,16 @@ internal static class DesignPreviewSmokeChecks
                     "VT preview samples match selected electrical and perfusion source");
                 if (choice > 26)
                 {
-                    Require(duration == 12_000_000_000, "fusion/capture previews cover their complete authored group");
+                    Require(duration == (choice <= 28 ? 12_000_000_000 : 3_000_000_000), "VT previews cover the full authored morphology group");
                     var regular = DesignPreviewWindow.CreateStylePreview(26, 0, 0);
                     while (regular.SimulationTimeNs < source.SimulationTimeNs) { regular.Advance(50_000_000); }
                     Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.FrontierNs - duration, source.FrontierNs)),
                         "long preview actually contains the selected variant");
+                    if (choice >= 29)
+                    {
+                        Require(cached.Abp.SequenceEqual(regular.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                            "rotating electrical vector does not invert or modulate the fixed perfusion preset");
+                    }
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-vt-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "VT paper capture is complete");

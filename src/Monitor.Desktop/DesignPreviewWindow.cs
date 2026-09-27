@@ -116,7 +116,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速",
             1 => "监护采样快照",
-            _ => "波形生成、显示、声音与报警"
+            _ => "按分类与参数组浏览设置"
         };
         _workspace.Content = page switch
         {

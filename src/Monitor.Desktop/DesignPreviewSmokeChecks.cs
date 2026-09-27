@@ -65,6 +65,17 @@ internal static class DesignPreviewSmokeChecks
         var saturation = window.Session.Measurements!.SpO2;
         Require(saturation.Status == WaveformMeasurementStatus.Valid && saturation.SaturationMilliPercent is >= 92500 and <= 97500,
             "native monitor receives independently measured seeded optical variation");
+        var oldMean = window.Session.Measurements!.CvpMean.MeanCentiMmHg;
+        previous = window.Session;
+        window.Settings.CvpBaseline.Value = null;
+        window.ApplySettings();
+        Require(ReferenceEquals(previous, window.Session), "missing CVP baseline preserves active source");
+        window.Settings.CvpBaseline.Value = 12;
+        window.ApplySettings();
+        Require(!ReferenceEquals(previous, window.Session), "CVP baseline applies");
+        for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        Require(oldMean.HasValue && window.Session.Measurements!.CvpMean.MeanCentiMmHg == oldMean + 600,
+            "native CVP mean derives shifted waveform, with identical seeded phase");
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }

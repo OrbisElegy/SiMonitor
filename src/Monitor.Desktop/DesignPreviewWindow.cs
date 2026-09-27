@@ -132,6 +132,7 @@ internal sealed class DesignPreviewWindow : Window
             {
                 BreathPeriodMilliseconds = breathPeriod,
                 InspirationMilliseconds = breathPeriod / 2,
+                CvpBaselineCentiMmHg = checked((int)((Settings.CvpBaseline.Value ?? throw new ArgumentException("CVP baseline required")) * 100)),
                 Co2EndExpiratoryMmHg = checked((int)(Settings.EtCo2Target.Value ?? throw new ArgumentException("EtCO2 required")))
             };
             if (Settings.CardiacRateEnabled.IsChecked == true)

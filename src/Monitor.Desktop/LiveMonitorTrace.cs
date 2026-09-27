@@ -17,18 +17,8 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
     private StreamGeometry?[,] _paths = new StreamGeometry?[0, 0];
     private Point[]?[,] _contours = new Point[]?[0, 0];
     internal LocalMonitorPreviewSession Session => session;
-    private FrozenMonitorTrace? _frozen;
-    internal long? FrozenAtNs => _frozen?.FrontierNs;
-    internal void Freeze()
-    {
-        if (_frozen is not null || session.FrontierNs == 0) { return; }
-        _frozen = FrozenMonitorTrace.Capture(session); _revision = ulong.MaxValue; InvalidateVisual();
-    }
-    internal void ResumeLive()
-    { _frozen = null; _revision = ulong.MaxValue; InvalidateVisual(); }
     private void Build()
     {
-        if (_frozen is not null && _revision != ulong.MaxValue) { return; }
         if (_revision == session.DataRevision && _cycle == session.Ranges.Cycle) { return; }
         _revision = session.DataRevision; _cycle = session.Ranges.Cycle;
         _paths = new StreamGeometry?[session.Display.Slots.Count, 2];
@@ -36,10 +26,9 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
         for (int row = 0; row < session.Display.Slots.Count; row++)
             for (int age = 0; age < 2; age++)
             {
-                var frozen = _frozen?.Rows[row];
-                long cycle = (frozen?.Cycle ?? session.Ranges.RowCycle(row)) - age;
+                long cycle = session.Ranges.RowCycle(row) - age;
                 long duration = session.Display.Slots[row].DurationNs;
-                if (cycle < 0 || (age == 1 && !(frozen?.ShowPrevious ?? session.Ranges.ShowPrevious(row)))) { continue; }
+                if (cycle < 0 || (age == 1 && !session.Ranges.ShowPrevious(row))) { continue; }
                 long from = cycle * duration;
                 List<Point> stablePoints = [];
                 var path = new StreamGeometry();
@@ -47,13 +36,12 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
                 {
                     bool started = false;
                     int channel = session.Display.Slots[row].Channel;
-                    var samples = (frozen is null ? session.Samples(channel, from, from + duration) :
-                        frozen.Samples.Where(s => s.TimeNs >= from && s.TimeNs < from + duration)).ToArray();
+                    var samples = session.Samples(channel, from, from + duration).ToArray();
                     var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
                         Point point = new((sample.TimeNs - from) / (double)duration,
-                            1 - (age == 0 ? frozen?.Range ?? session.Ranges.Range(row) : frozen?.PreviousRange ?? session.Ranges.PreviousRange(row)).Normalize(sample.Value));
+                            1 - (age == 0 ? session.Ranges.Range(row) : session.Ranges.PreviousRange(row)).Normalize(sample.Value));
                         if (channel != 0) { stablePoints.Add(point); continue; }
                         if (!started) { geometry.BeginFigure(point, false); started = true; }
                         else { geometry.LineTo(point); }
@@ -76,10 +64,10 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
         for (int row = 0; row < rows; row++)
         {
             long duration = session.Display.Slots[row].DurationNs;
-            double phase = ((_frozen?.FrontierNs ?? session.FrontierNs) % duration) / (double)duration;
+            double phase = (session.FrontierNs % duration) / (double)duration;
             int channel = session.Display.Slots[row].Channel;
             var color = Brush.Parse(Colors[channel]);
-            var range = _frozen?.Rows[row].Range ?? session.Ranges.Range(row);
+            var range = session.Ranges.Range(row);
             double top = row * rowHeight;
             context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1));
             Label(context, Names[channel], 12, top + 10, color, 14);

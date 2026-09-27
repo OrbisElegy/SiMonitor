@@ -21,13 +21,6 @@ internal sealed class DesignPreviewWindow : Window
     private readonly TextBlock _title = Text("监护波形", 27, true);
     private readonly TextBlock _subtitle = Text("", 13);
     private readonly TextBlock _state = Text("", 12);
-    internal Button FreezeButton { get; } = new()
-    {
-        Content = "冻结波形",
-        MinHeight = 44,
-        HorizontalContentAlignment = HorizontalAlignment.Center,
-        VerticalContentAlignment = VerticalAlignment.Center
-    };
     private readonly Button[] _navigation = new Button[3];
     private WaveformEnvelope[] _ecg;
     private LiveMonitorTrace _monitor;
@@ -91,10 +84,6 @@ internal sealed class DesignPreviewWindow : Window
         Grid.SetColumn(main, 1); root.Children.Add(main);
         var heading = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 14) };
         heading.Children.Add(_title); heading.Children.Add(_subtitle); main.Children.Add(heading);
-        heading.Children.Add(FreezeButton);
-        FreezeButton.HorizontalAlignment = HorizontalAlignment.Left;
-        FreezeButton.Click += (_, _) => { if (_monitor.FrozenAtNs is null) { _monitor.Freeze(); } else { _monitor.ResumeLive(); } UpdateState(); };
-        ToolTip.SetTip(FreezeButton, "仅冻结波形；数值与报警继续更新。返回实时直接加入当前扫屏位置。");
         var card = new Border
         {
             Background = Brushes.White,
@@ -131,7 +120,6 @@ internal sealed class DesignPreviewWindow : Window
             1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
             _ => Settings
         };
-        UpdateState();
     }
     internal void ApplySettings()
     {
@@ -191,16 +179,6 @@ internal sealed class DesignPreviewWindow : Window
     }
     private void UpdateState()
     {
-        FreezeButton.IsVisible = Page == 0;
-        FreezeButton.IsEnabled = _session.FrontierNs > 0;
-        FreezeButton.Content = _monitor.FrozenAtNs is null ? "冻结波形" : "返回实时";
-        AutomationProperties.SetName(FreezeButton, FreezeButton.Content.ToString());
-        if (Page == 0)
-        {
-            _subtitle.Text = _monitor.FrozenAtNs is { } frozen
-                ? $"波形冻结于 {frozen / 1_000_000_000d:0.00}s · 数值与报警随模拟更新"
-                : $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速";
-        }
         _state.Text = $"{(_timer is null ? "已暂停" : "运行中")} · {_session.SimulationTimeNs / 1_000_000_000}s";
         if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续生成" : "暂停生成"; }
     }

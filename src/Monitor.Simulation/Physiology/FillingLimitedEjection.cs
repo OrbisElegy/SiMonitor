@@ -12,11 +12,12 @@ public static class FillingLimitedEjection
     public const long ReferencePeriodNs = 800_000_000;
     public const long NonFillingDurationNs = 240_000_000;
     public const long FillingConstantNs = 200_000_000;
-    public static int StrokeVolumePermille(long periodNs)
+    public static int StrokeVolumePermille(long periodNs) => StrokeVolumePermille(periodNs, NonFillingDurationNs);
+    public static int StrokeVolumePermille(long periodNs, long nonFillingDurationNs)
     {
-        if (periodNs <= NonFillingDurationNs || periodNs > ReferencePeriodNs)
+        if (nonFillingDurationNs < 0 || periodNs <= nonFillingDurationNs || periodNs > ReferencePeriodNs)
         { throw new ArgumentOutOfRangeException(nameof(periodNs)); }
-        long filling = periodNs - NonFillingDurationNs;
+        long filling = periodNs - nonFillingDurationNs;
         long reference = ReferencePeriodNs - NonFillingDurationNs;
         return (int)FixedPointMath.RoundDivideTiesToEven((Int128)1000 * filling * (reference + FillingConstantNs),
             (Int128)reference * (filling + FillingConstantNs));
@@ -28,4 +29,25 @@ public static class FillingLimitedEjection
         EjectionEquilibriumCentiMmHg = Scale(pressure.EjectionEquilibriumCentiMmHg, periodNs),
         Morphology = pressure.Morphology! with { PulseHeightCentiMmHg = Scale(pressure.Morphology!.PulseHeightCentiMmHg, periodNs) }
     };
+    // RQ is flow, not volume: a shorter ejection needs the inverse duration
+    // conversion to preserve the requested fraction of reference stroke volume.
+    internal static VascularPressurePlan LimitDuration(VascularPressurePlan pressure, long periodNs,
+        long nonFillingDurationNs, long referenceEjectionDurationNs)
+    {
+        if (pressure.EjectionDurationNs <= 0 || referenceEjectionDurationNs <= 0)
+        { throw new ArgumentOutOfRangeException(nameof(referenceEjectionDurationNs)); }
+        int gain = StrokeVolumePermille(periodNs, nonFillingDurationNs);
+        return pressure with
+        {
+            EjectionEquilibriumCentiMmHg = checked((int)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)pressure.EjectionEquilibriumCentiMmHg * gain * referenceEjectionDurationNs,
+                (Int128)1000 * pressure.EjectionDurationNs)),
+            Morphology = pressure.Morphology! with
+            {
+                PulseHeightCentiMmHg = (int)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)pressure.Morphology!.PulseHeightCentiMmHg * gain, 1000)
+            }
+        };
+    }
+
 }

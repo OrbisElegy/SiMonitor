@@ -11,8 +11,8 @@ internal static class PhysiologyIllustrationSpecifications
 {
     // Captured from632acca before the refactor: concatenate returned raw wire
     // envelopes from40 advances of200ms (30 completed blocks after delay).
-    // SVT/VT goldens reflect the documented filling-limited corrections;
-    // the other twelve remain the original pre-refactor outputs.
+    // SVT/VT/1:1 flutter goldens reflect the documented filling-limited corrections;
+    // the other eleven remain the original pre-refactor outputs.
     // Independent expected bytes guard against shared test/source drift.
     public static Specification[] All =>
     [
@@ -56,7 +56,7 @@ internal static class PhysiologyIllustrationSpecifications
             ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "c4ae9df61ddf8ec848e74e7b19e096566d620dbf6e4acdbad29a6dbfcd721565"),
             ("PrematureAtrial", PhysiologyDemoConfiguration.PrematureAtrial, 30, "345d15d40686708b415f206ca172a39f567952a98625e073a6be6cedec5f1d03"),
             ("PrematureJunctional", PhysiologyDemoConfiguration.PrematureJunctional, 30, "6bf12ba27510575cdda201b40e5ad6c79b77b714e5cca430b550ce245db7109a"),
-            ("FlutterOneToOne", PhysiologyDemoConfiguration.Flutter(1), 30, "a97efc04dd02f0f1c8fa89aab254e462a6981b7335f2f06e11bb8107968caec4"),
+            ("FlutterOneToOne", PhysiologyDemoConfiguration.Flutter(1), 30, "bd406394bea15d7452312e9e50b20ce73b2a9c834b35ae8fe5e9453501c06bfa"),
             ("Fibrillation", PhysiologyDemoConfiguration.Fibrillation(), 30, "6db60b01aa40074cb96402a1e913daa4b0cd1f7d03d05f4679d30ad41394d52f"),
         ];
         foreach (var item in cases)
@@ -65,7 +65,7 @@ internal static class PhysiologyIllustrationSpecifications
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             int count = 0;
             for (long time = 200_000_000; time <= 8_000_000_000; time += 200_000_000)
-                foreach (var wire in source.AdvanceTo(time, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(time, 50, 1, 100))
                 { hash.AppendData(wire); count++; }
             string actual = Convert.ToHexStringLower(hash.GetHashAndReset());
             if (count != item.Envelopes || actual != item.Sha256)

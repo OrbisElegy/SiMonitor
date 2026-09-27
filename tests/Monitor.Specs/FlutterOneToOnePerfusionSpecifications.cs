@@ -9,10 +9,39 @@ internal static class FlutterOneToOnePerfusionSpecifications
     private const long Q = FixedPointMath.Q32One;
     public static Specification[] All =>
     [
+        new(nameof(FlutterFillingConservesRelativeStrokeInputAcrossDurations), FlutterFillingConservesRelativeStrokeInputAcrossDurations),
         new(nameof(FlutterSuppressesNormalVenousAAndKeepsVentricularPhase), FlutterSuppressesNormalVenousAAndKeepsVentricularPhase),
         new(nameof(FlutterOneToOnePerfusionPreservesSupportsAndBoundsOverlap), FlutterOneToOnePerfusionPreservesSupportsAndBoundsOverlap),
         new(nameof(FlutterOneToOnePerfusionIsPeriodicAtLateTimesAndRetainsRunoff), FlutterOneToOnePerfusionIsPeriodicAtLateTimesAndRetainsRunoff),
     ];
+    private static void FlutterFillingConservesRelativeStrokeInputAcrossDurations()
+    {
+        var plan = AtrialFlutterReference.CreatePlan(1);
+        foreach (var (pressure, originalFlow, originalDuration, originalPulse) in new[] {
+            (FlutterOneToOnePerfusionReference.Arterial, 30000, 240_000_000L, 4000),
+            (FlutterOneToOnePerfusionReference.Pulmonary, 5000, 200_000_000L, 1500) })
+        {
+            decimal ratio = (decimal)pressure.EjectionEquilibriumCentiMmHg * pressure.EjectionDurationNs / (originalFlow * (decimal)originalDuration);
+            Check.That(Math.Abs(ratio - FlutterOneToOnePerfusionReference.StrokeVolumePermille / 1000m) < .0001m,
+                "both circuits use the same relative stroke input despite different ejection durations");
+            var source = VascularPressureSource.Create(plan, pressure);
+            var old = VascularPressureSource.Create(plan, pressure with
+            {
+                EjectionEquilibriumCentiMmHg = originalFlow,
+                Morphology = pressure.Morphology! with { PulseHeightCentiMmHg = originalPulse }
+            });
+            var before = new List<double>(); var after = new List<double>();
+            for (long t = 300_000_000_000; t < 300_200_000_000; t += 1_000_000)
+            { before.Add(old.EvaluateAt(t) / (double)Q / 100); after.Add(source.EvaluateAt(t) / (double)Q / 100); }
+            Console.WriteLine($"Flutter1:1 {pressure.Morphology!.Kind} old {before.Min():F2}-{before.Max():F2}, filling-limited {after.Min():F2}-{after.Max():F2} mmHg");
+            Check.That(after.Max() < before.Min() && after.Max() - after.Min() > .1, "pressure input reduction preserves pulse modulation without clipping");
+            if (originalFlow == 30000) { Check.That(before.Max() > 200 && after.Max() < 140, "reproduce and remove excessive default ABP"); }
+        }
+        bool rejected = false;
+        try { FillingLimitedEjection.StrokeVolumePermille(200_000_000, 200_000_000); }
+        catch (ArgumentOutOfRangeException) { rejected = true; }
+        Check.That(rejected, "nonpositive filling interval rejects");
+    }
     private static void FlutterSuppressesNormalVenousAAndKeepsVentricularPhase()
     {
         var plan = AtrialFlutterReference.CreatePlan(1);

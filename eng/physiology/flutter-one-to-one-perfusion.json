@@ -1,8 +1,8 @@
 {
-  "id": "FlutterOneToOnePerfusionIllustration@1",
+  "id": "FlutterOneToOnePerfusionIllustration@2",
   "implementation_basis": [
     "AtrialFlutterOneToOneIllustration@1",
-    "Existing authored fixed SVT perfusion seeds; no clinical calibration"
+    "Authored filling fraction and duration-aware RQ conversion; no clinical calibration"
   ],
   "authored_choices": {
     "RR_ms": 200,
@@ -23,7 +23,9 @@
       3,
       4
     ],
-    "CVP_overlap": 2
+    "CVP_overlap": 2,
+    "non_filling_ms": 160,
+    "stroke_volume_permille": 226
   },
   "invariants": [
     "Normal atrial mechanical events absent; no normal CVP a wave",
@@ -34,10 +36,11 @@
     "Reservoir required, invalid changes atomic, wire recovery deterministic"
   ],
   "limitations": [
-    "Fixed ejection strength, not measured pump failure or cardiac output",
+    "Filling-limited teaching inputs; not measured pump function or calibrated cardiac output",
     "No perfusion to gas-exchange feedback or AV-node mechanism"
   ],
   "verification": [
+    "FlutterFillingConservesRelativeStrokeInputAcrossDurations",
     "FlutterOneToOnePerfusionPreservesSupportsAndBoundsOverlap",
     "FlutterOneToOnePerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
     "FlutterSuppressesNormalVenousAAndKeepsVentricularPhase",

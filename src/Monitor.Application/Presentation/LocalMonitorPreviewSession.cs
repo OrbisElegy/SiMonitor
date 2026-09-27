@@ -23,6 +23,7 @@ public sealed class LocalMonitorPreviewSession
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
+    public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
     public MonitorDisplayConfiguration Display { get; }
@@ -48,6 +49,8 @@ public sealed class LocalMonitorPreviewSession
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
         List<DetectedEcgBeat> beats = [];
+        List<DetectedPlethPulse> pulses = [];
+        DetectedPulses = [];
         DetectedBeats = [];
         while (deltaNs > 0)
         {
@@ -56,7 +59,7 @@ public sealed class LocalMonitorPreviewSession
             var wires = _source.AdvanceTo(next, 50, 1, 100);
             if (wires.Count > 0)
             {
-                foreach (var wire in wires)
+                foreach (byte[] wire in wires)
                 {
                     if (_measurements is null) { break; }
                     byte[] measurementWire = wire;
@@ -70,11 +73,14 @@ public sealed class LocalMonitorPreviewSession
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
                         });
                     }
-                    var measured = _measurements.Consume(measurementWire, out var detected);
+                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses);
                     _measurementFrontier = measured.SampleTimeNs;
                     if (measured.HeartRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp)
                     { beats.AddRange(detected); }
                     else { beats.Clear(); }
+                    if (measured.PulseRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp)
+                    { pulses.AddRange(detectedPulses); }
+                    else { pulses.Clear(); }
                 }
                 _blocks = _blocks.Concat(wires.Select(b => WaveformEnvelopeCodec.Decode(b))).TakeLast(RetainedBlockCount).ToArray();
                 DataRevision++;
@@ -85,20 +91,21 @@ public sealed class LocalMonitorPreviewSession
             Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
             deltaNs -= chunk;
         }
+        DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
     }
-    public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long from, long to)
+    public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs)
     {
         Guid id = PhysiologyIllustrationSource.ChannelId(channel);
         foreach (var block in _blocks)
         {
-            if (block.StartSimTimeNs + 200_000_000 <= from || block.StartSimTimeNs >= to) { continue; }
+            if (block.StartSimTimeNs + 200_000_000 <= fromSimTimeNs || block.StartSimTimeNs >= toExclusiveSimTimeNs) { continue; }
             var plane = block.Planes.Single(p => p.ChannelId == id);
             long step = checked(1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator);
             for (int i = 0; i < plane.Samples.Count; i++)
             {
                 long time = block.StartSimTimeNs + i * step;
-                if (time >= from && time < to)
+                if (time >= fromSimTimeNs && time < toExclusiveSimTimeNs)
                 {
                     yield return (time, (double)plane.Samples[i] * plane.ScaleNumerator / plane.ScaleDenominator +
                         (double)plane.OffsetNumerator / plane.OffsetDenominator);

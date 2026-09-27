@@ -21,6 +21,10 @@
     "Heartbeat": {
       "frames": 4800,
       "sha256": "616ff6c24b63397c4e66dd2401b61fe0f7b3ed55faf98cc20e9d9c03e5ba29ae"
+    },
+    "HeartbeatPitchA": {
+      "frames": 134400,
+      "sha256": "0120872138002ae59aec751928f94203807d0a27a42e28c5808eab0fc16bdbe7"
     }
   }
 }

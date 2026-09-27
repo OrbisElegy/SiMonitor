@@ -11,6 +11,8 @@ internal static class MonitorAlertSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(MeasuredPitchUsesSelectedCurveAndRejectsStaleValues), MeasuredPitchUsesSelectedCurveAndRejectsStaleValues),
+        new(nameof(PitchedHeartbeatPreservesEnvelopeAndRestores), PitchedHeartbeatPreservesEnvelopeAndRestores),
         new(nameof(CriticalDurationSurvivesRotationAndClearsIndependently), CriticalDurationSurvivesRotationAndClearsIndependently),
         new(nameof(RotationWeightsAndPreemption), RotationWeightsAndPreemption),
         new(nameof(AlarmPcmMatchesGroupedPatterns), AlarmPcmMatchesGroupedPatterns),
@@ -22,6 +24,54 @@ internal static class MonitorAlertSpecifications
         new(nameof(SaturationLimitsUseValidMeasurements), SaturationLimitsUseValidMeasurements),
         new(nameof(SaturationLimitsFollowAcquiredOptics), SaturationLimitsFollowAcquiredOptics),
     ];
+    private static void MeasuredPitchUsesSelectedCurveAndRejectsStaleValues()
+    {
+        var pitch = new MonitorBeatPitch();
+        OpticalSaturationReading Reading(int value, long time) => new(WaveformMeasurementStatus.Valid, value, null, time);
+        pitch.Update(Reading(97000, 0), 0);
+        Check.That(pitch.SaturationPercent == 97 && !pitch.Unavailable, "valid normal anchor");
+        for (int i = 1; i <= 30; i++)
+        { pitch.Update(Reading(i % 2 == 0 ? 96500 : 97500, i * 200_000_000L), i * 200_000_000L); }
+        Check.That(pitch.SaturationPercent == 97, "one-percent peak-to-peak jitter does not chatter pitch");
+        pitch.Update(Reading(80000, 7_000_000_000), 7_000_000_000);
+        Check.That(pitch.SaturationPercent == 80, "large desaturation bypasses smoothing");
+        pitch.Update(Reading(82000, 7_200_000_000), 7_200_000_000);
+        Check.That(pitch.SaturationPercent == 80, "small recovery is smoothed with hysteresis");
+        pitch.Update(Reading(82000, 7_200_000_000), 7_300_000_000);
+        Check.That(pitch.SaturationPercent == 80, "same measurement cannot accelerate smoothing on redraw");
+        pitch.Update(Reading(82000, 7_200_000_000), 12_200_000_001);
+        Check.That(pitch.Unavailable && pitch.SaturationPercent == 97, "stale value immediately drops to neutral anchor");
+        foreach (var status in Enum.GetValues<WaveformMeasurementStatus>().Where(x => x != WaveformMeasurementStatus.Valid))
+        {
+            pitch.Update(new(status, 80000, null, 0), 0);
+            Check.That(pitch.Unavailable && pitch.SaturationPercent == 97, "invalid quality cannot retain low or normal pitch as valid");
+        }
+        pitch.Update(Reading(50000, 0), 0);
+        Check.That(pitch.SaturationPercent == 70, "below audition range clamps to lowest approved pitch");
+        pitch.Update(Reading(90000, 100), 99);
+        Check.That(pitch.Unavailable, "future measurement is not usable");
+        pitch.Reset(); Check.That(!pitch.Unavailable && pitch.SaturationPercent == 97, "new scenario clears pitch history");
+    }
+    private static void PitchedHeartbeatPreservesEnvelopeAndRestores()
+    {
+        int previous = 0;
+        for (int saturation = 70; saturation <= 97; saturation++)
+        {
+            var preset = SelectedMonitorTones.Heartbeat(100, saturation);
+            Check.That(preset.TotalFrames == 4800 && preset.FrequencyMilliHz >= previous, "A curve monotonic and fixed duration");
+            previous = preset.FrequencyMilliHz;
+            var voice = new ToneVoice(preset); float[] full = new float[4800]; voice.Render(full);
+            int crossings = Enumerable.Range(1, full.Length - 1).Count(i => full[i - 1] <= 0 && full[i] > 0);
+            Check.That(Math.Abs(crossings * 10000 - preset.FrequencyMilliHz) <= 10000, "rendered pitch follows selected curve");
+            Check.That(full[0] == 0 && full[^1] == 0 && full.Max(Math.Abs) < .014, "same click-free envelope and routine beat gain");
+            var split = new ToneVoice(preset); float[] prefix = new float[1234]; split.Render(prefix);
+            var restored = ToneVoice.Restore(split.CaptureState()); float[] tail = new float[3566]; restored.Render(tail);
+            Check.That(prefix.Concat(tail).SequenceEqual(full), "pitch bank restores sample-exact continuation");
+            var quiet = SelectedMonitorTones.Heartbeat(25, saturation);
+            Check.That(quiet.FrequencyMilliHz == preset.FrequencyMilliHz && quiet.GainQ15 * 4 == preset.GainQ15, "volume is independent of pitch");
+        }
+        Check.That(SelectedMonitorTones.Heartbeat(100, 97) == SelectedMonitorTones.Heartbeat(100), "fixed and normal anchor remain identical");
+    }
     private static void SaturationLimitsUseValidMeasurements()
     {
         OpticalSaturationReading Reading(int? value, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) => new(status, value, null, 0);

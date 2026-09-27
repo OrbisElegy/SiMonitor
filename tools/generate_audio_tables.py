@@ -5,6 +5,7 @@ import argparse
 from decimal import Decimal, localcontext
 from pathlib import Path
 from generate_monitor_tones import generate as generate_selected
+from generate_beat_pitch_bank import generate as generate_pitch
 
 
 def generate():
@@ -44,3 +45,4 @@ if __name__ == '__main__':
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(expected)
     generate_selected(args.check)
+    generate_pitch(args.check)

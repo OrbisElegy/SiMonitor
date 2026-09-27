@@ -164,6 +164,7 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
+            Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
@@ -175,6 +176,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         foreach (var notice in Settings.Alerts.Notices(snapshot)) { yield return notice; }
         if (Settings.Sound.OutputNotice is { } fault) { yield return fault; }
+        if (Settings.Sound.PitchNotice is { } pitch) { yield return pitch; }
     }
     internal void Start()
     {
@@ -204,7 +206,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
             MonitorView.Refresh();
-            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats, _session.DetectedPulses);
+            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats, _session.DetectedPulses, _session.Measurements);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

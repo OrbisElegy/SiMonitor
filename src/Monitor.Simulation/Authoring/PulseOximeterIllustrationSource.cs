@@ -15,15 +15,19 @@ public sealed class PulseOximeterIllustrationSource
     private readonly Guid _plethChannel, _acquisitionInstance, _sensorInstance;
     private readonly int _ratioPpm;
     private readonly int _modulationPermille;
+    private readonly SeededOpticalSaturation? _variation;
 
     // Use a NEW instance ID when changing the optical model/target. Acquisition
     // configuration changes within that instance retain their input revisions.
-    public PulseOximeterIllustrationSource(Guid plethChannel, Guid acquisitionInstance, Guid sensorInstance, int saturationMilliPercent, int modulationPermille = 1000)
+    public PulseOximeterIllustrationSource(Guid plethChannel, Guid acquisitionInstance, Guid sensorInstance, int saturationMilliPercent, int modulationPermille = 1000, SeededOpticalSaturation? variation = null)
     {
         if (plethChannel == Guid.Empty || acquisitionInstance == Guid.Empty || sensorInstance == Guid.Empty || sensorInstance == acquisitionInstance ||
             plethChannel == RedChannelId || plethChannel == InfraredChannelId ||
             saturationMilliPercent is < 75000 or > 99000 || modulationPermille is < 100 or > 2000)
         { throw new ArgumentException("OpticalSource.InvalidConfiguration"); }
+        if (variation is not null && variation.TargetMilliPercent != saturationMilliPercent)
+        { throw new ArgumentException("OpticalSource.VariationTargetMismatch"); }
+        _variation = variation;
         _plethChannel = plethChannel; _acquisitionInstance = acquisitionInstance; _sensorInstance = sensorInstance;
         // Educational curve S%=110-25R; deliberately not a clinical calibration.
         _ratioPpm = (110000 - saturationMilliPercent) * 40;
@@ -54,7 +58,8 @@ public sealed class PulseOximeterIllustrationSource
             { throw new ArgumentException("OpticalSource.ModulationOutOfRange", nameof(wire)); }
             // DC(red)=16000, DC(IR)=20000; a1000-count pulse modulates IR2%.
             // Pulsatile absorption reduces transmitted light on both channels.
-            red[i] = checked((short)(16000 - FixedPointMath.RoundDivideTiesToEven((Int128)modulation * 32 * _ratioPpm * _modulationPermille, 100_000_000_000)));
+            int ratio = _variation is null ? _ratioPpm : (110000 - _variation.At(block.StartSimTimeNs + i * 8_000_000L)) * 40;
+            red[i] = checked((short)(16000 - FixedPointMath.RoundDivideTiesToEven((Int128)modulation * 32 * ratio * _modulationPermille, 100_000_000_000)));
             infrared[i] = checked((short)(20000 - FixedPointMath.RoundDivideTiesToEven((Int128)modulation * 2 * _modulationPermille, 5000)));
         }
         WaveformPlane Optical(Guid channel, short[] values) => new(channel, 125, 1, pulse.FirstSampleIndex,

@@ -9,6 +9,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
+using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -141,8 +142,15 @@ internal sealed class DesignPreviewWindow : Window
                     Settings.RateSeed.Text ?? "", checked((int)((Settings.RateVariation.Value ?? throw new ArgumentException("variation required")) * 10)));
                 config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
             }
+            int? opticalTarget = Settings.ReadOpticalTarget();
+            SeededOpticalSaturation? opticalVariation = null;
+            if (opticalTarget is { } target)
+            {
+                decimal amplitude = Settings.OpticalVariation.Value ?? throw new ArgumentException("SpO2 variation required");
+                if (amplitude > 0) { opticalVariation = new(target, checked((int)(amplitude * 1000)), Settings.RateSeed.Text ?? ""); }
+            }
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-                opticalSaturationMilliPercent: Settings.ReadOpticalTarget(), opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)));
+                opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)), opticalVariation: opticalVariation);
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             MonitorView = new(_monitor);

@@ -48,6 +48,16 @@ internal static class DesignPreviewSmokeChecks
         window.ApplySettings();
         Require(ReferenceEquals(previous, window.Session), "unsupported rhythm retains live state");
         window.Settings.EcgSelection = 0;
+        window.Settings.OpticalVariation.Value = 2;
+        window.ApplySettings();
+        Require(ReferenceEquals(previous, window.Session), "optical target plus amplitude outside75..99 rejects atomically");
+        window.Settings.OpticalTarget.Value = 95;
+        window.ApplySettings();
+        Require(!ReferenceEquals(previous, window.Session), "seeded optical target applies with cardiac variation");
+        for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        var saturation = window.Session.Measurements!.SpO2;
+        Require(saturation.Status == WaveformMeasurementStatus.Valid && saturation.SaturationMilliPercent is >= 92500 and <= 97500,
+            "native monitor receives independently measured seeded optical variation");
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }

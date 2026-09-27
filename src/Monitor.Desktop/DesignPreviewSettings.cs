@@ -32,6 +32,7 @@ internal sealed class DesignPreviewSettings : UserControl
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
     internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
+    internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
@@ -213,7 +214,7 @@ internal sealed class DesignPreviewSettings : UserControl
         panel.Children.Add(CardiacRateEnabled);
         Add("心率目标（bpm，30–180）", HeartRate);
         Add("逐搏周期波动上限（±%，0–5）", RateVariation);
-        Add("随机种子（64位小写十六进制）", RateSeed);
+        Add("波动共用种子（64位小写十六进制）", RateSeed);
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
         panel.Children.Add(Text("应用后从头生成并重新测量。波动为256搏循环的种子序列；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
@@ -225,7 +226,9 @@ internal sealed class DesignPreviewSettings : UserControl
         panel.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); panel.Children.Add(OpticalModulation);
         AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至99");
-        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalEnabled.IsChecked == true;
+        Add("SpO₂波动幅度（±百分点，0–2；0关闭）", OpticalVariation);
+        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
+        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡，32分钟循环；目标±幅度须在75–99%内。此为教学变化，不模拟氧输送或停搏耗氧。"));
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
         foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })

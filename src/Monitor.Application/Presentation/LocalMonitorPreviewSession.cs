@@ -28,17 +28,19 @@ public sealed class LocalMonitorPreviewSession
     public MonitorDisplayConfiguration Display { get; }
     public MonitorSweepRanges Ranges { get; }
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
-        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000)
+        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _source = PhysiologyIllustrationSource.Create(configuration);
         if (opticalSaturationMilliPercent.HasValue && !enableMeasurements)
         { throw new ArgumentException("Preview.OpticsRequireMeasurements", nameof(opticalSaturationMilliPercent)); }
+        if (opticalVariation is not null && opticalSaturationMilliPercent is null)
+        { throw new ArgumentException("Preview.VariationRequiresOptics"); }
         if (enableMeasurements) { _measurements = LiveWaveformMeasurements.CreateIllustration(); }
         if (opticalSaturationMilliPercent is { } target)
         {
             _opticalSource = new(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
-                Guid.NewGuid(), target, opticalModulationPermille);
+                Guid.NewGuid(), target, opticalModulationPermille, opticalVariation);
         }
         Display = display; Ranges = new(display);
     }

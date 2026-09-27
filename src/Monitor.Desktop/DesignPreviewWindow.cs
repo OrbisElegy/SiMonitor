@@ -37,7 +37,7 @@ internal sealed class DesignPreviewWindow : Window
     internal LiveMonitorTrace MonitorTrace => _monitor;
     internal DesignPreviewWindow()
     {
-        Title = "心电监护 · V0.5 设计预览";
+        Title = "心电监护 · V0.5 Standalone（开发版）";
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
         Background = Brush.Parse("#F5F6F8"); Foreground = Brush.Parse("#202C39");

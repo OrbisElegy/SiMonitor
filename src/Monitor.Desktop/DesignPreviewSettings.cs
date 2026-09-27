@@ -167,7 +167,7 @@ internal sealed class DesignPreviewSettings : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             VerticalContentAlignment = VerticalAlignment.Center,
-            CornerRadius = new CornerRadius(8)
+            CornerRadius = new CornerRadius(4)
         };
         AutomationProperties.SetName(card, title + "样式，" + choices[read()]);
         card.Click += (_, _) =>

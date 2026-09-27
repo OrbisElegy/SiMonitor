@@ -16,7 +16,33 @@ internal static class MonitorDisplaySpecifications
         new(nameof(DenseContoursPreserveKnotsAndMonotonicity), DenseContoursPreserveKnotsAndMonotonicity),
         new(nameof(DenseContourPrefixesRemainLocal), DenseContourPrefixesRemainLocal),
         new(nameof(IndependentSpeedsRetainPreviousScaleUntilOverwritten), IndependentSpeedsRetainPreviousScaleUntilOverwritten),
+        new(nameof(FrozenTraceOwnsSamplesAcrossLiveEviction), FrozenTraceOwnsSamplesAcrossLiveEviction),
     ];
+    private static void FrozenTraceOwnsSamplesAcrossLiveEviction()
+    {
+        var display = MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows);
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
+            new(display.Skin, display.Slots.Select((s, i) => s with { SpeedTenthsMmPerSecond = i % 2 == 0 ? 125 : 500 }).ToArray()), true);
+        for (int i = 0; i < 280; i++) { session.Advance(50_000_000); }
+        var frozen = FrozenMonitorTrace.Capture(session);
+        var owned = frozen.Rows.Select(r => r.Samples.ToArray()).ToArray();
+        long time = frozen.FrontierNs;
+        bool beats = false;
+        for (int i = 0; i < 1000; i++) { session.Advance(50_000_000); beats |= session.DetectedBeats.Count > 0; }
+        Check.That(session.Blocks[0].StartSimTimeNs > time && session.Measurements!.SampleTimeNs > time && beats,
+            "background ring evicts frozen time while measurement and fresh heartbeat events continue");
+        for (int row = 0; row < frozen.Rows.Count; row++)
+        {
+            Check.That(frozen.Rows[row].Samples.SequenceEqual(owned[row]) && owned[row].All(p => p.TimeNs < time),
+                "capture retains original samples and never includes buffered future data");
+            Check.That(frozen.Rows[row].Samples.Count <= 10000, "two sweep cycles bound per-row storage at all supported speeds");
+        }
+        Check.That(frozen.FrontierNs == time && FrozenMonitorTrace.Capture(session).FrontierNs > time, "new capture cannot mutate existing snapshot");
+        bool rejected = false;
+        try { ((IList<(long TimeNs, double Value)>)frozen.Rows[0].Samples)[0] = (0, 0); }
+        catch (NotSupportedException) { rejected = true; }
+        Check.That(rejected, "callers cannot edit captured samples");
+    }
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
     {
         foreach (var skin in Enum.GetValues<MonitorSkin>())

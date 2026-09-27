@@ -250,7 +250,7 @@ internal static class DesignPreviewSmokeChecks
         result = Monitor.Infrastructure.Audio.SoundPreviewResult.Interrupted;
         sound.PreviewAsync().GetAwaiter().GetResult();
         Require(sound.OutputNotice!.Text.Contains("已中断", StringComparison.Ordinal), "interruption is distinct from unavailable output");
-        view.AdditionalNotices = _ => [sound.OutputNotice!, new("patient", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }];
+        view.AdditionalNotices = _ => [sound.OutputNotice!, new("patient", MonitorNoticeLevel.Critical, "ECG HR 极高") { Numeric = MonitorNumeric.HeartRate }];
         view.RefreshReadings(snapshot);
         Require(view.HighestNotice == MonitorNoticeLevel.Critical, "silent output notice does not suppress independent patient alarm severity");
         result = Monitor.Infrastructure.Audio.SoundPreviewResult.StopFailed;
@@ -269,9 +269,9 @@ internal static class DesignPreviewSmokeChecks
         settings.HeartRateEnabled.IsChecked = true;
         foreach (var (rate, level, text) in new[]
         {
-            (39999, MonitorNoticeLevel.Critical, "HR 极低"), (40000, MonitorNoticeLevel.Warning, "HR 低"),
-            (49999, MonitorNoticeLevel.Warning, "HR 低"), (120001, MonitorNoticeLevel.Warning, "HR 高"),
-            (180000, MonitorNoticeLevel.Warning, "HR 高"), (180001, MonitorNoticeLevel.Critical, "HR 极高")
+            (39999, MonitorNoticeLevel.Critical, "ECG HR 极低"), (40000, MonitorNoticeLevel.Warning, "ECG HR 低"),
+            (49999, MonitorNoticeLevel.Warning, "ECG HR 低"), (120001, MonitorNoticeLevel.Warning, "ECG HR 高"),
+            (180000, MonitorNoticeLevel.Warning, "ECG HR 高"), (180001, MonitorNoticeLevel.Critical, "ECG HR 极高")
         })
         {
             var notices = At(rate);
@@ -371,16 +371,17 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Alerts.WarningHeartRate.Value = 60;
             window.Settings.Alerts.CriticalHeartRate.Value = 70;
             window.MonitorView.RefreshReadings(liveReading);
-            Require(window.MonitorView.HighestNotice == MonitorNoticeLevel.Critical && window.MonitorView.Notice.Text == "HR 极高（00:00）",
+            Require(window.MonitorView.HighestNotice == MonitorNoticeLevel.Critical && window.MonitorView.Notice.Text == "ECG HR 极高（00:00）",
                 "valid measured HR triggers the configured critical threshold and one banner");
             window.Settings.Sound.StartAudioPause(120);
             for (int i = 0; i < 20; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
-            Require(window.MonitorView.Notice.Text == "HR 极高（00:01）", "audio pause preserves critical elapsed counter");
+            Require(window.MonitorView.Notice.Text == "ECG HR 极高（00:01）", "audio pause preserves critical elapsed counter");
             Capture(window, "ui-preview-critical.png");
             var region = window.MonitorView.NoticeRegion;
             var center = region.TranslatePoint(new Point(region.Bounds.Width / 2, 0), window.MonitorView)!.Value;
             // Star-column layout rounding may shift the center by one layout unit.
-            Require(Math.Abs(center.X - window.MonitorView.Bounds.Width / 2) <= 1 && region.Bounds.Width <= 480 &&
+            Require(Math.Abs(center.X - window.MonitorView.Bounds.Width / 2) <= 1 && region.Bounds.Width <= 480 && region.Bounds.Height >= 44 &&
+                window.MonitorView.Notice.FontSize == 20 && window.MonitorView.Notice.FontWeight == Avalonia.Media.FontWeight.Bold &&
                 region.Bounds.Width < window.MonitorView.Bounds.Width * .7 && window.MonitorView.Notice.TextAlignment == Avalonia.Media.TextAlignment.Center,
                 $"bounded alarm region and its text are centered independently of side labels: center={center.X}, view={window.MonitorView.Bounds.Width}, region={region.Bounds.Width}, alignment={window.MonitorView.Notice.TextAlignment}");
             window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
@@ -589,7 +590,7 @@ internal static class DesignPreviewSmokeChecks
     {
         var view = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default())));
         bool noticeColor = true; view.NoticeColorEnabled = () => noticeColor;
-        MonitorNotice[] notices = [new("hr", MonitorNoticeLevel.Warning, "HR 高") { Numeric = MonitorNumeric.HeartRate },
+        MonitorNotice[] notices = [new("hr", MonitorNoticeLevel.Warning, "ECG HR 高") { Numeric = MonitorNumeric.HeartRate },
             new("pr", MonitorNoticeLevel.Notice, "PR 测试") { Numeric = MonitorNumeric.PulseRate }];
         view.AdditionalNotices = _ => notices;
         Avalonia.Media.Color Color(Avalonia.Media.IBrush? brush) => (brush as Avalonia.Media.ISolidColorBrush)?.Color ?? default;
@@ -604,7 +605,7 @@ internal static class DesignPreviewSmokeChecks
         Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c"), "one-second cycle repeats");
         noticeColor = false; view.RefreshNumericHighlights(1_000_000_000);
         Require(Color(pr.Background) == Avalonia.Media.Colors.Transparent && Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c") && view.ActiveNotices.Any(n => n.Id == "pr"), "Notice switch removes color without removing condition or Warning highlighting");
-        notices = [new("hr", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }];
+        notices = [new("hr", MonitorNoticeLevel.Critical, "ECG HR 极高") { Numeric = MonitorNumeric.HeartRate }];
         view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
         Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#ffb51f2c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff"), "critical red backing uses white text");
         notices = []; view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);

@@ -61,13 +61,13 @@ internal sealed class MonitorAlertSettings : StackPanel
         {
             if (WarningHeartRate.Value is not { } warning || CriticalHeartRate.Value is not { } critical || WarningLowHeartRate.Value is not { } warningLow || CriticalLowHeartRate.Value is not { } criticalLow ||
                 criticalLow >= warningLow || warningLow >= warning || warning >= critical)
-            { yield return new("hr-settings", MonitorNoticeLevel.Info, "HR 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限"); }
+            { yield return new("hr-settings", MonitorNoticeLevel.Info, "ECG HR 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限"); }
             else if (snapshot.HeartRate.Status == Monitor.Application.Measurements.WaveformMeasurementStatus.Valid && snapshot.HeartRate.MilliBeatsPerMinute is { } rate)
             {
-                if (rate < criticalLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Critical, "HR 极低") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate < warningLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Warning, "HR 低") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate > critical * 1000) { yield return new("hr-high", MonitorNoticeLevel.Critical, "HR 极高") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "HR 高") { Numeric = MonitorNumeric.HeartRate }; }
+                if (rate < criticalLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Critical, "ECG HR 极低") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate < warningLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Warning, "ECG HR 低") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate > critical * 1000) { yield return new("hr-high", MonitorNoticeLevel.Critical, "ECG HR 极高") { Numeric = MonitorNumeric.HeartRate }; }
+                else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "ECG HR 高") { Numeric = MonitorNumeric.HeartRate }; }
             }
         }
         var saturationNotice = SpO2LimitNotice.Evaluate(SpO2Enabled.IsChecked == true,

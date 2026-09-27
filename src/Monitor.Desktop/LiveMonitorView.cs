@@ -29,11 +29,11 @@ internal sealed class LiveMonitorView : UserControl
     internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
-    private readonly Border _noticeBackground = new() { Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(3), MaxWidth = 480, MinHeight = 28 };
+    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(3), MaxWidth = 480, MinHeight = 44 };
     internal Border NoticeRegion => _noticeBackground;
-    internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
-    internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13 };
-    internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
+    internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 20, FontWeight = FontWeight.Bold, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
     internal LiveMonitorView(LiveMonitorTrace trace)
     {

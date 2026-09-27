@@ -19,6 +19,8 @@ internal sealed class DesignPreviewTrace : Control
     private int Columns => SixRows ? 2 : 4;
     private int ColumnWidth => SixRows ? 530 : 280;
     internal long LongDurationNs => SixRows ? 10_300_000_000 : 10_900_000_000;
+    // A calibration masks time on the common paper axis; it never inserts time.
+    internal long ColumnStartNs(int column) => column * ColumnWidth * 10_000_000L;
     internal const double PixelsPerSecond = 100;
     internal const double PixelsPerMillivolt = 40;
     internal DesignPreviewTrace(WaveformEnvelope[] blocks, bool sixRows = false)
@@ -51,8 +53,8 @@ internal sealed class DesignPreviewTrace : Control
                 double baseline = 136 + row * 120;
                 Label(context, ProjectedEcgDemoSource.LeadNames[lead], x + 4, baseline - 67, Brushes.Black, 15);
                 Calibration(context, x + 26, baseline);
-                DrawSamples(context, ProjectedEcgDemoSource.ChannelId((EcgLead)lead), column * (10_000_000_000L / Columns),
-                    (column + 1) * (10_000_000_000L / Columns), x + 30, baseline, PixelsPerSecond, .04, Brushes.Black);
+                DrawSamples(context, ProjectedEcgDemoSource.ChannelId((EcgLead)lead), ColumnStartNs(column),
+                    ColumnStartNs(column) + (ColumnWidth - 30) * 10_000_000L, x + 30, baseline, PixelsPerSecond, .04, Brushes.Black);
             }
         Label(context, "II", 36, Height - 131, Brushes.Black, 15);
         Calibration(context, 58, Height - 60);

@@ -37,17 +37,17 @@ internal sealed class MonitorAlertSettings : StackPanel
     {
         Margin = new Thickness(20); Spacing = 12;
         Children.Add(Text("提示与声音 · 本地教学设置"));
-        Children.Add(Text("每次仅显示一条。Info / Notice / Warning / Critical 每轮分别占用 2 / 4 / 6 / 8 秒，同级轮流显示；更高新级别立即优先。声音始终跟随最高活动级别。"));
+        Children.Add(DesktopInformationPages.Help("报警", "每次仅显示一条。Info / Notice / Warning / Critical 每轮分别占用 2 / 4 / 6 / 8 秒，同级轮流显示；更高新级别立即优先。声音始终跟随最高活动级别。"));
         Children.Add(HeartRateEnabled);
         Row("Critical HR 下限（bpm）", CriticalLowHeartRate); Row("Warning HR 下限（bpm）", WarningLowHeartRate);
         Row("Warning HR 上限（bpm）", WarningHeartRate); Row("Critical HR 上限（bpm）", CriticalHeartRate);
-        Children.Add(Text("阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认。声音可独立定时暂停。"));
+        Children.Add(DesktopInformationPages.Help("报警", "阈值即时生效：Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限。低于下限或高于上限时提示；默认值仅作教学设置。只比较有效实测 HR；当前不包含窒息诊断、锁存、确认。声音可独立定时暂停。"));
         Children.Add(SpO2Enabled);
         Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
-        Children.Add(Text("低于下限才提示；Critical 下限须低于 Warning 下限。85% / 92% 仅作可调教学默认值。仅比较有效实测 SpO₂，信号质量不足或无数据时显示 ---，不推断低血氧或探头脱落。"));
+        Children.Add(DesktopInformationPages.Help("报警", "低于下限才提示；Critical 下限须低于 Warning 下限。85% / 92% 仅作可调教学默认值。仅比较有效实测 SpO₂，信号质量不足或无数据时显示 ---，不推断低血氧或探头脱落。"));
         Children.Add(AdditionalLimits);
         Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds);
-        Children.Add(Text("默认20秒仅作可调教学设置。连续有效CO₂采样超过时限未检出完整呼气后提示Critical；无数据或质量差时不据此判为呼吸暂停。恢复检出呼气后解除。"));
+        Children.Add(DesktopInformationPages.Help("报警", "默认20秒仅作可调教学设置。连续有效CO₂采样超过时限未检出完整呼气后提示Critical；无数据或质量差时不据此判为呼吸暂停。恢复检出呼气后解除。"));
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);
         Children.Add(NoticeColorEnabled);

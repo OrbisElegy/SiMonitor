@@ -126,6 +126,21 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+            int breathPeriod = checked((int)decimal.Round(60000 / (Settings.RespiratoryRate.Value ?? throw new ArgumentException("RR required")), 0, MidpointRounding.ToEven));
+            config = config with
+            {
+                BreathPeriodMilliseconds = breathPeriod,
+                InspirationMilliseconds = breathPeriod / 2,
+                Co2EndExpiratoryMmHg = checked((int)(Settings.EtCo2Target.Value ?? throw new ArgumentException("EtCO2 required")))
+            };
+            if (Settings.CardiacRateEnabled.IsChecked == true)
+            {
+                if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
+                { throw new ArgumentException("Heart rate controls require reference sinus and1:1 conduction."); }
+                var rate = new SeededCardiacRate(checked((int)(Settings.HeartRate.Value ?? throw new ArgumentException("HR required"))),
+                    Settings.RateSeed.Text ?? "", checked((int)((Settings.RateVariation.Value ?? throw new ArgumentException("variation required")) * 10)));
+                config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
+            }
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
                 opticalSaturationMilliPercent: Settings.ReadOpticalTarget(), opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)));
             var ecg = CapturePaper(ecgConfig);
@@ -136,7 +151,7 @@ internal sealed class DesignPreviewWindow : Window
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
-        { Settings.Status.Text = "未应用：检查样式组合、通道和量程上下限。原运行与画面保持不变。"; }
+        { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传。原运行与画面保持不变。"; }
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {

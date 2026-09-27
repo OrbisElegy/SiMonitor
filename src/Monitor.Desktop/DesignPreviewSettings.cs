@@ -26,6 +26,12 @@ internal sealed class DesignPreviewSettings : UserControl
     internal SoundSettingsPanel Sound { get; } = new();
     internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
+    internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1下传）", IsChecked = false };
+    internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
+    internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
+    internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
+    internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
+    internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
@@ -204,6 +210,15 @@ internal sealed class DesignPreviewSettings : UserControl
     private StackPanel VitalSigns()
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
+        panel.Children.Add(CardiacRateEnabled);
+        Add("心率目标（bpm，30–180）", HeartRate);
+        Add("逐搏周期波动上限（±%，0–5）", RateVariation);
+        Add("随机种子（64位小写十六进制）", RateSeed);
+        Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
+        Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
+        panel.Children.Add(Text("应用后从头生成并重新测量。波动为256搏循环的种子序列；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
+        void Add(string label, Control control)
+        { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
         panel.Children.Add(Text("指脉氧"));
         panel.Children.Add(OpticalEnabled);
         panel.Children.Add(Text("SpO₂ 教学目标（75–99%）")); panel.Children.Add(OpticalTarget);
@@ -213,7 +228,7 @@ internal sealed class DesignPreviewSettings : UserControl
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalEnabled.IsChecked == true;
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
-        foreach (string name in new[] { "心率（bpm）", "无创血压（mmHg）", "呼吸频率（次/分）", "体温（°C）", "EtCO₂（mmHg）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })
+        foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP（mmHg）", "CVP（mmHg）", "PA（mmHg）" })
         {
             var row = new Grid { ColumnDefinitions = new("220,*") };
             row.Children.Add(Text(name));
@@ -226,7 +241,7 @@ internal sealed class DesignPreviewSettings : UserControl
     {
         _advancedParameters.Children.Clear();
         _advancedParameters.Children.Add(Text("当前波形高级参数 · 预留编辑入口"));
-        _advancedParameters.Children.Add(Text("下列内容来自当前选择的模板，仅供查看，编辑尚未接入。固定病理模板不开放与其不兼容的时序修改。"));
+        _advancedParameters.Children.Add(Text("下列为模板默认参数，不代表生命体征页调整后的运行值；心率、周期波动、呼吸频率与EtCO₂请在生命体征页设置。固定病理模板不开放与其不兼容的时序修改。"));
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         _advancedParameters.Children.Add(Text($"P {config.Ecg.PDurationMilliseconds} ms · PR {config.Ecg.PrIntervalMilliseconds} ms · QRS {config.Ecg.QrsDurationMilliseconds} ms · QTc {config.Ecg.QtcMilliseconds} ms"));

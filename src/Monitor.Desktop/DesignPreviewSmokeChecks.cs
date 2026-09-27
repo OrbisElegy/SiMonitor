@@ -13,6 +13,44 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    private static void VerifySeededVitals(DesignPreviewWindow window)
+    {
+        window.Settings.CardiacRateEnabled.IsChecked = true;
+        window.Settings.HeartRate.Value = 158;
+        window.Settings.RateVariation.Value = 5;
+        window.Settings.RateSeed.Text = new string('1', 64);
+        window.Settings.RespiratoryRate.Value = 20;
+        window.Settings.EtCo2Target.Value = 50;
+        var previous = window.Session;
+        window.ApplySettings();
+        Require(!ReferenceEquals(previous, window.Session), "seeded high-rate source and paper capture apply together");
+        for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        var reading = window.Session.Measurements!;
+        Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+            Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 158000) < 12000,
+            "native monitor measures seeded high heart rate from acquisition");
+        Require(reading.Capnography.EndTidalCentiMmHg.Value is >= 4900 and <= 5100 &&
+            reading.Capnography.RespirationsMilliPerMinute.Value is >= 19500 and <= 20500,
+            "RR and EtCO2 changes reach sampled CO2 measurements");
+        var samples = window.Session.Samples(0, 0, 20_000_000_000).ToArray();
+        window.ApplySettings();
+        for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        Require(samples.SequenceEqual(window.Session.Samples(0, 0, 20_000_000_000)),
+            "same applied seed reproduces acquired ECG samples");
+        previous = window.Session;
+        var timer = window.ActiveTimer;
+        window.Settings.RateSeed.Text = "invalid";
+        window.ApplySettings();
+        Require(ReferenceEquals(previous, window.Session) && ReferenceEquals(timer, window.ActiveTimer),
+            "invalid seed cannot replace live session or timer");
+        window.Settings.RateSeed.Text = new string('1', 64);
+        window.Settings.EcgSelection = 1;
+        window.ApplySettings();
+        Require(ReferenceEquals(previous, window.Session), "unsupported rhythm retains live state");
+        window.Settings.EcgSelection = 0;
+        window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
+        Capture(window, "ui-preview-seeded-vitals.png");
+    }
     private static void VerifySoundSettings()
     {
         VerifyOutputFaultNotice();
@@ -308,6 +346,7 @@ internal static class DesignPreviewSmokeChecks
             window.ApplySettings(); window.SelectPage(0);
             for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Capture(window, "ui-preview-perfusion.png");
+            VerifySeededVitals(window);
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

@@ -34,7 +34,7 @@ public static class PhysiologyIllustrationSource
         bool variablePerfusion = beatPerfusion || fibrillation;
         bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
-        long PulseDuration(long normal) => shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        long PulseDuration(long normal) => configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         PhysiologyWaveformChannelPlan[] channels =
@@ -61,7 +61,7 @@ public static class PhysiologyIllustrationSource
                 fibrillation ? AtrialFibrillationReference.CreateLeadIIBands(plan.ConductionPattern == AvConductionPattern.AtrialFibrillationFineIllustration, configuration.IllustrateAfAberrancy) :
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :
                 plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
-                    ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(), 10, 0),
+                    ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(configuration.SeededRate?.Timing), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit)),
@@ -77,7 +77,7 @@ public static class PhysiologyIllustrationSource
              fixedPerfusion?.Venous.CreateChannel(plan, ChannelId(6), 0) ?? (new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))];
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1).CreateChannel(plan, ChannelId(6), 0))];
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);

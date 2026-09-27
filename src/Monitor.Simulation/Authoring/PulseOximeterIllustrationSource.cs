@@ -23,7 +23,7 @@ public sealed class PulseOximeterIllustrationSource
     {
         if (plethChannel == Guid.Empty || acquisitionInstance == Guid.Empty || sensorInstance == Guid.Empty || sensorInstance == acquisitionInstance ||
             plethChannel == RedChannelId || plethChannel == InfraredChannelId ||
-            saturationMilliPercent is < 75000 or > 99000 || modulationPermille is < 100 or > 2000)
+            saturationMilliPercent is < 75000 or > 100000 || modulationPermille is < 100 or > 2000)
         { throw new ArgumentException("OpticalSource.InvalidConfiguration"); }
         if (variation is not null && variation.TargetMilliPercent != saturationMilliPercent)
         { throw new ArgumentException("OpticalSource.VariationTargetMismatch"); }
@@ -59,6 +59,9 @@ public sealed class PulseOximeterIllustrationSource
             // DC(red)=16000, DC(IR)=20000; a1000-count pulse modulates IR2%.
             // Pulsatile absorption reduces transmitted light on both channels.
             int ratio = _variation is null ? _ratioPpm : (110000 - _variation.At(block.StartSimTimeNs + i * 8_000_000L)) * 40;
+            // A0.2pp source-side guard band keeps finite-DC/ADC error at100%
+            // inside the illustration calibration. Never relax estimator quality gates.
+            ratio = Math.Max(ratio, 408000);
             red[i] = checked((short)(16000 - FixedPointMath.RoundDivideTiesToEven((Int128)modulation * 32 * ratio * _modulationPermille, 100_000_000_000)));
             infrared[i] = checked((short)(20000 - FixedPointMath.RoundDivideTiesToEven((Int128)modulation * 2 * _modulationPermille, 5000)));
         }

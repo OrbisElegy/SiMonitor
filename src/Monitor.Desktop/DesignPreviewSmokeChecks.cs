@@ -21,7 +21,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.CardiacRateEnabled.IsChecked = true;
             window.Settings.RateVariation.Value = 5;
             window.Settings.OpticalEnabled.IsChecked = true;
-            window.Settings.OpticalVariation.Value = 1;
+            window.Settings.OpticalVariation.Value = 2.5m;
+            window.Settings.OpticalTarget.Value = 97.5m;
             window.ApplySettings();
             HashSet<string> hr = [], pr = [], spo2 = [];
             for (int i = 0; i < 450; i++)
@@ -33,12 +34,16 @@ internal static class DesignPreviewSmokeChecks
                 pr.Add(window.MonitorView.NumericBlocks[3].Text!);
             }
             Require(hr.Count >= 3 && spo2.Count >= 2 && pr.Count >= 3 && !hr.Contains("---") && !spo2.Contains("---"),
-                "90-second native displayed HR/PR/SpO2 visibly vary at5%/1 percentage point");
+                "90-second native displayed HR/PR/SpO2 visibly vary at5%/2.5 percentage points");
         }
         finally { window.Close(); }
     }
     private static void VerifySeededVitals(DesignPreviewWindow window)
     {
+        var live = window.Session; var oldSeed = window.Settings.RateSeed.Text;
+        window.Settings.GenerateSeed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        string generated = window.Settings.RateSeed.Text!;
+        Require(generated.Length == 64 && generated.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') && generated != oldSeed && ReferenceEquals(live, window.Session), "OS seed button changes draft only with256-bit lowercase hex");
         window.Settings.CardiacRateEnabled.IsChecked = true;
         window.Settings.HeartRate.Value = 158;
         window.Settings.RateVariation.Value = 5;
@@ -72,9 +77,11 @@ internal static class DesignPreviewSmokeChecks
         window.ApplySettings();
         Require(ReferenceEquals(previous, window.Session), "unsupported rhythm retains live state");
         window.Settings.EcgSelection = 0;
-        window.Settings.OpticalVariation.Value = 2;
+        window.Settings.OpticalVariation.Value = 2.5m;
         window.ApplySettings();
-        Require(ReferenceEquals(previous, window.Session), "optical target plus amplitude outside75..99 rejects atomically");
+        Require(!ReferenceEquals(previous, window.Session), "98% plus2.5pp now applies within bounded source range");
+        previous = window.Session;
+        window.Settings.OpticalVariation.Value = 2;
         window.Settings.OpticalTarget.Value = 95;
         window.Settings.EtCo2Variation.Value = 5;
         window.Settings.RespirationSelection = 1;

@@ -29,6 +29,7 @@ internal sealed class DesignPreviewSettings : UserControl
     internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1下传）", IsChecked = false };
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
+    internal Button GenerateSeed { get; } = new() { Content = "生成随机种子", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
     internal NumericUpDown InspirationPercent { get; } = new() { Minimum = 10, Maximum = 90, Value = 50, Increment = 1, Width = 180 };
     internal TextBlock BreathingTiming { get; } = Text("");
@@ -36,8 +37,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal NumericUpDown EtCo2Variation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
-    internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 99, Value = 98, Increment = 1, FormatString = "0", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
@@ -241,6 +242,9 @@ internal sealed class DesignPreviewSettings : UserControl
         Add("心率目标（bpm，30–180）", HeartRate);
         Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
         Add("波动共用种子（64位小写十六进制）", RateSeed);
+        panel.Children.Add(GenerateSeed);
+        GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        panel.Children.Add(Text("使用系统加密随机源生成256位种子；应用后生效。保留种子与设置即可复现。"));
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
         panel.Children.Add(BreathingTiming);
@@ -255,13 +259,13 @@ internal sealed class DesignPreviewSettings : UserControl
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
         panel.Children.Add(Text("指脉氧"));
         panel.Children.Add(OpticalEnabled);
-        panel.Children.Add(Text("SpO₂ 教学目标（75–99%）")); panel.Children.Add(OpticalTarget);
+        panel.Children.Add(Text("SpO₂ 教学目标（75–100%）")); panel.Children.Add(OpticalTarget);
         panel.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); panel.Children.Add(OpticalModulation);
         AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
-        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至99");
-        Add("SpO₂波动幅度（±百分点，0–2；0关闭）", OpticalVariation);
+        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至100");
+        Add("SpO₂波动幅度（±百分点，0–2.5；0关闭）", OpticalVariation);
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
-        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；目标±幅度须在75–99%内。此为教学变化，不模拟氧输送或停搏耗氧。"));
+        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；波动端点限制在75–100%内；97.5% ±2.5覆盖95–100%，98% ±2.5覆盖95.5–100%。此为教学变化，不模拟氧输送或停搏耗氧。"));
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(Text("基线叠加原有心搏与呼吸分量后再采样计算均压，因此实测CVP不必等于设置值。此处调整模拟源，不是传感器调零，也不改变射血或动脉压。"));

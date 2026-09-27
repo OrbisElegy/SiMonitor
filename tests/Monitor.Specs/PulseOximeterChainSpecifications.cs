@@ -36,9 +36,32 @@ internal static class PulseOximeterChainSpecifications
             differs |= value != other.At(t);
         }
         Check.That(differs && plan.At(long.MaxValue) is >= 93000 and <= 97000, "different seeds differ; late lookup is bounded and overflow-safe");
-        Reject(() => _ = new SeededOpticalSaturation(98000, 2000, seed), "upper excursion outside source calibration rejects");
-        Reject(() => _ = new SeededOpticalSaturation(75000, 1, seed), "lower excursion outside source calibration rejects");
-        Reject(() => _ = new SeededOpticalSaturation(95000, 2001, seed), "excess amplitude rejects");
+        foreach (int target in new[] { 75000, 97500, 98000, 100000 })
+        {
+            var bounded = new SeededOpticalSaturation(target, 2500, seed);
+            for (long t = 0; t < loop; t += 8_000_000)
+            {
+                int value = bounded.At(t);
+                Check.That(value >= Math.Max(75000, target - 2500) && value <= Math.Min(100000, target + 2500), "bounded2.5pp excursions");
+                Check.That(Math.Abs(value - bounded.At(t + 8_000_000)) <= 2, "bounded knots retain smooth transitions");
+            }
+        }
+        foreach (int target in new[] { 97500, 98000, 100000 })
+        {
+            var source = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, target,
+                variation: new SeededOpticalSaturation(target, 2500, seed));
+            var estimator = Measurement(); List<int> readings = [];
+            for (int i = 0; i < 450; i++)
+            {
+                var result = estimator.Consume(source.ConvertAcquiredPulse(Input(i)));
+                if (i < 25) { continue; }
+                Check.That(result.SpO2.Status == WaveformMeasurementStatus.Valid, "upper-bound variation retains measured saturation");
+                readings.Add(result.SpO2.SaturationMilliPercent!.Value);
+            }
+            Check.That(readings.Max() <= 100000 && readings.Max() >= 99500 && readings.Max() - readings.Min() >= 1800,
+                "bounded2.5pp variation reaches displayed100 and varies through actual optical samples");
+        }
+        Reject(() => _ = new SeededOpticalSaturation(95000, 2501, seed), "excess amplitude rejects");
         Reject(() => _ = new SeededOpticalSaturation(95000, 1000, "invalid"), "invalid seed rejects");
         Reject(() => plan.At(-1), "negative time rejects");
         Reject(() => _ = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 98000, variation: plan), "target mismatch rejects");
@@ -47,7 +70,7 @@ internal static class PulseOximeterChainSpecifications
         var measured = Measurement(); var restored = Measurement(); List<int> values = [];
         for (int i = 0; i < 600; i++)
         {
-            var input = Input(i);
+            byte[] input = Input(i);
             Check.That(zero.ConvertAcquiredPulse(input).SequenceEqual(Source(95000).ConvertAcquiredPulse(input)), "zero amplitude preserves old bytes");
             byte[] wire = varied.ConvertAcquiredPulse(input);
             var replay = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: same);
@@ -68,47 +91,48 @@ internal static class PulseOximeterChainSpecifications
         for (int i = 0; i < 40; i++) { flatMeasurement.Consume(varied.ConvertAcquiredPulse(Input(i, flat: true))); }
         Check.That(flatMeasurement.Read(7_992_000_000).SpO2.Status == WaveformMeasurementStatus.PoorSignal,
             "target drift cannot manufacture valid saturation without peripheral pulses");
-        var bad = Rewrite(Input(600), b => b with { InstanceId = Sensor });
+        byte[] bad = Rewrite(Input(600), b => b with { InstanceId = Sensor });
         Reject(() => varied.ConvertAcquiredPulse(bad), "bad source rejected during variation");
         Check.That(varied.ConvertAcquiredPulse(Input(600)).SequenceEqual(new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, 95000, variation: same).ConvertAcquiredPulse(Input(600))), "failure consumes no random state");
     }
 
     private static void AcquiredPeripheralSourceProducesPulseAndSaturation()
     {
-        foreach (int target in new[] { 75000, 90000, 98000, 99000 })
-            foreach (int conduction in new[] { 1, 2 })
-            {
-                var physical = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { VentricularConductionRatio = conduction });
-                var optical = Source(target); var measurement = Measurement(); PulseOximeterReading? reading = null;
-                for (int step = 1; step <= 65; step++)
-                    foreach (var original in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
-                    {
-                        byte[] wire = optical.ConvertAcquiredPulse(original);
-                        var packet = WaveformEnvelopeCodec.Decode(wire);
-                        var old = WaveformEnvelopeCodec.Decode(original);
-                        Check.That(packet.InstanceId == Sensor && packet.StartSimTimeNs == old.StartSimTimeNs &&
-                            packet.Planes.Single(p => p.ChannelId == Pleth).Samples.SequenceEqual(old.Planes.Single(p => p.ChannelId == Pleth).Samples),
-                            "same sensor bundle preserves acquired Pleth shape/time, not screen pixels");
-                        reading = measurement.Consume(wire);
-                        if (packet.StartSimTimeNs < 3_800_000_000)
-                        { Check.That(reading.SpO2.SaturationMilliPercent is null, "no saturation before full window"); }
-                    }
-                Check.That(reading!.PulseRate.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.PulseRate.MilliBeatsPerMinute!.Value - 75000 / conduction) <= 100, "sensor PR follows actual peripheral ejection: " + conduction + "/" + reading);
-                Check.That(reading.SpO2.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.SpO2.SaturationMilliPercent!.Value - target) <= 500,
-                    $"authored target recovered from two quantized wavelengths within0.5 percentage point: {target}/{conduction}: {reading.SpO2}");
-            }
+        foreach (int target in new[] { 75000, 90000, 98000, 99000, 100000 })
+            foreach (int modulation in (target == 100000 ? new[] { 1000, 2000 } : new[] { 1000 }))
+                foreach (int conduction in new[] { 1, 2 })
+                {
+                    var physical = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { VentricularConductionRatio = conduction });
+                    var optical = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, target, modulation); var measurement = Measurement(); PulseOximeterReading? reading = null;
+                    for (int step = 1; step <= 65; step++)
+                        foreach (byte[] original in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                        {
+                            byte[] wire = optical.ConvertAcquiredPulse(original);
+                            var packet = WaveformEnvelopeCodec.Decode(wire);
+                            var old = WaveformEnvelopeCodec.Decode(original);
+                            Check.That(packet.InstanceId == Sensor && packet.StartSimTimeNs == old.StartSimTimeNs &&
+                                packet.Planes.Single(p => p.ChannelId == Pleth).Samples.SequenceEqual(old.Planes.Single(p => p.ChannelId == Pleth).Samples),
+                                "same sensor bundle preserves acquired Pleth shape/time, not screen pixels");
+                            reading = measurement.Consume(wire);
+                            if (packet.StartSimTimeNs < 3_800_000_000)
+                            { Check.That(reading.SpO2.SaturationMilliPercent is null, "no saturation before full window"); }
+                        }
+                    Check.That(reading!.PulseRate.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.PulseRate.MilliBeatsPerMinute!.Value - 75000 / conduction) <= 100, "sensor PR follows actual peripheral ejection: " + conduction + "/" + reading);
+                    Check.That(reading.SpO2.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.SpO2.SaturationMilliPercent!.Value - target) <= 500,
+                        $"authored target recovered from two quantized wavelengths within0.5 percentage point: {target}/{conduction}: {reading.SpO2}");
+                }
         var sensor = Source(); var m = Measurement();
         for (int block = 0; block < 40; block++) { m.Consume(sensor.ConvertAcquiredPulse(Input(block, flat: true))); }
         Check.That(m.Read(7_992_000_000).SpO2.Status == WaveformMeasurementStatus.PoorSignal,
             "constant light without pulsatility cannot display the configured98%");
-        var originalBytes = Input(0);
+        byte[] originalBytes = Input(0);
         Check.That(Source(90000).ConvertAcquiredPulse(originalBytes).SequenceEqual(Source(90000).ConvertAcquiredPulse(originalBytes)), "conversion is deterministic");
         Reject(() => Source().ConvertAcquiredPulse(Rewrite(Input(0), b => b with { InstanceId = Sensor })), "cannot conceal an upstream source switch");
         var offsetMeasurement = Measurement(); var plainMeasurement = Measurement();
         for (int block = 0; block < 25; block++)
         {
-            var plain = sensor.ConvertAcquiredPulse(Input(block));
-            var offset = Rewrite(plain, b => b with
+            byte[] plain = sensor.ConvertAcquiredPulse(Input(block));
+            byte[] offset = Rewrite(plain, b => b with
             {
                 Planes = b.Planes.Select(p => p.ChannelId == Pleth ? p : p with
                 {
@@ -152,14 +176,14 @@ internal static class PulseOximeterChainSpecifications
         var checkpoint = measurement.Capture(); var restored = PulseOximeterMeasurement.Restore(checkpoint);
         for (int block = 7; block < 30; block++)
         {
-            var wire = source.ConvertAcquiredPulse(Input(block));
+            byte[] wire = source.ConvertAcquiredPulse(Input(block));
             Check.That(measurement.Consume(wire) == restored.Consume(wire), "mid-window restore preserves PR and SpO2");
         }
         Check.That(PulseOximeterMeasurement.Restore(checkpoint).Read(1_392_000_000).SpO2.Status == WaveformMeasurementStatus.WarmingUp,
             "captured window not changed by later consumes");
         var before = measurement.Read(5_992_000_000);
-        var next = source.ConvertAcquiredPulse(Input(30));
-        foreach (var bad in new[]
+        byte[] next = source.ConvertAcquiredPulse(Input(30));
+        foreach (byte[]? bad in new[]
         {
             source.ConvertAcquiredPulse(Input(29)),
             Rewrite(next, b => b with { Planes = b.Planes.Where(p => p.ChannelId != PulseOximeterIllustrationSource.InfraredChannelId).ToArray() }),
@@ -171,7 +195,7 @@ internal static class PulseOximeterChainSpecifications
             Check.That(before == measurement.Read(5_992_000_000), "late optical failure does not advance PR or window");
         }
         Check.That(measurement.Consume(next) == restored.Consume(next), "valid retry agrees with untouched branch");
-        var clipped = source.ConvertAcquiredPulse(Input(31, clip: true));
+        byte[] clipped = source.ConvertAcquiredPulse(Input(31, clip: true));
         Check.That(measurement.Consume(clipped).SpO2.Status == WaveformMeasurementStatus.PoorSignal, "source clipping never becomes plausible optical amplitude");
     }
 

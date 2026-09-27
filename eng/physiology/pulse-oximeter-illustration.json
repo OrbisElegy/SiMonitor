@@ -13,9 +13,9 @@
   "sample_rate_hz": 125,
   "optical_target_milli_percent_range": [
     75000,
-    99000
+    100000
   ],
-  "ratio_ppm": "(110000 - target_milli_percent) * 40",
+  "ratio_ppm": "max(408000, (110000 - target_milli_percent) * 40)",
   "red_adc": "16000 - round_ties_even(pulse_count * 32 * ratio_ppm * modulation_permille / 100000000000)",
   "infrared_adc": "20000 - round_ties_even(pulse_count * 2 * modulation_permille / 5000)",
   "accepted_pulse_count_range": [
@@ -33,7 +33,7 @@
     }
   ],
   "measurement": "500 paired samples; independent window means and AC RMS ratio; no target passed to calculator",
-  "engineering_acceptance": "Acquired reference and 2:1 examples at75/90/98/99 percent recover within0.5 percentage point; not a clinical accuracy statement",
+  "engineering_acceptance": "Acquired reference and2:1 examples at75/90/98/99/100 percent recover within0.5 percentage point;100 also checked at2x modulation. Not a clinical accuracy statement; weak signals may remain invalid.",
   "limitations": [
     "Affine small-modulation illustration; window mean and quantization cause target/measurement differences",
     "No oxygen transport, tissue model, hardware calibration, motion rejection or extended saturation range",
@@ -46,5 +46,6 @@
     "minimum": 100,
     "maximum": 2000
   },
-  "perfusion_index": "IR peak-to-peak / IR window mean * 100 percent, 500 samples; teaching estimate, not vendor algorithm"
+  "perfusion_index": "IR peak-to-peak / IR window mean * 100 percent, 500 samples; teaching estimate, not vendor algorithm",
+  "upper_boundary_guard": "Source-side0.2 percentage-point headroom for finite DC and integer ADC error at100%; independent measurement calibration/quality unchanged. Earlier targets through99% retain their bytes."
 }

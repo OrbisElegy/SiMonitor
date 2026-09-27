@@ -38,6 +38,7 @@ internal sealed class SettingsSections : UserControl
                 Child = section.Content
             }
         }).ToArray();
+        StyleNavigation(Sections);
         Sections.ItemsSource = sections.Select(s => Item(s.Title)).ToArray();
         _compact.ItemsSource = sections.Select(s => s.Title).ToArray();
         AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
@@ -60,15 +61,30 @@ internal sealed class SettingsSections : UserControl
         };
         Sections.SelectedIndex = 0;
     }
-    internal static ListBoxItem Item(string title)
+    internal static void StyleNavigation(ListBox list)
     {
-        var text = new TextBlock { Text = title + "  ›", TextWrapping = TextWrapping.Wrap };
-        var item = new ListBoxItem { MinHeight = 44, Padding = new Thickness(12, 10), Margin = new Thickness(0, 0, 0, 4), Content = text };
+        list.Background = Brushes.Transparent;
+        list.BorderThickness = new Thickness(0);
+        list.Padding = new Thickness(4);
+        list.VerticalAlignment = VerticalAlignment.Top;
+    }
+    internal static ListBoxItem Item(string title, bool showChevron = true)
+    {
+        var text = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) };
+        var indicator = new Border { Width = 3, Height = 18, CornerRadius = new CornerRadius(2), Background = DesktopFluentStyle.Accent, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
+        var content = new Grid { ColumnDefinitions = new("3,*,16") };
+        content.Children.Add(indicator); Grid.SetColumn(text, 1); content.Children.Add(text);
+        if (showChevron)
+        {
+            var chevron = new TextBlock { Text = "›", VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
+            Grid.SetColumn(chevron, 2); content.Children.Add(chevron);
+        }
+        var item = new ListBoxItem { MinHeight = 44, Padding = new Thickness(4, 10, 10, 10), Margin = new Thickness(0, 0, 0, 4), Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(item, title);
         item.PropertyChanged += (_, args) =>
         {
             if (args.Property != ListBoxItem.IsSelectedProperty) { return; }
-            text.Text = title + (item.IsSelected ? "  ✓" : "  ›");
+            indicator.IsVisible = item.IsSelected;
             text.FontWeight = item.IsSelected ? FontWeight.SemiBold : FontWeight.Normal;
         };
         return item;

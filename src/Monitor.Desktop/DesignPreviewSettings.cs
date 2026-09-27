@@ -35,6 +35,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal TextBlock BreathingTiming { get; } = Text("");
     internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
     internal NumericUpDown EtCo2Variation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
+    internal NumericUpDown AbpPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
+    internal NumericUpDown PaPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
@@ -267,10 +269,13 @@ internal sealed class DesignPreviewSettings : UserControl
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
         panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；波动端点限制在75–100%内；97.5% ±2.5覆盖95–100%，98% ±2.5覆盖95.5–100%。此为教学变化，不模拟氧输送或停搏耗氧。"));
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
+        Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
+        Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);
+        panel.Children.Add(Text("调整压力波形的脉搏分量，保留长间期回落；均压仍从采样计算。此项不是收缩压/舒张压目标，也不是显示缩放。"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(Text("基线叠加原有心搏与呼吸分量后再采样计算均压，因此实测CVP不必等于设置值。此处调整模拟源，不是传感器调零，也不改变射血或动脉压。"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
-        foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP（mmHg）", "PA（mmHg）" })
+        foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP收缩压/舒张压（mmHg）", "PA收缩压/舒张压（mmHg）" })
         {
             var row = new Grid { ColumnDefinitions = new("220,*") };
             row.Children.Add(Text(name));

@@ -10,11 +10,63 @@ internal static class MeanPressureMeasurementSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(3);
     public static Specification[] All =>
     [
+        new(nameof(PressurePulseControlsPreserveRunoffAndOtherChannels), PressurePulseControlsPreserveRunoffAndOtherChannels),
         new(nameof(CvpBaselineChangesSamplesAndMeasuredMean), CvpBaselineChangesSamplesAndMeasuredMean),
         new(nameof(PressureMeanUsesTimeSamplesAndFiniteHistory), PressureMeanUsesTimeSamplesAndFiniteHistory),
         new(nameof(PressureMeanRejectsBadInputAndRestores), PressureMeanRejectsBadInputAndRestores),
         new(nameof(RealPressureChannelsJoinAtomicLiveReadings), RealPressureChannelsJoinAtomicLiveReadings),
     ];
+    private static void PressurePulseControlsPreserveRunoffAndOtherChannels()
+    {
+        foreach (var config in new[] { PhysiologyIllustrationConfiguration.Default,
+            PhysiologyIllustrationConfiguration.SinusArrestPreset,
+            PhysiologyIllustrationConfiguration.Default with { VentricularMechanicalEnabled = false } })
+        {
+            var baseline = PhysiologyIllustrationSource.Create(config);
+            var adjusted = PhysiologyIllustrationSource.Create(config with { AbpPulsePermille = 2000, PaPulsePermille = 500 });
+            var restored = PhysiologyIllustrationSource.Create(config with { AbpPulsePermille = 2000, PaPulsePermille = 500 });
+            var left = LiveWaveformMeasurements.CreateIllustration(); var right = LiveWaveformMeasurements.CreateIllustration();
+            bool changed = false;
+            for (int step = 1; step <= 60; step++)
+            {
+                long time = step * 200_000_000L;
+                var a = baseline.AdvanceTo(time, 50, 1, 100);
+                var b = adjusted.AdvanceTo(time, 50, 1, 100);
+                var c = restored.AdvanceTo(time, 50, 1, 100);
+                for (int i = 0; i < a.Count; i++)
+                {
+                    Check.That(b[i].SequenceEqual(c[i]), "pressure gain restore preserves samples");
+                    var original = WaveformEnvelopeCodec.Decode(a[i]); var next = WaveformEnvelopeCodec.Decode(b[i]);
+                    foreach (var plane in original.Planes)
+                    {
+                        var actual = next.Planes.Single(p => p.ChannelId == plane.ChannelId);
+                        if (plane.ChannelId != Channel && plane.ChannelId != PhysiologyIllustrationSource.ChannelId(5))
+                        { Check.That(plane.Samples.SequenceEqual(actual.Samples), "pressure controls leave all other channels unchanged"); }
+                        else if (!config.VentricularMechanicalEnabled)
+                        { Check.That(plane.Samples.SequenceEqual(actual.Samples), "no ejection retains identical reservoir runoff"); }
+                        else { changed |= !plane.Samples.SequenceEqual(actual.Samples); }
+                    }
+                    var x = left.Consume(a[i]); var y = right.Consume(b[i]);
+                    if (x.AbpMean.Status == WaveformMeasurementStatus.Valid)
+                    {
+                        Check.That(y.AbpMean.MeanCentiMmHg >= x.AbpMean.MeanCentiMmHg && y.PaMean.MeanCentiMmHg <= x.PaMean.MeanCentiMmHg,
+                            "independent sampled pressure means follow selected pulse gains");
+                    }
+                }
+                if (step == 21) { restored = Monitor.Simulation.Physiology.PhysiologyWaveformGroup.Restore(restored.CaptureState()); }
+            }
+            Check.That(changed == config.VentricularMechanicalEnabled, "gain changes actual pressure only when ejection exists");
+        }
+        foreach (var config in new[] { PhysiologyIllustrationConfiguration.Default with { AbpPulsePermille = 499 },
+            PhysiologyIllustrationConfiguration.Default with { PaPulsePermille = 2001 },
+            PhysiologyIllustrationConfiguration.Default with { UseVascularReservoir = false, AbpPulsePermille = 1500 } })
+        {
+            bool rejected = false;
+            try { _ = PhysiologyIllustrationSource.Create(config); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "unsupported pressure adjustments reject before creating source");
+        }
+    }
+
     private static void CvpBaselineChangesSamplesAndMeasuredMean()
     {
         foreach (var config in new[] { PhysiologyIllustrationConfiguration.Default, PhysiologyIllustrationConfiguration.SinusArrestPreset,

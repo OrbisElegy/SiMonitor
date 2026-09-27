@@ -29,9 +29,9 @@ internal sealed class SettingsSections : UserControl
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = new Border
             {
-                Background = Brushes.White,
-                CornerRadius = new CornerRadius(12),
-                BorderBrush = Brush.Parse("#DCE1E7"),
+                Background = DesktopFluentStyle.Surface,
+                CornerRadius = new CornerRadius(8),
+                BorderBrush = DesktopFluentStyle.Stroke,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(20),
                 Margin = new Thickness(12, 0, 0, 0),

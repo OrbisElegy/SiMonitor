@@ -3,14 +3,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
-using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 
 namespace Monitor.Desktop;
 
 public sealed class MonitorApp : Avalonia.Application
 {
-    public override void Initialize() => Styles.Add(new FluentTheme());
+    public override void Initialize() => DesktopFluentStyle.Install(this);
 
     // Default product entry and the retained preview alias share one runtime.
     internal static Window CreateLaunchWindow(string[]? arguments) => arguments switch

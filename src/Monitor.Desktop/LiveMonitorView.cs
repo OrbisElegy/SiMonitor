@@ -29,13 +29,24 @@ internal sealed class LiveMonitorView : UserControl
     internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
-    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(3), MaxWidth = 480, MinHeight = 44 };
+    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(3) };
     internal Border NoticeRegion => _noticeBackground;
     internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
     internal Func<string>? BeatSourceText { get; set; }
     internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 20, FontWeight = FontWeight.Bold, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        // Scale against the monitor surface, independently of notice text length.
+        double scale = Math.Min(availableSize.Width / 1180, availableSize.Height / 800);
+        if (!double.IsFinite(scale)) { scale = 1; }
+        scale = Math.Max(.5, scale);
+        _noticeBackground.MinHeight = 44 * scale;
+        _noticeBackground.Padding = new Thickness(12 * scale, 8 * scale);
+        Notice.FontSize = 20 * scale;
+        return base.MeasureOverride(availableSize);
+    }
     internal LiveMonitorView(LiveMonitorTrace trace)
     {
         _trace = trace;

@@ -401,10 +401,17 @@ internal static class DesignPreviewSmokeChecks
             var region = window.MonitorView.NoticeRegion;
             var center = region.TranslatePoint(new Point(region.Bounds.Width / 2, 0), window.MonitorView)!.Value;
             // Star-column layout rounding may shift the center by one layout unit.
-            Require(Math.Abs(center.X - window.MonitorView.Bounds.Width / 2) <= 1 && region.Bounds.Width <= 480 && region.Bounds.Height >= 44 &&
-                window.MonitorView.Notice.FontSize == 20 && window.MonitorView.Notice.FontWeight == Avalonia.Media.FontWeight.Bold &&
+            Require(Math.Abs(center.X - window.MonitorView.Bounds.Width / 2) <= 1 && region.Bounds.Width > 0 && region.Bounds.Height > 0 &&
+                window.MonitorView.Notice.FontSize > 0 && window.MonitorView.Notice.FontWeight == Avalonia.Media.FontWeight.Bold &&
                 region.Bounds.Width < window.MonitorView.Bounds.Width * .7 && window.MonitorView.Notice.TextAlignment == Avalonia.Media.TextAlignment.Center,
                 $"bounded alarm region and its text are centered independently of side labels: center={center.X}, view={window.MonitorView.Bounds.Width}, region={region.Bounds.Width}, alignment={window.MonitorView.Notice.TextAlignment}");
+            var wideNoticeSize = region.Bounds.Size; double wideNoticeFont = window.MonitorView.Notice.FontSize;
+            window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-critical-compact.png");
+            Require(region.Bounds.Width < wideNoticeSize.Width && region.Bounds.Height < wideNoticeSize.Height && window.MonitorView.Notice.FontSize < wideNoticeFont,
+                "notice width, height and typography scale with monitor viewport");
+            var compactCenter = region.TranslatePoint(new Point(region.Bounds.Width / 2, 0), window.MonitorView)!.Value;
+            Require(Math.Abs(compactCenter.X - window.MonitorView.Bounds.Width / 2) <= 1, "scaled notice remains centered");
+            window.Width = 1440; window.Height = 940; Capture(window, "ui-preview-critical.png");
             window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             window.Settings.Alerts.HeartRateEnabled.IsChecked = false;
             foreach (int level in new[] { 1, 2, 3, 4 })
@@ -430,6 +437,9 @@ internal static class DesignPreviewSmokeChecks
             Require(narrowScale < wideScale, "paper including waves and calibration scales with the viewport");
             window.Width = 1440; window.Height = 940; window.SelectPage(2);
             Capture(window, "ui-preview-settings.png");
+            Require(window.Settings.Apply.Classes.Contains("accent"), "primary action uses Fluent accent state styling");
+            var mainNavigation = window.GetVisualDescendants().OfType<ListBox>().Single(list => AutomationProperties.GetName(list) == "主导航");
+            Require(mainNavigation.SelectedIndex == 2, "main navigation exposes Fluent list selection semantics");
             var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
             int navigationCacheCount = window.Settings.PreviewCacheCount;
             Require(!window.Settings.GetVisualDescendants().OfType<Button>().Any(b => b.Bounds.Size == new Size(238, 162)), "signal navigation has no preview cards");

@@ -22,7 +22,7 @@ internal sealed class DesignPreviewWindow : Window
     private readonly TextBlock _title = Text("监护波形", 27, true);
     private readonly TextBlock _subtitle = Text("", 13);
     private readonly TextBlock _state = Text("", 12);
-    private readonly Button[] _navigation = new Button[3];
+    private readonly ListBox _navigation = new();
     private WaveformEnvelope[] _ecg;
     private LiveMonitorTrace _monitor;
     internal LiveMonitorView MonitorView { get; private set; }
@@ -41,7 +41,7 @@ internal sealed class DesignPreviewWindow : Window
         Title = "心电监护 · V0.5 Standalone（开发版）";
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
-        Background = Brush.Parse("#F5F6F8"); Foreground = Brush.Parse("#202C39");
+        Background = DesktopFluentStyle.Canvas; Foreground = DesktopFluentStyle.Text;
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(), enableMeasurements: true);
         _monitor = new(_session);
@@ -58,7 +58,7 @@ internal sealed class DesignPreviewWindow : Window
             if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
         };
         MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
-        Settings.Apply.Background = Brush.Parse("#2464BA"); Settings.Apply.Foreground = Brushes.White;
+        Settings.Apply.Classes.Add("accent");
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
         var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
@@ -67,31 +67,24 @@ internal sealed class DesignPreviewWindow : Window
         var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
         footer.Children.Add(_state); footer.Children.Add(Text("离线教学模拟\n不得用于临床决策", 12));
         DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
-        var nav = new StackPanel { Spacing = 8 };
         string[] labels = ["监护波形", "十二导联", "设置"];
-        for (int i = 0; i < labels.Length; i++)
+        _navigation.ItemsSource = labels.Select(SettingsSections.Item).ToArray();
+        AutomationProperties.SetName(_navigation, "主导航");
+        _navigation.SelectionChanged += (_, args) =>
         {
-            int page = i;
-            var button = new Button
-            {
-                Content = labels[i],
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(14, 12),
-                CornerRadius = new CornerRadius(8)
-            };
-            button.Click += (_, _) => SelectPage(page); _navigation[i] = button; nav.Children.Add(button);
-        }
-        sidebar.Children.Add(nav);
-        root.Children.Add(new Border { Background = Brush.Parse("#EBEEF2"), Child = sidebar });
+            if (ReferenceEquals(args.Source, _navigation) && _navigation.SelectedIndex >= 0 && _navigation.SelectedIndex != Page)
+            { SelectPage(_navigation.SelectedIndex); }
+        };
+        sidebar.Children.Add(_navigation);
+        root.Children.Add(new Border { Background = DesktopFluentStyle.Canvas, Child = sidebar });
         var main = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(24, 20) };
         Grid.SetColumn(main, 1); root.Children.Add(main);
         var heading = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 14) };
         heading.Children.Add(_title); heading.Children.Add(_subtitle); main.Children.Add(heading);
         var card = new Border
         {
-            Background = Brushes.White,
-            BorderBrush = Brush.Parse("#DCE1E7"),
+            Background = DesktopFluentStyle.Surface,
+            BorderBrush = DesktopFluentStyle.Stroke,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             ClipToBounds = true,
@@ -105,12 +98,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         if (page is < 0 or > 2) { throw new ArgumentOutOfRangeException(nameof(page)); }
         Page = page;
-        for (int i = 0; i < _navigation.Length; i++)
-        {
-            _navigation[i].Background = Brush.Parse(i == page ? "#D3E3FA" : "#EBEEF2");
-            _navigation[i].FontWeight = i == page ? FontWeight.SemiBold : FontWeight.Normal;
-            AutomationProperties.SetName(_navigation[i], $"{_navigation[i].Content}{(i == page ? "，当前页面" : "")}");
-        }
+        _navigation.SelectedIndex = page;
         _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", _ => "设置" };
         _subtitle.Text = page switch
         {

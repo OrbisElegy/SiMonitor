@@ -239,7 +239,7 @@ internal sealed class DesignPreviewSettings : UserControl
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         panel.Children.Add(CardiacRateEnabled);
         Add("心率目标（bpm，30–180）", HeartRate);
-        Add("逐搏周期波动上限（±%，0–5）", RateVariation);
+        Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
         Add("波动共用种子（64位小写十六进制）", RateSeed);
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
@@ -250,7 +250,7 @@ internal sealed class DesignPreviewSettings : UserControl
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
         Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
         panel.Children.Add(Text("CO₂使用共用种子的独立随机流，64次呼吸循环，同次呼气保持同一目标。仅规则呼吸可用；目标±幅度须在5–80 mmHg内，显示值仍由波形测量。"));
-        panel.Children.Add(Text("应用后从头生成并重新测量。波动为256搏循环的种子序列；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
+        panel.Children.Add(Text("应用后从头生成并重新测量。波动为256搏循环的种子序列，连续16个间期逐渐偏长或偏短；相同种子和设置可复现。心率调整仅用于窦性参考与1:1下传，快心率使用缩短的教学波段；呼吸模板中的暂停/深浅变化仍会影响实测RR与EtCO₂。"));
         void Add(string label, Control control)
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
         panel.Children.Add(Text("指脉氧"));
@@ -261,7 +261,7 @@ internal sealed class DesignPreviewSettings : UserControl
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至99");
         Add("SpO₂波动幅度（±百分点，0–2；0关闭）", OpticalVariation);
         OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
-        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡，32分钟循环；目标±幅度须在75–99%内。此为教学变化，不模拟氧输送或停搏耗氧。"));
+        panel.Children.Add(Text("血氧使用上方种子的独立随机流，每30秒平滑过渡至设定幅度的80–100%，正负成对，32分钟循环；目标±幅度须在75–99%内。此为教学变化，不模拟氧输送或停搏耗氧。"));
         panel.Children.Add(Text("应用后从头采集红光与红外样本，再计算 SpO₂；目标值不是监护读数。未启用时 SpO₂ 显示 ---，PR 仍可独立测量。"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(Text("基线叠加原有心搏与呼吸分量后再采样计算均压，因此实测CVP不必等于设置值。此处调整模拟源，不是传感器调零，也不改变射血或动脉压。"));

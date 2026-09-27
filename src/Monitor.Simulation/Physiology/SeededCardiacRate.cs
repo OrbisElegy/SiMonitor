@@ -8,6 +8,7 @@ namespace Monitor.Simulation.Physiology;
 // state is retained. Runtime indexed visits never consume random draws.
 public sealed record SeededCardiacRate
 {
+    public const string PatternId = "SeededCardiacSlowVariation@2";
     public int HeartRateBpm { get; }
     public string SeedHex { get; }
     public int VariationPermille { get; }
@@ -23,11 +24,27 @@ public sealed record SeededCardiacRate
         var random = factory.CreateStream("physiology.cardiac.rate");
         HeartRateBpm = heartRateBpm; SeedHex = seedHex; VariationPermille = variationPermille;
         PeriodNs = (long)FixedPointMath.RoundDivideTiesToEven(60_000_000_000, heartRateBpm);
-        long displacement = PeriodNs * variationPermille / 2000;
-        MinimumPeriodNs = PeriodNs - 2 * displacement;
+        long maximumOffset = PeriodNs * variationPermille / 1000;
+        MinimumPeriodNs = PeriodNs - maximumOffset;
         Slots = new long[256];
-        for (int i = 1; i < Slots.Length; i++)
-        { Slots[i] = i * PeriodNs + (long)random.UniformBelow((ulong)(2 * displacement + 1)) - displacement; }
+        long cursor = 0;
+        // Correlated16-interval excursions survive the8-interval measurement
+        // window. Pair each with its opposite to preserve the nominal cycle
+        // mean exactly; the seed selects direction and75..100% of the bound.
+        for (int pair = 0; pair < 8; pair++)
+        {
+            long minimum = (maximumOffset * 3 + 3) / 4;
+            long magnitude = minimum + (long)random.UniformBelow((ulong)(maximumOffset - minimum + 1));
+            int sign = random.UniformBelow(2) == 0 ? -1 : 1;
+            for (int beat = 0; beat < 32; beat++)
+            {
+                int phase = beat % 16;
+                int weight = Math.Min(phase + 1, 16 - phase);
+                long offset = magnitude * weight / 8 * sign * (beat < 16 ? 1 : -1);
+                Slots[pair * 32 + beat] = cursor;
+                cursor += PeriodNs + offset;
+            }
+        }
         PreparedState = random.CaptureState();
     }
     // Teaching morphology support, not patient-specific QT adaptation.
@@ -46,19 +63,29 @@ public sealed record SeededCardiacRate
         int maximumEvents, Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
         Int128 origin = (Int128)plan.EpochAnchorSimTimeNs + offset;
-        Int128 first = Int128.Max(0, ((Int128)inclusive - origin) / PeriodNs - 1);
-        Int128 last = (exclusive - origin) / PeriodNs + 1;
-        if (last - first > (Int128)maximumEvents + 4)
-        { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
-        Int128 At(Int128 cycle) => origin + cycle / Slots.Length * (PeriodNs * Slots.Length) + Slots[(int)(cycle % Slots.Length)];
-        int count = 0;
-        for (Int128 i = first; i <= last; i++)
-        { cancellationToken.ThrowIfCancellationRequested(); if (At(i) >= inclusive && At(i) < exclusive) { count++; } }
-        if (count > maximumEvents) { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
-        for (Int128 i = first; i <= last; i++)
+        Int128 duration = (Int128)PeriodNs * Slots.Length;
+        Int128 LowerBound(Int128 time)
         {
-            cancellationToken.ThrowIfCancellationRequested(); Int128 time = At(i);
-            if (time >= inclusive && time < exclusive) { visitor(new((long)time, kind, (ulong)i)); }
+            Int128 relative = time - origin;
+            if (relative <= 0) { return 0; }
+            Int128 group = relative / duration;
+            long phase = (long)(relative % duration);
+            int left = 0, right = Slots.Length;
+            while (left < right)
+            {
+                int middle = (left + right) / 2;
+                if (Slots[middle] < phase) { left = middle + 1; } else { right = middle; }
+            }
+            return group * Slots.Length + left;
+        }
+        Int128 first = LowerBound(inclusive), last = LowerBound(exclusive);
+        if (last - first > maximumEvents)
+        { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
+        for (Int128 i = first; i < last; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Int128 time = origin + i / Slots.Length * duration + Slots[(int)(i % Slots.Length)];
+            visitor(new((long)time, kind, (ulong)i));
         }
     }
 }

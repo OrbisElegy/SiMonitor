@@ -13,6 +13,30 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    private static void VerifyVisibleVariation()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            window.Settings.CardiacRateEnabled.IsChecked = true;
+            window.Settings.RateVariation.Value = 5;
+            window.Settings.OpticalEnabled.IsChecked = true;
+            window.Settings.OpticalVariation.Value = 1;
+            window.ApplySettings();
+            HashSet<string> hr = [], pr = [], spo2 = [];
+            for (int i = 0; i < 450; i++)
+            {
+                window.Pulse(window.ActiveTimer, 200_000_000);
+                if (i < 100) { continue; }
+                hr.Add(window.MonitorView.NumericTexts[0]);
+                spo2.Add(window.MonitorView.NumericTexts[1]);
+                pr.Add(window.MonitorView.NumericBlocks[3].Text!);
+            }
+            Require(hr.Count >= 3 && spo2.Count >= 2 && pr.Count >= 3 && !hr.Contains("---") && !spo2.Contains("---"),
+                "90-second native displayed HR/PR/SpO2 visibly vary at5%/1 percentage point");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifySeededVitals(DesignPreviewWindow window)
     {
         window.Settings.CardiacRateEnabled.IsChecked = true;
@@ -237,6 +261,7 @@ internal static class DesignPreviewSmokeChecks
     }
     internal static void Verify()
     {
+        VerifyVisibleVariation();
         VerifyStableSlowContours();
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();

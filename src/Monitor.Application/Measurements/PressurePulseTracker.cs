@@ -16,6 +16,7 @@ internal sealed class PressurePulseTracker
     private Pulse[] _pulses = [];
     private long? _first, _lastPeak;
     private long _troughTime, _peakTime;
+    private long _intervalNs = 1_000_000_000;
     private int _previous1, _previous2, _filterCount, _trough, _peak, _amplitude;
     private bool _initialized, _active;
     internal PressurePulseTracker Copy() => (PressurePulseTracker)MemberwiseClone();
@@ -27,6 +28,16 @@ internal sealed class PressurePulseTracker
         if (!_initialized) { _initialized = true; _trough = value; _troughTime = time; return; }
         if (_lastPeak is { } last && time - last >= ExpiryNs) { _amplitude = 0; }
         int threshold = Math.Max(100, _amplitude / 3);
+        if (_lastPeak is { } confirmed)
+        {
+            // Hold normal notch rejection through the expected next pulse.
+            // Missing that pulse must not keep a former large amplitude as
+            // the threshold until the five-second reading expiry.
+            long start = Math.Clamp(_intervalNs * 3 / 2, 400_000_000, 2_000_000_000);
+            long duration = Math.Clamp(_intervalNs, 400_000_000, 1_000_000_000);
+            long remaining = Math.Clamp(duration - (time - confirmed - start), 0, duration);
+            threshold = 100 + (int)FixedPointMath.RoundDivideTiesToEven((Int128)(threshold - 100) * remaining, duration);
+        }
         if (!_active)
         {
             if (value <= _trough) { _trough = value; _troughTime = time; }
@@ -45,6 +56,7 @@ internal sealed class PressurePulseTracker
         // the detector, then retain complete trough-to-peak observations.
         bool contiguous = _lastPeak is { } old && _peakTime - old < ExpiryNs;
         _pulses = contiguous ? _pulses.Append(new Pulse(_peakTime, _peak, trough)).TakeLast(8).ToArray() : [];
+        if (_lastPeak is { } prior) { _intervalNs = Math.Clamp(_peakTime - prior, 200_000_000, 2_000_000_000); }
         _lastPeak = _peakTime; _amplitude = amplitude;
     }
     internal PulsePressureReading Read(long time, WaveformMeasurementStatus inputStatus)

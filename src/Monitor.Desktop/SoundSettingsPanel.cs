@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Audio;
@@ -20,6 +22,16 @@ internal sealed class SoundSettingsPanel : StackPanel
     private MonitorNoticeLevel? _alarmLevel;
     private MonitorSoundTiming _timing = new();
     private bool _monitorRunning;
+    private readonly MonitorAudioPause _audioPause = new();
+    private readonly Func<long> _authorityNow;
+    private readonly DispatcherTimer _pauseTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+    internal event Action? AudioPauseChanged;
+    internal string AudioPauseText { get; private set; } = "";
+    internal MonitorAlarmSoundRequest? PublishedAlarm { get; private set; }
+    internal NumericUpDown PauseSeconds { get; } = new() { Minimum = 1, Maximum = 3600, Value = 120, Increment = 1, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal Button PauseAlarmAudio { get; } = Button("暂停报警声音");
+    internal Button ResumeAlarmAudio { get; } = Button("立即恢复报警声音");
+    internal TextBlock PauseStatus { get; } = Text("报警声音未定时暂停");
     internal MonitorNotice? OutputNotice { get; private set; }
     internal event Action? OutputNoticeChanged;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
@@ -29,8 +41,11 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal Button Stop { get; } = Button("停止试听");
     internal TextBlock Status { get; } = Text("未播放");
 
-    internal SoundSettingsPanel(Func<int, CancellationToken, Task<SoundPreviewResult>>? play = null)
+    internal SoundSettingsPanel(Func<int, CancellationToken, Task<SoundPreviewResult>>? play = null, Func<long>? authorityNow = null)
     {
+        long origin = Stopwatch.GetTimestamp();
+        _authorityNow = authorityNow ?? (() => checked(Stopwatch.GetElapsedTime(origin).Ticks * 100));
+        _pauseTimer.Tick += (_, _) => RefreshAudioPause();
         var playback = new SoundPreviewPlayback(() => new NativeAudioOutputFactory(Path.Combine(AppContext.BaseDirectory, "sim_audio_native.dll")));
         _play = play ?? playback.PlayAsync;
         Margin = new Thickness(20); Spacing = 16;
@@ -47,6 +62,19 @@ internal sealed class SoundSettingsPanel : StackPanel
         Stop.IsEnabled = false; Children.Add(Status);
         Children.Add(AlarmEnabled);
         Children.Add(HeartbeatEnabled);
+        Children.Add(Text("报警声音暂停时长（秒，1–3600）")); Children.Add(PauseSeconds);
+        AutomationProperties.SetName(PauseSeconds, "报警声音暂停时长，秒");
+        var pauseButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        pauseButtons.Children.Add(PauseAlarmAudio); pauseButtons.Children.Add(ResumeAlarmAudio); Children.Add(pauseButtons);
+        ResumeAlarmAudio.IsEnabled = false; Children.Add(PauseStatus);
+        Children.Add(Text("定时暂停只影响报警声音，视觉报警与心搏音继续。倒计时按真实经过时间进行，暂停模拟不会延长；到期恢复当前仍活动的报警。"));
+        PauseAlarmAudio.Click += (_, _) =>
+        {
+            if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds))
+            { PauseStatus.Text = "请输入1–3600的整数秒数；原声音状态保持不变。"; return; }
+            StartAudioPause(checked((int)seconds));
+        };
+        ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
         Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由 ECG 检测到的搏动触发，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
@@ -99,9 +127,22 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         _monitorRunning = false; Publish();
     }
+    internal void StartAudioPause(int seconds)
+    {
+        if (_closed) { return; }
+        _audioPause.Start(_authorityNow(), seconds); _pauseTimer.Start(); RefreshAudioPause();
+    }
+    internal void RefreshAudioPause() => Publish();
     private void Publish()
     {
-        _alarms.SetRequest(_monitorRunning && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null);
+        int remaining = _audioPause.RemainingSeconds(_authorityNow());
+        if (remaining == 0) { _pauseTimer.Stop(); }
+        string text = remaining == 0 ? "" : $"报警声音暂停 · {remaining}s";
+        PauseStatus.Text = remaining == 0 ? "报警声音未定时暂停" : text;
+        ResumeAlarmAudio.IsEnabled = remaining > 0;
+        if (text != AudioPauseText) { AudioPauseText = text; AudioPauseChanged?.Invoke(); }
+        PublishedAlarm = _monitorRunning && remaining == 0 && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null;
+        _alarms.SetRequest(PublishedAlarm);
         _alarms.SetHeartbeatEnabled(_monitorRunning && AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true);
     }
     private async Task RunAlarmsAsync()
@@ -142,7 +183,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (OutputNotice == notice) { return; }
         OutputNotice = notice; OutputNoticeChanged?.Invoke();
     }
-    internal void Close() { _closed = true; StopPreview(); _alarmCancellation?.Cancel(); }
+    internal void Close() { _closed = true; _pauseTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
     private static Button Button(string content) => new()
     {
         Content = content,

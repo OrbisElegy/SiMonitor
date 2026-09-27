@@ -35,7 +35,8 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal MonitorNotice? OutputNotice { get; private set; }
     internal event Action? OutputNoticeChanged;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
-    internal CheckBox HeartbeatEnabled { get; } = new() { Content = "ECG 心搏提示音（与报警声独立重叠）", IsChecked = true };
+    internal CheckBox HeartbeatEnabled { get; } = new() { Content = "心搏提示音（与报警声独立重叠）", IsChecked = true };
+    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Button Audition { get; } = Button("试听三声");
     internal Button Stop { get; } = Button("停止试听");
@@ -62,6 +63,9 @@ internal sealed class SoundSettingsPanel : StackPanel
         Stop.IsEnabled = false; Children.Add(Status);
         Children.Add(AlarmEnabled);
         Children.Add(HeartbeatEnabled);
+        Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
+        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG或PLETH");
+        BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); Publish(); };
         Children.Add(Text("报警声音暂停时长（秒，1–3600）")); Children.Add(PauseSeconds);
         AutomationProperties.SetName(PauseSeconds, "报警声音暂停时长，秒");
         var pauseButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
@@ -75,7 +79,7 @@ internal sealed class SoundSettingsPanel : StackPanel
             StartAudioPause(checked((int)seconds));
         };
         ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
-        Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由 ECG 检测到的搏动触发，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
+        Children.Add(Text("报警音高于日常心搏音，音量滑块同时调整两者。报警按最高活动级别发声；心搏音由所选来源的检测事件触发，不按设置值或平均心率补播；PLETH暂无血氧音高映射，可与报警起音和尾音重叠。暂停模拟时静音。试听三声仅用于检查输出。"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         AlarmEnabled.IsCheckedChanged += async (_, _) =>
         {
@@ -114,13 +118,14 @@ internal sealed class SoundSettingsPanel : StackPanel
         _cancellation?.Cancel(); Stop.IsEnabled = false;
         if (_cancellation is not null) { Status.Text = "正在停止…"; }
     }
-    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null)
+    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null, IReadOnlyList<DetectedPlethPulse>? pulses = null)
     {
         if (_alarms.OutputActive) { SetOutputNotice(null); }
         _monitorRunning = true; _alarmLevel = level; _timing = timing;
         Publish();
         // Advance delivers new measurement events once, never extrapolated HR.
-        if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && beats is { Count: > 0 })
+        if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true &&
+            (BeatSource.SelectedIndex == 0 ? beats is { Count: > 0 } : BeatSource.SelectedIndex == 1 && pulses is { Count: > 0 }))
         { _alarms.SubmitHeartbeat((int)Volume.Value); }
     }
     internal void PauseMonitor()

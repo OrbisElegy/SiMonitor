@@ -188,16 +188,19 @@ internal static class MonitorAlertSpecifications
     {
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true);
         var observed = new List<DetectedEcgBeat>();
+        var observedPulses = new List<DetectedPlethPulse>();
         for (int i = 0; i < 400; i++)
         {
-            session.Advance(25_000_000); observed.AddRange(session.DetectedBeats);
+            session.Advance(25_000_000); observed.AddRange(session.DetectedBeats); observedPulses.AddRange(session.DetectedPulses);
         }
         Check.That(observed.Count >= 8 && observed.Select(b => b.PeakTimeNs).Distinct().Count() == observed.Count,
             "acquired ECG emits actual detections once rather than extrapolating rate");
         Check.That(observed.All(b => b.ConfirmedAtNs > b.PeakTimeNs), "detector confirmation is not a fabricated zero-latency event");
+        Check.That(observedPulses.Count >= 8 && observedPulses.Select(p => p.PeakTimeNs).Distinct().Count() == observedPulses.Count, "session delivers acquired pulses once");
         var source = PhysiologyIllustrationSource.Create(); var owner = LiveWaveformMeasurements.CreateIllustration();
         var flat = LiveWaveformMeasurements.CreateIllustration();
-        int events = 0;
+        var noPerfusion = LiveWaveformMeasurements.CreateIllustration();
+        int events = 0, pulseEvents = 0, independentPulses = 0;
         for (int tick = 1; tick <= 40; tick++)
             foreach (var wire in source.AdvanceTo(tick * 200_000_000L, 50, 1, 100))
             {
@@ -208,30 +211,43 @@ internal static class MonitorAlertSpecifications
                     Planes = block.Planes.Select(p => p.ChannelId == PhysiologyIllustrationSource.ChannelId(0)
                         ? p with { Samples = new short[p.Samples.Count] } : p).ToArray()
                 };
-                flat.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(zero), out var noBeats);
+                flat.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(zero), out var noBeats, out var independent);
+                independentPulses += independent.Count;
                 Check.That(noBeats.Count == 0, "flat acquired ECG produces no beep despite unchanged generator heart-rate settings");
-                owner.Consume(wire, out var beats); events += beats.Count;
+                var flatPleth = block with
+                {
+                    Planes = block.Planes.Select(p => p.ChannelId == PhysiologyIllustrationSource.ChannelId(2)
+                        ? p with { Samples = new short[p.Samples.Count] } : p).ToArray()
+                };
+                noPerfusion.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(flatPleth), out var electrical, out var absentPulses);
+                Check.That(absentPulses.Count == 0, "flat PLETH cannot borrow ECG beats for pulse cues");
+                owner.Consume(wire, out var beats, out var pulses); events += beats.Count; pulseEvents += pulses.Count;
+                Check.That(electrical.SequenceEqual(beats), "absent PLETH preserves independent ECG events");
                 var restored = LiveWaveformMeasurements.Restore(before);
-                restored.Consume(wire, out var replay);
+                restored.Consume(wire, out var replay, out var replayPulses);
+                Check.That(pulses.SequenceEqual(replayPulses), "checkpoint preserves pulse confirmation identity");
                 Check.That(beats.SequenceEqual(replay), "checkpoint detector continuation preserves confirmed event identity");
-                if (beats.Count > 0)
+                if (beats.Count > 0 || pulses.Count > 0)
                 {
                     var broken = block with { Planes = block.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(6)).ToArray() };
                     var atomic = LiveWaveformMeasurements.Restore(before);
                     IReadOnlyList<DetectedEcgBeat> leaked = [];
+                    IReadOnlyList<DetectedPlethPulse> leakedPulses = [];
                     bool lateFailure = false;
-                    try { atomic.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(broken), out leaked); }
+                    try { atomic.Consume(Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.EncodeRaw(broken), out leaked, out leakedPulses); }
                     catch (ArgumentException) { lateFailure = true; }
-                    Check.That(lateFailure && leaked.Count == 0, "late CVP rejection cannot publish earlier ECG detections");
-                    atomic.Consume(wire, out var retry);
+                    Check.That(lateFailure && leaked.Count == 0 && leakedPulses.Count == 0, "late CVP rejection cannot publish earlier ECG detections");
+                    atomic.Consume(wire, out var retry, out var retryPulses);
+                    Check.That(retryPulses.SequenceEqual(pulses), "retry publishes pulses only after full packet commit");
                     Check.That(retry.SequenceEqual(beats), "valid retry publishes detector events once after rollback");
                 }
                 IReadOnlyList<DetectedEcgBeat> rejected = beats;
+                IReadOnlyList<DetectedPlethPulse> rejectedPulses = pulses;
                 bool failed = false;
-                try { owner.Consume(wire, out rejected); } catch (ArgumentException) { failed = true; }
-                Check.That(failed && rejected.Count == 0, "rejected duplicate packet cannot leak or replay a beat");
+                try { owner.Consume(wire, out rejected, out rejectedPulses); } catch (ArgumentException) { failed = true; }
+                Check.That(failed && rejected.Count == 0 && rejectedPulses.Count == 0, "rejected duplicate packet cannot leak or replay a beat");
             }
-        Check.That(events > 0, "real detector events exercised");
+        Check.That(events > 0 && pulseEvents > 0 && independentPulses == pulseEvents, "pulse detection is independent of missing ECG events");
     }
     private static void CriticalDurationSurvivesRotationAndClearsIndependently()
     {

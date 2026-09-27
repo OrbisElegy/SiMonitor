@@ -204,7 +204,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             _session.Advance(deltaNs); _monitor.InvalidateVisual();
             MonitorView.Refresh();
-            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats);
+            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats, _session.DetectedPulses);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

@@ -169,7 +169,10 @@ internal static class DesignPreviewSmokeChecks
         long authority = 0;
         var timed = new SoundSettingsPanel(authorityNow: () => authority);
         timed.UpdateAlarm(MonitorNoticeLevel.Warning, new());
+        Require(timed.BeatSource.SelectedIndex == 0, "default beat source remains ECG");
         timed.StartAudioPause(120);
+        timed.BeatSource.SelectedIndex = 1;
+        Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pulse source selection preserves independent audio pause");
         Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pause suppresses alarm request and shows countdown");
         timed.UpdateAlarm(MonitorNoticeLevel.Critical, new());
         Require(timed.PublishedAlarm is null && timed.HeartbeatEnabled.IsChecked == true, "new critical condition is retained while heartbeat preference stays independent");

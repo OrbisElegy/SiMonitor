@@ -27,7 +27,8 @@ public sealed class LiveWaveformMeasurements
     public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration)
     {
         ArgumentNullException.ThrowIfNull(calibration);
-        _calibration = calibration; _optical = NewOptical();
+        _calibration = calibration;
+        _optical = NewOptical();
     }
     public static LiveWaveformMeasurements CreateIllustration() => new(new(PulseOximeterIllustrationSource.ModelId,
         [new(400000, 100000), new(1600000, 70000)]));
@@ -38,8 +39,11 @@ public sealed class LiveWaveformMeasurements
     // Publish events only after the entire acquired packet commits; Read and
     // checkpoint restoration never replay a previous batch of cues.
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats)
+        => Consume(wire, out detectedBeats, out _);
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses)
     {
         detectedBeats = [];
+        detectedPulses = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         if (block.DurationNs != 200_000_000) { throw new ArgumentException("LiveMeasurement.BlockDuration", nameof(wire)); }
         long sampleTime = checked(block.StartSimTimeNs + block.DurationNs - 1);
@@ -60,14 +64,27 @@ public sealed class LiveWaveformMeasurements
         var pa = MeanPressureMeasurement.Restore(_pa.Capture());
         var cvp = MeanPressureMeasurement.Restore(_cvp.Capture());
         var optical = red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
-        var beats = ecg.Consume(wire); resp.Consume(wire); pleth.Consume(wire); co2.Consume(wire);
+        var beats = ecg.Consume(wire);
+        resp.Consume(wire);
+        var pulses = pleth.Consume(wire);
+        co2.Consume(wire);
         if (red is not null) { optical.Consume(wire); }
-        abp.Consume(wire); pa.Consume(wire); cvp.Consume(wire);
+        abp.Consume(wire);
+        pa.Consume(wire);
+        cvp.Consume(wire);
         var snapshot = new LiveMeasurementSnapshot(sampleTime, ecg.Read(sampleTime), resp.Read(sampleTime),
             pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime));
-        _ecg = ecg; _resp = resp; _pleth = pleth; _co2 = co2; _optical = optical; _lastSampleTime = sampleTime;
-        _abp = abp; _pa = pa; _cvp = cvp;
+        _ecg = ecg;
+        _resp = resp;
+        _pleth = pleth;
+        _co2 = co2;
+        _optical = optical;
+        _lastSampleTime = sampleTime;
+        _abp = abp;
+        _pa = pa;
+        _cvp = cvp;
         detectedBeats = beats;
+        detectedPulses = pulses;
         return snapshot;
     }
 
@@ -114,6 +131,17 @@ public sealed class LiveWaveformMeasurements
             ImpedanceRespirationMeasurement.Checkpoint resp, PlethPulseRateMeasurement.Checkpoint pleth,
             CapnographyMeasurement.Checkpoint co2, OpticalSaturationAcquisition.Checkpoint optical,
             MeanPressureMeasurement.Checkpoint abp, MeanPressureMeasurement.Checkpoint pa, MeanPressureMeasurement.Checkpoint cvp, long? last)
-        { Calibration = calibration; Ecg = ecg; Resp = resp; Pleth = pleth; Co2 = co2; Optical = optical; Abp = abp; Pa = pa; Cvp = cvp; LastSampleTime = last; }
+        {
+            Calibration = calibration;
+            Ecg = ecg;
+            Resp = resp;
+            Pleth = pleth;
+            Co2 = co2;
+            Optical = optical;
+            Abp = abp;
+            Pa = pa;
+            Cvp = cvp;
+            LastSampleTime = last;
+        }
     }
 }

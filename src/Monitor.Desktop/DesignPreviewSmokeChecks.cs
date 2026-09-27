@@ -338,6 +338,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyDisorganizedProductStyles();
         VerifySvtProductStyles();
         VerifyVtProductStyles();
+        VerifyAutomaticRhythmProductStyles();
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -626,6 +627,62 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyAutomaticRhythmProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 31, 32, 33, 34, 35, 36, 33 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "automatic rhythm clears prior disorganization and variant state");
+                if (choice == 21) { continue; }
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                int expected = choice is 31 or 32 ? 100000 : choice == 36 ? 50000 : 80000;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - expected) <= 5000,
+                    $"automatic rhythm acquired rate choice={choice}: {reading.HeartRate}");
+                Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid &&
+                    reading.AbpMean.MeanCentiMmHg is > 5000 and < 18000,
+                    "automatic rhythm retains sampled perfusion");
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.Aar == (choice == 31) && pair.Ecg.Aar == pair.Physiology.Aar &&
+                    pair.Physiology.Ajr == (choice == 32) && pair.Ecg.Ajr == pair.Physiology.Ajr &&
+                    pair.Physiology.Aivr == (choice is >= 33 and <= 35) && pair.Ecg.Aivr == pair.Physiology.Aivr &&
+                    pair.Physiology.AivrFusion == (choice == 34) && pair.Ecg.AivrFusion == pair.Physiology.AivrFusion &&
+                    pair.Physiology.AivrCapture == (choice == 35) && pair.Ecg.AivrCapture == pair.Physiology.AivrCapture &&
+                    pair.Physiology.AtrialEscape == (choice == 36) && pair.Ecg.AtrialEscape == pair.Physiology.AtrialEscape,
+                    "monitor and paper resolve exactly the selected automatic rhythm");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "automatic rhythm cached samples match live electrical and perfusion source");
+                if (choice is 34 or 35)
+                {
+                    Require(duration == 12_000_000_000, "AIVR preview includes the full sixteen-beat group");
+                    var regular = DesignPreviewWindow.CreateStylePreview(33, 0, 0);
+                    while (regular.SimulationTimeNs < source.SimulationTimeNs) { regular.Advance(50_000_000); }
+                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                        cached.Abp.SequenceEqual(regular.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        "fusion/capture preview differs electrically while retaining existing fixed perfusion");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-automatic-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "automatic rhythm paper has complete continuous acquisition");
+                window.SelectPage(0);
+            }
+            var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only rate controls cannot silently replace automatic rhythm timing");
+            window.Settings.CardiacRateEnabled.IsChecked = false;
+            window.Settings.EjectionSelection = 1; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "PVC-only ejection rejects atomically for automatic rhythms");
         }
         finally { window.Close(); }
     }

@@ -9,10 +9,35 @@ internal static class VtPerfusionSpecifications
     private const long Q = FixedPointMath.Q32One;
     public static Specification[] All =>
     [
+        new(nameof(VtFillingLimitsPressureWithoutChangingOtherRhythms), VtFillingLimitsPressureWithoutChangingOtherRhythms),
         new(nameof(VtPerfusionPreservesSupportsAndBoundsOverlap), VtPerfusionPreservesSupportsAndBoundsOverlap),
         new(nameof(VtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff), VtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff),
         new(nameof(VtVenousAndRespiratoryComponentsRespectIndependentClocks), VtVenousAndRespiratoryComponentsRespectIndependentClocks),
     ];
+    private static void VtFillingLimitsPressureWithoutChangingOtherRhythms()
+    {
+        var plan = VentricularTachycardiaReference.CreatePlan();
+        var corrected = VascularPressureSource.Create(plan, VtPerfusionReference.Arterial);
+        var old = VascularPressureSource.Create(plan, VtPerfusionReference.Arterial with
+        { EjectionEquilibriumCentiMmHg = 30000, Morphology = VtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
+        var before = new List<double>(); var after = new List<double>();
+        for (long t = 300_000_000_000; t < 300_375_000_000; t += 1_000_000)
+        { before.Add(old.EvaluateAt(t) / (double)Q / 100); after.Add(corrected.EvaluateAt(t) / (double)Q / 100); }
+        Console.WriteLine($"VT steady ABP old {before.Min():F2}-{before.Max():F2}, filling-limited {after.Min():F2}-{after.Max():F2} mmHg");
+        Check.That(before.Max() > 220 && after.Max() < 160 && after.Min() > 60 && after.Max() - after.Min() > 5,
+            "fixed VT no longer pumps full reference volume at fast rate");
+        Check.That(FillingLimitedEjection.StrokeVolumePermille(375_000_000) > SvtPerfusionReference.StrokeVolumePermille(300_000_000),
+            "VT uses its own filling interval rather than SVT gain");
+        Check.That(FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000 &&
+            FlutterOneToOnePerfusionReference.Arterial.EjectionEquilibriumCentiMmHg == 30000,
+            "unrelated preset inputs remain unchanged");
+        foreach (long invalid in new[] { -1L, 240_000_000L, 800_000_001L })
+        {
+            bool rejected = false;
+            try { FillingLimitedEjection.StrokeVolumePermille(invalid); } catch (ArgumentOutOfRangeException) { rejected = true; }
+            Check.That(rejected, "unsupported filling intervals reject rather than inventing zero-flow extrapolation");
+        }
+    }
     private static void VtPerfusionPreservesSupportsAndBoundsOverlap()
     {
         var plan = VentricularTachycardiaReference.CreatePlan();

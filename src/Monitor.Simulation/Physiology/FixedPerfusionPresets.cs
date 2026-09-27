@@ -12,11 +12,11 @@ public static class FixedPerfusionPresets
     // All full supports fit the750/800/1200ms examples. Preserve the existing
     // amplitudes, input durations and finite runoff; only overlap budgets vary.
     public static FixedPerfusionPreset SinglePulse { get; } = new(
-        VtPerfusionReference.Pleth,
-        VtPerfusionReference.Arterial with
-        { Morphology = VtPerfusionReference.Arterial.Morphology! with { MaximumPulseOverlap = 1 } },
-        VtPerfusionReference.Pulmonary with
-        { Morphology = VtPerfusionReference.Pulmonary.Morphology! with { MaximumPulseOverlap = 1 } },
+        SvtPerfusionReference.ReferencePleth,
+        SvtPerfusionReference.ReferenceArterial with
+        { Morphology = SvtPerfusionReference.ReferenceArterial.Morphology! with { MaximumPulseOverlap = 1 } },
+        SvtPerfusionReference.ReferencePulmonary with
+        { Morphology = SvtPerfusionReference.ReferencePulmonary.Morphology! with { MaximumPulseOverlap = 1 } },
         VtPerfusionReference.Venous);
 
     // At minimum RR600ms the640ms PA support may overlap its successor.

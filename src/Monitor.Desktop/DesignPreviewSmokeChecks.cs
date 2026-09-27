@@ -360,9 +360,19 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Alerts.WarningHeartRate.Value = 60;
             window.Settings.Alerts.CriticalHeartRate.Value = 70;
             window.MonitorView.RefreshReadings(liveReading);
-            Require(window.MonitorView.HighestNotice == MonitorNoticeLevel.Critical && window.MonitorView.Notice.Text == "Critical · HR 极高",
+            Require(window.MonitorView.HighestNotice == MonitorNoticeLevel.Critical && window.MonitorView.Notice.Text == "HR 极高（00:00）",
                 "valid measured HR triggers the configured critical threshold and one banner");
+            window.Settings.Sound.StartAudioPause(120);
+            for (int i = 0; i < 20; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(window.MonitorView.Notice.Text == "HR 极高（00:01）", "audio pause preserves critical elapsed counter");
             Capture(window, "ui-preview-critical.png");
+            var region = window.MonitorView.NoticeRegion;
+            var center = region.TranslatePoint(new Point(region.Bounds.Width / 2, 0), window.MonitorView)!.Value;
+            // Star-column layout rounding may shift the center by one layout unit.
+            Require(Math.Abs(center.X - window.MonitorView.Bounds.Width / 2) <= 1 && region.Bounds.Width <= 480 &&
+                region.Bounds.Width < window.MonitorView.Bounds.Width * .7 && window.MonitorView.Notice.TextAlignment == Avalonia.Media.TextAlignment.Center,
+                $"bounded alarm region and its text are centered independently of side labels: center={center.X}, view={window.MonitorView.Bounds.Width}, region={region.Bounds.Width}, alignment={window.MonitorView.Notice.TextAlignment}");
+            window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             window.Settings.Alerts.HeartRateEnabled.IsChecked = false;
             foreach (int level in new[] { 1, 2, 3, 4 })
             {

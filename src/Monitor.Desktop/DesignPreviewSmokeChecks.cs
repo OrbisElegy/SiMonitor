@@ -334,6 +334,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
+        VerifyBlockProductStyles();
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -625,6 +626,32 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyBlockProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            // Alternate independent escape clocks and conducted rhythms to catch stale state.
+            foreach (int choice in new[] { 19, 10, 18, 11, 12, 13, 14, 15, 16, 17, 10 })
+            {
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "block presets reset incompatible prior rhythm state atomically");
+                for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                Require(window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.Valid, "block ECG produces measured ventricular rate");
+                if (choice >= 18)
+                {
+                    int expected = choice == 18 ? 50000 : 30000;
+                    Require(Math.Abs(window.Session.Measurements.HeartRate.MilliBeatsPerMinute!.Value - expected) <= 1000, "complete block follows independent escape rate");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-block-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "block twelve-lead capture is complete");
+                window.SelectPage(0);
+            }
+            var live = window.Session; window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus rate override cannot overwrite block timing");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyPrebuiltStyles()
     {
         int count = 0;
@@ -637,7 +664,7 @@ internal static class DesignPreviewSmokeChecks
                     if (valid)
                     {
                         var data = StylePreviewCatalog.Get(ecg, resp, ejection); count++;
-                        Require(data.Ecg.Length == 750 && data.Abp.Length == 375 && ReferenceEquals(data, StylePreviewCatalog.Get(ecg, resp, ejection)),
+                        Require(data.Ecg.Length == StylePreviewCatalog.DurationNs(ecg) / 4_000_000 && data.Abp.Length == StylePreviewCatalog.DurationNs(ecg) / 8_000_000 && ReferenceEquals(data, StylePreviewCatalog.Get(ecg, resp, ejection)),
                             "every valid combination loads shared prebuilt samples without simulation");
                     }
                     else
@@ -661,6 +688,17 @@ internal static class DesignPreviewSmokeChecks
             var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
             Require(pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern && pair.Physiology.VentricularConductionRatio == pair.Ecg.VentricularConductionRatio,
                 "monitor and twelve-lead share atrial rhythm and conduction ratio");
+        }
+        for (int choice = 10; choice < 20; choice++)
+        {
+            var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+            var cachedBlock = StylePreviewCatalog.Get(choice, 0, 0);
+            Require(cachedBlock.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)) &&
+                cachedBlock.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)), "block previews match actual ECG and ejection waveforms");
+            var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+            Require(pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern && pair.Physiology.ConductedBeatsPerGroup == pair.Ecg.ConductedBeatsPerGroup &&
+                pair.Physiology.IndependentVentricularPeriodMilliseconds == pair.Ecg.IndependentVentricularPeriodMilliseconds,
+                "monitor and paper share block schedule and escape clock");
         }
         Require(StylePreviewCatalog.Respiration(1).SequenceEqual(DesignPreviewWindow.CreateRespirationPreview(1)), "long respiration asset preserves full authored cycle");
     }

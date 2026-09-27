@@ -13,7 +13,7 @@ namespace Monitor.Desktop;
 
 internal sealed class DesignPreviewSettings : UserControl
 {
-    private static readonly string[] EcgChoices = ["窦性参考", "窦性停搏（无逸搏）", "单形室早", "窦性心律不齐", "房性早搏", "交界性早搏", "房颤（粗波）", "房颤（细波）", "房扑（2:1下传）", "房扑（4:1下传）"];
+    private static readonly string[] EcgChoices = ["窦性参考", "窦性停搏（无逸搏）", "单形室早", "窦性心律不齐", "房性早搏", "交界性早搏", "房颤（粗波）", "房颤（细波）", "房扑（2:1下传）", "房扑（4:1下传）", "二度Ⅰ型4:3", "二度Ⅰ型3:2", "二度Ⅰ型5:4", "二度Ⅱ型3:2（窄QRS）", "二度Ⅱ型4:3（窄QRS）", "二度2:1（不分型）", "二度Ⅱ型4:3＋RBBB", "二度Ⅱ型4:3＋LBBB", "三度AVB（交界性逸搏）", "三度AVB（室性逸搏）"];
     internal static int EcgChoiceCount => EcgChoices.Length;
     private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量"];
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];
@@ -185,7 +185,7 @@ internal sealed class DesignPreviewSettings : UserControl
     }
     private void OpenChooser(string title, int channel, string[] choices, Func<int> read, Action<int> write, string? activeGroup = null, bool focusSelection = false)
     {
-        string Group(int i) => channel == 0 ? i switch { 0 or 1 or 3 => "窦性心律", 4 or 6 or 7 or 8 or 9 => "房性心律", 5 => "交界性心律", _ => "室性心律" }
+        string Group(int i) => channel == 0 ? i switch { 0 or 1 or 3 => "窦性心律", 4 or 6 or 7 or 8 or 9 => "房性心律", 5 => "交界性心律", >= 10 and <= 19 => "房室传导阻滞", _ => "室性心律" }
             : channel == 1 ? i == 0 ? "规则呼吸" : "异常呼吸示意" : i == 0 ? "节律相关" : "异常射血示意";
         var shell = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         var navigation = new WrapPanel { Orientation = Orientation.Horizontal };

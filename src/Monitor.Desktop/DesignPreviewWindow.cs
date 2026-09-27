@@ -217,8 +217,8 @@ internal sealed class DesignPreviewWindow : Window
     {
         if (ecg < 0 || ecg >= DesignPreviewSettings.EcgChoiceCount || resp is < 0 or > 3 || ejection is < 0 or > 3)
         { throw new ArgumentOutOfRangeException(nameof(ecg), "Preview.InvalidStyle"); }
-        var config = ecg switch { 1 => PhysiologyDemoConfiguration.SinusArrestPreset, 2 => PhysiologyDemoConfiguration.PrematureVentricular, 3 => PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 4 => PhysiologyDemoConfiguration.PrematureAtrial, 5 => PhysiologyDemoConfiguration.PrematureJunctional, 6 => PhysiologyDemoConfiguration.Fibrillation(), 7 => PhysiologyDemoConfiguration.Fibrillation(fine: true), 8 => PhysiologyDemoConfiguration.Flutter(2), 9 => PhysiologyDemoConfiguration.Flutter(4), _ => PhysiologyDemoConfiguration.Default };
-        var ecgConfig = ecg switch { 1 => ProjectedEcgDemoConfiguration.SinusArrestPreset, 2 => ProjectedEcgDemoConfiguration.PrematureVentricular, 3 => ProjectedEcgDemoConfiguration.SinusArrhythmiaPreset, 4 => ProjectedEcgDemoConfiguration.PrematureAtrial, 5 => ProjectedEcgDemoConfiguration.PrematureJunctional, 6 => ProjectedEcgDemoConfiguration.Fibrillation(), 7 => ProjectedEcgDemoConfiguration.Fibrillation(fine: true), 8 => ProjectedEcgDemoConfiguration.Flutter(2), 9 => ProjectedEcgDemoConfiguration.Flutter(4), _ => ProjectedEcgDemoConfiguration.Default };
+        var config = ecg switch { 1 => PhysiologyDemoConfiguration.SinusArrestPreset, 2 => PhysiologyDemoConfiguration.PrematureVentricular, 3 => PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 4 => PhysiologyDemoConfiguration.PrematureAtrial, 5 => PhysiologyDemoConfiguration.PrematureJunctional, 6 => PhysiologyDemoConfiguration.Fibrillation(), 7 => PhysiologyDemoConfiguration.Fibrillation(fine: true), 8 => PhysiologyDemoConfiguration.Flutter(2), 9 => PhysiologyDemoConfiguration.Flutter(4), >= 10 and <= 17 => SecondDegreeBlockPreset.Physiology(ecg - 10), 18 => PhysiologyDemoConfiguration.JunctionalEscape, 19 => PhysiologyDemoConfiguration.VentricularEscape, _ => PhysiologyDemoConfiguration.Default };
+        var ecgConfig = ecg switch { 1 => ProjectedEcgDemoConfiguration.SinusArrestPreset, 2 => ProjectedEcgDemoConfiguration.PrematureVentricular, 3 => ProjectedEcgDemoConfiguration.SinusArrhythmiaPreset, 4 => ProjectedEcgDemoConfiguration.PrematureAtrial, 5 => ProjectedEcgDemoConfiguration.PrematureJunctional, 6 => ProjectedEcgDemoConfiguration.Fibrillation(), 7 => ProjectedEcgDemoConfiguration.Fibrillation(fine: true), 8 => ProjectedEcgDemoConfiguration.Flutter(2), 9 => ProjectedEcgDemoConfiguration.Flutter(4), >= 10 and <= 17 => SecondDegreeBlockPreset.Ecg(ecg - 10), 18 => ProjectedEcgDemoConfiguration.JunctionalEscape, 19 => ProjectedEcgDemoConfiguration.VentricularEscape, _ => ProjectedEcgDemoConfiguration.Default };
         config = config with
         {
             RespiratoryPattern = resp switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
@@ -235,11 +235,13 @@ internal sealed class DesignPreviewWindow : Window
         return (config, ecgConfig);
     }
     internal static LocalMonitorPreviewSession CreateStylePreview(int ecg, int resp, int ejection) =>
-        CreateThumbnailSource(ResolveStyle(ecg, resp, ejection).Physiology);
-    private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration)
+        CreateThumbnailSource(ResolveStyle(ecg, resp, ejection).Physiology, StylePreviewCatalog.DurationNs(ecg));
+    private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration, long durationNs)
     {
         var preview = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default());
-        for (int i = 0; i < 108; i++) { preview.Advance(50_000_000); }
+        // Include presentation latency before taking the requested complete interval.
+        long end = Math.Max(5_400_000_000, durationNs + LocalMonitorPreviewSession.PresentationLatencyNs + 200_000_000);
+        while (preview.SimulationTimeNs < end) { preview.Advance(50_000_000); }
         return preview;
     }
     internal static (long TimeNs, double Value)[] CreateRespirationPreview(int resp)

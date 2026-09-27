@@ -1,5 +1,5 @@
 {
-  "id": "VtPerfusionIllustration@1",
+  "id": "VtPerfusionIllustration@2",
   "extends": "MonomorphicVtIllustration@1",
   "authored_choices": {
     "ventricular_period_ms": 375,
@@ -19,7 +19,7 @@
       "CVP_each_component": 1
     },
     "resp_cardiac_artifact_support_ms": 375,
-    "input_strengths": "Existing fixed demo ejection strengths; not calibrated VT filling, compensation or pressure"
+    "input_strengths": "FillingLimitedEjection at375ms:547permille of reference input; no calibrated VT pump response"
   },
   "limitations": [
     "CVP retains independent atrial a and ventricular c/x/v/y clocks, no closed-valve cannon a model",
@@ -28,6 +28,7 @@
     "Both demos now share VT ECG timing; Resp/CO2 unchanged unless cardiac artifact requested"
   ],
   "verification": [
+    "VtFillingLimitsPressureWithoutChangingOtherRhythms",
     "VtPerfusionPreservesSupportsAndBoundsOverlap",
     "VtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
     "VtVenousAndRespiratoryComponentsRespectIndependentClocks",

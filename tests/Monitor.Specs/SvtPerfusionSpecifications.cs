@@ -35,8 +35,7 @@ internal static class SvtPerfusionSpecifications
             "reproduced near300mmHg defect is removed at source while retaining pulsatility");
         var stopped = VascularPressureSource.Create(plan with { VentricularMechanicalEnabled = false }, SvtPerfusionReference.Arterial);
         Check.That(stopped.EvaluateAt(20_000_000_000) < stopped.EvaluateAt(5_000_000_000), "no ejection still runs down without a pressure floor clamp");
-        Check.That(VtPerfusionReference.Arterial.EjectionEquilibriumCentiMmHg == 30000 &&
-            FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000,
+        Check.That(FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000,
             "SVT correction cannot silently alter unrelated fixed presets");
     }
     private static void SvtPerfusionPreservesSupportsAndBoundsOverlap()

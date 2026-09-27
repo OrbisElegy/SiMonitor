@@ -11,8 +11,8 @@ internal static class PhysiologyIllustrationSpecifications
 {
     // Captured from632acca before the refactor: concatenate returned raw wire
     // envelopes from40 advances of200ms (30 completed blocks after delay).
-    // SVT golden is updated for the documented filling-limited correction;
-    // the other thirteen remain the original pre-refactor outputs.
+    // SVT/VT goldens reflect the documented filling-limited corrections;
+    // the other twelve remain the original pre-refactor outputs.
     // Independent expected bytes guard against shared test/source drift.
     public static Specification[] All =>
     [
@@ -51,7 +51,7 @@ internal static class PhysiologyIllustrationSpecifications
             ("AarPreset", PhysiologyDemoConfiguration.AarPreset, 30, "240e79245bf4736c11b6d782982812c5b50c447592d0d94cee0f3267f9c64dce"),
             ("AjrPreset", PhysiologyDemoConfiguration.AjrPreset, 30, "01a473cad6b807d769519a45dcc04c7341d8617d6b9c310f4eba24f69f64f294"),
             ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "227cc44d118c39fb186017ab19918f74da2bb9b8229a00f598081643a033357b"),
-            ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "88157f5e1a59b4e69aa47b8b2fc844ca8562760ace3af0ed4bca2922d1f6d1cb"),
+            ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "24cdef032803730b1862bc8604cf4b509c3a806621bad261f813ecc6a66489e1"),
             ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "1e3020ff3b1ffc6ffa93937eabab421a425c514feec76140aed370b9f2316630"),
             ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "c4ae9df61ddf8ec848e74e7b19e096566d620dbf6e4acdbad29a6dbfcd721565"),
             ("PrematureAtrial", PhysiologyDemoConfiguration.PrematureAtrial, 30, "345d15d40686708b415f206ca172a39f567952a98625e073a6be6cedec5f1d03"),

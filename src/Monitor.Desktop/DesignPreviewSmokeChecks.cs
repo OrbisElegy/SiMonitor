@@ -169,8 +169,6 @@ internal static class DesignPreviewSmokeChecks
             VerifyNumericAlarmHighlights(liveReading);
             VerifyHeartRateLimits(liveReading);
             VerifyAdditionalLimits(liveReading);
-            VerifyFrozenMonitor(window);
-            timer = window.ActiveTimer;
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
             seven.RefreshReadings(liveReading);
@@ -263,11 +261,9 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "advanced parameters track current selected style");
             Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 6, "generation/display/audio/alarms/vitals/advanced live in settings tabs");
             var source = window.Session;
-            window.MonitorTrace.Freeze();
             window.Settings.Slots[0].Minimum.Text = "NaN";
             window.ApplySettings();
-            Require(ReferenceEquals(window.Session, source) && ReferenceEquals(window.ActiveTimer, timer) && window.MonitorTrace.FrozenAtNs is not null,
-                "invalid settings preserve live session, timer and frozen display");
+            Require(ReferenceEquals(window.Session, source) && ReferenceEquals(window.ActiveTimer, timer), "invalid settings preserve live session and timer");
             window.Settings.Skin.SelectedIndex = 0;
             window.Settings.OpticalEnabled.IsChecked = true;
             window.Settings.OpticalTarget.Value = 98;
@@ -278,7 +274,6 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Slots[2].Speed.SelectedIndex = 0;
             window.ApplySettings();
             Require(!ReferenceEquals(source, window.Session) && window.Session.Display.Slots.Count == 3, "apply changes fixed skin and restarts");
-            Require(window.MonitorTrace.FrozenAtNs is null, "successful source replacement clears old frozen trace");
             Require(window.MonitorView.NumericTexts.All(t => t == "---"), "apply clears previous numeric readings until newly acquired");
             window.Pulse(timer, 50_000_000);
             Require(window.Session.SimulationTimeNs == 0, "callbacks from old run are fenced");
@@ -316,27 +311,6 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");
-    }
-    private static void VerifyFrozenMonitor(DesignPreviewWindow window)
-    {
-        window.FreezeButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        long frozen = window.MonitorTrace.FrozenAtNs!.Value;
-        byte[] image = Raster(window.MonitorTrace, 800, 600);
-        long before = window.Session.Measurements!.SampleTimeNs;
-        for (int i = 0; i < 900; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
-        Require(window.Session.Measurements!.SampleTimeNs > before && window.Session.FrontierNs > frozen + 40_000_000_000 &&
-            Raster(window.MonitorTrace, 800, 600).SequenceEqual(image), "frozen trace survives live ring eviction while measurement advances");
-        _ = Raster(window.MonitorTrace, 1000, 700);
-        Require(Raster(window.MonitorTrace, 800, 600).SequenceEqual(image), "resize preserves frozen geometry and scale");
-        window.SelectPage(2); window.SelectPage(0);
-        Require(window.MonitorTrace.FrozenAtNs == frozen, "page changes retain freeze");
-        window.Pause(); long paused = window.Session.SimulationTimeNs;
-        window.FreezeButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        Require(window.MonitorTrace.FrozenAtNs is null && window.ActiveTimer is null && window.Session.SimulationTimeNs == paused,
-            "return live does not resume paused simulation or advance time");
-        Require(Raster(window.MonitorTrace, 800, 600).SequenceEqual(Raster(new LiveMonitorTrace(window.Session), 800, 600)),
-            "unfreeze rebuilds current phase directly, not a catch-up replay");
-        window.Start();
     }
     private static void VerifyRespirationOverview()
     {

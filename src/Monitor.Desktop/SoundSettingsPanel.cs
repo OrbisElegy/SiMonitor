@@ -22,6 +22,13 @@ internal sealed class SoundSettingsPanel : StackPanel
     private MonitorNoticeLevel? _alarmLevel;
     private MonitorSoundTiming _timing = new();
     private bool _monitorRunning;
+    private readonly MonitorBeatSource _source = new();
+    private LiveMeasurementSnapshot? _sourceMeasurement;
+    private readonly TextBlock _sourceStatus = Text("当前心搏音源：ECG");
+    private readonly TextBlock _sourceHistory = Text("");
+    internal event Action? BeatSourceChanged;
+    internal string BeatSourceLabel => $"心搏音源：{OriginName(_source.Current)}{(BeatSource.SelectedIndex == 2 ? " · 自动" : "")}";
+    private static string OriginName(MonitorBeatOrigin source) => source switch { MonitorBeatOrigin.Ecg => "ECG", MonitorBeatOrigin.Pleth => "PLETH", _ => "等待有效信号" };
     private readonly MonitorBeatPitch _pitch = new();
     internal int BeatPitchPercent => PitchSource.SelectedIndex == 1 ? _pitch.SaturationPercent : 97;
     internal MonitorNotice? PitchNotice => AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && PitchSource.SelectedIndex == 1 && _pitch.Unavailable
@@ -41,7 +48,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal event Action? OutputNoticeChanged;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
     internal CheckBox HeartbeatEnabled { get; } = new() { Content = "心搏提示音（与报警声独立重叠）", IsChecked = true };
-    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
+    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏", "自动 · ECG优先" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider HeartbeatVolume { get; } = new() { Minimum = 0, Maximum = 100, Value = 100, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal int EffectiveHeartbeatVolume => (int)(Volume.Value * HeartbeatVolume.Value / 100);
@@ -78,8 +85,11 @@ internal sealed class SoundSettingsPanel : StackPanel
         };
         Children.Add(Text("心搏相对音量100%为原始音量；仅调整心搏音，不改变报警音。主音量仍控制全部声音。"));
         Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
-        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG或PLETH");
-        BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); Publish(); };
+        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG、PLETH或自动");
+        BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); UpdateBeatSource(); Publish(); };
+        Children.Add(_sourceStatus);
+        Children.Add(new Expander { Header = "本次模拟音源切换记录（最近64条）", Content = _sourceHistory });
+        Children.Add(Text("自动模式优先有效ECG；改用稳定的PLETH后，ECG连续有效3秒才切回。两路均不可用时停止心搏提示音。"));
         Children.Add(Text("心搏音高来源")); Children.Add(PitchSource);
         AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或SpO2 A曲线");
         PitchSource.SelectionChanged += (_, _) => { ResetPitchState(); OutputNoticeChanged?.Invoke(); };
@@ -105,6 +115,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         };
         Audition.Click += async (_, _) => await PreviewAsync();
         Stop.Click += (_, _) => StopPreview();
+        UpdateBeatSource();
     }
 
     internal async Task PreviewAsync()
@@ -137,15 +148,34 @@ internal sealed class SoundSettingsPanel : StackPanel
     }
     internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null, IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null)
     {
+        if (measurement is not null) { _sourceMeasurement = measurement; }
+        UpdateBeatSource();
         if (PitchSource.SelectedIndex == 1) { _pitch.Update(measurement?.SpO2, measurement?.SampleTimeNs ?? 0); }
         if (_alarms.OutputActive) { SetOutputNotice(null); }
         _monitorRunning = true; _alarmLevel = level; _timing = timing;
         Publish();
-        // Advance delivers new measurement events once, never extrapolated HR.
-        if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true &&
-            (BeatSource.SelectedIndex == 0 ? beats is { Count: > 0 } : BeatSource.SelectedIndex == 1 && pulses is { Count: > 0 }))
+        // Transfer only fresh events from the one selected source.
+        long? confirmed = _source.Current switch
+        {
+            MonitorBeatOrigin.Ecg when beats is { Count: > 0 } => beats[^1].ConfirmedAtNs,
+            MonitorBeatOrigin.Pleth when pulses is { Count: > 0 } => pulses[^1].ConfirmedAtNs,
+            _ => null
+        };
+        if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && confirmed is { } at && _source.Accept(_source.Current, at))
         { _alarms.SubmitHeartbeat(EffectiveHeartbeatVolume, BeatPitchPercent); }
     }
+    private void UpdateBeatSource()
+    {
+        if (BeatSource.SelectedIndex is < 0 or > 2) { return; }
+        if (!_source.Update((MonitorBeatMode)BeatSource.SelectedIndex,
+            _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
+            _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData, _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
+        _alarms.SetHeartbeatEnabled(false);
+        _sourceStatus.Text = "当前" + BeatSourceLabel;
+        _sourceHistory.Text = string.Join("\n", _source.Changes.Select(c => $"{c.TimeNs / 1_000_000_000}s · {(c.Mode == MonitorBeatMode.Auto ? "自动" : "手动")} · {OriginName(c.From)} → {OriginName(c.To)}"));
+        BeatSourceChanged?.Invoke();
+    }
+    internal void ResetBeatSource() { _source.Reset(); _sourceMeasurement = null; UpdateBeatSource(); }
     internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }
     internal void PauseMonitor()
     {

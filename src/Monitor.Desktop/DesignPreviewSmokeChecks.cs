@@ -178,6 +178,10 @@ internal static class DesignPreviewSmokeChecks
         timed.UpdateAlarm(MonitorNoticeLevel.Warning, new());
         Require(timed.BeatPitchPercent == 97, "missing measurement uses neutral pitch");
         Require(timed.BeatSource.SelectedIndex == 0, "default beat source remains ECG");
+        timed.BeatSource.SelectedIndex = 2;
+        Require(timed.BeatSourceLabel.Contains("等待有效信号", StringComparison.Ordinal), "auto without valid measurements waits visibly");
+        timed.BeatSource.SelectedIndex = 0;
+        Require(timed.BeatSourceLabel == "心搏音源：ECG", "manual selection shows effective source");
         Require(timed.HeartbeatVolume.Value == 100 && timed.EffectiveHeartbeatVolume == 50, "default heartbeat uses original gain under master volume");
         var alarmBeforeBeatVolume = timed.PublishedAlarm;
         timed.HeartbeatVolume.Value = 0;

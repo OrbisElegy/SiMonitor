@@ -32,7 +32,8 @@ internal sealed class LiveMonitorView : UserControl
     private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(3), MaxWidth = 480, MinHeight = 44 };
     internal Border NoticeRegion => _noticeBackground;
     internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
-    internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    internal Func<string>? BeatSourceText { get; set; }
+    internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 20, FontWeight = FontWeight.Bold, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
     internal LiveMonitorView(LiveMonitorTrace trace)
@@ -98,7 +99,7 @@ internal sealed class LiveMonitorView : UserControl
     internal void Refresh()
     {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
-        Clock.Text = $"模拟 {seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+        Clock.Text = $"模拟 {seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}" + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
         if (_opticalRows.Count > 0)
         {
             var pulse = _trace.Session.Samples(2, Math.Max(0, _trace.Session.FrontierNs - 32_000_000), _trace.Session.FrontierNs).LastOrDefault();

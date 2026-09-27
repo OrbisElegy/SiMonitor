@@ -11,6 +11,7 @@ internal static class MonitorAlertSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(AutomaticBeatSourceWaitsAndNeverInventsCues), AutomaticBeatSourceWaitsAndNeverInventsCues),
         new(nameof(MeasuredPitchUsesSelectedCurveAndRejectsStaleValues), MeasuredPitchUsesSelectedCurveAndRejectsStaleValues),
         new(nameof(PitchedHeartbeatPreservesEnvelopeAndRestores), PitchedHeartbeatPreservesEnvelopeAndRestores),
         new(nameof(CriticalDurationSurvivesRotationAndClearsIndependently), CriticalDurationSurvivesRotationAndClearsIndependently),
@@ -24,6 +25,36 @@ internal static class MonitorAlertSpecifications
         new(nameof(SaturationLimitsUseValidMeasurements), SaturationLimitsUseValidMeasurements),
         new(nameof(SaturationLimitsFollowAcquiredOptics), SaturationLimitsFollowAcquiredOptics),
     ];
+    private static void AutomaticBeatSourceWaitsAndNeverInventsCues()
+    {
+        var source = new MonitorBeatSource();
+        const WaveformMeasurementStatus valid = WaveformMeasurementStatus.Valid, poor = WaveformMeasurementStatus.PoorSignal;
+        source.Update(MonitorBeatMode.Auto, valid, valid, 0);
+        Check.That(source.Current == MonitorBeatOrigin.None, "auto acquisition waits for stable quality");
+        source.Update(MonitorBeatMode.Auto, valid, valid, 1_000_000_000);
+        Check.That(source.Current == MonitorBeatOrigin.Ecg && source.Accept(MonitorBeatOrigin.Ecg, 1_000_000_000), "stable ECG wins when both sources valid");
+        source.Update(MonitorBeatMode.Auto, poor, valid, 1_200_000_000);
+        Check.That(source.Current == MonitorBeatOrigin.Pleth && !source.Accept(MonitorBeatOrigin.Pleth, 1_200_000_000), "delayed pulse from same cardiac cycle does not double-beep on switch");
+        source.Update(MonitorBeatMode.Auto, poor, valid, 1_800_000_000);
+        Check.That(source.Accept(MonitorBeatOrigin.Pleth, 1_800_000_000) && !source.Accept(MonitorBeatOrigin.Pleth, 1_800_000_000), "next acquired pulse is accepted only once");
+        source.Update(MonitorBeatMode.Auto, valid, valid, 2_000_000_000);
+        source.Update(MonitorBeatMode.Auto, valid, valid, 4_999_999_999);
+        Check.That(source.Current == MonitorBeatOrigin.Pleth, "recovered ECG must remain valid for three seconds");
+        source.Update(MonitorBeatMode.Auto, valid, valid, 5_000_000_000);
+        Check.That(source.Current == MonitorBeatOrigin.Ecg && !source.Accept(MonitorBeatOrigin.Pleth, 5_000_000_000), "switch chooses only ECG, never mixes event sources");
+        Check.That(!source.Accept(MonitorBeatOrigin.Ecg, 4_000_000_000) && !source.Accept(MonitorBeatOrigin.Ecg, 5_000_000_001), "stale/future confirmations rejected");
+        source.Update(MonitorBeatMode.Auto, poor, poor, 6_000_000_000);
+        Check.That(source.Current == MonitorBeatOrigin.None && !source.Accept(MonitorBeatOrigin.Ecg, 6_000_000_000), "neither reliable means no cue");
+        int count = source.Changes.Count; bool rejected = false;
+        try { source.Update(MonitorBeatMode.Auto, valid, valid, 0); } catch (ArgumentException) { rejected = true; }
+        Check.That(rejected && source.Changes.Count == count && source.Current == MonitorBeatOrigin.None, "backward update rejected atomically");
+        for (int i = 0; i < 100; i++) { source.Update(i % 2 == 0 ? MonitorBeatMode.Ecg : MonitorBeatMode.Pleth, poor, poor, 7_000_000_000 + i); }
+        Check.That(source.Changes.Count == 64, "session switch log remains bounded");
+        source.Reset();
+        Check.That(source.Changes.Count == 0 && source.Current == MonitorBeatOrigin.None, "new scenario resets source history and clocks");
+        source.Update(MonitorBeatMode.Ecg, poor, poor, 0);
+        Check.That(source.Current == MonitorBeatOrigin.Ecg, "explicit manual mode preserves existing event-only routing");
+    }
     private static void MeasuredPitchUsesSelectedCurveAndRejectsStaleValues()
     {
         var pitch = new MonitorBeatPitch();
@@ -108,7 +139,7 @@ internal static class MonitorAlertSpecifications
             var measurement = LiveWaveformMeasurements.CreateIllustration();
             LiveMeasurementSnapshot? snapshot = null;
             for (int step = 1; step <= 45; step++)
-                foreach (var wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     var original = WaveformEnvelopeCodec.Decode(wire);
                     var light = WaveformEnvelopeCodec.Decode(optical.ConvertAcquiredPulse(wire));
@@ -145,7 +176,7 @@ internal static class MonitorAlertSpecifications
         var measurement = PulseOximeterMeasurement.CreateIllustration(PhysiologyIllustrationSource.ChannelId(2));
         bool normal = false, lost = false, recovered = false;
         for (int step = 1; step <= 100; step++)
-            foreach (var wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+            foreach (byte[] wire in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             {
                 var block = Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.Decode(wire);
                 long time = block.StartSimTimeNs;
@@ -179,10 +210,10 @@ internal static class MonitorAlertSpecifications
         foreach (int volume in new[] { 25, 50, 100 })
         {
             Check.That(SelectedMonitorTones.Heartbeat(volume).GainQ15 == 16384 * volume / 100, "original heartbeat gain restored without hidden attenuation");
-            var beat = Render(SelectedMonitorTones.Heartbeat(volume));
+            float[] beat = Render(SelectedMonitorTones.Heartbeat(volume));
             foreach (var level in Enum.GetValues<MonitorNoticeLevel>())
             {
-                var alarm = Render(SelectedMonitorTones.Alarm(level, volume));
+                float[] alarm = Render(SelectedMonitorTones.Alarm(level, volume));
                 Check.That(Rms(alarm) > Rms(beat), "alarm attack remains louder after restoring original beat gain");
                 Check.That(alarm.Zip(beat).All(p => Math.Abs(p.First + p.Second) < 1), "simultaneous alarm and heartbeat retain headroom");
             }
@@ -216,10 +247,10 @@ internal static class MonitorAlertSpecifications
             }
             return result;
         }
-        var alarm = Render(true, false); var beat = Render(false, true); var mix = Render(true, true);
+        float[] alarm = Render(true, false); float[] beat = Render(false, true); float[] mix = Render(true, true);
         Check.That(mix.Select((v, i) => Math.Abs(v - alarm[i] - beat[i])).Max() < .000001f && mix.Max(Math.Abs) < 1,
             "independent800ms beat clock adds even at simultaneous starts, no ducking or clipping");
-        var rapid = Render(true, false, 250);
+        float[] rapid = Render(true, false, 250);
         float[] expected = new float[rapid.Length];
         for (int start = 480; start < expected.Length; start += 12000)
             for (int i = 0; i < whole.Length && start + i < expected.Length; i++) { expected[start + i] += whole[i]; }
@@ -253,7 +284,7 @@ internal static class MonitorAlertSpecifications
         var noPerfusion = LiveWaveformMeasurements.CreateIllustration();
         int events = 0, pulseEvents = 0, independentPulses = 0;
         for (int tick = 1; tick <= 40; tick++)
-            foreach (var wire in source.AdvanceTo(tick * 200_000_000L, 50, 1, 100))
+            foreach (byte[] wire in source.AdvanceTo(tick * 200_000_000L, 50, 1, 100))
             {
                 var before = owner.Capture();
                 var block = Monitor.Simulation.Acquisition.WaveformEnvelopeCodec.Decode(wire);

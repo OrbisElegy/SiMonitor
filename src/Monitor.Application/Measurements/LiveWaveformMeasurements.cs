@@ -17,8 +17,8 @@ public sealed class LiveWaveformMeasurements
     private ImpedanceRespirationMeasurement _resp = new(PhysiologyIllustrationSource.ChannelId(1));
     private PlethPulseRateMeasurement _pleth = new(PhysiologyIllustrationSource.ChannelId(2));
     private CapnographyMeasurement _co2 = new(PhysiologyIllustrationSource.ChannelId(4));
-    private MeanPressureMeasurement _abp = new(PhysiologyIllustrationSource.ChannelId(3));
-    private MeanPressureMeasurement _pa = new(PhysiologyIllustrationSource.ChannelId(5));
+    private MeanPressureMeasurement _abp = new(PhysiologyIllustrationSource.ChannelId(3), detectPulse: true);
+    private MeanPressureMeasurement _pa = new(PhysiologyIllustrationSource.ChannelId(5), detectPulse: true);
     private MeanPressureMeasurement _cvp = new(PhysiologyIllustrationSource.ChannelId(6));
     private OpticalSaturationAcquisition _optical;
     private readonly OpticalSaturationMeasurement _calibration;

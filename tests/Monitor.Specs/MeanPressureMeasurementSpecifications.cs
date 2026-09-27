@@ -10,12 +10,61 @@ internal static class MeanPressureMeasurementSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(3);
     public static Specification[] All =>
     [
+        new(nameof(PulsePressureMeasuresCyclesAndExpires), PulsePressureMeasuresCyclesAndExpires),
         new(nameof(PressurePulseControlsPreserveRunoffAndOtherChannels), PressurePulseControlsPreserveRunoffAndOtherChannels),
         new(nameof(CvpBaselineChangesSamplesAndMeasuredMean), CvpBaselineChangesSamplesAndMeasuredMean),
         new(nameof(PressureMeanUsesTimeSamplesAndFiniteHistory), PressureMeanUsesTimeSamplesAndFiniteHistory),
         new(nameof(PressureMeanRejectsBadInputAndRestores), PressureMeanRejectsBadInputAndRestores),
         new(nameof(RealPressureChannelsJoinAtomicLiveReadings), RealPressureChannelsJoinAtomicLiveReadings),
     ];
+    private static void PulsePressureMeasuresCyclesAndExpires()
+    {
+        byte[] PulseWire(int block, bool quality = false, int offset = 0)
+        {
+            var packet = WaveformEnvelopeCodec.Decode(Wire(block, quality: quality, offset: offset));
+            short[] values = Enumerable.Range(block * 25, 25).Select(i =>
+            {
+                int phase = i % 125;
+                //80/120mmHg with a small notch rebound that must not count twice.
+                return (short)(phase < 20 ? 8000 + phase * 200 : phase < 25 ? 12000 :
+                    phase < 65 ? 12000 - (phase - 25) * 100 : phase < 70 ? 8500 : 8000);
+            }).ToArray();
+            return WaveformEnvelopeCodec.EncodeRaw(packet with { Planes = [packet.Planes[0] with { Samples = values }] });
+        }
+        var measurement = new MeanPressureMeasurement(Channel, detectPulse: true);
+        var restored = MeanPressureMeasurement.Restore(measurement.Capture());
+        for (int b = 0; b < 70; b++)
+        {
+            Check.That(measurement.Consume(PulseWire(b)) == restored.Consume(PulseWire(b)), "pulse detector restore retains phase and extrema history");
+            if (b == 23) { restored = MeanPressureMeasurement.Restore(restored.Capture()); }
+        }
+        var before = measurement.Read(13_992_000_000);
+        Check.That(before.Pulse is { Status: WaveformMeasurementStatus.Valid, SystolicCentiMmHg: 12000, DiastolicCentiMmHg: 8000 }, "pulse extrema recover120/80 without notch double counting");
+        Reject(() => measurement.Consume(PulseWire(69)));
+        Check.That(measurement.Read(13_992_000_000) == before, "duplicate delivery leaves detector unchanged");
+        measurement.Consume(PulseWire(70, quality: true));
+        Check.That(measurement.Read(14_192_000_000).Pulse is { Status: WaveformMeasurementStatus.PoorSignal, SystolicCentiMmHg: null }, "quality loss clears pulse number immediately");
+        for (int b = 71; b < 100; b++) { measurement.Consume(PulseWire(b)); }
+        Check.That(measurement.Read(19_992_000_000).Pulse!.Status == WaveformMeasurementStatus.Valid, "clean cycles recover after complete clean window");
+        for (int b = 100; b < 140; b++) { measurement.Consume(Wire(b, constant: 6000)); }
+        var expired = measurement.Read(27_992_000_000);
+        Check.That(expired.MeanCentiMmHg == 6000 && expired.Pulse is { Status: WaveformMeasurementStatus.Stale, SystolicCentiMmHg: null, DiastolicCentiMmHg: null }, "flat pressure retains mean but cannot retain stale systolic/diastolic values");
+        Check.That(measurement.Read(29_000_000_000).Pulse!.Status == WaveformMeasurementStatus.NoData, "missing acquisition differs from pulse expiry");
+        var spikes = new MeanPressureMeasurement(Channel, detectPulse: true);
+        for (int b = 0; b < 40; b++)
+        {
+            var packet = WaveformEnvelopeCodec.Decode(Wire(b, constant: 8000));
+            var plane = packet.Planes[0]; var values = plane.Samples.ToArray(); values[12] = 20000;
+            spikes.Consume(WaveformEnvelopeCodec.EncodeRaw(packet with { Planes = [plane with { Samples = values }] }));
+        }
+        Check.That(spikes.Read(7_992_000_000).Pulse is { Status: WaveformMeasurementStatus.Stale, SystolicCentiMmHg: null }, "isolated sample spikes cannot manufacture pressure pulses");
+        var affine = new MeanPressureMeasurement(Channel, detectPulse: true);
+        for (int b = 0; b < 50; b++) { affine.Consume(PulseWire(b, offset: 3)); }
+        Check.That(affine.Read(9_992_000_000).Pulse is { SystolicCentiMmHg: 12300, DiastolicCentiMmHg: 8300 }, "pulse values honor physical affine units");
+        var gap = affine.Consume(PulseWire(52));
+        Check.That(gap.Pulse is { Status: WaveformMeasurementStatus.WarmingUp, SystolicCentiMmHg: null }, "gap removes old pulse history");
+    }
+
     private static void PressurePulseControlsPreserveRunoffAndOtherChannels()
     {
         foreach (var config in new[] { PhysiologyIllustrationConfiguration.Default,
@@ -178,6 +227,12 @@ internal static class MeanPressureMeasurementSpecifications
                 int expected = (int)decimal.Round(samples[row].TakeLast(500).Average(), 0, MidpointRounding.ToEven);
                 Check.That(value.Status == WaveformMeasurementStatus.Valid && value.MeanCentiMmHg == expected,
                     "ABP/PA/CVP measured from real physical samples, including2:1 timing: " + row);
+            }
+            foreach (var pressure in new[] { reading!.AbpMean, reading.PaMean })
+            {
+                if (mechanical)
+                { Check.That(pressure.Pulse is { Status: WaveformMeasurementStatus.Valid } pulse && pulse.SystolicCentiMmHg > pressure.MeanCentiMmHg && pulse.DiastolicCentiMmHg < pressure.MeanCentiMmHg, "sampled ABP/PA extrema bound mean in1:1 and2:1 examples: " + pressure); }
+                else { Check.That(pressure.Pulse is { Status: WaveformMeasurementStatus.Stale, SystolicCentiMmHg: null }, "no ejection produces no systolic reading"); }
             }
             if (!mechanical) { Check.That(reading!.AbpMean.MeanCentiMmHg is >= 1000 and < 4000, "no ejection still reports sampled reservoir runoff rather than an old normal pressure"); }
             var previous = reading;

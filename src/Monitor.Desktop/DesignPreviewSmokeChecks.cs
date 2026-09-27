@@ -440,6 +440,11 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.Apply.Classes.Contains("accent"), "primary action uses Fluent accent state styling");
             var mainNavigation = window.GetVisualDescendants().OfType<ListBox>().Single(list => AutomationProperties.GetName(list) == "主导航");
             Require(mainNavigation.SelectedIndex == 2, "main navigation exposes Fluent list selection semantics");
+            Require(!mainNavigation.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text is "›" or "✓"), "main navigation uses no chevrons or checkmarks");
+            Require(window.Settings.Tabs.GetVisualDescendants().OfType<TextBlock>().Count(t => t.Text == "›") == 6 &&
+                !window.Settings.Tabs.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains('✓') == true), "settings chevrons persist independently of selection");
+            Require(window.Settings.Tabs.Background == Avalonia.Media.Brushes.Transparent && window.Settings.Tabs.Bounds.Height < window.Settings.Bounds.Height * .75,
+                "settings navigation is a compact transparent list rather than a full-height slab");
             var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
             int navigationCacheCount = window.Settings.PreviewCacheCount;
             Require(!window.Settings.GetVisualDescendants().OfType<Button>().Any(b => b.Bounds.Size == new Size(238, 162)), "signal navigation has no preview cards");

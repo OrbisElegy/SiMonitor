@@ -68,7 +68,8 @@ internal sealed class DesignPreviewWindow : Window
         footer.Children.Add(_state); footer.Children.Add(Text("离线教学模拟\n不得用于临床决策", 12));
         DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
         string[] labels = ["监护波形", "十二导联", "设置"];
-        _navigation.ItemsSource = labels.Select(SettingsSections.Item).ToArray();
+        SettingsSections.StyleNavigation(_navigation);
+        _navigation.ItemsSource = labels.Select(title => SettingsSections.Item(title, showChevron: false)).ToArray();
         AutomationProperties.SetName(_navigation, "主导航");
         _navigation.SelectionChanged += (_, args) =>
         {

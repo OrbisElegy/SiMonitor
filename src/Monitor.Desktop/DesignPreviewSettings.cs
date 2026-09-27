@@ -122,7 +122,8 @@ internal sealed class DesignPreviewSettings : UserControl
         Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], Scroll(_advancedParameters)];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
-        Tabs.ItemsSource = categories.Select(SettingsSections.Item).ToArray();
+        SettingsSections.StyleNavigation(Tabs);
+        Tabs.ItemsSource = categories.Select(title => SettingsSections.Item(title)).ToArray();
         AutomationProperties.SetName(Tabs, "设置分类"); AutomationProperties.SetName(_compactCategory, "设置分类");
         _compactCategory.ItemsSource = categories;
         navigation.Children.Add(Tabs); Grid.SetColumn(detail, 1); navigation.Children.Add(detail);
@@ -207,7 +208,7 @@ internal sealed class DesignPreviewSettings : UserControl
                 bool current = group == Group(read());
                 var button = new Button
                 {
-                    Content = group + (current ? "  ✓  ›" : "  ›"),
+                    Content = group + "  ›",
                     MinHeight = 56,
                     Padding = new Thickness(16),
                     HorizontalAlignment = HorizontalAlignment.Stretch,

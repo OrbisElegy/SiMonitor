@@ -11,6 +11,7 @@ namespace Monitor.Desktop;
 // All desktop entry points share Fluent templates and semantic resource tokens.
 internal static class DesktopFluentStyle
 {
+    internal static readonly IBrush Accent = Brush.Parse("#0078D4");
     internal static readonly IBrush Canvas = Brush.Parse("#F3F3F3");
     internal static readonly IBrush Surface = Brushes.White;
     internal static readonly IBrush Stroke = Brush.Parse("#E5E5E5");

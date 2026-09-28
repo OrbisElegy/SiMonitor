@@ -11,12 +11,52 @@ internal static class EcgHeartRateMeasurementSpecifications
     private static readonly Guid Channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
     public static Specification[] All =>
     [
+        new(nameof(PreexcitationRetainsMeasuredRate), PreexcitationRetainsMeasuredRate),
         new(nameof(TwistingMorphologyPreservesMeasuredFluctuationAndRecovery), TwistingMorphologyPreservesMeasuredFluctuationAndRecovery),
         new(nameof(EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates), EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates),
         new(nameof(EcgContinuousDisorganizationDoesNotBecomeANormalRate), EcgContinuousDisorganizationDoesNotBecomeANormalRate),
         new(nameof(EcgMeasurementFencesBadInputAndRestoresPartialCandidates), EcgMeasurementFencesBadInputAndRestoresPartialCandidates),
     ];
 
+    private static void PreexcitationRetainsMeasuredRate()
+    {
+        foreach (var config in new[]
+        {
+            PhysiologyIllustrationConfiguration.WpwPreset,
+            PhysiologyIllustrationConfiguration.WpwPreset with { WpwNegativeV1 = true },
+            PhysiologyIllustrationConfiguration.WpwPreset with { WpwSmallerDelta = true },
+            PhysiologyIllustrationConfiguration.WpwPreset with { WpwNegativeV1 = true, WpwSmallerDelta = true },
+            PhysiologyIllustrationConfiguration.ShortPrPreset,
+            PhysiologyIllustrationConfiguration.NormalPrDeltaPreset,
+            PhysiologyIllustrationConfiguration.NormalPrDeltaPreset with { ProlongedPrDelta = true }
+        })
+        {
+            var source = PhysiologyIllustrationSource.Create(config);
+            var detector = new EcgHeartRateMeasurement(Channel);
+            EcgHeartRateMeasurement? restored = null;
+            var beats = new List<DetectedEcgBeat>();
+            for (int step = 1; step <= 110; step++)
+                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                {
+                    var events = detector.Consume(wire); beats.AddRange(events);
+                    long last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
+                    var reading = detector.Read(last);
+                    if (restored is null) { restored = EcgHeartRateMeasurement.Restore(detector.Capture()); }
+                    else
+                    {
+                        Check.That(events.SequenceEqual(restored.Consume(wire)) && reading == restored.Read(last),
+                        "merged P/QRS candidate and measured history survive exact restoration");
+                    }
+                    if (last > 3_000_000_000)
+                    {
+                        Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.MilliBeatsPerMinute == 75000,
+                        "preexcitation is counted from samples without rhythm labels or configured rate: " + reading);
+                    }
+                }
+            Check.That(beats.Count >= 23 && beats.Zip(beats.Skip(1)).All(p => p.Second.PeakTimeNs - p.First.PeakTimeNs == 800_000_000),
+                "one confirmation per QRS, no separate P/delta/T events");
+        }
+    }
     private static void TwistingMorphologyPreservesMeasuredFluctuationAndRecovery()
     {
         foreach (var configuration in new[]

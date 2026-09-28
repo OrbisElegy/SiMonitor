@@ -14,6 +14,8 @@ internal static class EcgTemplateSummary
         { return "无心房或心室电活动；P、PR、QRS、QT 不适用。"; }
         if (VentricularDisorganizationReference.IsPattern(pattern))
         { return "无可独立标注的 P、PR、QRS、QT；采用室扑／室颤复合波形。"; }
+        if (config.HyperkalemiaFusion)
+        { return "无 P 波；QRS–T 融合，PR、独立 QRS／T／QT 不适用；复合轮廓 720 ms"; }
         var timing = config.ResolveTiming();
         string Ms(long ns) => (ns / 1_000_000m).ToString("0.###", CultureInfo.InvariantCulture);
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)

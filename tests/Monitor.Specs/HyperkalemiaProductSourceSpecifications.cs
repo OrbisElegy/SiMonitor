@@ -12,7 +12,51 @@ internal static class HyperkalemiaProductSourceSpecifications
         new(nameof(RepolarizationSourcePreservesMechanicsAndRecovery), RepolarizationSourcePreservesMechanicsAndRecovery),
         new(nameof(RepolarizationSourceRejectsConflictingCardiacModes), RepolarizationSourceRejectsConflictingCardiacModes),
         new(nameof(ConductionSourceUsesAuthoredClocksAndAtrialActivity), ConductionSourceUsesAuthoredClocksAndAtrialActivity),
+        new(nameof(FusionSourcePreservesMechanicalClockAndRejectsOrphans), FusionSourcePreservesMechanicalClockAndRejectsOrphans),
     ];
+    private static void FusionSourcePreservesMechanicalClockAndRejectsOrphans()
+    {
+        var normal = PhysiologyIllustrationConfiguration.Default with
+        {
+            HyperkalemiaRepolarization = true,
+            HyperkalemiaConduction = true,
+            HyperkalemiaAbsentP = true,
+            CardiacActivity = CardiacActivity.VentricularOnly
+        };
+        var config = normal with { HyperkalemiaFusion = true };
+        Check.That(config.ResolvePlan() == HyperkalemiaFusionReference.CreatePlan(), "fusion does not invent a new electrical or mechanical event grid");
+        var source = PhysiologyIllustrationSource.Create(config); var reference = PhysiologyIllustrationSource.Create(normal);
+        bool changed = false;
+        for (int step = 1; step <= 40; step++)
+        {
+            var actual = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            var expected = reference.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            Check.That(actual.Count == expected.Count, "fusion preserves all sample frontiers");
+            foreach (var pair in actual.Zip(expected))
+            {
+                var a = WaveformEnvelopeCodec.Decode(pair.First); var b = WaveformEnvelopeCodec.Decode(pair.Second);
+                foreach (var plane in a.Planes)
+                {
+                    bool equal = plane.Samples.SequenceEqual(b.Planes.Single(p => p.ChannelId == plane.ChannelId).Samples);
+                    if (plane.ChannelId == PhysiologyIllustrationSource.ChannelId(0)) { changed |= !equal; }
+                    else { Check.That(equal, "compound ECG does not invent pump failure or alter other channels"); }
+                }
+            }
+            if (step == 17) { source = PhysiologyWaveformGroup.Restore(source.CaptureState()); }
+        }
+        Check.That(changed, "fusion replaces acquired ECG contour");
+        foreach (var invalid in new[] { config with { HyperkalemiaRepolarization = false },
+            config with { HyperkalemiaConduction = false }, config with { HyperkalemiaAbsentP = false },
+            config with { CardiacActivity = CardiacActivity.AtrialAndVentricular },
+            config with { DigitalisEffect = true }, config with { HypokalemiaRepolarization = true } })
+        {
+            bool rejected = false;
+            try { PhysiologyIllustrationSource.Create(invalid); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "orphan or incompatible fusion flags reject");
+        }
+        _ = PhysiologyIllustrationSource.Create(config with { VentricularMechanicalEnabled = false });
+    }
+
     private static void ConductionSourceUsesAuthoredClocksAndAtrialActivity()
     {
         var config = PhysiologyIllustrationConfiguration.Default with { HyperkalemiaRepolarization = true, HyperkalemiaConduction = true };

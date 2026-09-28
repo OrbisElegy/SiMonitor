@@ -136,6 +136,7 @@ internal static class Program
             .. HyperkalemiaRepolarizationSpecifications.All,
             .. HyperkalemiaProductSourceSpecifications.All,
             .. HypokalemiaProductSourceSpecifications.All,
+            .. CalciumProductSourceSpecifications.All,
             .. HyperkalemiaConductionSpecifications.All,
             .. HyperkalemiaFusionSpecifications.All,
             .. HypokalemiaRepolarizationSpecifications.All,

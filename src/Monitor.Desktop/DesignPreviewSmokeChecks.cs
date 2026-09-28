@@ -342,6 +342,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyCalciumProductStyles();
         VerifyDigitalisProductStyles();
         VerifyQuinidineProductStyles();
+        VerifyHyperkalemiaFusionProductStyle();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -678,6 +679,47 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyHyperkalemiaFusionProductStyle()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 97, 98, 77, 98, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "fusion preset atomically replaces and clears preceding morphology");
+                if (choice == 97) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.HyperkalemiaFusion == (choice == 98) && pair.Ecg.HyperkalemiaFusion == (choice == 98),
+                    "monitor and paper share exactly the selected compound contour");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                if (choice == 98)
+                {
+                    Require(reading.HeartRate.Status == WaveformMeasurementStatus.Uncountable && reading.HeartRate.MilliBeatsPerMinute is null &&
+                        window.MonitorView.NumericTexts[0] == "-?-", "fusion shows actual uncountable detector state, not configured rate");
+                    Require(EcgTemplateSummary.Describe(pair.Ecg).Contains("独立 QRS／T／QT 不适用", StringComparison.Ordinal),
+                        "advanced fusion summary omits construction subdivisions");
+                }
+                else { Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid, "ordinary QRS measurement recovers after fusion"); }
+                Require(reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "independent mechanical measurements remain available during fused ECG");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "fusion card contains actual source samples");
+                window.SelectPage(1); Capture(window, $"ui-preview-high-k-fusion-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "fusion paper retains complete twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 98; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace fusion source");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "fusion supports independent disabled ejection");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyQuinidineProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

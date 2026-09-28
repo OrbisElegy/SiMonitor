@@ -50,6 +50,7 @@ public static class PhysiologyIllustrationSource
                 configuration.DigitalisEffect ? DigitalisEffectReference.CreateLeadIIBands(configuration.DigitalisShape) :
                 configuration.Calcium != CalciumIllustration.Reference ? CalciumRepolarizationReference.CreateLeadIIBands(configuration.Calcium) :
                 configuration.HypokalemiaRepolarization ? HypokalemiaRepolarizationReference.CreateLeadIIBands(configuration.HypokalemiaTuFusion, configuration.HypokalemiaInvertedT, configuration.HypokalemiaConduction) :
+                configuration.HyperkalemiaFusion ? HyperkalemiaFusionReference.CreateLeadIIBands() :
                 configuration.HyperkalemiaConduction ? HyperkalemiaConductionReference.CreateLeadIIBands(configuration.HyperkalemiaAbsentP) :
                 configuration.HyperkalemiaRepolarization ? HyperkalemiaRepolarizationReference.CreateLeadIIBands() :
                 configuration.AtrialEscape ? AtrialEscapeReference.CreateLeadIIBands() :

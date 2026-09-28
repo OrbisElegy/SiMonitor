@@ -22,6 +22,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public bool HyperkalemiaRepolarization { get; init; }
     public bool HyperkalemiaConduction { get; init; }
     public bool HyperkalemiaAbsentP { get; init; }
+    public bool HyperkalemiaFusion { get; init; }
     public int AbpPulsePermille { get; init; } = 1000;
     public int PaPulsePermille { get; init; } = 1000;
     public int CvpBaselineCentiMmHg { get; init; } = 600;
@@ -97,6 +98,8 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (HyperkalemiaFusion && (!HyperkalemiaRepolarization || !HyperkalemiaConduction || !HyperkalemiaAbsentP))
+        { throw new EventWaveformException("HyperkalemiaFusion.ConflictingModes", "configuration"); }
         if (!Enum.IsDefined(Quinidine) || (QuinidineNotchedP && Quinidine == QuinidineIllustration.Reference) ||
             Quinidine != QuinidineIllustration.Reference && (DigitalisEffect || DigitalisShape != DigitalisTShape.FishHook ||
                 Calcium != CalciumIllustration.Reference || HyperkalemiaRepolarization || HyperkalemiaConduction || HyperkalemiaAbsentP ||

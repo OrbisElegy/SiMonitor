@@ -337,6 +337,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyAfVariantProductStyles();
         VerifyStandstillProductStyles();
         VerifyAdvancedTemplateDescriptions();
+        VerifyHyperkalemiaProductStyle();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -673,6 +674,53 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyHyperkalemiaProductStyle()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 75, 74, 75, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "high-T preset replaces incompatible rhythm atomically");
+                if (choice is 21 or 74) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.HyperkalemiaRepolarization == (choice == 75) &&
+                    pair.Ecg.HyperkalemiaRepolarization == (choice == 75), "monitor and paper share high-T selection and reset");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 75000) < 1000,
+                    $"high T is not counted as another heartbeat: {reading.HeartRate}");
+                Require(reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "repolarization preserves sampled mechanical measurements");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long end = source.FrontierNs, start = end - StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, start, end)) && cached.Abp.SequenceEqual(source.Samples(3, start, end)),
+                    "high-T preview uses actual selected source samples");
+                if (choice == 75)
+                {
+                    var normal = DesignPreviewWindow.CreateStylePreview(0, 0, 0);
+                    Require(!cached.Ecg.SequenceEqual(normal.Samples(0, start, end)), "high-T card differs from sinus reference");
+                    foreach (int channel in Enumerable.Range(1, 6))
+                    { Require(source.Samples(channel, start, end).SequenceEqual(normal.Samples(channel, start, end)), "no invented non-ECG potassium effect"); }
+                    Require(EcgTemplateSummary.Describe(pair.Ecg).Contains("QT 300 ms", StringComparison.Ordinal), "advanced summary uses high-T resolved timing");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-high-t-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "high-T paper retains complete twelve-lead snapshot");
+                window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 75; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing high-T source");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "independent disabled ejection remains supported with high T");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyAdvancedTemplateDescriptions()
     {
         for (int choice = 0; choice < DesignPreviewSettings.EcgChoiceCount; choice++)

@@ -46,6 +46,7 @@ public static class PhysiologyIllustrationSource
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 sinusArrest ? SinusArrestReference.CreateLeadIIBands() :
                 sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :
+                configuration.HyperkalemiaRepolarization ? HyperkalemiaRepolarizationReference.CreateLeadIIBands() :
                 configuration.AtrialEscape ? AtrialEscapeReference.CreateLeadIIBands() :
                 configuration.Aar ? AcceleratedAtrialReference.CreateLeadIIBands() :
                 configuration.Ajr ? AcceleratedJunctionalReference.CreateLeadIIBands() :

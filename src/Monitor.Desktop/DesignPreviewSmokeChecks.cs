@@ -334,6 +334,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
+        VerifyAfVariantProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -667,6 +668,60 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyAfVariantProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 66, 67, 68, 69, 70, 71, 6 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "AF variants replace VF and clear preceding aberrancy/deficit state");
+                if (choice == 21) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                bool aberrant = choice is 66 or 67 or 70 or 71;
+                bool deficit = choice >= 68;
+                Require(pair.Physiology.IllustrateAfAberrancy == aberrant && pair.Ecg.IllustrateAfAberrancy == aberrant &&
+                    pair.Physiology.IllustrateAfSystemicPulseDeficit == deficit &&
+                    pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern,
+                    "monitor and paper share AF electrical variant while deficit is mechanical only");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                Require(window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    window.Session.Measurements.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    $"AF variants retain sample-derived HR and pressure choice={choice}");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "AF preview uses actual selected electrical and mechanical samples");
+                if (choice >= 66)
+                {
+                    Require(duration == 12_000_000_000, "AF variant preview includes the authored early long-short examples");
+                    var reference = DesignPreviewWindow.CreateStylePreview(choice % 2 == 0 ? 6 : 7, 0, 0);
+                    while (reference.SimulationTimeNs < source.SimulationTimeNs) { reference.Advance(50_000_000); }
+                    long start = source.FrontierNs - duration, end = source.FrontierNs;
+                    Require(cached.Ecg.SequenceEqual(reference.Samples(0, start, end)) == !aberrant,
+                        $"aberrancy changes ECG while mechanical deficit does not: choice={choice}, samples={cached.Ecg.Length}/{reference.Samples(0, start, end).Count()}, frontier={source.FrontierNs}/{reference.FrontierNs}");
+                    Require(cached.Abp.SequenceEqual(reference.Samples(3, start, end)) == !deficit &&
+                        source.Samples(2, start, end).SequenceEqual(reference.Samples(2, start, end)) == !deficit,
+                        "systemic deficit changes ABP and Pleth independently of aberrancy");
+                    Require(source.Samples(5, start, end).SequenceEqual(reference.Samples(5, start, end)),
+                        "systemic deficit does not remove authored pulmonary ejection");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-af-variant-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "AF variant has complete twelve-lead snapshot");
+                window.SelectPage(0);
+            }
+            var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only rate controls reject for irregular AF");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "PVC-only weak ejection rejects for AF");
         }
         finally { window.Close(); }
     }

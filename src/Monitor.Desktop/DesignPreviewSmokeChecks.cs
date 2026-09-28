@@ -335,6 +335,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
         VerifyAfVariantProductStyles();
+        VerifyStandstillProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -671,6 +672,63 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyStandstillProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 72, 73, 74, 72, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "standstill/PEA replaces previous rhythm atomically");
+                if (choice == 21) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                bool absent = choice == 72, noPulse = choice is 72 or 73 or 74;
+                Require(pair.Physiology.CardiacActivity == pair.Ecg.CardiacActivity &&
+                    (pair.Ecg.CardiacActivity == Monitor.Simulation.Physiology.CardiacActivity.Absent) == absent &&
+                    pair.Physiology.VentricularMechanicalEnabled == (choice != 73),
+                    "standstill removes electrical activity while PEA retains organized ECG");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == (absent ? WaveformMeasurementStatus.Stale : choice == 74 ? WaveformMeasurementStatus.Uncountable : WaveformMeasurementStatus.Valid),
+                    $"sampled flat ECG is stale, P-only is uncountable and PEA retains HR: {choice}/{reading.HeartRate}");
+                Require(noPulse ? reading.PulseRate.Status == WaveformMeasurementStatus.Stale : reading.PulseRate.Status == WaveformMeasurementStatus.Valid,
+                    "sampled pulse rate follows mechanical activity independently of ECG");
+                long end = window.Session.FrontierNs, start = end - 3_000_000_000;
+                foreach (int channel in new[] { 2, 3, 5 })
+                {
+                    var values = window.Session.Samples(channel, start, end).Select(p => p.Value).ToArray();
+                    Require(values.Zip(values.Skip(1)).Any(p => p.Second > p.First) == !noPulse,
+                        $"standstill/PEA retain runoff without new Pleth/ABP/PA upstrokes: {choice}/{channel}");
+                }
+                foreach (int channel in new[] { 1, 4 })
+                {
+                    Require(window.Session.Samples(channel, start, end).Select(p => p.Value).Distinct().Count() > 1,
+                        "respiration and CO2 remain independently configured");
+                }
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "standstill/PEA cards retain actual electrical and mechanical samples");
+                Require(cached.Ecg.All(p => p.Value == 0) == absent, "only standstill has flat ECG");
+                if (noPulse)
+                {
+                    var live = window.Session;
+                    window.Settings.EjectionSelection = 1; window.ApplySettings();
+                    Require(ReferenceEquals(live, window.Session), "PVC-only ejection rejects without replacing standstill/PEA");
+                    window.Settings.EjectionSelection = 0;
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-standstill-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "standstill/PEA paper retains full timestamped twelve-lead record");
+                window.SelectPage(0);
+            }
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyAfVariantProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

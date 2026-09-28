@@ -341,6 +341,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyHypokalemiaProductStyles();
         VerifyCalciumProductStyles();
         VerifyDigitalisProductStyles();
+        VerifyQuinidineProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -677,6 +678,51 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyQuinidineProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 89, 90, 91, 92, 93, 94, 95, 96, 97, 90, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "quinidine preset atomically replaces previous morphology");
+                if (choice == 89) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                int mode = choice == 0 ? 0 : (choice - 90) % 4 + 1;
+                Require((int)pair.Physiology.Quinidine == mode && (int)pair.Ecg.Quinidine == mode &&
+                    pair.Physiology.QuinidineNotchedP == (choice >= 94) && pair.Ecg.QuinidineNotchedP == (choice >= 94) &&
+                    !pair.Physiology.DigitalisEffect && !pair.Ecg.DigitalisEffect,
+                    "monitor/paper share mode and P notch and clear preceding digitalis effect");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - (choice == 0 ? 75000 : 60000)) < 1000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "notched P, wide QRS and late U retain sample-derived rates");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "quinidine preview is the selected acquired shape");
+                if (choice != 0)
+                {
+                    string summary = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(summary.Contains($"QT {(mode >= 3 ? 560 : 480)} ms", StringComparison.Ordinal) &&
+                        summary.Contains($"QU {(mode >= 3 ? 790 : 710)} ms", StringComparison.Ordinal) &&
+                        summary.Contains("（切迹）", StringComparison.Ordinal) == (choice >= 94), "summary distinguishes QT, QU and P notch");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-quinidine-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "quinidine paper retains full twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 97; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing quinidine source");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "quinidine retains independent no-ejection control");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyDigitalisProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

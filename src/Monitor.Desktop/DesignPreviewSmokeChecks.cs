@@ -338,6 +338,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyStandstillProductStyles();
         VerifyAdvancedTemplateDescriptions();
         VerifyHyperkalemiaProductStyle();
+        VerifyHypokalemiaProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -674,6 +675,53 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyHypokalemiaProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 77, 78, 79, 80, 81, 78, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "low-potassium preset replaces prior cardiac morphology atomically");
+                if (choice == 77) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.HypokalemiaRepolarization == (choice >= 78) && pair.Ecg.HypokalemiaRepolarization == (choice >= 78) &&
+                    pair.Physiology.HypokalemiaInvertedT == (choice == 79) && pair.Ecg.HypokalemiaInvertedT == (choice == 79) &&
+                    pair.Physiology.HypokalemiaTuFusion == (choice == 80) && pair.Ecg.HypokalemiaTuFusion == (choice == 80) &&
+                    pair.Physiology.HypokalemiaConduction == (choice == 81) && pair.Ecg.HypokalemiaConduction == (choice == 81) &&
+                    !pair.Physiology.HyperkalemiaRepolarization && !pair.Ecg.HyperkalemiaRepolarization,
+                    "monitor/paper flags match exactly and clear preceding high-potassium shape");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - (choice == 0 ? 75000 : 60000)) < 1000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "low-potassium ECG and mechanical measurements remain sample-derived");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "low-potassium card uses selected acquired ECG");
+                if (choice >= 78)
+                {
+                    string summary = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(summary.Contains("QU 650 ms", StringComparison.Ordinal) &&
+                        (choice != 80 || summary.Contains("QT 不单独标注", StringComparison.Ordinal)), "T-U fusion does not claim measurable QT");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-low-potassium-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "low-potassium paper retains complete twelve-lead snapshot");
+                window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 80; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace T-U template");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "low-potassium template permits independent absent ejection");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyHyperkalemiaProductStyle()
     {
         var window = new DesignPreviewWindow(); window.Show();

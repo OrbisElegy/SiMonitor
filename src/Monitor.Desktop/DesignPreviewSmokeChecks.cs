@@ -334,6 +334,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyRespirationOverview();
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
+        VerifyPrematureSupraventricularProductStyles();
         VerifyBlockProductStyles();
         VerifyDisorganizedProductStyles();
         VerifySvtProductStyles();
@@ -663,6 +664,61 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyPrematureSupraventricularProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 40, 41, 4, 42, 43, 5 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "PAC/PJC presets replace VF and preceding variant atomically");
+                if (choice == 21) { continue; }
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    reading.HeartRate.MilliBeatsPerMinute is > 40000 and < 110000,
+                    $"PAC/PJC uses sample-derived ventricular rate choice={choice}: {reading.HeartRate}");
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                var expected = choice switch
+                {
+                    40 => Monitor.Simulation.Physiology.AvConductionPattern.BlockedPrematureAtrialIllustration,
+                    41 => Monitor.Simulation.Physiology.AvConductionPattern.AberrantPrematureAtrialIllustration,
+                    42 => Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalAfterQrsIllustration,
+                    43 => Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalOverlappingIllustration,
+                    4 => Monitor.Simulation.Physiology.AvConductionPattern.PrematureAtrialIllustration,
+                    _ => Monitor.Simulation.Physiology.AvConductionPattern.PrematureJunctionalIllustration
+                };
+                Require(pair.Physiology.ConductionPattern == expected && pair.Ecg.ConductionPattern == expected,
+                    "paper and monitor retain exactly the selected P-prime/conduction variant");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(duration == (choice is 4 or 40 or 41 ? 6_200_000_000 : 6_400_000_000),
+                    "PAC/PJC previews show two complete early-beat/pause groups");
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "PAC/PJC preview contains actual selected ECG and weighted ejection");
+                if (choice >= 40)
+                {
+                    var reference = StylePreviewCatalog.Get(choice <= 41 ? 4 : 5, 0, 0);
+                    Require(!cached.Ecg.SequenceEqual(reference.Ecg), "variant is visibly different from the base electrical morphology");
+                    Require(cached.Abp.SequenceEqual(reference.Abp) == (choice != 40),
+                        "blocked PAC loses an ejection; aberrancy and retrograde P position preserve existing ventricular perfusion");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-premature-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "PAC/PJC paper has complete twelve-lead capture");
+                window.SelectPage(0);
+            }
+            var live = window.Session;
+            window.Settings.EjectionSelection = 1; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "PVC-only weak-ejection option cannot replace PJC session");
+            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot override authored premature timing");
         }
         finally { window.Close(); }
     }

@@ -134,6 +134,7 @@ internal static class Program
             .. AtrialFibrillationDeficitSpecifications.All,
             .. AtrialFibrillationAberrancySpecifications.All,
             .. HyperkalemiaRepolarizationSpecifications.All,
+            .. HyperkalemiaProductSourceSpecifications.All,
             .. HyperkalemiaConductionSpecifications.All,
             .. HyperkalemiaFusionSpecifications.All,
             .. HypokalemiaRepolarizationSpecifications.All,

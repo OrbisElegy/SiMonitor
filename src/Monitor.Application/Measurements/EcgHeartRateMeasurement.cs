@@ -119,6 +119,11 @@ public sealed class EcgHeartRateMeasurement
         // Accepted QRS candidates still require the original64ms confirmation.
         if (s.Active && s.Max - s.Min < 250 && time - s.LastActive >= 24_000_000 &&
             slope < Math.Max(threshold / 2, s.MaxSlope / 4)) { s.Active = false; }
+        // A markedly steeper new deflection can follow a broad atrial prelude
+        // before the quiet confirmation gap has elapsed. Restart at that edge
+        // instead of rejecting the merged P/QRS envelope as an overlong complex.
+        if (s.Active && time - s.Start >= 100_000_000 && (long)slope > (long)s.MaxSlope * 3)
+        { s.Active = false; }
         if (!s.Active)
         {
             if (slope < threshold || s.Count < 10) { return; }

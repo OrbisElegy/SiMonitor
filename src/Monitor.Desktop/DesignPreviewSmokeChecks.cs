@@ -335,6 +335,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyPrebuiltStyles();
         VerifyAtrialProductStyles();
         VerifyPrematureSupraventricularProductStyles();
+        VerifyPvcGroupProductStyles();
         VerifyBlockProductStyles();
         VerifyDisorganizedProductStyles();
         VerifySvtProductStyles();
@@ -664,6 +665,62 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyPvcGroupProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 44, 45, 46, 47, 2 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "PVC groups replace VF and previous grouped timing");
+                if (choice == 21) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                var expected = choice switch
+                {
+                    44 => Monitor.Simulation.Physiology.AvConductionPattern.VentricularBigeminyIllustration,
+                    45 => Monitor.Simulation.Physiology.AvConductionPattern.VentricularTrigeminyIllustration,
+                    46 => Monitor.Simulation.Physiology.AvConductionPattern.VentricularCoupletIllustration,
+                    47 => Monitor.Simulation.Physiology.AvConductionPattern.InterpolatedPvcIllustration,
+                    _ => Monitor.Simulation.Physiology.AvConductionPattern.PrematureVentricularIllustration
+                };
+                Require(pair.Physiology.ConductionPattern == expected && pair.Ecg.ConductionPattern == expected,
+                    "monitor and paper use the selected PVC schedule");
+                if (choice == 47) { Require(pair.Ecg.HeartRateBpm == 60, "interpolated example retains its existing sinus grid"); }
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid && reading.HeartRate.MilliBeatsPerMinute is > 40000 and < 110000,
+                    $"PVC grouped rate is sample-derived choice={choice}: {reading.HeartRate}");
+                Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid, "PVC weighted ejection reaches pressure measurement");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "PVC cached electrical and weighted mechanical samples match the selected live source");
+                if (choice >= 44)
+                {
+                    long group = choice switch { 44 => 1_600_000_000, 45 => 2_400_000_000, 46 => 4_000_000_000, _ => 3_000_000_000 };
+                    Require(duration == 2 * group, "PVC preview covers two full groups including recovery interval");
+                    var plan = pair.Physiology.ResolvePlan();
+                    var beats = Monitor.Simulation.Physiology.RegularPhysiologyTimeline.Start(plan).AdvanceBefore(group, 100)
+                        .Count(e => e.Kind == Monitor.Simulation.Physiology.PhysiologyCycleEventKind.VentricularMechanical);
+                    Require(beats == (choice == 44 ? 2 : choice == 45 ? 3 : choice == 46 ? 5 : 4),
+                        "PVC grouping preserves authored mechanical event count");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-pvc-group-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "PVC paper contains complete twelve-lead capture");
+                window.SelectPage(0);
+            }
+            var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot alter PVC group timing");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override rejects for PVC groups");
         }
         finally { window.Close(); }
     }

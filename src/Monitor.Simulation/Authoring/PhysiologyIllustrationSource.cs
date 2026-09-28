@@ -46,6 +46,7 @@ public static class PhysiologyIllustrationSource
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
                 sinusArrest ? SinusArrestReference.CreateLeadIIBands() :
                 sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :
+                configuration.AtrialShape != EcgAtrialIllustration.Reference ? EcgAtrialIllustrations.CreateLeadIIBands(configuration.AtrialShape) :
                 configuration.Quinidine != QuinidineIllustration.Reference ? QuinidineEffectReference.CreateLeadIIBands(configuration.Quinidine, configuration.QuinidineNotchedP) :
                 configuration.DigitalisEffect ? DigitalisEffectReference.CreateLeadIIBands(configuration.DigitalisShape) :
                 configuration.Calcium != CalciumIllustration.Reference ? CalciumRepolarizationReference.CreateLeadIIBands(configuration.Calcium) :

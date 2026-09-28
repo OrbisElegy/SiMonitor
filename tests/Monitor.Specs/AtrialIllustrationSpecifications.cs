@@ -22,8 +22,8 @@ internal static class AtrialIllustrationSpecifications
             var samples = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1,
                 TextbookElectrodeReference.CreateElectrodes(atrial: kind)).GenerateBefore(800_000_000, 200, 100);
             int[] P(EcgLead lead) => samples.Take(36).Select(x => (int)x.MicrovoltValues[(int)lead]).ToArray();
-            var ii = P(EcgLead.II);
-            var v1 = P(EcgLead.V1);
+            int[] ii = P(EcgLead.II);
+            int[] v1 = P(EcgLead.V1);
             Check.That(ii.Max() >= 250, "inferior P reaches at least 0.25mV after acquisition");
             if (kind == EcgAtrialIllustration.RightAtrialAbnormality)
             {
@@ -70,13 +70,13 @@ internal static class AtrialIllustrationSpecifications
         var samples = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
         foreach (var lead in new[] { EcgLead.I, EcgLead.II, EcgLead.AVL })
         {
-            var p = samples.Take(36).Select(x => (int)x.MicrovoltValues[(int)lead]).ToArray();
+            int[] p = samples.Take(36).Select(x => (int)x.MicrovoltValues[(int)lead]).ToArray();
             int first = Enumerable.Range(0, 18).MaxBy(i => p[i]);
             int second = Enumerable.Range(18, 18).MaxBy(i => p[i]);
             Check.That((second - first) * 4 >= 40 && p[17] < Math.Min(p[first], p[second]), "projected P has two peaks separated by at least 40 ms");
             Check.That(p[2] > 0 && p[33] > 0 && p[0] == 0 && p[35] == 0, "P spans more than 120 ms and returns to baseline at 140 ms");
         }
-        var v1 = samples.Take(36).Select(x => (int)x.MicrovoltValues[(int)EcgLead.V1]).ToArray();
+        int[] v1 = samples.Take(36).Select(x => (int)x.MicrovoltValues[(int)EcgLead.V1]).ToArray();
         int negativeMs = v1.Count(x => x < 0) * 4;
         // uV * ms / 100000 = mm*s at 10 mm/mV. Conservative sampled duration.
         Check.That(v1.Take(17).Max() > 0 && -v1.Min() * negativeMs >= 4000, "V1 positive onset and terminal negative force >=0.04 mm*s");
@@ -111,10 +111,18 @@ internal static class AtrialIllustrationSpecifications
 
     private static void AtrialIllustrationRejectsIncompatibleInputs()
     {
-        void Reject(Action action, string reason)
+        void Reject(Action action, string reason, string? parameter = null)
         {
             try { action(); }
-            catch (EventWaveformException e) { Check.That(e.ReasonCode == reason, "stable rejection reason"); return; }
+            catch (EventWaveformException e)
+            {
+                Check.That(e.ReasonCode == reason, "stable rejection reason");
+                if (parameter is not null)
+                {
+                    Check.That(e.ParamName == parameter, "rejection identifies the actual method parameter");
+                }
+                return;
+            }
             throw new InvalidOperationException("Invalid atrial illustration accepted.");
         }
         foreach (var kind in new[] { EcgAtrialIllustration.RightAtrialAbnormality, EcgAtrialIllustration.BiatrialAbnormality })
@@ -122,7 +130,8 @@ internal static class AtrialIllustrationSpecifications
             Reject(() => TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing with { PDurationNs = 120_000_000 }, atrial: kind), "EcgAtrial.InvalidTiming");
             Reject(() => TextbookElectrodeReference.CreateElectrodes(pWave: new(new EcgPWaveComponents?[10]), atrial: kind), "EcgAtrial.ConflictingModes");
         }
-        Reject(() => TextbookElectrodeReference.CreateElectrodes(atrial: (EcgAtrialIllustration)99), "EcgAtrial.InvalidIllustration");
+        Reject(() => EcgAtrialIllustrations.PDurationNs((EcgAtrialIllustration)99), "EcgAtrial.InvalidIllustration", "illustration");
+        Reject(() => TextbookElectrodeReference.CreateElectrodes(atrial: (EcgAtrialIllustration)99), "EcgAtrial.InvalidIllustration", "illustration");
         Reject(() => TextbookElectrodeReference.CreateElectrodes(timing: TextbookEcgReference.Timing, atrial: EcgAtrialIllustration.LeftAtrialAbnormality), "EcgAtrial.InvalidTiming");
         var boundary = TextbookEcgReference.Timing with { PDurationNs = 140_000_000, PrIntervalNs = 227_500_000 };
         Reject(() => TextbookElectrodeReference.CreateElectrodes(timing: boundary, atrial: EcgAtrialIllustration.LeftAtrialAbnormality), "EcgAtrial.InvalidTiming");

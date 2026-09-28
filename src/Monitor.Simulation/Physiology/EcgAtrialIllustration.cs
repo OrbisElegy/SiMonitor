@@ -21,13 +21,23 @@ public static class EcgAtrialIllustrations
         EcgAtrialIllustration.Reference => null,
         EcgAtrialIllustration.RightAtrialAbnormality => 100_000_000,
         EcgAtrialIllustration.LeftAtrialAbnormality or EcgAtrialIllustration.BiatrialAbnormality => LeftPDurationNs,
-        _ => throw new EventWaveformException("EcgAtrial.InvalidIllustration", "atrial"),
+        _ => throw new EventWaveformException("EcgAtrial.InvalidIllustration", nameof(illustration)),
     };
+
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(EcgAtrialIllustration illustration)
+    {
+        var timing = TextbookEcgReference.Timing;
+        if (PDurationNs(illustration) is { } duration) { timing = timing with { PDurationNs = duration }; }
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(timing: timing, atrial: illustration);
+        return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
+            electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
+            { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());
+    }
 
     internal static EcgPWavePlan? Resolve(EcgAtrialIllustration illustration, EcgCycleTiming timing)
     {
         if (!Enum.IsDefined(illustration))
-        { throw new EventWaveformException("EcgAtrial.InvalidIllustration", "atrial"); }
+        { throw new EventWaveformException("EcgAtrial.InvalidIllustration", nameof(illustration)); }
         if (illustration == EcgAtrialIllustration.Reference) { return null; }
         // Retain PR and all ventricular timing. Reject an incompatible PR
         // rather than silently moving the ventricular event.

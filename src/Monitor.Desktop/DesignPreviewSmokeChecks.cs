@@ -673,7 +673,7 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in new[] { 21, 44, 45, 46, 47, 2 })
+            foreach (int choice in new[] { 21, 44, 45, 46, 47, 48, 49, 50, 51, 52, 2 })
             {
                 var previous = window.Session;
                 window.Settings.EcgSelection = choice; window.ApplySettings();
@@ -686,6 +686,11 @@ internal static class DesignPreviewSmokeChecks
                     45 => Monitor.Simulation.Physiology.AvConductionPattern.VentricularTrigeminyIllustration,
                     46 => Monitor.Simulation.Physiology.AvConductionPattern.VentricularCoupletIllustration,
                     47 => Monitor.Simulation.Physiology.AvConductionPattern.InterpolatedPvcIllustration,
+                    48 => Monitor.Simulation.Physiology.AvConductionPattern.PolymorphicPvcIllustration,
+                    49 => Monitor.Simulation.Physiology.AvConductionPattern.MultifocalPvcIllustration,
+                    50 => Monitor.Simulation.Physiology.AvConductionPattern.PolymorphicVentricularCoupletIllustration,
+                    51 => Monitor.Simulation.Physiology.AvConductionPattern.RonTLongQtPvcIllustration,
+                    52 => Monitor.Simulation.Physiology.AvConductionPattern.ShortCoupledRonTPvcIllustration,
                     _ => Monitor.Simulation.Physiology.AvConductionPattern.PrematureVentricularIllustration
                 };
                 Require(pair.Physiology.ConductionPattern == expected && pair.Ecg.ConductionPattern == expected,
@@ -704,13 +709,36 @@ internal static class DesignPreviewSmokeChecks
                     "PVC cached electrical and weighted mechanical samples match the selected live source");
                 if (choice >= 44)
                 {
-                    long group = choice switch { 44 => 1_600_000_000, 45 => 2_400_000_000, 46 => 4_000_000_000, _ => 3_000_000_000 };
+                    long group = choice switch { 44 => 1_600_000_000, 45 => 2_400_000_000, 46 or 50 => 4_000_000_000, 48 or 49 => 6_400_000_000, 51 or 52 => 3_200_000_000, _ => 3_000_000_000 };
                     Require(duration == 2 * group, "PVC preview covers two full groups including recovery interval");
                     var plan = pair.Physiology.ResolvePlan();
                     var beats = Monitor.Simulation.Physiology.RegularPhysiologyTimeline.Start(plan).AdvanceBefore(group, 100)
                         .Count(e => e.Kind == Monitor.Simulation.Physiology.PhysiologyCycleEventKind.VentricularMechanical);
-                    Require(beats == (choice == 44 ? 2 : choice == 45 ? 3 : choice == 46 ? 5 : 4),
+                    Require(beats == (choice == 44 ? 2 : choice == 45 ? 3 : choice is 46 or 50 ? 5 : choice is 48 or 49 ? 8 : 4),
                         "PVC grouping preserves authored mechanical event count");
+                }
+                if (choice >= 48)
+                {
+                    int baselineChoice = choice == 50 ? 46 : 2;
+                    var baseline = DesignPreviewWindow.CreateStylePreview(baselineChoice, 0, 0);
+                    while (baseline.SimulationTimeNs < source.SimulationTimeNs) { baseline.Advance(50_000_000); }
+                    Require(!cached.Ecg.SequenceEqual(baseline.Samples(0, source.FrontierNs - duration, source.FrontierNs)),
+                        "diverse and R-on-T cards contain their selected morphology/timing");
+                    if (choice is 48 or 50 or 51)
+                    {
+                        Require(cached.Abp.SequenceEqual(baseline.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        "electrical-only variant retains the existing matched mechanical schedule");
+                    }
+                    if (choice is 49 or 52)
+                    {
+                        Require(!cached.Abp.SequenceEqual(baseline.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        "changed coupling or absent short-coupled ejection reaches the pressure preview");
+                    }
+                    if (choice == 52)
+                    {
+                        Require(Monitor.Simulation.Physiology.PrematureBeatPerfusion.GainPermille(expected, 3) == 0,
+                        "short-coupled R-on-T keeps its authored non-ejecting premature beat");
+                    }
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-pvc-group-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "PVC paper contains complete twelve-lead capture");

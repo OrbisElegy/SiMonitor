@@ -138,6 +138,7 @@ internal static class Program
             .. HypokalemiaProductSourceSpecifications.All,
             .. CalciumProductSourceSpecifications.All,
             .. DigitalisProductSourceSpecifications.All,
+            .. QuinidineProductSourceSpecifications.All,
             .. HyperkalemiaConductionSpecifications.All,
             .. HyperkalemiaFusionSpecifications.All,
             .. HypokalemiaRepolarizationSpecifications.All,

@@ -19,6 +19,8 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
+        if (config.DigitalisEffect)
+        { return $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · QT {Ms(timing.QtIntervalNs)} ms；QRS 末段与 ST–T 连续，T 时限不单独标注"; }
         if (config.HypokalemiaRepolarization)
         {
             string atrialTiming = $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · QRS {Ms(timing.QrsDurationNs)} ms";

@@ -340,6 +340,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyHyperkalemiaProductStyle();
         VerifyHypokalemiaProductStyles();
         VerifyCalciumProductStyles();
+        VerifyDigitalisProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -676,6 +677,50 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyDigitalisProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 86, 87, 88, 89, 87, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "digitalis preset replaces previous morphology atomically");
+                if (choice == 86) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.DigitalisEffect == (choice != 0) && pair.Ecg.DigitalisEffect == (choice != 0) &&
+                    pair.Physiology.DigitalisShape == pair.Ecg.DigitalisShape &&
+                    (int)pair.Ecg.DigitalisShape == (choice == 0 ? 0 : choice - 87) &&
+                    pair.Physiology.Calcium == Monitor.Simulation.Physiology.CalciumIllustration.Reference,
+                    "monitor and paper share the exact digitalis shape and clear previous calcium mode");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - (choice == 0 ? 75000 : 60000)) < 1000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "joined QRS/ST-T preserves measured cardiac and perfusion rates");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "digitalis card uses actual selected joined contour");
+                if (choice != 0)
+                {
+                    string summary = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(summary.Contains("QT 320 ms", StringComparison.Ordinal) && summary.Contains("T 时限不单独标注", StringComparison.Ordinal),
+                        "digitalis summary omits construction T duration");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-digitalis-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "digitalis paper has complete twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 87; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without changing digitalis source");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "digitalis permits independent disabled ejection");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyCalciumProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

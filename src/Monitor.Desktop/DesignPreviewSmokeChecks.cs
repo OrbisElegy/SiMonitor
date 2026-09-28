@@ -339,6 +339,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyAdvancedTemplateDescriptions();
         VerifyHyperkalemiaProductStyle();
         VerifyHypokalemiaProductStyles();
+        VerifyCalciumProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -675,6 +676,51 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyCalciumProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 80, 82, 83, 84, 85, 86, 82, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "calcium preset atomically replaces previous electrolyte morphology");
+                if (choice == 80) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                var mode = choice == 0 ? Monitor.Simulation.Physiology.CalciumIllustration.Reference : (Monitor.Simulation.Physiology.CalciumIllustration)(choice - 81);
+                Require(pair.Physiology.Calcium == mode && pair.Ecg.Calcium == mode &&
+                    !pair.Physiology.HypokalemiaTuFusion && !pair.Ecg.HypokalemiaTuFusion,
+                    "monitor/paper share calcium mode and clear preceding T-U fusion");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - (choice == 0 ? 75000 : 60000)) < 1000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "calcium templates retain sample-derived electrical and mechanical measurements");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "calcium card uses actual selected acquired samples");
+                if (choice != 0)
+                {
+                    int qt = choice == 82 ? 300 : choice == 84 ? 260 : 460;
+                    Require(EcgTemplateSummary.Describe(pair.Ecg).Contains($"QT {qt} ms", StringComparison.Ordinal),
+                        "advanced page reports resolved shortened/prolonged QT");
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-calcium-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "calcium paper retains full twelve-lead snapshot");
+                window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 84; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for calcium template");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "calcium template retains independent no-ejection option");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyHypokalemiaProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

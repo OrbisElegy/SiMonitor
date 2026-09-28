@@ -337,6 +337,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
+        VerifyPreexcitationProductStyles();
         VerifyBlockProductStyles();
         VerifyDisorganizedProductStyles();
         VerifySvtProductStyles();
@@ -666,6 +667,53 @@ internal static class DesignPreviewSmokeChecks
             }
             var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
+        }
+        finally { window.Close(); }
+    }
+    private static void VerifyPreexcitationProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 21, 59, 60, 61, 62, 63, 64, 65, 59, 0 })
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "preexcitation presets replace VF and reset preceding PR/delta state");
+                if (choice == 21) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.Wpw == (choice is >= 59 and <= 62) && pair.Ecg.Wpw == pair.Physiology.Wpw &&
+                    pair.Physiology.WpwNegativeV1 == (choice is 60 or 62) && pair.Ecg.WpwNegativeV1 == pair.Physiology.WpwNegativeV1 &&
+                    pair.Physiology.WpwSmallerDelta == (choice is 61 or 62) && pair.Ecg.WpwSmallerDelta == pair.Physiology.WpwSmallerDelta &&
+                    pair.Physiology.ShortPr == (choice == 63) && pair.Ecg.ShortPr == pair.Physiology.ShortPr &&
+                    pair.Physiology.NormalPrDelta == (choice is 64 or 65) && pair.Ecg.NormalPrDelta == pair.Physiology.NormalPrDelta &&
+                    pair.Physiology.ProlongedPrDelta == (choice == 65) && pair.Ecg.ProlongedPrDelta == pair.Physiology.ProlongedPrDelta,
+                    "monitor/paper retain exactly the selected preexcitation variant");
+                Require(pair.Ecg.PrIntervalMilliseconds == (choice == 65 ? 240 : choice is >= 59 and <= 63 ? 100 : 160) &&
+                    pair.Ecg.QrsDurationMilliseconds == (choice is 61 or 62 ? 110 : choice is 59 or 60 or 64 or 65 ? 140 : 80),
+                    "paper uses the authored PR and QRS for each delta variant");
+                for (int i = 0; i < 320; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 75000) <= 5000,
+                    $"preexcitation measured HR choice={choice}: {reading.HeartRate}");
+                Require(reading.AbpMean.Status == WaveformMeasurementStatus.Valid, "preexcitation existing ejection reaches pressure measurement");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                long duration = StylePreviewCatalog.DurationNs(choice);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    "preexcitation preview matches selected source and mechanical timing");
+                window.SelectPage(1); Capture(window, $"ui-preview-preexcitation-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "preexcitation has full twelve-lead snapshot");
+                window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 59; window.ApplySettings();
+            var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only variable rate rejects without changing preexcitation timing");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override cannot replace preexcitation");
         }
         finally { window.Close(); }
     }

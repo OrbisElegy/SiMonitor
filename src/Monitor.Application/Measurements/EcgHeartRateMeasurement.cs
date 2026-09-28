@@ -114,6 +114,11 @@ public sealed class EcgHeartRateMeasurement
         s.History[s.Cursor] = value; s.Cursor = (s.Cursor + 1) % 250; s.Count = Math.Min(250, s.Count + 1);
         if (s.LastBeat is { } lastBeat && time - lastBeat >= ExpiryNs) { s.LastSlope = 0; }
         int threshold = Math.Max(90, s.LastSlope / 4);
+        // Discard a subthreshold prelude after a short quiet gap. Otherwise a
+        // short-PR P wave can keep the candidate open through the following QRS.
+        // Accepted QRS candidates still require the original64ms confirmation.
+        if (s.Active && s.Max - s.Min < 250 && time - s.LastActive >= 24_000_000 &&
+            slope < Math.Max(threshold / 2, s.MaxSlope / 4)) { s.Active = false; }
         if (!s.Active)
         {
             if (slope < threshold || s.Count < 10) { return; }

@@ -334,12 +334,20 @@ internal sealed class DesignPreviewSettings : UserControl
         _advancedParameters.Children.Add(DesktopInformationPages.Help("topic-8"));
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
-        _advancedParameters.Children.Add(Text($"P {config.Ecg.PDurationMilliseconds} ms · PR {config.Ecg.PrIntervalMilliseconds} ms · QRS {config.Ecg.QrsDurationMilliseconds} ms · QTc {config.Ecg.QtcMilliseconds} ms"));
+        _advancedParameters.Children.Add(Text(EcgTemplateSummary.Describe(config.Ecg)));
         _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
         _advancedParameters.Children.Add(Text(RespirationSelection == 3 ? "当前无呼吸分量，不提供吸呼比、呼吸深度等编辑。" :
             $"周期 {config.Physiology.BreathPeriodMilliseconds} ms · 吸气 {config.Physiology.InspirationMilliseconds} ms · 相对深度 {config.Physiology.RespAmplitudeCounts}"));
         _advancedParameters.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
-        _advancedParameters.Children.Add(Text(EjectionSelection == 3 ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+        try
+        {
+            var selected = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, EjectionSelection).Physiology;
+            bool noEjection = !selected.VentricularMechanicalEnabled || selected.CardiacActivity is
+                Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
+                Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
+            _advancedParameters.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+        }
+        catch (ArgumentException error) { _advancedParameters.Children.Add(Text("当前组合不兼容：" + error.Message)); }
         _advancedParameters.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
         _advancedParameters.Children.Add(developer);
     }

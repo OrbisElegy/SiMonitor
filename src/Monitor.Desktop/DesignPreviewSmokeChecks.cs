@@ -336,6 +336,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyAtrialProductStyles();
         VerifyAfVariantProductStyles();
         VerifyStandstillProductStyles();
+        VerifyAdvancedTemplateDescriptions();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -672,6 +673,47 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyAdvancedTemplateDescriptions()
+    {
+        for (int choice = 0; choice < DesignPreviewSettings.EcgChoiceCount; choice++)
+        {
+            var config = DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg;
+            string summary = EcgTemplateSummary.Describe(config);
+            Require(!string.IsNullOrWhiteSpace(summary) && !summary.Contains("QTc", StringComparison.Ordinal),
+                "advanced authored intervals never label a construction value as QTc");
+            if (choice is 6 or 7 or 8 or 9 or 37 or 38 or 39 or >= 66 and <= 71)
+            { Require(summary.Contains("PR 不适用", StringComparison.Ordinal), "AF/flutter hides construction P/PR"); }
+            if (choice is >= 10 and <= 12)
+            { Require(summary.Contains("PR 逐搏延长", StringComparison.Ordinal), "Wenckebach does not show a fixed PR"); }
+            if (choice is 18 or 19 or >= 26 and <= 30 or >= 32 and <= 35)
+            { Require(summary.Contains("无固定 PR", StringComparison.Ordinal), "independent atrial and ventricular clocks have no fixed PR"); }
+        }
+        Require(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(19, 0, 0).Ecg).Contains("QT 480 ms", StringComparison.Ordinal),
+            "ventricular escape reports resolved QT rather than its QTc input");
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            window.SelectPage(2);
+            foreach (int choice in new[] { 72, 74, 73, 20, 0 })
+            {
+                window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = choice;
+                window.Settings.Tabs.SelectedIndex = 5;
+                Capture(window, $"ui-preview-advanced-{choice}.png");
+                var text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+                Require(text.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg)),
+                    "advanced page renders the selected waveform semantics");
+                Require(text.Contains("当前无有效射血，不提供射血强度编辑。") == (choice != 0),
+                    "advanced page derives absent ejection from rhythm as well as ejection selection");
+            }
+            var live = window.Session;
+            window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = 74; window.Settings.EjectionSelection = 1;
+            window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-advanced-incompatible.png");
+            Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("当前组合不兼容：", StringComparison.Ordinal) == true) &&
+                ReferenceEquals(live, window.Session), "browsing incompatible advanced settings explains conflict without mutating live session");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyStandstillProductStyles()
     {
         var window = new DesignPreviewWindow(); window.Show();

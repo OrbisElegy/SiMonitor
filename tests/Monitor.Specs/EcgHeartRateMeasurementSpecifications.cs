@@ -11,12 +11,45 @@ internal static class EcgHeartRateMeasurementSpecifications
     private static readonly Guid Channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
     public static Specification[] All =>
     [
+        new(nameof(PeakedRepolarizationDoesNotDoubleCount), PeakedRepolarizationDoesNotDoubleCount),
         new(nameof(PreexcitationRetainsMeasuredRate), PreexcitationRetainsMeasuredRate),
         new(nameof(TwistingMorphologyPreservesMeasuredFluctuationAndRecovery), TwistingMorphologyPreservesMeasuredFluctuationAndRecovery),
         new(nameof(EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates), EcgRateComesFromAcquiredQrsAndHandlesPolarityAndFastRates),
         new(nameof(EcgContinuousDisorganizationDoesNotBecomeANormalRate), EcgContinuousDisorganizationDoesNotBecomeANormalRate),
         new(nameof(EcgMeasurementFencesBadInputAndRestoresPartialCandidates), EcgMeasurementFencesBadInputAndRestoresPartialCandidates),
     ];
+
+    private static void PeakedRepolarizationDoesNotDoubleCount()
+    {
+        foreach (int mode in new[] { 0, 1, 2 })
+        {
+            var config = PhysiologyIllustrationConfiguration.Default with
+            {
+                HyperkalemiaRepolarization = true,
+                HyperkalemiaConduction = mode > 0,
+                HyperkalemiaAbsentP = mode == 2,
+                CardiacActivity = mode == 2 ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular
+            };
+            var source = PhysiologyIllustrationSource.Create(config);
+            var detector = new EcgHeartRateMeasurement(Channel);
+            EcgHeartRateMeasurement? restored = null;
+            var beats = new List<DetectedEcgBeat>();
+            for (int step = 1; step <= 110; step++)
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                {
+                    var events = detector.Consume(wire); beats.AddRange(events);
+                    long last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
+                    var reading = detector.Read(last);
+                    if (restored is not null)
+                    { Check.That(events.SequenceEqual(restored.Consume(wire)) && reading == restored.Read(last), "T rejection and candidate recovery are identical"); }
+                    restored = EcgHeartRateMeasurement.Restore(detector.Capture());
+                    if (last > 3_000_000_000)
+                    { Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.MilliBeatsPerMinute == (mode == 0 ? 75000 : 60000), "peaked repolarization is not an extra QRS: " + reading); }
+                }
+            Check.That(beats.Count >= 18 && beats.Zip(beats.Skip(1)).All(p => p.Second.PeakTimeNs - p.First.PeakTimeNs == (mode == 0 ? 800_000_000 : 1_000_000_000)),
+                "one sample-derived confirmation per QRS despite high T amplitude");
+        }
+    }
 
     private static void PreexcitationRetainsMeasuredRate()
     {
@@ -36,7 +69,7 @@ internal static class EcgHeartRateMeasurementSpecifications
             EcgHeartRateMeasurement? restored = null;
             var beats = new List<DetectedEcgBeat>();
             for (int step = 1; step <= 110; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     var events = detector.Consume(wire); beats.AddRange(events);
                     long last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
@@ -77,7 +110,7 @@ internal static class EcgHeartRateMeasurementSpecifications
             EcgHeartRateMeasurement? restored = null;
             var rates = new HashSet<int>();
             for (int step = 1; step <= 210; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     var events = detector.Consume(wire);
                     long last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
@@ -105,7 +138,7 @@ internal static class EcgHeartRateMeasurementSpecifications
         var source = PhysiologyIllustrationSource.Create();
         var measured = new EcgHeartRateMeasurement(Channel); List<DetectedEcgBeat> beats = []; long last = 0;
         for (int step = 1; step <= 110; step++)
-            foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+            foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             { beats.AddRange(measured.Consume(wire)); last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000; }
         Check.That(measured.Read(last) is { Status: WaveformMeasurementStatus.Valid, MilliBeatsPerMinute: 75000 }, "real acquired lead II gives75bpm without source timing input");
         Check.That(beats.Count >= 20 && beats.All(b => b.ConfirmedAtNs > b.PeakTimeNs), "detected sample peak and later causal confirmation are separate");
@@ -118,7 +151,7 @@ internal static class EcgHeartRateMeasurementSpecifications
         {
             var input = PhysiologyIllustrationSource.Create(configuration); var calculator = new EcgHeartRateMeasurement(Channel);
             for (int step = 1; step <= 110; step++)
-                foreach (var wire in input.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in input.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 { calculator.Consume(wire); last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000; }
             Check.That(calculator.Read(last).MilliBeatsPerMinute == expected, "finite interval average includes variable RR and missed conducted beats: " + calculator.Read(last));
         }
@@ -141,7 +174,7 @@ internal static class EcgHeartRateMeasurementSpecifications
             var source = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Disorganized(pattern));
             var detector = new EcgHeartRateMeasurement(Channel); long last = 0;
             for (int step = 1; step <= 110; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     detector.Consume(wire); last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 196_000_000;
                     if (last >= 5_000_000_000)
@@ -165,7 +198,7 @@ internal static class EcgHeartRateMeasurementSpecifications
         var before = detector.Read(5_996_000_000);
         Check.That(before == restored.Read(5_996_000_000), "restored finite interval history agrees");
         Check.That(EcgHeartRateMeasurement.Restore(checkpoint).Read(196_000_000).Status == WaveformMeasurementStatus.WarmingUp, "checkpoint sample buffer not mutated later");
-        foreach (var wire in new[] { Wire(29), Wire(30, scale: int.MaxValue) })
+        foreach (byte[]? wire in new[] { Wire(29), Wire(30, scale: int.MaxValue) })
         {
             bool rejected = false;
             try { detector.Consume(wire); } catch (Exception error) when (error is ArgumentException or OverflowException) { rejected = true; }

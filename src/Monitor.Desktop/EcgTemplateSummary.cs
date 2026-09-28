@@ -19,6 +19,8 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
+        if (config.HyperkalemiaAbsentP)
+        { return "无 P 波；PR 不适用；" + ventricular; }
         if (AtrialFibrillationReference.IsPattern(pattern))
         {
             string aberrancy = config.IllustrateAfAberrancy

@@ -11,6 +11,8 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
     public bool HyperkalemiaRepolarization { get; init; }
+    public bool HyperkalemiaConduction { get; init; }
+    public bool HyperkalemiaAbsentP { get; init; }
     public int AbpPulsePermille { get; init; } = 1000;
     public int PaPulsePermille { get; init; } = 1000;
     public int CvpBaselineCentiMmHg { get; init; } = 600;
@@ -86,8 +88,10 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (HyperkalemiaConduction && !HyperkalemiaRepolarization || HyperkalemiaAbsentP && !HyperkalemiaConduction)
+        { throw new EventWaveformException("HyperkalemiaConduction.ConflictingModes", "configuration"); }
         if (HyperkalemiaRepolarization && (ConductionPattern != AvConductionPattern.FixedPr ||
-            VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+            VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || CardiacActivity != (HyperkalemiaAbsentP ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular) ||
             IndependentVentricularPeriodMilliseconds is not null || IndependentVentricularOffsetMilliseconds is not null ||
             BundleBlock != EcgBundleBlockIllustration.Reference || SeededRate is not null ||
             Wpw || WpwNegativeV1 || WpwSmallerDelta || ShortPr || NormalPrDelta || ProlongedPrDelta ||
@@ -187,7 +191,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
         bool flutter = AtrialFlutterReference.IsPattern(ConductionPattern);
         bool fibrillation = AtrialFibrillationReference.IsPattern(ConductionPattern);
         bool prematureBeat = PrematureAtrialReference.IsPattern(ConductionPattern) || PrematureJunctionalReference.IsPattern(ConductionPattern) || PrematureVentricularReference.IsPattern(ConductionPattern);
-        var timing = AtrialEscape ? AtrialEscapeReference.Timing : Aar ? AcceleratedAtrialReference.Timing : Svt ? SupraventricularTachycardiaReference.ResolveTiming(SvtRbbb, SvtLbbb) : NormalPrDelta ? NormalPrDeltaReference.ResolveTiming(ProlongedPrDelta) : ShortPr ? ShortPrReference.Timing : Wpw ? WpwReference.ResolveTiming(WpwSmallerDelta) : prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
+        var timing = HyperkalemiaConduction ? HyperkalemiaConductionReference.Timing : AtrialEscape ? AtrialEscapeReference.Timing : Aar ? AcceleratedAtrialReference.Timing : Svt ? SupraventricularTachycardiaReference.ResolveTiming(SvtRbbb, SvtLbbb) : NormalPrDelta ? NormalPrDeltaReference.ResolveTiming(ProlongedPrDelta) : ShortPr ? ShortPrReference.Timing : Wpw ? WpwReference.ResolveTiming(WpwSmallerDelta) : prematureBeat ? (ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? PrematureAtrialReference.BlockedTiming : PrematureAtrialReference.Timing) : fibrillation ? AtrialFibrillationReference.Timing : flutter ? AtrialFlutterReference.Timing(VentricularConductionRatio) : TextbookEcgReference.Timing;
         if (SeededRate is { } seeded)
         {
             if (ConductionPattern != AvConductionPattern.FixedPr || IndependentVentricularPeriodMilliseconds is not null ||

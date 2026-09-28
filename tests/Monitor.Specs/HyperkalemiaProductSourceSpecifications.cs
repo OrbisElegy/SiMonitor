@@ -11,7 +11,50 @@ internal static class HyperkalemiaProductSourceSpecifications
     [
         new(nameof(RepolarizationSourcePreservesMechanicsAndRecovery), RepolarizationSourcePreservesMechanicsAndRecovery),
         new(nameof(RepolarizationSourceRejectsConflictingCardiacModes), RepolarizationSourceRejectsConflictingCardiacModes),
+        new(nameof(ConductionSourceUsesAuthoredClocksAndAtrialActivity), ConductionSourceUsesAuthoredClocksAndAtrialActivity),
     ];
+    private static void ConductionSourceUsesAuthoredClocksAndAtrialActivity()
+    {
+        var config = PhysiologyIllustrationConfiguration.Default with { HyperkalemiaRepolarization = true, HyperkalemiaConduction = true };
+        var withoutP = config with { HyperkalemiaAbsentP = true, CardiacActivity = CardiacActivity.VentricularOnly };
+        Check.That(config.ResolvePlan() == HyperkalemiaConductionReference.CreatePlan() &&
+            withoutP.ResolvePlan() == HyperkalemiaConductionReference.CreatePlan(true), "conduction clocks use RR1000, PR240 and ejection320ms");
+        var source = PhysiologyIllustrationSource.Create(config); var absent = PhysiologyIllustrationSource.Create(withoutP);
+        bool ecgChanged = false, cvpChanged = false;
+        for (int step = 1; step <= 40; step++)
+        {
+            var a = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            var b = absent.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            Check.That(a.Count == b.Count, "atrial suppression preserves sample frontier");
+            foreach (var pair in a.Zip(b))
+            {
+                var left = WaveformEnvelopeCodec.Decode(pair.First); var right = WaveformEnvelopeCodec.Decode(pair.Second);
+                for (int channel = 0; channel < 7; channel++)
+                {
+                    var id = PhysiologyIllustrationSource.ChannelId(channel);
+                    bool equal = left.Planes.Single(p => p.ChannelId == id).Samples.SequenceEqual(right.Planes.Single(p => p.ChannelId == id).Samples);
+                    if (channel == 0) { ecgChanged |= !equal; }
+                    else if (channel == 6) { cvpChanged |= !equal; }
+                    else { Check.That(equal, "absent P does not suppress ventricular perfusion or independent respiration"); }
+                }
+            }
+            if (step == 17)
+            {
+                source = PhysiologyWaveformGroup.Restore(source.CaptureState());
+                absent = PhysiologyWaveformGroup.Restore(absent.CaptureState());
+            }
+        }
+        Check.That(ecgChanged && cvpChanged, "absent P removes both electrical P and CVP atrial contribution");
+        foreach (var invalid in new[] { config with { HyperkalemiaRepolarization = false },
+            withoutP with { HyperkalemiaConduction = false }, withoutP with { CardiacActivity = CardiacActivity.AtrialAndVentricular },
+            config with { CardiacActivity = CardiacActivity.VentricularOnly } })
+        {
+            bool rejected = false;
+            try { PhysiologyIllustrationSource.Create(invalid); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "orphan or inconsistent conduction/atrial flags reject");
+        }
+    }
+
     private static void RepolarizationSourcePreservesMechanicsAndRecovery()
     {
         var config = PhysiologyIllustrationConfiguration.Default with { HyperkalemiaRepolarization = true };

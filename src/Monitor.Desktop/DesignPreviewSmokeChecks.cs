@@ -679,19 +679,19 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in new[] { 21, 75, 74, 75, 0 })
+            foreach (int choice in new[] { 21, 75, 76, 77, 74, 75, 0 })
             {
                 var previous = window.Session;
                 window.Settings.EcgSelection = choice; window.ApplySettings();
                 Require(!ReferenceEquals(previous, window.Session), "high-T preset replaces incompatible rhythm atomically");
                 if (choice is 21 or 74) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
-                Require(pair.Physiology.HyperkalemiaRepolarization == (choice == 75) &&
-                    pair.Ecg.HyperkalemiaRepolarization == (choice == 75), "monitor and paper share high-T selection and reset");
+                Require(pair.Physiology.HyperkalemiaRepolarization == (choice >= 75) &&
+                    pair.Ecg.HyperkalemiaRepolarization == (choice >= 75), "monitor and paper share high-T selection and reset");
                 for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
                 var reading = window.Session.Measurements!;
                 Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid &&
-                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - 75000) < 1000,
+                    Math.Abs(reading.HeartRate.MilliBeatsPerMinute!.Value - (choice >= 76 ? 60000 : 75000)) < 1000,
                     $"high T is not counted as another heartbeat: {reading.HeartRate}");
                 Require(reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "repolarization preserves sampled mechanical measurements");
@@ -707,6 +707,15 @@ internal static class DesignPreviewSmokeChecks
                     foreach (int channel in Enumerable.Range(1, 6))
                     { Require(source.Samples(channel, start, end).SequenceEqual(normal.Samples(channel, start, end)), "no invented non-ECG potassium effect"); }
                     Require(EcgTemplateSummary.Describe(pair.Ecg).Contains("QT 300 ms", StringComparison.Ordinal), "advanced summary uses high-T resolved timing");
+                }
+                if (choice >= 76)
+                {
+                    Require(pair.Physiology.ResolvePlan() == Monitor.Simulation.Physiology.HyperkalemiaConductionReference.CreatePlan(choice == 77),
+                        "conduction template shares authored atrial/ventricular electrical and mechanical clocks");
+                    string summary = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(summary.Contains("QRS 140 ms", StringComparison.Ordinal) && summary.Contains("QT 440 ms", StringComparison.Ordinal) &&
+                        (choice != 77 || summary.StartsWith("无 P 波；PR 不适用", StringComparison.Ordinal)),
+                        "conduction summary reports resolved timing and absent-P semantics");
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-high-t-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "high-T paper retains complete twelve-lead snapshot");

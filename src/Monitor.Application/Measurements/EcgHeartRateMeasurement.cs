@@ -145,7 +145,7 @@ public sealed class EcgHeartRateMeasurement
         long interval = s.LastBeat is { } previous ? s.PeakTime - previous : long.MaxValue;
         // Suppress a secondary lobe and slower T-like slopes near a prior QRS.
         // This is a detector heuristic, not a physiological refractory model.
-        if (interval < 200_000_000 || interval < 360_000_000 && s.MaxSlope < s.LastSlope / 2) { return; }
+        if (interval < 200_000_000 || interval < 360_000_000 && (long)s.MaxSlope * 3 < (long)s.LastSlope * 2) { return; }
         s.Peaks = interval <= ExpiryNs ? s.Peaks.Append(s.PeakTime).TakeLast(MaximumRateIntervals + 1).ToArray() : [s.PeakTime];
         s.LastBeat = s.PeakTime; s.LastSlope = s.MaxSlope;
         if (s.Peaks.Length >= 2) { s.Uncountable = false; }

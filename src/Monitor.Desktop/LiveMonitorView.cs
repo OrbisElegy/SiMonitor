@@ -29,11 +29,12 @@ internal sealed class LiveMonitorView : UserControl
     internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
-    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(3) };
+    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(8) };
     internal Border NoticeRegion => _noticeBackground;
     internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
     internal Func<string>? BeatSourceText { get; set; }
     internal TextBlock Clock { get; } = new() { Foreground = Brushes.White, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    internal Border NoticeSurface => _noticeBackground;
     internal TextBlock Notice { get; } = new() { Foreground = Brushes.White, FontSize = 20, FontWeight = FontWeight.Bold, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     internal IReadOnlyList<string> NumericTexts => _rows.Select(r => r.Primary.Text ?? "").ToArray();
     protected override Size MeasureOverride(Size availableSize)
@@ -82,13 +83,13 @@ internal sealed class LiveMonitorView : UserControl
             if (slot.Channel == 2)
             {
                 var pair = new Grid { ColumnDefinitions = new("*,22") };
-                var bar = new PulseIndicator(); Grid.SetColumn(bar, 1); pair.Children.Add(primary); pair.Children.Add(bar); content.Children.Add(pair);
+                var bar = new PulseIndicator(); Grid.SetColumn(bar, 1); pair.Children.Add(HighlightHost(primary)); pair.Children.Add(bar); content.Children.Add(pair);
                 var pi = new TextBlock { Text = "PI --- %", FontSize = 14, Foreground = color };
                 AutomationProperties.SetName(pi, "灌注指数 PI，百分比");
                 content.Children.Add(pi); _opticalRows.Add((pi, bar));
             }
-            else { content.Children.Add(primary); }
-            content.Children.Add(secondary);
+            else { content.Children.Add(HighlightHost(primary)); }
+            content.Children.Add(HighlightHost(secondary));
             var border = new Border
             {
                 Padding = new Thickness(8, 6),
@@ -107,6 +108,9 @@ internal sealed class LiveMonitorView : UserControl
         }
         Content = root; Refresh();
     }
+    private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(8), Child = text };
+    internal static IBrush? NumericBackground(TextBlock text) => ((Border)text.Parent!).Background;
+
     internal void Refresh()
     {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
@@ -150,7 +154,7 @@ internal sealed class LiveMonitorView : UserControl
                 case 1:
                     primary.Text = Value(MeasurementSource.ImpedanceRespiration, snapshot.ImpedanceRespiration.Status, snapshot.ImpedanceRespiration.MilliBreathsPerMinute, 1000, "RR"); break;
                 case 2:
-                    primary.Text = Value(MeasurementSource.SpO2, snapshot.SpO2.Status, snapshot.SpO2.SaturationMilliPercent, 1000, "SpO₂");
+                    primary.Text = Value(MeasurementSource.SpO2, snapshot.SpO2.Status, snapshot.SpO2.SaturationMilliPercent, 1000, "SpO₂") + (snapshot.SpO2.IsQuestionable ? "?" : "");
                     secondary.Text = "PR  " + Value(MeasurementSource.Pleth, snapshot.PulseRate.Status, snapshot.PulseRate.MilliBeatsPerMinute, 1000, "PR") + " bpm"; break;
                 case 4:
                     primary.Text = Value(MeasurementSource.Co2, snapshot.Capnography.EndTidalCentiMmHg.Status, snapshot.Capnography.EndTidalCentiMmHg.Value, 100, "EtCO₂");
@@ -183,14 +187,6 @@ internal sealed class LiveMonitorView : UserControl
             long seconds = elapsed / 1_000_000_000;
             Notice.Text += $"（{seconds / 60:00}:{seconds % 60:00}）";
         }
-        _noticeBackground.Background = notice?.Level switch
-        {
-            MonitorNoticeLevel.Notice when NoticeColorEnabled?.Invoke() != false => Brush.Parse("#145AA3"),
-            MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
-            MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
-            _ => Brushes.Transparent
-        };
-        Notice.Foreground = notice?.Level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;
         ToolTip.SetTip(Notice, Notice.Text); AutomationProperties.SetName(Notice, Notice.Text);
         RefreshNumericHighlights(_trace.Session.SimulationTimeNs);
     }
@@ -199,6 +195,15 @@ internal sealed class LiveMonitorView : UserControl
         // 1Hz cycle, half a second on/off; simulation clock freezes on pause.
         bool on = timeNs % 1_000_000_000 < 500_000_000;
         bool noticeColor = NoticeColorEnabled?.Invoke() != false;
+        var level = _rotation.Current?.Level;
+        bool bannerOn = on && level is not null && level != MonitorNoticeLevel.Info && (level != MonitorNoticeLevel.Notice || noticeColor);
+        _noticeBackground.Background = !bannerOn ? Brushes.Transparent : level switch
+        {
+            MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
+            MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
+            _ => Brush.Parse("#145AA3")
+        };
+        Notice.Foreground = bannerOn && level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;
         if (ReferenceEquals(_highlightNotices, _notices) && _highlightOn == on && _highlightNoticeColor == noticeColor) { return; }
         _highlightNotices = _notices; _highlightOn = on; _highlightNoticeColor = noticeColor;
         void Paint(TextBlock text, MonitorNumeric? numeric, IBrush normal)
@@ -206,7 +211,7 @@ internal sealed class LiveMonitorView : UserControl
             var level = _notices.Where(n => n.Numeric == numeric && numeric is not null && n.Level != MonitorNoticeLevel.Info)
                 .Select(n => (MonitorNoticeLevel?)n.Level).Max();
             bool highlight = on && level is not null && (level != MonitorNoticeLevel.Notice || noticeColor);
-            text.Background = !highlight ? Brushes.Transparent : level switch
+            ((Border)text.Parent!).Background = !highlight ? Brushes.Transparent : level switch
             {
                 MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
                 MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),

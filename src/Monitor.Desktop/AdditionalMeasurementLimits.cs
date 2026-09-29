@@ -8,29 +8,11 @@ using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
 
-// One editor at a time; switching parameters retains each independent setting.
-internal sealed class AdditionalMeasurementLimits : StackPanel
+// Persistent independent editors; each is hosted in its own alarm category.
+internal sealed class AdditionalMeasurementLimits
 {
-    internal ComboBox Parameter { get; } = new()
-    { ItemsSource = MeasuredLimitNotice.Descriptors.Select(d => d.Label).ToArray(), SelectedIndex = 0, MinWidth = 240 };
-    internal IReadOnlyDictionary<MonitorNumeric, LimitEditor> Editors { get; }
-    private readonly ContentControl _editor = new();
-    internal AdditionalMeasurementLimits()
-    {
-        Spacing = 8;
-        Editors = MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new LimitEditor(d));
-        Children.Add(new TextBlock { Text = "其他实测参数上下限", FontWeight = FontWeight.SemiBold });
-        Children.Add(Parameter); Children.Add(_editor);
-        AutomationProperties.SetName(Parameter, "选择报警参数");
-        Parameter.SelectionChanged += (_, _) => Select(); Select();
-        Children.Add(new TextBlock
-        {
-            Text = "各参数独立启用，切换参数保留设置。默认阈值仅作教学示例。只比较有效实测值；压力为平均压，RESP 与 CO₂ 呼吸率分别计算。无效读数不推断窒息或传感器脱落。",
-            TextWrapping = TextWrapping.Wrap
-        });
-    }
-    private void Select() => _editor.Content = Parameter.SelectedIndex >= 0 && Parameter.SelectedIndex < MeasuredLimitNotice.Descriptors.Count
-        ? Editors[MeasuredLimitNotice.Descriptors[Parameter.SelectedIndex].Numeric] : null;
+    internal IReadOnlyDictionary<MonitorNumeric, LimitEditor> Editors { get; } =
+        MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new LimitEditor(d));
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
     {
         foreach (var descriptor in MeasuredLimitNotice.Descriptors)

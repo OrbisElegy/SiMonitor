@@ -45,8 +45,12 @@ internal sealed class MonitorAlertSettings : StackPanel
         Children.Add(SpO2Enabled);
         Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
         Children.Add(DesktopInformationPages.Help("topic-13"));
-        Children.Add(AdditionalLimits);
-        Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds);
+        foreach (var descriptor in MeasuredLimitNotice.Descriptors)
+        {
+            Children.Add(AdditionalLimits.Editors[descriptor.Numeric]);
+            if (descriptor.Numeric == MonitorNumeric.EtCo2)
+            { Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds); }
+        }
         Children.Add(DesktopInformationPages.Help("topic-14"));
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);

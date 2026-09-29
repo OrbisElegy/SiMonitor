@@ -318,7 +318,7 @@ internal static class DesignPreviewSmokeChecks
         var session = new LocalMonitorPreviewSession(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default());
         var view = new LiveMonitorView(new LiveMonitorTrace(session)) { AdditionalNotices = settings.Notices };
         view.RefreshReadings(At(80000)); view.RefreshNumericHighlights(0);
-        Require(view.NumericTexts[1] == "80" && (view.NumericBlocks[2].Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
+        Require(view.NumericTexts[1] == "80" && (LiveMonitorView.NumericBackground(view.NumericBlocks[2]) as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
             view.HighestNotice == MonitorNoticeLevel.Critical, "measured low SpO2 drives displayed number, red backing and audio severity");
         view.RefreshReadings(At(null, WaveformMeasurementStatus.PoorSignal)); view.RefreshNumericHighlights(0);
         Require(view.NumericTexts[1] == "---" && view.HighestNotice == MonitorNoticeLevel.Info,
@@ -532,6 +532,12 @@ internal static class DesignPreviewSmokeChecks
             window.Width = 1440; window.Height = 940;
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-audio.png");
             var settingsSession = window.Session;
+            var alarmGroups = window.Settings.SectionPages[3];
+            var alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
+            Require(alarmLabels.Contains("EtCO₂") && alarmLabels.Contains("PR · PLETH") && alarmLabels.Contains("ABP 平均压") &&
+                !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries");
+            Require(ReferenceEquals(window.Settings.Alerts.NoExpirationEnabled.Parent,
+                window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].Parent), "CO2 absence controls share EtCO2 page");
             var soundGroups = window.Settings.SectionPages[2];
             soundGroups.Sections.SelectedIndex = 1;
             window.Settings.Sound.HeartbeatVolume.Value = 62;
@@ -1792,7 +1798,7 @@ internal static class DesignPreviewSmokeChecks
         Require(!settings.Notices(snapshot).Any(), "all real limits remain opt-in");
         for (int i = 0; i < MeasuredLimitNotice.Descriptors.Count; i++)
         {
-            var d = MeasuredLimitNotice.Descriptors[i]; extra.Parameter.SelectedIndex = i;
+            var d = MeasuredLimitNotice.Descriptors[i];
             var editor = extra.Editors[d.Numeric];
             Require(editor.Parent is not null && editor.CriticalLow.Value == (decimal)d.TeachingDefaults.CriticalLow! / d.Divisor,
                 "each selected editor exposes correctly scaled units");
@@ -1801,7 +1807,6 @@ internal static class DesignPreviewSmokeChecks
             editor.WarningLow.Value = d.Minimum < 0 ? -5 : .25m;
             editor.WarningHigh.Value = .5m; editor.CriticalHigh.Value = 1;
         }
-        extra.Parameter.SelectedIndex = 0;
         Require(extra.Editors[MonitorNumeric.RespirationRate].CriticalHigh.Value == 1, "switching editor retains prior limits");
         var notices = settings.Notices(snapshot).ToArray();
         Require(notices.Length == 7 && notices.All(n => n.Level == MonitorNoticeLevel.Critical) && notices.Select(n => n.Id).Distinct().Count() == 7,
@@ -1811,11 +1816,11 @@ internal static class DesignPreviewSmokeChecks
         { AdditionalNotices = settings.Notices };
         view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
         var co2Rate = view.NumericBlocks.Single(b => b.IsVisible && AutomationProperties.GetName(b) == "RR · CO₂，次/分");
-        Require((co2Rate.Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
+        Require((LiveMonitorView.NumericBackground(co2Rate) as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Color.Parse("#ffb51f2c") &&
             view.HighestNotice == MonitorNoticeLevel.Critical, "secondary CO2 rate binds flashing and sound severity");
         var invalid = snapshot with { Capnography = new(new(WaveformMeasurementStatus.PoorSignal, null, null), new(WaveformMeasurementStatus.PoorSignal, null, null)) };
         view.RefreshReadings(invalid); view.RefreshNumericHighlights(0);
-        Require((co2Rate.Background as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Colors.Transparent &&
+        Require((LiveMonitorView.NumericBackground(co2Rate) as Avalonia.Media.ISolidColorBrush)?.Color == Avalonia.Media.Colors.Transparent &&
             view.ActiveNotices.Any(n => n.Numeric == MonitorNumeric.RespirationRate && n.Level == MonitorNoticeLevel.Critical),
             "CO2 failure clears its highlight while independent RESP condition stays");
         foreach (var editor in extra.Editors.Values) { editor.Enabled.IsChecked = false; }
@@ -1831,20 +1836,30 @@ internal static class DesignPreviewSmokeChecks
         Avalonia.Media.Color Color(Avalonia.Media.IBrush? brush) => (brush as Avalonia.Media.ISolidColorBrush)?.Color ?? default;
         view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
         var hr = view.NumericBlocks[0]; var spo2 = view.NumericBlocks[2]; var pr = view.NumericBlocks[3];
-        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ff000000"), "warning numeric uses yellow backing with black high-contrast text");
-        Require(Color(pr.Background) == Avalonia.Media.Color.Parse("#ff145aa3") && Color(pr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff") && Color(spo2.Background) == Avalonia.Media.Colors.Transparent,
+        Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Color.Parse("#fff2c94c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ff000000"), "warning numeric uses yellow backing with black high-contrast text");
+        Require(Color(LiveMonitorView.NumericBackground(pr)) == Avalonia.Media.Color.Parse("#ff145aa3") && Color(pr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff") && Color(LiveMonitorView.NumericBackground(spo2)) == Avalonia.Media.Colors.Transparent,
             "notice highlights its own secondary numeric, not unrelated SpO2 or banner-selected HR");
+        Require(view.NoticeSurface.CornerRadius == ((Border)hr.Parent!).CornerRadius && view.NoticeSurface.CornerRadius.TopLeft > 0,
+            "banner and numeric use matching rounded highlight surfaces");
+        Require(Color(view.NoticeSurface.Background) == Avalonia.Media.Color.Parse("#fff2c94c"), "warning banner lights with numeric phase");
         view.RefreshNumericHighlights(500_000_000);
-        Require(Color(hr.Background) == Avalonia.Media.Colors.Transparent && Color(hr.Foreground) == Avalonia.Media.Color.Parse(LiveMonitorTrace.Colors[0]), "half-cycle restores normal channel color");
+        Require(Color(view.NoticeSurface.Background) == Avalonia.Media.Colors.Transparent && !string.IsNullOrEmpty(view.Notice.Text), "banner off phase keeps its text readable");
+        Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Colors.Transparent && Color(hr.Foreground) == Avalonia.Media.Color.Parse(LiveMonitorTrace.Colors[0]), "half-cycle restores normal channel color");
         view.RefreshNumericHighlights(1_000_000_000);
-        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c"), "one-second cycle repeats");
+        Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Color.Parse("#fff2c94c"), "one-second cycle repeats");
         noticeColor = false; view.RefreshNumericHighlights(1_000_000_000);
-        Require(Color(pr.Background) == Avalonia.Media.Colors.Transparent && Color(hr.Background) == Avalonia.Media.Color.Parse("#fff2c94c") && view.ActiveNotices.Any(n => n.Id == "pr"), "Notice switch removes color without removing condition or Warning highlighting");
+        Require(Color(LiveMonitorView.NumericBackground(pr)) == Avalonia.Media.Colors.Transparent && Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Color.Parse("#fff2c94c") && view.ActiveNotices.Any(n => n.Id == "pr"), "Notice switch removes color without removing condition or Warning highlighting");
         notices = [new("hr", MonitorNoticeLevel.Critical, "ECG HR 极高") { Numeric = MonitorNumeric.HeartRate }];
         view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
-        Require(Color(hr.Background) == Avalonia.Media.Color.Parse("#ffb51f2c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff"), "critical red backing uses white text");
+        Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Color.Parse("#ffb51f2c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff"), "critical red backing uses white text");
+        view.RefreshNumericHighlights(500_000_000);
+        Require(Color(view.NoticeSurface.Background) == Avalonia.Media.Colors.Transparent, "critical banner also flashes");
+        view.RefreshReadings(snapshot with { SpO2 = new(WaveformMeasurementStatus.Valid, 99000, 500000, snapshot.SampleTimeNs) { PerfusionMilliPercent = 200 } });
+        Require(spo2.Text == "99?", "reportable low perfusion displays question suffix");
+        view.RefreshReadings(snapshot with { SpO2 = new(WaveformMeasurementStatus.PoorSignal, null, null, snapshot.SampleTimeNs) { PerfusionMilliPercent = 20 } });
+        Require(spo2.Text == "---", "unreportable saturation retains placeholder");
         notices = []; view.RefreshReadings(snapshot); view.RefreshNumericHighlights(0);
-        Require(Color(hr.Background) == Avalonia.Media.Colors.Transparent, "cleared alarms immediately clear numeric highlighting");
+        Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Colors.Transparent, "cleared alarms immediately clear numeric highlighting");
     }
     private static void VerifyStableSlowContours()
     {

@@ -168,6 +168,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionComponents")
+        { Settings.Status.Text = "未应用：请检查 QRS 形态、混合比例及 ST／T 分量的整数值。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InfarctionChestRequired")
         { Settings.Status.Text = "未应用：梗死快照须至少选择一个胸导联。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionDelay")

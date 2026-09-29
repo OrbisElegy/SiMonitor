@@ -103,6 +103,25 @@ internal sealed class DesignPreviewSettings : UserControl
         }
         return (Read(Co2TransportDelay), Read(Co2DispersionStep));
     }
+    internal NumericUpDown Co2DeadSpace { get; } = new() { Minimum = 1, Maximum = 10000, Value = 125, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown Co2Rise { get; } = new() { Minimum = 1, Maximum = 10000, Value = 250, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown Co2Fall { get; } = new() { Minimum = 1, Maximum = 10000, Value = 200, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal (int DeadSpace, int Rise, int Fall) ReadCo2Timing()
+    {
+        static int Read(NumericUpDown field)
+        {
+            decimal value = field.Value ?? throw new ArgumentException("Preview.InvalidCo2Timing");
+            if (value < field.Minimum || value > field.Maximum || value != decimal.Truncate(value))
+            { throw new ArgumentException("Preview.InvalidCo2Timing"); }
+            return checked((int)value);
+        }
+        return (Read(Co2DeadSpace), Read(Co2Rise), Read(Co2Fall));
+    }
+    internal string BreathingConstraintDescription()
+    {
+        var timing = ReadCo2Timing();
+        return $"吸气须至少 {timing.Fall} ms，呼气须大于 {timing.DeadSpace + timing.Rise} ms；请调整 CO₂ 时长、呼吸频率或吸气占比。";
+    }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -148,6 +167,7 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly Func<int, int, int, StylePreviewData> _preview;
     private readonly StackPanel _advancedEcg = new() { Spacing = 16 };
     private readonly StackPanel _advancedRespiration = new() { Spacing = 16 };
+    private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
     internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
@@ -352,13 +372,13 @@ internal sealed class DesignPreviewSettings : UserControl
         ? checked((int)((OpticalTarget.Value ?? throw new ArgumentException("SpO2 target required")) * 1000)) : null;
     internal (int Period, int Inspiration) ReadBreathingTiming()
     {
+        var timing = ReadCo2Timing();
         decimal rate = RespiratoryRate.Value ?? throw new ArgumentException("Preview.InvalidBreathingTiming");
         decimal fraction = InspirationPercent.Value ?? throw new ArgumentException("Preview.InvalidBreathingTiming");
         if (rate is < 6 or > 60 || fraction is < 10 or > 90) { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
         int period = checked((int)decimal.Round(60000 / rate, 0, MidpointRounding.ToEven));
         int inspiration = checked((int)decimal.Round(period * fraction / 100, 0, MidpointRounding.ToEven));
-        var reference = PhysiologyDemoConfiguration.Default;
-        if (inspiration < reference.Co2FallMilliseconds || period - inspiration <= reference.Co2DeadSpaceMilliseconds + reference.Co2RiseMilliseconds)
+        if (inspiration < timing.Fall || period - inspiration <= timing.DeadSpace + timing.Rise)
         { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
         return (period, inspiration);
     }
@@ -369,8 +389,10 @@ internal sealed class DesignPreviewSettings : UserControl
             var timing = ReadBreathingTiming();
             BreathingTiming.Text = $"吸气 {timing.Inspiration} ms · 呼气 {timing.Period - timing.Inspiration} ms · 周期 {timing.Period} ms（设置预览，非实测）";
         }
+        catch (ArgumentException error) when (error.Message == "Preview.InvalidCo2Timing")
+        { BreathingTiming.Text = "当前 CO₂ 时长未填写完整或不是正整数。"; }
         catch (ArgumentException)
-        { BreathingTiming.Text = "当前组合不可用：吸气须至少200 ms，呼气须大于375 ms。请调整呼吸频率或吸气占比。"; }
+        { BreathingTiming.Text = "当前组合不可用：" + BreathingConstraintDescription(); }
     }
     private StackPanel VitalSigns()
     {
@@ -387,6 +409,9 @@ internal sealed class DesignPreviewSettings : UserControl
         panel.Children.Add(BreathingTiming);
         RespiratoryRate.ValueChanged += (_, _) => RefreshBreathingTiming();
         InspirationPercent.ValueChanged += (_, _) => RefreshBreathingTiming();
+        Co2DeadSpace.ValueChanged += (_, _) => RefreshBreathingTiming();
+        Co2Rise.ValueChanged += (_, _) => RefreshBreathingTiming();
+        Co2Fall.ValueChanged += (_, _) => RefreshBreathingTiming();
         RefreshBreathingTiming();
         Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
         Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
@@ -446,6 +471,16 @@ internal sealed class DesignPreviewSettings : UserControl
         _advancedRespiration.Children.Add(Text(RespirationSelection == 3
             ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
             : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
+        if (_co2Timing.Children.Count == 0)
+        {
+            foreach (var (label, input) in new[] { ("CO₂ 死腔时长（ms）", Co2DeadSpace), ("CO₂ 上升时长（ms）", Co2Rise), ("CO₂ 下降时长（ms）", Co2Fall) })
+            {
+                var field = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 16, 12) };
+                field.Children.Add(Text(label)); field.Children.Add(input); _co2Timing.Children.Add(field);
+                AutomationProperties.SetName(input, label);
+            }
+        }
+        _advancedRespiration.Children.Add(_co2Timing);
         _advancedRespiration.Children.Add(Text("CO₂ 管路延迟（0–5000 ms）"));
         _advancedRespiration.Children.Add(Co2TransportDelay);
         _advancedRespiration.Children.Add(Text("CO₂ 展宽步长（0–500 ms）"));

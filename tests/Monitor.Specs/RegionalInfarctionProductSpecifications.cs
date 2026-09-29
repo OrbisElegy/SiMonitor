@@ -6,18 +6,19 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Specs;
 
-internal static class InferiorInfarctionProductSpecifications
+internal static class RegionalInfarctionProductSpecifications
 {
     public static Specification[] All =>
     [
-        new(nameof(InferiorSnapshotsPreserveQrsDetectionAndNonEcgChannels), InferiorSnapshotsPreserveQrsDetectionAndNonEcgChannels),
-        new(nameof(InferiorSnapshotsMatchProjectionAndRejectConflicts), InferiorSnapshotsMatchProjectionAndRejectConflicts),
+        new(nameof(RegionalSnapshotsPreserveQrsDetectionAndNonEcgChannels), RegionalSnapshotsPreserveQrsDetectionAndNonEcgChannels),
+        new(nameof(RegionalSnapshotsMatchProjectionAndRejectConflicts), RegionalSnapshotsMatchProjectionAndRejectConflicts),
     ];
     private static IEnumerable<EcgChestInfarctionPlan> Snapshots() =>
-        Enum.GetValues<InfarctionIllustrationStage>().Where(stage => stage != InfarctionIllustrationStage.None)
-            .Select(stage => new EcgChestInfarctionPlan(0, stage, InfarctionTerritory.Inferior));
+        new[] { InfarctionTerritory.Inferior, InfarctionTerritory.Lateral }.SelectMany(territory =>
+            Enum.GetValues<InfarctionIllustrationStage>().Where(stage => stage != InfarctionIllustrationStage.None)
+                .Select(stage => new EcgChestInfarctionPlan(0, stage, territory)));
 
-    private static void InferiorSnapshotsPreserveQrsDetectionAndNonEcgChannels()
+    private static void RegionalSnapshotsPreserveQrsDetectionAndNonEcgChannels()
     {
         foreach (var shape in Snapshots())
         {
@@ -31,7 +32,7 @@ internal static class InferiorInfarctionProductSpecifications
             {
                 var actual = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
                 var expected = reference.AdvanceTo(step * 200_000_000L, 50, 1, 100);
-                Check.That(actual.Count == expected.Count, "inferior snapshot retains sample frontiers");
+                Check.That(actual.Count == expected.Count, "regional snapshot retains sample frontiers");
                 foreach (var pair in actual.Zip(expected))
                 {
                     var a = WaveformEnvelopeCodec.Decode(pair.First); var b = WaveformEnvelopeCodec.Decode(pair.Second);
@@ -39,7 +40,7 @@ internal static class InferiorInfarctionProductSpecifications
                     {
                         bool equal = plane.Samples.SequenceEqual(b.Planes.Single(p => p.ChannelId == plane.ChannelId).Samples);
                         if (plane.ChannelId == PhysiologyIllustrationSource.ChannelId(0)) { changed |= !equal; }
-                        else { Check.That(equal, "inferior snapshot does not invent altered mechanics or respiration"); }
+                        else { Check.That(equal, "regional snapshot does not invent altered mechanics or respiration"); }
                     }
                     var events = detector.Consume(pair.First); count += events.Count;
                     Check.That(events.All(e => e.PeakTimeNs % 800_000_000 >= 160_000_000 &&
@@ -49,14 +50,16 @@ internal static class InferiorInfarctionProductSpecifications
                     { Check.That(events.SequenceEqual(restored.Consume(pair.First)) && reading == restored.Read(end), "QRS candidate restores exactly"); }
                     restored = EcgHeartRateMeasurement.Restore(detector.Capture());
                     if (end > 3_000_000_000)
-                    { Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.MilliBeatsPerMinute == 75000, "inferior snapshot preserves75bpm sample rate"); }
+                    { Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.MilliBeatsPerMinute == 75000, "regional snapshot preserves75bpm sample rate"); }
                 }
                 if (step == 19) { source = PhysiologyWaveformGroup.Restore(source.CaptureState()); }
             }
-            Check.That(changed && count == 25, "actual ECG changes while all QRS remain detected");
+            Check.That(count == 25, "one QRS per cycle remains detected");
+            if (shape.Territory == InfarctionTerritory.Inferior)
+            { Check.That(changed, "inferior morphology changes monitored II"); }
         }
     }
-    private static void InferiorSnapshotsMatchProjectionAndRejectConflicts()
+    private static void RegionalSnapshotsMatchProjectionAndRejectConflicts()
     {
         var plan = PhysiologyIllustrationConfiguration.Default.ResolvePlan();
         var baseline = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1,
@@ -68,9 +71,14 @@ internal static class InferiorInfarctionProductSpecifications
             var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1,
                 shape.CreateLeadIIBands()).GenerateBefore(800_000_000, 200, 100);
             Check.That(projected.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[(int)EcgLead.II] - p.Second.NormalizedValue) <= 1), "monitor II is LL minus RA of the paper electrodes");
-            Check.That(projected.Zip(baseline).All(pair => Enumerable.Range((int)EcgLead.V1, 6)
+            Check.That(projected.Zip(baseline).All(pair => Enumerable.Range((int)EcgLead.V1, shape.Territory == InfarctionTerritory.Inferior ? 6 : 4)
                 .All(lead => Math.Abs(pair.First.MicrovoltValues[lead] - pair.Second.MicrovoltValues[lead]) <= 1)),
-                "inferior limb projection preserves all six chest leads");
+                "regional projection preserves unaffected chest leads");
+            if (shape.Territory == InfarctionTerritory.Lateral)
+            {
+                foreach (var lead in new[] { EcgLead.I, EcgLead.AVL, EcgLead.V5, EcgLead.V6 })
+                { Check.That(projected.Zip(baseline).Any(pair => Math.Abs(pair.First.MicrovoltValues[(int)lead] - pair.Second.MicrovoltValues[(int)lead]) > 10), "lateral snapshot changes each targeted lead"); }
+            }
         }
         var config = PhysiologyIllustrationConfiguration.Default with { Infarction = Snapshots().First() };
         foreach (var invalid in new[] { config with { Infarction = Snapshots().First() with { Stage = (InfarctionIllustrationStage)99 } },
@@ -83,7 +91,7 @@ internal static class InferiorInfarctionProductSpecifications
         {
             bool rejected = false;
             try { PhysiologyIllustrationSource.Create(invalid); } catch (ArgumentException) { rejected = true; }
-            Check.That(rejected, "incompatible inferior snapshot combination rejects before construction");
+            Check.That(rejected, "incompatible regional snapshot combination rejects before construction");
         }
         _ = PhysiologyIllustrationSource.Create(config with { VentricularMechanicalEnabled = false });
     }

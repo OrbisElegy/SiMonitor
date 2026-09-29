@@ -21,12 +21,12 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
-        if (config.Infarction is { Territory: InfarctionTerritory.Inferior, Components: null } infarction)
+        if (config.Infarction is { Territory: InfarctionTerritory.Inferior or InfarctionTerritory.Lateral, Components: null } infarction)
         {
             string local = infarction.Stage is InfarctionIllustrationStage.HyperacuteInjury or InfarctionIllustrationStage.AcuteMonophasic
                 ? $"ST–T 融合，T 时限不单独标注；局部 QRS {Ms(infarction.Stage == InfarctionIllustrationStage.HyperacuteInjury ? timing.QrsDurationNs * 6 / 5 : timing.QrsDurationNs)} ms"
                 : ventricular;
-            return $"下壁独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
+            return $"{(infarction.Territory == InfarctionTerritory.Inferior ? "下壁" : "侧壁")}独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
         }
         if (config.TContour is { } contour)
         {

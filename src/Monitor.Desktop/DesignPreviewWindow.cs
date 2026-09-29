@@ -165,6 +165,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.TContourChestRequired")
+        { Settings.Status.Text = "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
         { Settings.Status.Text = "未应用：吸气须至少200 ms，呼气须大于375 ms；请调整呼吸频率或吸气占比。原运行与画面保持不变。"; }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

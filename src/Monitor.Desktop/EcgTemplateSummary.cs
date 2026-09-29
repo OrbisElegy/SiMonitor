@@ -32,8 +32,11 @@ internal static class EcgTemplateSummary
         {
             string crossing = contour.Shape is EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive
                 ? $"；过零 {(contour.CrossingPositionPermille ?? 500) / 10m:0.#}% · 第二瓣 {contour.SecondPeakMicrovolts ?? contour.PeakMicrovolts} μV" : "";
+            string target = contour.Target == EcgTContourTarget.Chest
+                ? string.Join("、", Enumerable.Range(0, 6).Where(i => (contour.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))
+                : contour.Target.ToString();
             return $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular +
-                $"；T 目标 {contour.Target} · 峰幅 {contour.PeakMicrovolts} μV" + crossing;
+                $"；T 目标 {target} · 峰幅 {contour.PeakMicrovolts} μV" + crossing;
         }
         if (config.Quinidine != QuinidineIllustration.Reference)
         { return $"P {Ms(timing.PDurationNs)} ms{(config.QuinidineNotchedP ? "（切迹）" : "")} · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular + $"；QU {Ms(QuinidineEffectReference.ResolveQuIntervalNs(config.Quinidine))} ms"; }

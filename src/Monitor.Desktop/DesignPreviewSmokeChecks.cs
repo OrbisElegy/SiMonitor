@@ -822,10 +822,33 @@ internal static class DesignPreviewSmokeChecks
             for (int channel = 1; channel < 7; channel++)
             { Require(window.Session.Samples(channel, 0, end).SequenceEqual(original.Samples(channel, 0, end)), "contour editing preserves non-ECG channels"); }
             window.SelectPage(1); Capture(window, "ui-preview-t-contour-edited-paper.png");
+            foreach (int target in Enumerable.Range(0, 7))
+            {
+                editor.Target.SelectedIndex = target;
+                for (int i = 0; i < 6; i++) { editor.ChestLeads[i].IsChecked = i is 1 or 3; }
+                var plan = editor.Read(TContourProductPreset.Create(0))!;
+                Require((int)plan.Target == target && (target != 0 || plan.ChestMask == 10), "target editor preserves exact chest selection or limb target");
+                if (target == 0)
+                { Require(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(107, 0, 0).Ecg with { TContour = plan }).Contains("V2、V4", StringComparison.Ordinal), "summary identifies selected chest leads"); }
+                live = window.Session; window.ApplySettings();
+                Require(!ReferenceEquals(live, window.Session), "each target applies through shared monitor and paper path");
+                var targetSource = new LocalMonitorPreviewSession(baseline with { TContour = plan }, window.Session.Display);
+                for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); targetSource.Advance(50_000_000); }
+                for (int channel = 0; channel < 7; channel++)
+                { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(targetSource.Samples(channel, 0, targetSource.FrontierNs)), "selected target retains projected acquisition parity across channels"); }
+            }
+            editor.Target.SelectedIndex = 0;
+            foreach (var lead in editor.ChestLeads) { lead.IsChecked = false; }
+            live = window.Session; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal), "empty chest selection rejects atomically with actionable message");
+            editor.ChestLeads[1].IsChecked = true;
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 0; window.Settings.Tabs.SelectedIndex = 5;
+            Capture(window, "ui-preview-t-contour-target-editor.png");
             live = window.Session; editor.Crossing.Value = null; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "missing contour parameter rejects without replacing session");
             window.Settings.EcgSelection = 108;
-            Require(editor.Crossing.Value == 65 && editor.Peak.Value == 300 && editor.SecondPeak.Value == 200, "switching contour resets draft to selected template");
+            Require(editor.Crossing.Value == 65 && editor.Peak.Value == 300 && editor.SecondPeak.Value == 200 && editor.Target.SelectedIndex == 2 &&
+                editor.ChestLeads.Select((lead, index) => (lead.IsChecked == true) == (index == 0)).All(matches => matches), "switching contour resets draft and target to selected template");
             window.Settings.EcgSelection = 0; window.ApplySettings();
             Require(!editor.IsVisible && !ReferenceEquals(live, window.Session), "incompatible template ignores stale contour edits");
         }

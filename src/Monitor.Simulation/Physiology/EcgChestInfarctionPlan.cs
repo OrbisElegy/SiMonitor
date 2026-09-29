@@ -26,6 +26,14 @@ public sealed record EcgChestInfarctionPlan(int ChestMask, InfarctionIllustratio
         _ => ChestMask,
     };
 
+    public IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
+    {
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(infarction: this);
+        return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
+            electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
+            { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());
+    }
+
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> current, EcgCycleTiming timing)
     {
         if (ChestMask is < 0 or > 63 || !Enum.IsDefined(Stage) || !Enum.IsDefined(Territory) || RepolarizationDelayNs < 0) { throw Invalid(); }

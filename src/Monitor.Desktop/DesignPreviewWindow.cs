@@ -123,8 +123,9 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
-            var infarction = Settings.InfarctionParameters.Read(ecgConfig.Infarction);
-            config = config with { Infarction = infarction }; ecgConfig = ecgConfig with { Infarction = infarction };
+            var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
+            var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
+            config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
             var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
             config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();

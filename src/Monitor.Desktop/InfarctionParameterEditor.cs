@@ -19,6 +19,11 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal NumericUpDown JPoint { get; } = Field(-4000, 4000, 0, 10);
     internal NumericUpDown StEnd { get; } = Field(-4000, 4000, 0, 10);
     internal NumericUpDown StArch { get; } = Field(-4000, 4000, 0, 10);
+    internal CheckBox SeparateRegions { get; } = new() { Content = "缺血／损伤／坏死分别选区" };
+    internal ComboBox IschemiaRegion { get; } = Region();
+    internal ComboBox InjuryRegion { get; } = Region();
+    internal ComboBox NecrosisRegion { get; } = Region();
+    private readonly StackPanel _zones = new() { Spacing = 8, IsVisible = false };
     private readonly StackPanel _components = new() { Spacing = 8, IsVisible = false };
     private readonly StackPanel _chest = new() { Spacing = 8 };
     private readonly TextBlock _region = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
@@ -48,6 +53,15 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Add("QRS 形态", Necrosis); Add("异常 QRS 模板混合比例（%）", QrsWeight);
         _components.Children.Add(ReferenceT); Add("T 波峰幅（μV；负值倒置，0 为低平）", TPeak);
         Add("J 点偏移（μV）", JPoint); Add("ST 末端偏移（μV）", StEnd); Add("ST 弓形幅度（μV）", StArch);
+        _components.Children.Add(SeparateRegions);
+        foreach (var (zoneLabel, selector) in new[] { ("缺血（T 波及局部复极延长）", IschemiaRegion), ("损伤（J／ST）", InjuryRegion), ("坏死（QRS）", NecrosisRegion) })
+        {
+            _zones.Children.Add(new TextBlock { Text = zoneLabel }); _zones.Children.Add(selector);
+            AutomationProperties.SetName(selector, zoneLabel);
+            selector.SelectionChanged += (_, _) => Changed?.Invoke();
+        }
+        _components.Children.Add(_zones);
+        SeparateRegions.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         Children.Add(_components);
         ComponentsEnabled.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         ReferenceT.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
@@ -77,7 +91,10 @@ internal sealed class InfarctionParameterEditor : StackPanel
         };
         for (int i = 0; i < 6; i++) { ChestLeads[i].IsChecked = (mask & (1 << i)) != 0; }
         Delay.Value = preset.RepolarizationDelayNs / 1_000_000m;
-        ComponentsEnabled.IsChecked = false; Necrosis.SelectedIndex = 0; QrsWeight.Value = 100;
+        ComponentsEnabled.IsChecked = false; SeparateRegions.IsChecked = false;
+        int region = preset.Territory switch { InfarctionTerritory.Inferior => 10, InfarctionTerritory.Lateral => 11, InfarctionTerritory.Anteroseptal => 7, InfarctionTerritory.Anterior => 8, _ => 9 };
+        IschemiaRegion.SelectedIndex = InjuryRegion.SelectedIndex = NecrosisRegion.SelectedIndex = region;
+        Necrosis.SelectedIndex = 0; QrsWeight.Value = 100;
         ReferenceT.IsChecked = true; TPeak.Value = 300; JPoint.Value = StEnd.Value = StArch.Value = 0;
         RefreshComponents();
         _region.Text = _chest.IsVisible ? "仅修改所选胸导联；其他胸导联及肢体导联保持原样。"
@@ -105,9 +122,20 @@ internal sealed class InfarctionParameterEditor : StackPanel
         int original = preset.Territory switch { InfarctionTerritory.Anteroseptal => 7, InfarctionTerritory.Anterior => 28, _ => 31 };
         return mask == original ? edited : edited with { Territory = InfarctionTerritory.CustomChest, ChestMask = mask };
     }
+    internal EcgInfarctionZones? ReadZones(EcgChestInfarctionPlan? preset)
+    {
+        if (preset is null || ComponentsEnabled.IsChecked != true || SeparateRegions.IsChecked != true) { return null; }
+        var edited = Read(preset)!;
+        return new(InfarctionZoneSelection.Resolve(IschemiaRegion.SelectedIndex), InfarctionZoneSelection.Resolve(InjuryRegion.SelectedIndex),
+            InfarctionZoneSelection.Resolve(NecrosisRegion.SelectedIndex), edited.Components!, edited.RepolarizationDelayNs);
+    }
+    private static ComboBox Region() => new() { ItemsSource = InfarctionZoneSelection.Names, SelectedIndex = 0, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
     private void RefreshComponents()
     {
         _components.IsVisible = ComponentsEnabled.IsChecked == true;
+        _zones.IsVisible = _components.IsVisible && SeparateRegions.IsChecked == true;
+        _chest.IsVisible = !_zones.IsVisible && _preset?.Territory is InfarctionTerritory.Anteroseptal or InfarctionTerritory.Anterior or InfarctionTerritory.ExtensiveAnterior;
+        _region.IsVisible = !_zones.IsVisible;
         TPeak.IsEnabled = ReferenceT.IsChecked != true;
         QrsWeight.IsEnabled = Necrosis.SelectedIndex > 0;
     }

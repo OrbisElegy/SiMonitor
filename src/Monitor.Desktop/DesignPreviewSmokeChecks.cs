@@ -977,7 +977,31 @@ internal static class DesignPreviewSmokeChecks
                 controls.ComponentsEnabled.IsChecked = false; window.ApplySettings();
                 Require(!ReferenceEquals(live, window.Session) && controls.Read(pair.Ecg.Infarction) == pair.Ecg.Infarction, "disabling component editing exactly restores original fusion stage despite stale fields");
             }
+            var zoneEditor = window.Settings.InfarctionParameters;
+            zoneEditor.ComponentsEnabled.IsChecked = true; zoneEditor.SeparateRegions.IsChecked = true;
+            zoneEditor.IschemiaRegion.SelectedIndex = 10; zoneEditor.InjuryRegion.SelectedIndex = 2; zoneEditor.NecrosisRegion.SelectedIndex = 11;
+            zoneEditor.ReferenceT.IsChecked = false; zoneEditor.TPeak.Value = -400;
+            zoneEditor.JPoint.Value = 200; zoneEditor.StEnd.Value = 100; zoneEditor.StArch.Value = 150;
+            zoneEditor.Necrosis.SelectedIndex = 1; zoneEditor.QrsWeight.Value = 60; zoneEditor.Delay.Value = 80;
+            var zonePair = DesignPreviewWindow.ResolveStyle(window.Settings.EcgSelection, 0, 0);
+            var zones = zoneEditor.ReadZones(zonePair.Ecg.Infarction)!;
+            Require(zones.Ischemia.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.Inferior && zones.Injury.ChestMask == 2 &&
+                zones.Necrosis.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.Lateral, "separate component selectors retain different regions");
+            window.ApplySettings();
+            Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text!.Contains("缺血：下壁", StringComparison.Ordinal), "zone summary and applied status identify separate regions");
+            var zoneTiming = window.Settings.ReadBreathingTiming();
+            var zoneSource = new LocalMonitorPreviewSession(zonePair.Physiology with { Infarction = null, Zones = zones, BreathPeriodMilliseconds = zoneTiming.Item1, InspirationMilliseconds = zoneTiming.Item2 }, window.Session.Display);
+            for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); zoneSource.Advance(50_000_000); }
+            for (int channel = 0; channel < 7; channel++)
+            { Require(window.Session.Samples(channel, 0, zoneSource.FrontierNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.FrontierNs)), "zone edits reach shared acquired monitor channels"); }
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            Capture(window, "ui-preview-infarction-zones.png");
+            live = window.Session; zoneEditor.IschemiaRegion.SelectedIndex = -1; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "missing zone choice rejects atomically");
+            zoneEditor.SeparateRegions.IsChecked = false; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction) is null, "disabling separate zones restores shared region and ignores hidden invalid selection");
             window.Settings.EcgSelection = 164; window.ApplySettings();
+            Require(zoneEditor.SeparateRegions.IsChecked != true, "template selection clears separate zone mode");
             Require(window.Settings.InfarctionParameters.ComponentsEnabled.IsChecked != true && window.Settings.InfarctionParameters.JPoint.Value == 0, "switching stages clears component overrides");
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
             Require(window.Settings.InfarctionParameters.Parent is not null, "infarction advanced editor is reachable");

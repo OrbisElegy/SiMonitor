@@ -21,6 +21,12 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
+        if (config.Zones is { } zones)
+        {
+            string Region(EcgInfarctionRegion region) => InfarctionZoneSelection.Names[InfarctionZoneSelection.Index(region)];
+            return DescribeComponents(zones.Components, $"缺血：{Region(zones.Ischemia)}；损伤：{Region(zones.Injury)}；坏死：{Region(zones.Necrosis)}",
+                timing.QtIntervalNs + (zones.Ischemia.Territory == InfarctionTerritory.CustomChest && zones.Ischemia.ChestMask == 0 ? 0 : zones.RepolarizationDelayNs));
+        }
         if (config.Infarction is { } infarction)
         {
             string local = infarction.Stage is InfarctionIllustrationStage.HyperacuteInjury or InfarctionIllustrationStage.AcuteMonophasic
@@ -31,9 +37,7 @@ internal static class EcgTemplateSummary
                 : InfarctionProductPreset.TerritoryName(infarction.Territory);
             if (infarction.Components is { } parts)
             {
-                string qrs = parts.Necrosis switch { NecrosisIllustrationShape.QWithReducedR => "异常 Q／低 R", NecrosisIllustrationShape.QS => "QS", _ => "参考 QRS" };
-                string t = parts.TPeakMicrovolts is { } peak ? $"T {peak} μV" : "参考 T";
-                return $"{region}独立分量 · {qrs}（模板混合 {parts.QrsTemplatePermille / 10m:0.#}%）· J {parts.JMicrovolts} / ST末端 {parts.StEndMicrovolts} / 弓形 {parts.StArchMicrovolts} μV · {t} · 局部 QT {Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs)} ms；非阶段融合模板";
+                return DescribeComponents(parts, region, timing.QtIntervalNs + infarction.RepolarizationDelayNs);
             }
             return $"{region}独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
         }
@@ -86,4 +90,11 @@ internal static class EcgTemplateSummary
         return (premature ? "窦性搏动：" : "") + $"{atrial} {Ms(timing.PDurationNs)} ms · {pr} · " + ventricular +
             (premature ? "；早搏及相关搏动采用独立时序／形态" : "");
     }
+    private static string DescribeComponents(EcgInfarctionComponents parts, string region, long qtNs)
+    {
+        string qrs = parts.Necrosis switch { NecrosisIllustrationShape.QWithReducedR => "异常 Q／低 R", NecrosisIllustrationShape.QS => "QS", _ => "参考 QRS" };
+        string t = parts.TPeakMicrovolts is { } peak ? $"T {peak} μV" : "参考 T";
+        return $"{region}独立分量 · {qrs}（模板混合 {parts.QrsTemplatePermille / 10m:0.#}%）· J {parts.JMicrovolts} / ST末端 {parts.StEndMicrovolts} / 弓形 {parts.StArchMicrovolts} μV · {t} · 局部 QT {(qtNs / 1_000_000m).ToString("0.###", CultureInfo.InvariantCulture)} ms；非阶段融合模板";
+    }
+
 }

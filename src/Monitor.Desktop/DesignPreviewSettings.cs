@@ -22,6 +22,7 @@ internal sealed class DesignPreviewSettings : UserControl
     private int _appliedShapeSelection;
     private EcgTContourPlan? _appliedTContour;
     private EcgChestInfarctionPlan? _appliedInfarction;
+    private EcgInfarctionZones? _appliedZones;
     internal TextBlock ShapeEditStatus { get; } = Text("");
     internal TextBlock ShapeEditSummary { get; } = Text("");
     internal void MarkShapeApplied(ProjectedEcgDemoConfiguration configuration)
@@ -29,6 +30,7 @@ internal sealed class DesignPreviewSettings : UserControl
         _appliedShapeSelection = EcgSelection;
         _appliedTContour = configuration.TContour;
         _appliedInfarction = configuration.Infarction;
+        _appliedZones = configuration.Zones;
         RefreshShapeSummary();
     }
     private void RefreshShapeSummary()
@@ -37,12 +39,14 @@ internal sealed class DesignPreviewSettings : UserControl
         {
             var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0).Ecg;
             bool editable = config.TContour is not null || config.Infarction is not null;
+            var zones = InfarctionParameters.ReadZones(config.Infarction);
             config = config with
             {
+                Zones = zones,
                 TContour = TContourParameters.Read(config.TContour),
-                Infarction = InfarctionParameters.Read(config.Infarction)
+                Infarction = zones is null ? InfarctionParameters.Read(config.Infarction) : null
             };
-            bool applied = _appliedShapeSelection == EcgSelection && _appliedTContour == config.TContour && _appliedInfarction == config.Infarction;
+            bool applied = _appliedShapeSelection == EcgSelection && _appliedTContour == config.TContour && _appliedInfarction == config.Infarction && _appliedZones == config.Zones;
             ShapeEditStatus.Text = !editable ? "模板默认参数（非运行值）" : applied ? "形态参数 · 已应用（非测量值）" : "形态参数 · 待应用（非测量值）";
             ShapeEditSummary.Text = EcgTemplateSummary.Describe(config);
         }

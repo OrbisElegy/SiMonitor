@@ -10,9 +10,53 @@ internal static class RegionalInfarctionProductSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(IndependentZonesShareProjectionAndRestore), IndependentZonesShareProjectionAndRestore),
         new(nameof(RegionalSnapshotsPreserveQrsDetectionAndNonEcgChannels), RegionalSnapshotsPreserveQrsDetectionAndNonEcgChannels),
         new(nameof(RegionalSnapshotsMatchProjectionAndRejectConflicts), RegionalSnapshotsMatchProjectionAndRejectConflicts),
     ];
+    private static void IndependentZonesShareProjectionAndRestore()
+    {
+        var zones = new EcgInfarctionZones(new(0, InfarctionTerritory.Inferior), new(2), new(0, InfarctionTerritory.Lateral),
+            new(NecrosisIllustrationShape.QWithReducedR, -400, 200, 100, 150, 600), 80_000_000);
+        var config = PhysiologyIllustrationConfiguration.Default with { Zones = zones };
+        var plan = config.ResolvePlan();
+        Check.That(plan == PhysiologyIllustrationConfiguration.Default.ResolvePlan(), "independent zones retain event clocks");
+        var projection = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1,
+            TextbookElectrodeReference.CreateElectrodes(zones: zones)).GenerateBefore(800_000_000, 200, 100);
+        var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, zones.CreateLeadIIBands()).GenerateBefore(800_000_000, 200, 100);
+        Check.That(projection.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[(int)EcgLead.II] - p.Second.NormalizedValue) <= 1), "zone monitor is projected paper II");
+        var source = PhysiologyIllustrationSource.Create(config);
+        var restored = PhysiologyIllustrationSource.Create(config);
+        var baseline = PhysiologyIllustrationSource.Create();
+        bool changed = false;
+        for (int step = 1; step <= 30; step++)
+        {
+            var actual = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            var recovered = restored.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            var reference = baseline.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+            Check.That(actual.Count == recovered.Count && actual.Zip(recovered).All(p => p.First.SequenceEqual(p.Second)), "zone source restores exact acquisition bytes");
+            foreach (var pair in actual.Zip(reference))
+            {
+                var a = WaveformEnvelopeCodec.Decode(pair.First); var b = WaveformEnvelopeCodec.Decode(pair.Second);
+                foreach (var plane in a.Planes)
+                {
+                    bool equal = plane.Samples.SequenceEqual(b.Planes.Single(p => p.ChannelId == plane.ChannelId).Samples);
+                    if (plane.ChannelId == PhysiologyIllustrationSource.ChannelId(0)) { changed |= !equal; }
+                    else { Check.That(equal, "independent zones preserve mechanical and respiratory channels"); }
+                }
+            }
+            restored = PhysiologyWaveformGroup.Restore(restored.CaptureState());
+        }
+        Check.That(changed, "mixed zones change the actual monitor ECG");
+        foreach (var invalid in new[] { config with { Infarction = Snapshots().First() }, config with { TContour = new(1, EcgTContourShape.Notched, 300) },
+            config with { Svt = true }, config with { VentricularConductionRatio = 2 }, config with { DigitalisEffect = true },
+            config with { Zones = zones with { Ischemia = new(64) } } })
+        {
+            bool rejected = false;
+            try { PhysiologyIllustrationSource.Create(invalid); } catch (ArgumentException) { rejected = true; }
+            Check.That(rejected, "conflicting or invalid zones reject before construction");
+        }
+    }
     private static IEnumerable<EcgChestInfarctionPlan> Snapshots() =>
         new[] { InfarctionTerritory.Inferior, InfarctionTerritory.Lateral, InfarctionTerritory.Anteroseptal, InfarctionTerritory.Anterior, InfarctionTerritory.ExtensiveAnterior }.SelectMany(territory =>
             Enum.GetValues<InfarctionIllustrationStage>().Where(stage => stage != InfarctionIllustrationStage.None)

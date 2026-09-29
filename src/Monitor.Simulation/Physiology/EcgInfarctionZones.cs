@@ -8,6 +8,13 @@ public sealed record EcgInfarctionRegion(int ChestMask = 0, InfarctionTerritory 
 public sealed record EcgInfarctionZones(EcgInfarctionRegion Ischemia, EcgInfarctionRegion Injury,
     EcgInfarctionRegion Necrosis, EcgInfarctionComponents Components, long RepolarizationDelayNs = 0)
 {
+    public IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
+    {
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(zones: this);
+        return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
+            electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
+            { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());
+    }
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> current, EcgCycleTiming timing, EcgUWavePlan? u)
     {
         if (Ischemia is null || Injury is null || Necrosis is null || Components is null || RepolarizationDelayNs < 0)

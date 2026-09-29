@@ -90,6 +90,19 @@ internal sealed class DesignPreviewSettings : UserControl
         }
         return (RespirationSelection == 3 ? 1000 : Read(RespSignalAmplitude), Read(RespCardiacArtifact));
     }
+    internal NumericUpDown Co2TransportDelay { get; } = new() { Minimum = 0, Maximum = 5000, Value = 0, Increment = 100, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown Co2DispersionStep { get; } = new() { Minimum = 0, Maximum = 500, Value = 0, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal (int Delay, int Dispersion) ReadCo2Response()
+    {
+        static int Read(NumericUpDown field)
+        {
+            decimal value = field.Value ?? throw new ArgumentException("Preview.InvalidCo2Response");
+            if (value < field.Minimum || value > field.Maximum || value != decimal.Truncate(value))
+            { throw new ArgumentException("Preview.InvalidCo2Response"); }
+            return checked((int)value);
+        }
+        return (Read(Co2TransportDelay), Read(Co2DispersionStep));
+    }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -433,6 +446,13 @@ internal sealed class DesignPreviewSettings : UserControl
         _advancedRespiration.Children.Add(Text(RespirationSelection == 3
             ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
             : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
+        _advancedRespiration.Children.Add(Text("CO₂ 管路延迟（0–5000 ms）"));
+        _advancedRespiration.Children.Add(Co2TransportDelay);
+        _advancedRespiration.Children.Add(Text("CO₂ 展宽步长（0–500 ms）"));
+        _advancedRespiration.Children.Add(Co2DispersionStep);
+        AutomationProperties.SetName(Co2TransportDelay, "CO₂ 管路延迟，毫秒");
+        AutomationProperties.SetName(Co2DispersionStep, "CO₂ 展宽步长，毫秒");
+        _advancedRespiration.Children.Add(Text("仅影响 CO₂ 采集波形；均设为 0 可关闭。展宽还会增加延迟，并可能改变测得的呼气末值。"));
         _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {

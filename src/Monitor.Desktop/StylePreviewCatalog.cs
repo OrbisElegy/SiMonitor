@@ -12,7 +12,7 @@ internal sealed record StylePreviewData((long TimeNs, double Value)[] Ecg, (long
 // Build-generated finite sample catalog. UI loading never invokes simulation.
 internal sealed class StylePreviewCatalog
 {
-    internal const int CombinationCount = 824;
+    internal const int CombinationCount = 864;
     internal static long DurationNs(int ecg) => ecg is >= 66 and <= 71 ? 12_000_000_000 : ecg is 48 or 49 ? 12_800_000_000 : ecg == 50 ? 8_000_000_000 : ecg is 51 or 52 ? 6_400_000_000 : ecg == 44 ? 3_200_000_000 : ecg == 45 ? 4_800_000_000 : ecg == 46 ? 8_000_000_000 : ecg == 47 ? 6_000_000_000 : ecg is 4 or 40 or 41 ? 6_200_000_000 : ecg is 5 or 42 or 43 ? 6_400_000_000 : ecg == 39 ? 3_600_000_000 : ecg is 27 or 28 or 34 or 35 ? 12_000_000_000 : ecg is >= 10 and <= 19 ? 5_000_000_000 : 3_000_000_000;
     private const string FileName = "style-previews.bin";
     private readonly Dictionary<(int, int, int), StylePreviewData> _styles = [];

@@ -76,7 +76,7 @@ public sealed class EcgHeartRateMeasurement
         if ((_state.Uncountable || expired) && activity)
         { return new(WaveformMeasurementStatus.Uncountable, null, _state.LastBeat); }
         if (expired) { return new(WaveformMeasurementStatus.Stale, null, _state.LastBeat); }
-        var peaks = _state.Peaks.Where(p => p >= asOfSampleTimeNs - RateWindowNs).ToArray();
+        long[] peaks = _state.Peaks.Where(p => p >= asOfSampleTimeNs - RateWindowNs).ToArray();
         int? rate = peaks.Length < 2 ? null : checked((int)FixedPointMath.RoundDivideTiesToEven(
             (Int128)60_000_000_000_000L * (peaks.Length - 1), peaks[^1] - peaks[0]));
         return new(rate.HasValue ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.WarmingUp, rate, _state.LastBeat);
@@ -117,7 +117,7 @@ public sealed class EcgHeartRateMeasurement
         // Discard a subthreshold prelude after a short quiet gap. Otherwise a
         // short-PR P wave can keep the candidate open through the following QRS.
         // Accepted QRS candidates still require the original64ms confirmation.
-        if (s.Active && s.Max - s.Min < 250 && time - s.LastActive >= 24_000_000 &&
+        if (s.Active && s.Max - s.Min < 250 && !IsCompactLowAmplitudeQrs(s) && time - s.LastActive >= 24_000_000 &&
             slope < Math.Max(threshold / 2, s.MaxSlope / 4)) { s.Active = false; }
         // A markedly steeper new deflection can follow a broad atrial prelude
         // before the quiet confirmation gap has elapsed. Restart at that edge
@@ -146,7 +146,8 @@ public sealed class EcgHeartRateMeasurement
         if (time - s.LastActive < 64_000_000) { return; }
         s.Active = false;
         long width = s.LastActive - s.Start;
-        if (width is < 12_000_000 or > 180_000_000 || s.Max - s.Min < 250) { return; }
+        if (width is < 12_000_000 or > 180_000_000 || s.Max - s.Min < 200) { return; }
+        if (s.Max - s.Min < 250 && !IsCompactLowAmplitudeQrs(s)) { return; }
         long interval = s.LastBeat is { } previous ? s.PeakTime - previous : long.MaxValue;
         // Suppress a secondary lobe and slower T-like slopes near a prior QRS.
         // This is a detector heuristic, not a physiological refractory model.
@@ -156,6 +157,11 @@ public sealed class EcgHeartRateMeasurement
         if (s.Peaks.Length >= 2) { s.Uncountable = false; }
         events.Add(new(s.PeakTime, time));
     }
+
+    // Low-amplitude acceptance stays restricted to a compact, steep contour.
+    // The same rule keeps that candidate alive across the confirmation gap.
+    private static bool IsCompactLowAmplitudeQrs(State s) => s.Max - s.Min >= 200 &&
+        s.LastActive - s.Start <= 80_000_000 && (long)s.MaxSlope * 4 >= (long)(s.Max - s.Min) * 3;
 
     internal sealed record Identity(Guid Session, Guid Instance, ulong Timebase, ulong Stream, ulong Revision);
     internal sealed record State

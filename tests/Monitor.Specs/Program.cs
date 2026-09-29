@@ -161,6 +161,7 @@ internal static class Program
             .. PWaveComponentSpecifications.All,
             .. AtrialIllustrationSpecifications.All,
             .. AtrialShapeProductSpecifications.All,
+            .. VentricularShapeProductSpecifications.All,
             .. VentricularIllustrationSpecifications.All,
             .. TContourSpecifications.All,
             .. StSegmentSpecifications.All,

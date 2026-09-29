@@ -122,6 +122,24 @@ internal sealed class DesignPreviewSettings : UserControl
         var timing = ReadCo2Timing();
         return $"吸气须至少 {timing.Fall} ms，呼气须大于 {timing.DeadSpace + timing.Rise} ms；请调整 CO₂ 时长、呼吸频率或吸气占比。";
     }
+    internal NumericUpDown Co2Baseline { get; } = new() { Minimum = 0, Maximum = 80, Value = 0, Increment = 1, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal CheckBox Co2CustomPlateau { get; } = new() { Content = "自定义 CO₂ 平台起始高度" };
+    internal NumericUpDown Co2PlateauStart { get; } = new() { Minimum = 0, Maximum = 80, Value = 35, Increment = .25m, Width = 180, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = false };
+    internal (int Baseline, int Target, int? Plateau) ReadCo2Levels()
+    {
+        static int Read(NumericUpDown field, int scale)
+        {
+            decimal value = field.Value ?? throw new ArgumentException("Preview.InvalidCo2Levels");
+            if (value < field.Minimum || value > field.Maximum || value * scale != decimal.Truncate(value * scale))
+            { throw new ArgumentException("Preview.InvalidCo2Levels"); }
+            return checked((int)(value * scale));
+        }
+        int baseline = Read(Co2Baseline, 1), target = Read(EtCo2Target, 1);
+        int? plateau = Co2CustomPlateau.IsChecked == true ? Read(Co2PlateauStart, 100) : null;
+        if (baseline > target || plateau < baseline * 100 || plateau > target * 100)
+        { throw new ArgumentException("Preview.InvalidCo2Levels"); }
+        return (baseline, target, plateau);
+    }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -231,6 +249,7 @@ internal sealed class DesignPreviewSettings : UserControl
             ("压力", Before(vitals, AbpPulseGain)));
         SectionPages[5] = new SettingsSections("高级参数", ("心电图", _advancedEcg), ("呼吸", _advancedRespiration),
             ("射血", _advancedEjection), ("开发工具", _advancedTools));
+        Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
         Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
         var detail = new ContentControl();
@@ -471,6 +490,13 @@ internal sealed class DesignPreviewSettings : UserControl
         _advancedRespiration.Children.Add(Text(RespirationSelection == 3
             ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
             : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
+        _advancedRespiration.Children.Add(Text("CO₂ 基线（mmHg，0–80；不高于呼气末目标）"));
+        _advancedRespiration.Children.Add(Co2Baseline);
+        _advancedRespiration.Children.Add(Co2CustomPlateau);
+        _advancedRespiration.Children.Add(Text("平台起始高度（mmHg，最多两位小数；基线至呼气末目标之间）"));
+        _advancedRespiration.Children.Add(Co2PlateauStart);
+        AutomationProperties.SetName(Co2Baseline, "CO₂ 基线，毫米汞柱");
+        AutomationProperties.SetName(Co2PlateauStart, "CO₂ 平台起始高度，毫米汞柱");
         if (_co2Timing.Children.Count == 0)
         {
             foreach (var (label, input) in new[] { ("CO₂ 死腔时长（ms）", Co2DeadSpace), ("CO₂ 上升时长（ms）", Co2Rise), ("CO₂ 下降时长（ms）", Co2Fall) })

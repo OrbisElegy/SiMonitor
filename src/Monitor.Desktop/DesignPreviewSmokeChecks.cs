@@ -163,6 +163,81 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyCo2LevelEditing()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            Require(window.Settings.ReadCo2Levels() == (0, 40, null), "default CO2 levels retain reference ratio");
+            foreach (int pattern in Enumerable.Range(0, 4))
+            {
+                window.Settings.RespirationSelection = pattern;
+                foreach (bool custom in new[] { true, false })
+                {
+                    window.Settings.Co2CustomPlateau.IsChecked = custom;
+                    window.Settings.Co2Baseline.Value = custom ? 5 : 0;
+                    window.Settings.Co2PlateauStart.Value = custom ? 32.25m : null;
+                    var previous = window.Session; window.ApplySettings();
+                    Require(!ReferenceEquals(previous, window.Session) && window.Settings.Co2PlateauStart.IsEnabled == custom,
+                        "CO2 level edits apply and disabled plateau ignores dormant invalid draft");
+                    var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                    var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
+                    { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    var expected = new LocalMonitorPreviewSession(baseline with
+                    { Co2BaselineMmHg = custom ? 5 : 0, Co2PlateauStartCentiMmHg = custom ? 3225 : null }, window.Session.Display);
+                    for (int i = 0; i < 200; i++)
+                    { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
+                    for (int channel = 0; channel < 7; channel++)
+                    {
+                        var actual = window.Session.Samples(channel, 0, expected.FrontierNs);
+                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "CO2 levels match acquired source");
+                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.FrontierNs)) == (channel != 4 || !custom),
+                            "CO2 levels isolate gas channel and restore exact reference ratio");
+                    }
+                }
+            }
+            window.Settings.RespirationSelection = 0;
+            window.Settings.Co2CustomPlateau.IsChecked = true;
+            var live = window.Session; var timer = window.ActiveTimer;
+            foreach (decimal? value in new decimal?[] { null, 40.01m, 32.251m })
+            {
+                window.Settings.Co2PlateauStart.Value = value; window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                    window.Settings.Status.Text!.Contains("平台起始", StringComparison.Ordinal), "invalid active plateau rejects atomically");
+            }
+            window.Settings.Co2PlateauStart.Value = 4.99m; window.Settings.Co2Baseline.Value = 5;
+            window.ApplySettings(); Require(ReferenceEquals(live, window.Session), "plateau below baseline rejects");
+            window.Settings.Co2CustomPlateau.IsChecked = false;
+            foreach (var field in new[] { window.Settings.Co2Baseline, window.Settings.EtCo2Target })
+            {
+                decimal? original = field.Value;
+                foreach (decimal? value in new decimal?[] { null, 5.5m })
+                {
+                    field.Value = value; window.ApplySettings();
+                    Require(ReferenceEquals(live, window.Session), "pressure integer inputs do not silently truncate");
+                }
+                field.Value = original;
+            }
+            window.Settings.Co2Baseline.Value = 41; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "baseline exceeding target rejects");
+            window.Settings.Co2Baseline.Value = 5; window.Settings.EtCo2Variation.Value = 1;
+            window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("基线为 0", StringComparison.Ordinal),
+                "nonzero baseline and seeded variation give actionable conflict");
+            window.Settings.Co2Baseline.Value = 0; window.Settings.Co2CustomPlateau.IsChecked = true;
+            window.Settings.Co2PlateauStart.Value = 40; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "flat reference plateau supports zero-baseline seeded response");
+            window.Settings.EtCo2Variation.Value = 0; window.Settings.Co2Baseline.Value = 5;
+            window.Settings.Co2PlateauStart.Value = 5; window.ApplySettings();
+            Require(window.Settings.Status.Text!.StartsWith("已应用", StringComparison.Ordinal), "plateau equal to baseline accepted");
+            window.Settings.Co2PlateauStart.Value = 32.25m; window.ApplySettings();
+            window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            Capture(window, "ui-preview-co2-level-editor.png");
+            window.Width = 960; Capture(window, "ui-preview-co2-level-editor-compact.png");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyCo2TimingEditing()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -791,6 +866,7 @@ internal static class DesignPreviewSmokeChecks
             VerifyRespirationSignalEditing();
             VerifyCo2ResponseEditing();
             VerifyCo2TimingEditing();
+            VerifyCo2LevelEditing();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

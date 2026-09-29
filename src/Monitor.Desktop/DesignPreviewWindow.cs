@@ -123,6 +123,8 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+            var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
+            config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
             config = config with
             {

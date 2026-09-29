@@ -434,6 +434,7 @@ internal sealed class DesignPreviewSettings : UserControl
                     path.EndFigure(false);
                 }
             }
+            if (channel == 0 && source is not null) { context.DrawText(new FormattedText($"{source.Lead} 导联", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
             if (channel == 1) { context.DrawText(new FormattedText("41.25 s · 完整呼吸分组", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
             if (_geometry is not null) { context.DrawGeometry(null, new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2), _geometry); }
         }

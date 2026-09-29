@@ -801,14 +801,14 @@ internal static class DesignPreviewSmokeChecks
         var window = new DesignPreviewWindow(); window.Show();
         try
         {
-            foreach (int choice in Enumerable.Range(114, 21).Append(115).Append(125).Append(0))
+            foreach (int choice in Enumerable.Range(114, 51).Append(115).Append(125).Append(135).Append(0))
             {
                 var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
                 Require(!ReferenceEquals(previous, window.Session), "regional snapshot replaces preceding compound/rhythm source");
                 if (choice == 114) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
                 Require(pair.Physiology.Infarction == pair.Ecg.Infarction &&
-                    pair.Ecg.Infarction == (choice == 0 ? null : InfarctionProductPreset.Create((choice - 115) % 10, choice >= 125 ? Monitor.Simulation.Physiology.InfarctionTerritory.Lateral : Monitor.Simulation.Physiology.InfarctionTerritory.Inferior)) &&
+                    pair.Ecg.Infarction == (choice == 0 ? null : InfarctionProductPreset.Create((choice - 115) % 10, (Monitor.Simulation.Physiology.InfarctionTerritory)((choice - 115) / 10 + 1))) &&
                     pair.Ecg.TContour is null,
                     "monitor and paper share contour and clear prior T contour");
                 for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
@@ -817,15 +817,15 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "regional snapshot preserves sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                if (choice is >= 125 and <= 134)
+                if (choice is >= 125 and <= 164)
                 {
-                    Require(cached.Lead == Monitor.Simulation.Physiology.EcgLead.I, "lateral cards identify the affected lead I");
+                    Require(cached.Lead == (choice < 135 ? Monitor.Simulation.Physiology.EcgLead.I : choice < 145 ? Monitor.Simulation.Physiology.EcgLead.V2 : choice < 155 ? Monitor.Simulation.Physiology.EcgLead.V4 : Monitor.Simulation.Physiology.EcgLead.V3), "regional cards identify the affected lead");
                     long from = source.FrontierNs - StylePreviewCatalog.DurationNs(choice), to = source.FrontierNs;
                     var projected = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg, cached.Lead, from, to);
                     var baseline = StylePreviewCatalog.CreateProjectedPreview(ProjectedEcgDemoConfiguration.Default, cached.Lead, from, to);
                     Require(cached.Ecg.SequenceEqual(projected) && cached.Ecg.Length == 750 &&
                         cached.Ecg.Zip(baseline).Any(p => Math.Abs(p.First.Value - p.Second.Value) > 50),
-                        "lateral card contains complete actual paper-lead samples and visible regional changes");
+                        "regional card contains complete actual paper-lead samples and visible regional changes");
                     Require(cached.Abp.SequenceEqual(source.Samples(3, from, to)), "preview lead choice does not alter perfusion preview");
                 }
                 else
@@ -837,15 +837,15 @@ internal static class DesignPreviewSmokeChecks
                 if (choice != 0)
                 {
                     string description = EcgTemplateSummary.Describe(pair.Ecg);
-                    Require(description.Contains(choice >= 125 ? "侧壁独立快照" : "下壁独立快照", StringComparison.Ordinal) && description.Contains("不随模拟时间演变", StringComparison.Ordinal), "summary identifies independent snapshot");
-                    if (choice is 116 or 117 or 126 or 127)
+                    Require(description.Contains(InfarctionProductPreset.TerritoryName(pair.Ecg.Infarction!.Territory) + "独立快照", StringComparison.Ordinal) && description.Contains("不随模拟时间演变", StringComparison.Ordinal), "summary identifies independent snapshot");
+                    if ((choice - 115) % 10 is 1 or 2)
                     { Require(description.Contains("ST–T 融合", StringComparison.Ordinal) && !description.Contains("T 180 ms", StringComparison.Ordinal), "fused contour omits independently measured T duration"); }
-                    if (choice is 116 or 126) { Require(description.Contains("局部 QRS 96 ms", StringComparison.Ordinal), "hyperacute local widening is described accurately"); }
+                    if ((choice - 115) % 10 == 1) { Require(description.Contains("局部 QRS 96 ms", StringComparison.Ordinal), "hyperacute local widening is described accurately"); }
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-regional-infarction-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "regional snapshot paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 134; window.ApplySettings(); var live = window.Session;
+            window.Settings.EcgSelection = 164; window.ApplySettings(); var live = window.Session;
             window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for regional snapshot");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();

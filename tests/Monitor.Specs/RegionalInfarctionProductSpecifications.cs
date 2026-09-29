@@ -14,7 +14,7 @@ internal static class RegionalInfarctionProductSpecifications
         new(nameof(RegionalSnapshotsMatchProjectionAndRejectConflicts), RegionalSnapshotsMatchProjectionAndRejectConflicts),
     ];
     private static IEnumerable<EcgChestInfarctionPlan> Snapshots() =>
-        new[] { InfarctionTerritory.Inferior, InfarctionTerritory.Lateral }.SelectMany(territory =>
+        new[] { InfarctionTerritory.Inferior, InfarctionTerritory.Lateral, InfarctionTerritory.Anteroseptal, InfarctionTerritory.Anterior, InfarctionTerritory.ExtensiveAnterior }.SelectMany(territory =>
             Enum.GetValues<InfarctionIllustrationStage>().Where(stage => stage != InfarctionIllustrationStage.None)
                 .Select(stage => new EcgChestInfarctionPlan(0, stage, territory)));
 
@@ -71,13 +71,28 @@ internal static class RegionalInfarctionProductSpecifications
             var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1,
                 shape.CreateLeadIIBands()).GenerateBefore(800_000_000, 200, 100);
             Check.That(projected.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[(int)EcgLead.II] - p.Second.NormalizedValue) <= 1), "monitor II is LL minus RA of the paper electrodes");
-            Check.That(projected.Zip(baseline).All(pair => Enumerable.Range((int)EcgLead.V1, shape.Territory == InfarctionTerritory.Inferior ? 6 : 4)
-                .All(lead => Math.Abs(pair.First.MicrovoltValues[lead] - pair.Second.MicrovoltValues[lead]) <= 1)),
-                "regional projection preserves unaffected chest leads");
+            int mask = shape.Territory switch
+            {
+                InfarctionTerritory.Inferior => 0,
+                InfarctionTerritory.Lateral => 48,
+                InfarctionTerritory.Anteroseptal => 7,
+                InfarctionTerritory.Anterior => 28,
+                _ => 31
+            };
+            for (int chest = 0; chest < 6; chest++)
+            {
+                int lead = (int)EcgLead.V1 + chest;
+                bool selected = (mask & (1 << chest)) != 0;
+                Check.That(selected ? projected.Zip(baseline).Any(p => Math.Abs(p.First.MicrovoltValues[lead] - p.Second.MicrovoltValues[lead]) > 10) :
+                    projected.Zip(baseline).All(p => Math.Abs(p.First.MicrovoltValues[lead] - p.Second.MicrovoltValues[lead]) <= 1),
+                    "regional snapshot changes selected chest leads and preserves the rest");
+            }
+            if (shape.Territory >= InfarctionTerritory.Anteroseptal)
+            { Check.That(projected.Zip(baseline).All(p => Enumerable.Range(0, 6).All(lead => p.First.MicrovoltValues[lead] == p.Second.MicrovoltValues[lead])), "chest-only regions preserve all limb leads"); }
             if (shape.Territory == InfarctionTerritory.Lateral)
             {
-                foreach (var lead in new[] { EcgLead.I, EcgLead.AVL, EcgLead.V5, EcgLead.V6 })
-                { Check.That(projected.Zip(baseline).Any(pair => Math.Abs(pair.First.MicrovoltValues[(int)lead] - pair.Second.MicrovoltValues[(int)lead]) > 10), "lateral snapshot changes each targeted lead"); }
+                foreach (var lead in new[] { EcgLead.I, EcgLead.AVL })
+                { Check.That(projected.Zip(baseline).Any(pair => Math.Abs(pair.First.MicrovoltValues[(int)lead] - pair.Second.MicrovoltValues[(int)lead]) > 10), "lateral snapshot changes targeted limb leads"); }
             }
         }
         var config = PhysiologyIllustrationConfiguration.Default with { Infarction = Snapshots().First() };

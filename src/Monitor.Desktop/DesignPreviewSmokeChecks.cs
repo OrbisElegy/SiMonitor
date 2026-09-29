@@ -345,6 +345,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyHyperkalemiaFusionProductStyle();
         VerifyAtrialShapeProductStyles();
         VerifyVentricularShapeProductStyles();
+        VerifyTContourProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -749,6 +750,47 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for ventricular shape");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session), "ventricular shape permits independent no-ejection setting");
+        }
+        finally { window.Close(); }
+    }
+
+    private static void VerifyTContourProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 106, 107, 108, 109, 110, 111, 112, 113, 114, 0 })
+            {
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "T contour replaces preceding compound/rhythm source");
+                if (choice == 106) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.TContour == pair.Ecg.TContour &&
+                    pair.Ecg.TContour == (choice == 0 ? null : TContourProductPreset.Create(choice - 107)) &&
+                    pair.Ecg.Ventricular == Monitor.Simulation.Physiology.EcgVentricularIllustration.Reference,
+                    "monitor and paper share contour and clear prior ventricular shape");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid && reading.HeartRate.MilliBeatsPerMinute == 75000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "T contour preserves sample-derived electrical and mechanical measurements");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "T contour card is actual selected acquired ECG");
+                if (choice != 0)
+                {
+                    string description = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(description.Contains("T 目标 II", StringComparison.Ordinal), "summary identifies contour target");
+                    if (choice is 107 or 108) { Require(description.Contains(choice == 107 ? "过零 35%" : "过零 65%", StringComparison.Ordinal), "summary shows noncentral crossing"); }
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-t-contour-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "T contour paper retains full twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 114; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for T contour");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "T contour permits independent no-ejection setting");
         }
         finally { window.Close(); }
     }

@@ -24,7 +24,9 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal ComboBox InjuryRegion { get; } = Region();
     internal ComboBox NecrosisRegion { get; } = Region();
     private readonly StackPanel _zones = new() { Spacing = 8, IsVisible = false };
-    private readonly StackPanel _components = new() { Spacing = 8, IsVisible = false };
+    internal TabControl Groups { get; } = new();
+    private readonly StackPanel _tOverride = new() { Spacing = 8 };
+    private readonly TextBlock _componentNote = new() { Text = "本模式不保留阶段模板的 ST–T 融合；QRS 混合比例仅为形态参数。", TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private readonly StackPanel _chest = new() { Spacing = 8 };
     private readonly TextBlock _region = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     internal event Action? Changed;
@@ -34,7 +36,12 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Spacing = 8;
         Delay.ValueChanged += (_, _) => Changed?.Invoke();
 
-        Children.Add(_region);
+        Children.Add(ComponentsEnabled); Children.Add(_componentNote);
+        var regionPage = new StackPanel { Spacing = 8 };
+        var repolarizationPage = new StackPanel { Spacing = 8 };
+        var injuryPage = new StackPanel { Spacing = 8 };
+        var necrosisPage = new StackPanel { Spacing = 8 };
+        regionPage.Children.Add(_region);
         _chest.Children.Add(new TextBlock { Text = "胸导联区域（至少选择一个）" });
         var row = new WrapPanel();
         foreach (var lead in ChestLeads)
@@ -44,33 +51,37 @@ internal sealed class InfarctionParameterEditor : StackPanel
             lead.IsCheckedChanged += (_, _) => Changed?.Invoke();
             row.Children.Add(lead);
         }
-        _chest.Children.Add(row); Children.Add(_chest);
-        const string label = "局部复极延长（ms；T 时限与 QT 同步增加）";
-        Children.Add(new TextBlock { Text = label }); Children.Add(Delay);
-        AutomationProperties.SetName(Delay, label);
-        Children.Add(ComponentsEnabled);
-        _components.Children.Add(new TextBlock { Text = "本模式不保留阶段模板的 ST–T 融合；QRS 混合比例仅为形态参数。", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
-        Add("QRS 形态", Necrosis); Add("异常 QRS 模板混合比例（%）", QrsWeight);
-        _components.Children.Add(ReferenceT); Add("T 波峰幅（μV；负值倒置，0 为低平）", TPeak);
-        Add("J 点偏移（μV）", JPoint); Add("ST 末端偏移（μV）", StEnd); Add("ST 弓形幅度（μV）", StArch);
-        _components.Children.Add(SeparateRegions);
+        _chest.Children.Add(row); regionPage.Children.Add(_chest);
+        regionPage.Children.Add(SeparateRegions);
         foreach (var (zoneLabel, selector) in new[] { ("缺血（T 波及局部复极延长）", IschemiaRegion), ("损伤（J／ST）", InjuryRegion), ("坏死（QRS）", NecrosisRegion) })
         {
-            _zones.Children.Add(new TextBlock { Text = zoneLabel }); _zones.Children.Add(selector);
-            AutomationProperties.SetName(selector, zoneLabel);
+            Add(_zones, zoneLabel, selector);
             selector.SelectionChanged += (_, _) => Changed?.Invoke();
         }
-        _components.Children.Add(_zones);
+        regionPage.Children.Add(_zones);
+        Add(repolarizationPage, "局部复极延长（ms；T 时限与 QT 同步增加）", Delay);
+        _tOverride.Children.Add(ReferenceT); Add(_tOverride, "T 波峰幅（μV；负值倒置，0 为低平）", TPeak);
+        repolarizationPage.Children.Add(_tOverride);
+        Add(injuryPage, "J 点偏移（μV）", JPoint); Add(injuryPage, "ST 末端偏移（μV）", StEnd); Add(injuryPage, "ST 弓形幅度（μV）", StArch);
+        Add(necrosisPage, "QRS 形态", Necrosis); Add(necrosisPage, "异常 QRS 模板混合比例（%）", QrsWeight);
+        Groups.ItemsSource = new[]
+        {
+            Page("区域", regionPage), Page("复极／T", repolarizationPage),
+            Page("损伤／ST", injuryPage), Page("坏死／QRS", necrosisPage)
+        };
+        Groups.SelectedIndex = 0;
+        AutomationProperties.SetName(Groups, "梗死高级参数分组");
+        Children.Add(Groups);
         SeparateRegions.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
-        Children.Add(_components);
         ComponentsEnabled.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         ReferenceT.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         Necrosis.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         foreach (var field in new[] { QrsWeight, TPeak, JPoint, StEnd, StArch }) { field.ValueChanged += (_, _) => Changed?.Invoke(); }
         RefreshComponents();
-        void Add(string label, Control control)
+        static TabItem Page(string title, Control content) => new() { Header = title, Content = content, MinHeight = 44 };
+        static void Add(StackPanel host, string label, Control control)
         {
-            _components.Children.Add(new TextBlock { Text = label }); _components.Children.Add(control);
+            host.Children.Add(new TextBlock { Text = label }); host.Children.Add(control);
             AutomationProperties.SetName(control, label);
         }
         var reset = new Button { Content = "恢复梗死模板参数", MinHeight = 44 };
@@ -80,6 +91,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal void Reset(EcgChestInfarctionPlan? preset)
     {
         _preset = preset; IsVisible = preset is not null;
+        Groups.SelectedIndex = 0;
         if (preset is null) { return; }
         _chest.IsVisible = preset.Territory is InfarctionTerritory.Anteroseptal or InfarctionTerritory.Anterior or InfarctionTerritory.ExtensiveAnterior;
         int mask = preset.Territory switch
@@ -132,8 +144,11 @@ internal sealed class InfarctionParameterEditor : StackPanel
     private static ComboBox Region() => new() { ItemsSource = InfarctionZoneSelection.Names, SelectedIndex = 0, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
     private void RefreshComponents()
     {
-        _components.IsVisible = ComponentsEnabled.IsChecked == true;
-        _zones.IsVisible = _components.IsVisible && SeparateRegions.IsChecked == true;
+        bool components = ComponentsEnabled.IsChecked == true;
+        _componentNote.IsVisible = _tOverride.IsVisible = SeparateRegions.IsVisible = components;
+        _zones.IsVisible = components && SeparateRegions.IsChecked == true;
+        foreach (var page in Groups.Items.OfType<TabItem>().Skip(2)) { page.IsEnabled = components; }
+        if (!components && Groups.SelectedIndex >= 2) { Groups.SelectedIndex = 0; }
         _chest.IsVisible = !_zones.IsVisible && _preset?.Territory is InfarctionTerritory.Anteroseptal or InfarctionTerritory.Anterior or InfarctionTerritory.ExtensiveAnterior;
         _region.IsVisible = !_zones.IsVisible;
         TPeak.IsEnabled = ReferenceT.IsChecked != true;

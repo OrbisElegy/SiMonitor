@@ -22,20 +22,26 @@ internal sealed class TContourParameterEditor : StackPanel
     internal CheckBox[] ChestLeads { get; } = Enumerable.Range(1, 6).Select(i => new CheckBox { Content = $"V{i}" }).ToArray();
     private readonly WrapPanel _chest = new();
     private readonly TextBlock _targetNote = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+    internal event Action? Changed;
     private EcgTContourPlan? _preset;
     private readonly StackPanel _biphasic = new() { Spacing = 8 };
     internal TContourParameterEditor()
     {
         Spacing = 8;
+        Peak.ValueChanged += (_, _) => Changed?.Invoke();
+        SecondPeak.ValueChanged += (_, _) => Changed?.Invoke();
+        Crossing.ValueChanged += (_, _) => Changed?.Invoke();
+
         Add(this, "T 波目标导联", Target);
         foreach (var lead in ChestLeads)
         {
             lead.Margin = new Avalonia.Thickness(0, 0, 16, 0);
             AutomationProperties.SetName(lead, $"T 波目标胸导联 {lead.Content}");
+            lead.IsCheckedChanged += (_, _) => Changed?.Invoke();
             _chest.Children.Add(lead);
         }
         Children.Add(_chest); Children.Add(_targetNote);
-        Target.SelectionChanged += (_, _) => RefreshTarget();
+        Target.SelectionChanged += (_, _) => { RefreshTarget(); Changed?.Invoke(); };
         RefreshTarget();
         Add(this, "T 波幅度／第一瓣幅度（μV）", Peak);
         Add(_biphasic, "第二瓣幅度（μV）", SecondPeak);
@@ -59,6 +65,7 @@ internal sealed class TContourParameterEditor : StackPanel
         SecondPeak.Value = preset.SecondPeakMicrovolts ?? preset.PeakMicrovolts;
         Crossing.Value = (preset.CrossingPositionPermille ?? 500) / 10m;
         _biphasic.IsVisible = preset.Shape is EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive;
+        Changed?.Invoke();
     }
     internal EcgTContourPlan? Read(EcgTContourPlan? preset)
     {

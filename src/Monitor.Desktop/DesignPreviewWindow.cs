@@ -159,6 +159,7 @@ internal sealed class DesignPreviewWindow : Window
                 opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)), opticalVariation: opticalVariation);
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
+            Settings.MarkShapeApplied(ecgConfig);
             MonitorView = new(_monitor);
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;

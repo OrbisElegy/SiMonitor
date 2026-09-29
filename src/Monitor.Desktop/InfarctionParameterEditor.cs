@@ -13,10 +13,13 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal NumericUpDown Delay { get; } = new() { Minimum = 0, Maximum = 500, Increment = 10, Value = 0, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly StackPanel _chest = new() { Spacing = 8 };
     private readonly TextBlock _region = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+    internal event Action? Changed;
     private EcgChestInfarctionPlan? _preset;
     internal InfarctionParameterEditor()
     {
         Spacing = 8;
+        Delay.ValueChanged += (_, _) => Changed?.Invoke();
+
         Children.Add(_region);
         _chest.Children.Add(new TextBlock { Text = "胸导联区域（至少选择一个）" });
         var row = new WrapPanel();
@@ -24,6 +27,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
         {
             lead.Margin = new Avalonia.Thickness(0, 0, 16, 0);
             AutomationProperties.SetName(lead, $"梗死快照目标胸导联 {lead.Content}");
+            lead.IsCheckedChanged += (_, _) => Changed?.Invoke();
             row.Children.Add(lead);
         }
         _chest.Children.Add(row); Children.Add(_chest);
@@ -50,6 +54,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Delay.Value = preset.RepolarizationDelayNs / 1_000_000m;
         _region.Text = _chest.IsVisible ? "仅修改所选胸导联；其他胸导联及肢体导联保持原样。"
             : "保留模板区域及肢体导联投影关系，仅调整局部复极时限。";
+        Changed?.Invoke();
     }
     internal EcgChestInfarctionPlan? Read(EcgChestInfarctionPlan? preset)
     {

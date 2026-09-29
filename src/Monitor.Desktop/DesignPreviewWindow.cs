@@ -132,8 +132,11 @@ internal sealed class DesignPreviewWindow : Window
             var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
             var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
             var (co2DeadSpace, co2Rise, co2Fall) = Settings.ReadCo2Timing();
+            var (co2Baseline, co2Target, co2Plateau) = Settings.ReadCo2Levels();
             config = config with
             {
+                Co2BaselineMmHg = co2Baseline,
+                Co2PlateauStartCentiMmHg = co2Plateau,
                 Co2DeadSpaceMilliseconds = co2DeadSpace,
                 Co2RiseMilliseconds = co2Rise,
                 Co2FallMilliseconds = co2Fall,
@@ -146,7 +149,7 @@ internal sealed class DesignPreviewWindow : Window
                 AbpPulsePermille = checked((int)((Settings.AbpPulseGain.Value ?? throw new ArgumentException("ABP pulse gain required")) * 1000)),
                 PaPulsePermille = checked((int)((Settings.PaPulseGain.Value ?? throw new ArgumentException("PA pulse gain required")) * 1000)),
                 CvpBaselineCentiMmHg = checked((int)((Settings.CvpBaseline.Value ?? throw new ArgumentException("CVP baseline required")) * 100)),
-                Co2EndExpiratoryMmHg = checked((int)(Settings.EtCo2Target.Value ?? throw new ArgumentException("EtCO2 required")))
+                Co2EndExpiratoryMmHg = co2Target
             };
             if (Settings.CardiacRateEnabled.IsChecked == true)
             {
@@ -157,6 +160,7 @@ internal sealed class DesignPreviewWindow : Window
                 config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
             }
             decimal co2Amplitude = Settings.EtCo2Variation.Value ?? throw new ArgumentException("CO2 variation required");
+            if (co2Amplitude > 0 && co2Baseline != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
             if (co2Amplitude > 0)
             { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, checked((int)(co2Amplitude * 100)), Settings.RateSeed.Text ?? "") }; }
             int? opticalTarget = Settings.ReadOpticalTarget();
@@ -179,6 +183,10 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Levels")
+        { Settings.Status.Text = "未应用：CO₂ 基线须为 0–80、呼气末目标须为 5–80 mmHg 的整数；平台起始高度最多两位小数，须位于基线与呼气末目标之间。原运行与画面保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "Preview.Co2BaselineVariationConflict")
+        { Settings.Status.Text = "未应用：当前模型的 CO₂ 逐呼吸随机波动要求基线为 0；请将基线归零或关闭波动。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Timing")
         { Settings.Status.Text = "未应用：CO₂ 死腔、上升和下降时长须为 1–10000 ms 的整数，并满足当前吸呼时程。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Response")

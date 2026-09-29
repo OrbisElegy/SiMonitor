@@ -944,6 +944,41 @@ internal static class DesignPreviewSmokeChecks
                     Require(EcgTemplateSummary.Describe(pair.Ecg with { Infarction = edited }).Contains("V2、V4", StringComparison.Ordinal), "custom region summary names selected leads");
                 }
             }
+            foreach (int choice in new[] { 116, 126, 136 })
+            {
+                window.Settings.EcgSelection = choice;
+                var controls = window.Settings.InfarctionParameters;
+                controls.ComponentsEnabled.IsChecked = true;
+                controls.Necrosis.SelectedIndex = 2; controls.QrsWeight.Value = 60;
+                controls.ReferenceT.IsChecked = false; controls.TPeak.Value = -500;
+                controls.JPoint.Value = 200; controls.StEnd.Value = 100; controls.StArch.Value = 150;
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                var plan = controls.Read(pair.Ecg.Infarction)!;
+                Require(plan.Components is
+                {
+                    Necrosis: Monitor.Simulation.Physiology.NecrosisIllustrationShape.QS, QrsTemplatePermille: 600,
+                    TPeakMicrovolts: -500, JMicrovolts: 200, StEndMicrovolts: 100, StArchMicrovolts: 150
+                }, "independent infarction components preserve all authored controls");
+                window.ApplySettings();
+                Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text!.Contains("独立分量", StringComparison.Ordinal) &&
+                    !window.Settings.ShapeEditSummary.Text.Contains("ST–T 融合", StringComparison.Ordinal), "component mode summary does not claim stage fusion");
+                var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                var config = pair.Physiology with { Infarction = plan, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+                var expected = new LocalMonitorPreviewSession(config, window.Session.Display);
+                var stage = new LocalMonitorPreviewSession(config with { Infarction = pair.Physiology.Infarction }, window.Session.Display);
+                for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); stage.Advance(50_000_000); }
+                for (int channel = 0; channel < 7; channel++)
+                {
+                    Require(window.Session.Samples(channel, 0, expected.FrontierNs).SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "component editing reaches acquired samples");
+                    if (channel > 0) { Require(expected.Samples(channel, 0, expected.FrontierNs).SequenceEqual(stage.Samples(channel, 0, stage.FrontierNs)), "component editing preserves mechanical and respiratory channels"); }
+                }
+                live = window.Session; controls.JPoint.Value = null; window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("ST／T", StringComparison.Ordinal), "incomplete independent components reject atomically");
+                controls.ComponentsEnabled.IsChecked = false; window.ApplySettings();
+                Require(!ReferenceEquals(live, window.Session) && controls.Read(pair.Ecg.Infarction) == pair.Ecg.Infarction, "disabling component editing exactly restores original fusion stage despite stale fields");
+            }
+            window.Settings.EcgSelection = 164; window.ApplySettings();
+            Require(window.Settings.InfarctionParameters.ComponentsEnabled.IsChecked != true && window.Settings.InfarctionParameters.JPoint.Value == 0, "switching stages clears component overrides");
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
             Require(window.Settings.InfarctionParameters.Parent is not null, "infarction advanced editor is reachable");
             Capture(window, "ui-preview-infarction-advanced.png");

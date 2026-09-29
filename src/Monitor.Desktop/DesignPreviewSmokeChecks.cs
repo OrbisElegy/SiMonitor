@@ -1056,6 +1056,43 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "missing zone choice rejects atomically");
             zoneEditor.SeparateRegions.IsChecked = false; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction) is null, "disabling separate zones restores shared region and ignores hidden invalid selection");
+            zoneEditor.SeparateRegions.IsChecked = true;
+            zoneEditor.IschemiaRegion.SelectedIndex = zoneEditor.InjuryRegion.SelectedIndex = zoneEditor.NecrosisRegion.SelectedIndex = 0;
+            zoneEditor.Delay.Value = zoneEditor.TPeak.Value = zoneEditor.JPoint.Value = zoneEditor.StEnd.Value = zoneEditor.StArch.Value = zoneEditor.QrsWeight.Value = null;
+            zoneEditor.Necrosis.SelectedIndex = -1;
+            live = window.Session; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session) && zoneEditor.Groups.Items.OfType<TabItem>().Skip(1).All(page => !page.IsEnabled),
+                "disabled zones ignore dormant invalid parameters and disable their parameter groups");
+            var inactive = zoneEditor.ReadZones(zonePair.Ecg.Infarction)!;
+            Require(inactive.Components == new Monitor.Simulation.Physiology.EcgInfarctionComponents() && inactive.RepolarizationDelayNs == 0,
+                "disabled zones contribute neutral parameters without overwriting drafts");
+            // Region editing uses electrode-projected II, whereas the ordinary
+            // sinus preview uses its original scalar reference table.
+            var reference = new LocalMonitorPreviewSession(DesignPreviewWindow.ResolveStyle(0, 0, 0).Physiology with
+            {
+                Infarction = new(0, Monitor.Simulation.Physiology.InfarctionIllustrationStage.None),
+                BreathPeriodMilliseconds = zoneTiming.Item1,
+                InspirationMilliseconds = zoneTiming.Item2
+            }, window.Session.Display);
+            for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
+            for (int channel = 0; channel < 7; channel++)
+            { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "all closed regions produce the unmodified electrode-reference acquisition"); }
+            live = window.Session;
+            foreach (var region in new[] { zoneEditor.IschemiaRegion, zoneEditor.InjuryRegion, zoneEditor.NecrosisRegion })
+            {
+                region.SelectedIndex = 2; window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session) && zoneEditor.Delay.Value is null && zoneEditor.QrsWeight.Value is null,
+                    "reenabled region validates its preserved invalid draft instead of applying neutral data");
+                region.SelectedIndex = 0;
+            }
+            zoneEditor.InjuryRegion.SelectedIndex = 2;
+            zoneEditor.JPoint.Value = 200; zoneEditor.StEnd.Value = 100; zoneEditor.StArch.Value = 150;
+            window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction)!.Components.JMicrovolts == 200,
+                "valid injury-only edits apply while other dormant drafts remain invalid");
+            zoneEditor.Groups.SelectedIndex = 2; zoneEditor.InjuryRegion.SelectedIndex = 0;
+            Require(zoneEditor.Groups.SelectedIndex == 0, "closing the displayed region returns navigation to region selection");
+            Capture(window, "ui-preview-infarction-inactive-zones.png");
             window.Settings.EcgSelection = 164; window.ApplySettings();
             Require(zoneEditor.SeparateRegions.IsChecked != true, "template selection clears separate zone mode");
             Require(zoneEditor.Groups.SelectedIndex == 0 && zoneEditor.Groups.Items.OfType<TabItem>().Skip(2).All(page => !page.IsEnabled),

@@ -56,7 +56,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
         foreach (var (zoneLabel, selector) in new[] { ("缺血（T 波及局部复极延长）", IschemiaRegion), ("损伤（J／ST）", InjuryRegion), ("坏死（QRS）", NecrosisRegion) })
         {
             Add(_zones, zoneLabel, selector);
-            selector.SelectionChanged += (_, _) => Changed?.Invoke();
+            selector.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         }
         regionPage.Children.Add(_zones);
         Add(repolarizationPage, "局部复极延长（ms；T 时限与 QT 同步增加）", Delay);
@@ -117,15 +117,18 @@ internal sealed class InfarctionParameterEditor : StackPanel
     {
         if (preset is null) { return null; }
         if (preset != _preset) { throw new ArgumentException("Preview.StaleInfarction"); }
-        decimal delay = Delay.Value ?? throw new ArgumentException("Preview.InvalidInfarctionDelay");
+        decimal delay = RegionActive(IschemiaRegion) ? Delay.Value ?? throw new ArgumentException("Preview.InvalidInfarctionDelay") : 0;
         if (delay is < 0 or > 500 || delay != decimal.Truncate(delay)) { throw new ArgumentException("Preview.InvalidInfarctionDelay"); }
         EcgInfarctionComponents? components = null;
         if (ComponentsEnabled.IsChecked == true)
         {
-            if (Necrosis.SelectedIndex is < 0 or > 2) { throw new ArgumentException("Preview.InvalidInfarctionComponents"); }
-            components = new((NecrosisIllustrationShape)Necrosis.SelectedIndex,
-                ReferenceT.IsChecked == true ? null : Integer(TPeak), Integer(JPoint), Integer(StEnd), Integer(StArch),
-                Necrosis.SelectedIndex == 0 ? 1000 : Integer(QrsWeight) * 10);
+            int necrosis = RegionActive(NecrosisRegion) ? Necrosis.SelectedIndex : 0;
+            if (necrosis is < 0 or > 2) { throw new ArgumentException("Preview.InvalidInfarctionComponents"); }
+            bool injury = RegionActive(InjuryRegion);
+            components = new((NecrosisIllustrationShape)necrosis,
+                !RegionActive(IschemiaRegion) || ReferenceT.IsChecked == true ? null : Integer(TPeak),
+                injury ? Integer(JPoint) : 0, injury ? Integer(StEnd) : 0, injury ? Integer(StArch) : 0,
+                necrosis == 0 ? 1000 : Integer(QrsWeight) * 10);
         }
         var edited = preset with { RepolarizationDelayNs = (long)delay * 1_000_000, Components = components };
         if (!_chest.IsVisible) { return edited; }
@@ -142,13 +145,21 @@ internal sealed class InfarctionParameterEditor : StackPanel
             InfarctionZoneSelection.Resolve(NecrosisRegion.SelectedIndex), edited.Components!, edited.RepolarizationDelayNs);
     }
     private static ComboBox Region() => new() { ItemsSource = InfarctionZoneSelection.Names, SelectedIndex = 0, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
+    private bool RegionActive(ComboBox region) =>
+        ComponentsEnabled.IsChecked != true || SeparateRegions.IsChecked != true || region.SelectedIndex != 0;
     private void RefreshComponents()
     {
         bool components = ComponentsEnabled.IsChecked == true;
         _componentNote.IsVisible = _tOverride.IsVisible = SeparateRegions.IsVisible = components;
         _zones.IsVisible = components && SeparateRegions.IsChecked == true;
-        foreach (var page in Groups.Items.OfType<TabItem>().Skip(2)) { page.IsEnabled = components; }
-        if (!components && Groups.SelectedIndex >= 2) { Groups.SelectedIndex = 0; }
+        var pages = Groups.Items.OfType<TabItem>().ToArray();
+        if (pages.Length == 4)
+        {
+            pages[1].IsEnabled = RegionActive(IschemiaRegion);
+            pages[2].IsEnabled = components && RegionActive(InjuryRegion);
+            pages[3].IsEnabled = components && RegionActive(NecrosisRegion);
+            if (Groups.SelectedIndex >= 0 && !pages[Groups.SelectedIndex].IsEnabled) { Groups.SelectedIndex = 0; }
+        }
         _chest.IsVisible = !_zones.IsVisible && _preset?.Territory is InfarctionTerritory.Anteroseptal or InfarctionTerritory.Anterior or InfarctionTerritory.ExtensiveAnterior;
         _region.IsVisible = !_zones.IsVisible;
         TPeak.IsEnabled = ReferenceT.IsChecked != true;

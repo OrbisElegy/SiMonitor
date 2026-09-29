@@ -17,7 +17,18 @@ internal sealed class DesignPreviewSettings : UserControl
     internal static int EcgChoiceCount => EcgChoices.Length;
     private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量"];
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];
-    internal int EcgSelection { get; set; }
+    private int _ecgSelection;
+    internal TContourParameterEditor TContourParameters { get; } = new();
+    internal int EcgSelection
+    {
+        get => _ecgSelection;
+        set
+        {
+            if (_ecgSelection == value) { return; }
+            _ecgSelection = value;
+            TContourParameters.Reset(value is >= 107 and <= 114 ? TContourProductPreset.Create(value - 107) : null);
+        }
+    }
     internal int RespirationSelection { get; set; }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -336,6 +347,7 @@ internal sealed class DesignPreviewSettings : UserControl
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         _advancedParameters.Children.Add(Text(EcgTemplateSummary.Describe(config.Ecg)));
+        if (config.Ecg.TContour is not null) { _advancedParameters.Children.Add(TContourParameters); }
         _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
         _advancedParameters.Children.Add(Text(RespirationSelection == 3 ? "当前无呼吸分量，不提供吸呼比、呼吸深度等编辑。" :
             $"周期 {config.Physiology.BreathPeriodMilliseconds} ms · 吸气 {config.Physiology.InspirationMilliseconds} ms · 相对深度 {config.Physiology.RespAmplitudeCounts}"));

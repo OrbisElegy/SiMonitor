@@ -798,6 +798,36 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for T contour");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session), "T contour permits independent no-ejection setting");
+            window.Settings.EjectionSelection = 0;
+            window.Settings.EcgSelection = 107;
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            var editor = window.Settings.TContourParameters;
+            Require(editor.IsVisible && editor.Parent is not null, "compatible contour editor is reachable in advanced settings");
+            editor.Peak.Value = 450; editor.SecondPeak.Value = 150; editor.Crossing.Value = 25;
+            window.ApplySettings();
+            var edited = editor.Read(TContourProductPreset.Create(0));
+            Require(edited is { PeakMicrovolts: 450, SecondPeakMicrovolts: 150, CrossingPositionPermille: 250 }, "advanced contour preserves independent lobes and crossing");
+            var (period, inspiration) = window.Settings.ReadBreathingTiming();
+            var baseline = DesignPreviewWindow.ResolveStyle(107, 0, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+            var expected = new LocalMonitorPreviewSession(baseline with { TContour = edited }, window.Session.Display);
+            var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+            for (int i = 0; i < 100; i++)
+            {
+                window.Pulse(window.ActiveTimer, 50_000_000);
+                expected.Advance(50_000_000); original.Advance(50_000_000);
+            }
+            long end = window.Session.FrontierNs;
+            Require(window.Session.Samples(0, 0, end).SequenceEqual(expected.Samples(0, 0, end)) &&
+                !window.Session.Samples(0, 0, end).SequenceEqual(original.Samples(0, 0, end)), "edited contour reaches acquired monitor signal");
+            for (int channel = 1; channel < 7; channel++)
+            { Require(window.Session.Samples(channel, 0, end).SequenceEqual(original.Samples(channel, 0, end)), "contour editing preserves non-ECG channels"); }
+            window.SelectPage(1); Capture(window, "ui-preview-t-contour-edited-paper.png");
+            live = window.Session; editor.Crossing.Value = null; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "missing contour parameter rejects without replacing session");
+            window.Settings.EcgSelection = 108;
+            Require(editor.Crossing.Value == 65 && editor.Peak.Value == 300 && editor.SecondPeak.Value == 200, "switching contour resets draft to selected template");
+            window.Settings.EcgSelection = 0; window.ApplySettings();
+            Require(!editor.IsVisible && !ReferenceEquals(live, window.Session), "incompatible template ignores stale contour edits");
         }
         finally { window.Close(); }
     }

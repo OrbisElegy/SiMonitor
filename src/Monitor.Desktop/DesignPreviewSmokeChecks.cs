@@ -1839,8 +1839,8 @@ internal static class DesignPreviewSmokeChecks
         Require(Color(LiveMonitorView.NumericBackground(hr)) == Avalonia.Media.Color.Parse("#fff2c94c") && Color(hr.Foreground) == Avalonia.Media.Color.Parse("#ff000000"), "warning numeric uses yellow backing with black high-contrast text");
         Require(Color(LiveMonitorView.NumericBackground(pr)) == Avalonia.Media.Color.Parse("#ff145aa3") && Color(pr.Foreground) == Avalonia.Media.Color.Parse("#ffffffff") && Color(LiveMonitorView.NumericBackground(spo2)) == Avalonia.Media.Colors.Transparent,
             "notice highlights its own secondary numeric, not unrelated SpO2 or banner-selected HR");
-        Require(view.NoticeSurface.CornerRadius == ((Border)hr.Parent!).CornerRadius && view.NoticeSurface.CornerRadius.TopLeft > 0,
-            "banner and numeric use matching rounded highlight surfaces");
+        Require(view.NoticeSurface.CornerRadius == ((Border)hr.Parent!).CornerRadius && view.NoticeSurface.CornerRadius == new CornerRadius(0),
+            "banner and numeric use matching square highlight surfaces");
         Require(Color(view.NoticeSurface.Background) == Avalonia.Media.Color.Parse("#fff2c94c"), "warning banner lights with numeric phase");
         view.RefreshNumericHighlights(500_000_000);
         Require(Color(view.NoticeSurface.Background) == Avalonia.Media.Colors.Transparent && !string.IsNullOrEmpty(view.Notice.Text), "banner off phase keeps its text readable");

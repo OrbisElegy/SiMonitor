@@ -130,8 +130,11 @@ internal sealed class DesignPreviewWindow : Window
             config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
             var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
+            var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
             config = config with
             {
+                Co2TransportDelayMilliseconds = co2Delay,
+                Co2DispersionStepMilliseconds = co2Dispersion,
                 RespAmplitudeCounts = respAmplitude,
                 RespCardiacArtifactCounts = respArtifact,
                 BreathPeriodMilliseconds = breathPeriod,
@@ -172,6 +175,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Response")
+        { Settings.Status.Text = "未应用：CO₂ 管路延迟须为 0–5000 ms 的整数，展宽步长须为 0–500 ms 的整数。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidRespirationSignal")
         { Settings.Status.Text = "未应用：RESP 信号幅度须为 −1000–1000 的整数，心源性干扰须为 −200–200 的整数。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionComponents")

@@ -163,6 +163,63 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyCo2ResponseEditing()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            Require(window.Settings.ReadCo2Response() == (0, 0), "CO2 response defaults preserve source");
+            foreach (int pattern in Enumerable.Range(0, 4))
+            {
+                window.Settings.RespirationSelection = pattern;
+                var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
+                { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+                foreach (var response in new[] { (Delay: 600, Dispersion: 0), (Delay: 600, Dispersion: 150), (Delay: 0, Dispersion: 0) })
+                {
+                    window.Settings.Co2TransportDelay.Value = response.Delay;
+                    window.Settings.Co2DispersionStep.Value = response.Dispersion;
+                    var previous = window.Session; window.ApplySettings();
+                    Require(!ReferenceEquals(previous, window.Session), "valid CO2 response applies across respiratory templates");
+                    var expected = new LocalMonitorPreviewSession(baseline with
+                    { Co2TransportDelayMilliseconds = response.Delay, Co2DispersionStepMilliseconds = response.Dispersion }, window.Session.Display);
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    for (int i = 0; i < 240; i++)
+                    { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
+                    long end = expected.FrontierNs;
+                    for (int channel = 0; channel < 7; channel++)
+                    {
+                        var actual = window.Session.Samples(channel, 0, end);
+                        Require(actual.SequenceEqual(expected.Samples(channel, 0, end)), "CO2 response uses shared acquired source");
+                        bool unchanged = actual.SequenceEqual(original.Samples(channel, 0, end));
+                        Require(unchanged == (channel != 4 || pattern == 3 || response == (0, 0)),
+                            "CO2 response isolates gas channel; zero settings restore exact source");
+                    }
+                }
+            }
+            var live = window.Session; var timer = window.ActiveTimer;
+            foreach (var field in new[] { window.Settings.Co2TransportDelay, window.Settings.Co2DispersionStep })
+            {
+                foreach (decimal? invalid in new decimal?[] { null, .5m })
+                {
+                    field.Value = invalid; window.ApplySettings();
+                    Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                        window.Settings.Status.Text!.Contains("管路延迟", StringComparison.Ordinal),
+                        "invalid CO2 response preserves session and timer with actionable error");
+                }
+                field.Value = 0;
+            }
+            window.Settings.Co2TransportDelay.Value = 5000; window.Settings.Co2DispersionStep.Value = 500;
+            window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "CO2 response UI upper bounds accepted");
+            window.Settings.RespirationSelection = 0;
+            window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
+            window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            Capture(window, "ui-preview-co2-response-editor.png");
+            window.Width = 960; Capture(window, "ui-preview-co2-response-editor-compact.png");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyRespirationSignalEditing()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -665,6 +722,7 @@ internal static class DesignPreviewSmokeChecks
             Capture(window, "ui-preview-perfusion.png");
             VerifySeededVitals(window);
             VerifyRespirationSignalEditing();
+            VerifyCo2ResponseEditing();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

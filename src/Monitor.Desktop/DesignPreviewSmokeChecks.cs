@@ -201,8 +201,20 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespCardiacArtifact.Value = null; live = window.Session; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("心源性干扰", StringComparison.Ordinal), "missing cardiac artifact gives actionable rejection");
             window.Settings.RespCardiacArtifact.Value = 120; window.Settings.RespSignalAmplitude.Value = -400;
-            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            Require(window.Settings.SectionPages[5].Sections.SelectedIndex == 1, "respiration style opens respiration advanced group directly");
+            live = window.Session;
+            window.Settings.OpenAdvanced(0);
+            Require(window.Settings.SectionPages[5].Sections.SelectedIndex == 0, "ECG style opens ECG advanced group");
+            window.Settings.OpenAdvanced(3);
+            Require(window.Settings.SectionPages[5].Sections.SelectedIndex == 2, "ejection style opens ejection advanced group");
+            window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
+            window.Settings.Tabs.SelectedIndex = 0; window.Settings.OpenAdvanced(1);
+            Require(ReferenceEquals(live, window.Session) && window.Settings.RespSignalAmplitude.Value == -400 && window.Settings.RespCardiacArtifact.Value == 120,
+                "advanced group navigation and return preserve drafts without applying");
             Capture(window, "ui-preview-resp-signal-editor.png");
+            window.Width = 960; Capture(window, "ui-preview-resp-signal-editor-compact.png");
+            Require(window.Settings.SectionPages[5].Compact, "advanced groups use existing compact Fluent navigation");
         }
         finally { window.Close(); }
     }
@@ -1423,17 +1435,20 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 72, 74, 73, 20, 0 })
             {
                 window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = choice;
-                window.Settings.Tabs.SelectedIndex = 5;
+                window.Settings.OpenAdvanced(0);
                 Capture(window, $"ui-preview-advanced-{choice}.png");
                 var text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
                 Require(text.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg)),
                     "advanced page renders the selected waveform semantics");
+                window.Settings.OpenAdvanced(3);
+                Capture(window, $"ui-preview-advanced-ejection-{choice}.png");
+                text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
                 Require(text.Contains("当前无有效射血，不提供射血强度编辑。") == (choice != 0),
                     "advanced page derives absent ejection from rhythm as well as ejection selection");
             }
             var live = window.Session;
             window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = 74; window.Settings.EjectionSelection = 1;
-            window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-advanced-incompatible.png");
+            window.Settings.OpenAdvanced(3); Capture(window, "ui-preview-advanced-incompatible.png");
             Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("当前组合不兼容：", StringComparison.Ordinal) == true) &&
                 ReferenceEquals(live, window.Session), "browsing incompatible advanced settings explains conflict without mutating live session");
         }

@@ -817,8 +817,23 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "regional snapshot preserves sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
-                    "regional snapshot card is actual selected acquired ECG");
+                if (choice is >= 125 and <= 134)
+                {
+                    Require(cached.Lead == Monitor.Simulation.Physiology.EcgLead.I, "lateral cards identify the affected lead I");
+                    long from = source.FrontierNs - StylePreviewCatalog.DurationNs(choice), to = source.FrontierNs;
+                    var projected = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg, cached.Lead, from, to);
+                    var baseline = StylePreviewCatalog.CreateProjectedPreview(ProjectedEcgDemoConfiguration.Default, cached.Lead, from, to);
+                    Require(cached.Ecg.SequenceEqual(projected) && cached.Ecg.Length == 750 &&
+                        cached.Ecg.Zip(baseline).Any(p => Math.Abs(p.First.Value - p.Second.Value) > 50),
+                        "lateral card contains complete actual paper-lead samples and visible regional changes");
+                    Require(cached.Abp.SequenceEqual(source.Samples(3, from, to)), "preview lead choice does not alter perfusion preview");
+                }
+                else
+                {
+                    Require(cached.Lead == Monitor.Simulation.Physiology.EcgLead.II &&
+                        cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                        "ordinary cards retain sampled monitor II");
+                }
                 if (choice != 0)
                 {
                     string description = EcgTemplateSummary.Describe(pair.Ecg);

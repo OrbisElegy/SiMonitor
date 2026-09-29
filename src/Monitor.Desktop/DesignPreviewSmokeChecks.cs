@@ -346,6 +346,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyAtrialShapeProductStyles();
         VerifyVentricularShapeProductStyles();
         VerifyTContourProductStyles();
+        VerifyInferiorInfarctionProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -791,6 +792,49 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for T contour");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session), "T contour permits independent no-ejection setting");
+        }
+        finally { window.Close(); }
+    }
+
+    private static void VerifyInferiorInfarctionProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 0 })
+            {
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "inferior snapshot replaces preceding compound/rhythm source");
+                if (choice == 114) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.Infarction == pair.Ecg.Infarction &&
+                    pair.Ecg.Infarction == (choice == 0 ? null : InferiorInfarctionProductPreset.Create(choice - 115)) &&
+                    pair.Ecg.TContour is null,
+                    "monitor and paper share contour and clear prior T contour");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid && reading.HeartRate.MilliBeatsPerMinute == 75000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "inferior snapshot preserves sample-derived electrical and mechanical measurements");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "inferior snapshot card is actual selected acquired ECG");
+                if (choice != 0)
+                {
+                    string description = EcgTemplateSummary.Describe(pair.Ecg);
+                    Require(description.Contains("不随模拟时间演变", StringComparison.Ordinal), "summary identifies independent snapshot");
+                    if (choice is 116 or 117)
+                    { Require(description.Contains("ST–T 融合", StringComparison.Ordinal) && !description.Contains("T 180 ms", StringComparison.Ordinal), "fused contour omits independently measured T duration"); }
+                    if (choice == 116) { Require(description.Contains("局部 QRS 96 ms", StringComparison.Ordinal), "hyperacute local widening is described accurately"); }
+                }
+                window.SelectPage(1); Capture(window, $"ui-preview-inferior-infarction-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "inferior snapshot paper retains full twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 124; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for inferior snapshot");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "inferior snapshot permits independent no-ejection setting");
         }
         finally { window.Close(); }
     }

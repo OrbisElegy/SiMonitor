@@ -804,7 +804,10 @@ internal static class DesignPreviewSmokeChecks
             var editor = window.Settings.TContourParameters;
             Require(editor.IsVisible && editor.Parent is not null, "compatible contour editor is reachable in advanced settings");
             editor.Peak.Value = 450; editor.SecondPeak.Value = 150; editor.Crossing.Value = 25;
+            Require(window.Settings.ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal) &&
+                window.Settings.ShapeEditSummary.Text!.Contains("峰幅 450", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text.Contains("过零 25%", StringComparison.Ordinal), "draft summary follows contour fields before application");
             window.ApplySettings();
+            Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal), "successful contour application marks only accepted shape applied");
             var edited = editor.Read(TContourProductPreset.Create(0));
             Require(edited is { PeakMicrovolts: 450, SecondPeakMicrovolts: 150, CrossingPositionPermille: 250 }, "advanced contour preserves independent lobes and crossing");
             var (period, inspiration) = window.Settings.ReadBreathingTiming();
@@ -840,12 +843,13 @@ internal static class DesignPreviewSmokeChecks
             editor.Target.SelectedIndex = 0;
             foreach (var lead in editor.ChestLeads) { lead.IsChecked = false; }
             live = window.Session; window.ApplySettings();
-            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal), "empty chest selection rejects atomically with actionable message");
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal) &&
+                window.Settings.ShapeEditStatus.Text!.Contains("输入不完整或无效", StringComparison.Ordinal), "empty chest selection rejects atomically with actionable message and invalid draft state");
             editor.ChestLeads[1].IsChecked = true;
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 0; window.Settings.Tabs.SelectedIndex = 5;
             Capture(window, "ui-preview-t-contour-target-editor.png");
             live = window.Session; editor.Crossing.Value = null; window.ApplySettings();
-            Require(ReferenceEquals(live, window.Session), "missing contour parameter rejects without replacing session");
+            Require(ReferenceEquals(live, window.Session) && window.Settings.ShapeEditStatus.Text!.Contains("输入不完整或无效", StringComparison.Ordinal), "missing contour parameter rejects without replacing session or showing stale summary");
             window.Settings.EcgSelection = 108;
             Require(editor.Crossing.Value == 65 && editor.Peak.Value == 300 && editor.SecondPeak.Value == 200 && editor.Target.SelectedIndex == 2 &&
                 editor.ChestLeads.Select((lead, index) => (lead.IsChecked == true) == (index == 0)).All(matches => matches), "switching contour resets draft and target to selected template");
@@ -921,7 +925,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(edited.RepolarizationDelayNs == 80_000_000 && edited.Stage == pair.Ecg.Infarction!.Stage &&
                     (choice < 135 ? edited.Territory == pair.Ecg.Infarction.Territory : edited.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.CustomChest && edited.ChestMask == 10), "regional editor preserves snapshot and limb territory or custom chest mask");
                 live = window.Session; window.ApplySettings();
-                Require(!ReferenceEquals(live, window.Session), "regional delay and mask apply atomically");
+                Require(!ReferenceEquals(live, window.Session) && window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) &&
+                    window.Settings.ShapeEditSummary.Text!.Contains("局部 QT 440 ms", StringComparison.Ordinal), "regional delay and mask apply atomically with accepted extended QT summary");
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var source = new LocalMonitorPreviewSession(pair.Physiology with { Infarction = edited, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration }, window.Session.Display);
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); source.Advance(50_000_000); }
@@ -948,10 +953,11 @@ internal static class DesignPreviewSmokeChecks
             window.ApplySettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal), "empty infarction mask preserves running session");
             infarctionEditor.ChestLeads[1].IsChecked = true;
+            Require(window.Settings.ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal), "correcting region input restores a pending draft rather than stale accepted state");
             foreach (decimal? delay in new decimal?[] { null, 1.5m, 500 })
             {
                 infarctionEditor.Delay.Value = delay; window.ApplySettings();
-                Require(ReferenceEquals(live, window.Session), "missing, fractional or cycle-overlapping delay rejects atomically");
+                Require(ReferenceEquals(live, window.Session) && !window.Settings.ShapeEditStatus.Text!.Contains("· 已应用", StringComparison.Ordinal), "missing, fractional or cycle-overlapping delay rejects atomically without marking draft applied");
             }
             window.Settings.EcgSelection = 135;
             Require(infarctionEditor.Delay.Value == 0 && infarctionEditor.ChestLeads.Select((lead, i) => (lead.IsChecked == true) == (i < 3)).All(matches => matches), "new chest template restores mask and delay defaults");

@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
@@ -18,6 +19,39 @@ internal sealed class DesignPreviewSettings : UserControl
     private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量"];
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];
     private int _ecgSelection;
+    private int _appliedShapeSelection;
+    private EcgTContourPlan? _appliedTContour;
+    private EcgChestInfarctionPlan? _appliedInfarction;
+    internal TextBlock ShapeEditStatus { get; } = Text("");
+    internal TextBlock ShapeEditSummary { get; } = Text("");
+    internal void MarkShapeApplied(ProjectedEcgDemoConfiguration configuration)
+    {
+        _appliedShapeSelection = EcgSelection;
+        _appliedTContour = configuration.TContour;
+        _appliedInfarction = configuration.Infarction;
+        RefreshShapeSummary();
+    }
+    private void RefreshShapeSummary()
+    {
+        try
+        {
+            var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0).Ecg;
+            bool editable = config.TContour is not null || config.Infarction is not null;
+            config = config with
+            {
+                TContour = TContourParameters.Read(config.TContour),
+                Infarction = InfarctionParameters.Read(config.Infarction)
+            };
+            bool applied = _appliedShapeSelection == EcgSelection && _appliedTContour == config.TContour && _appliedInfarction == config.Infarction;
+            ShapeEditStatus.Text = !editable ? "模板默认参数（非运行值）" : applied ? "形态参数 · 已应用（非测量值）" : "形态参数 · 待应用（非测量值）";
+            ShapeEditSummary.Text = EcgTemplateSummary.Describe(config);
+        }
+        catch (ArgumentException)
+        {
+            ShapeEditStatus.Text = "形态参数 · 输入不完整或无效，尚未应用";
+            ShapeEditSummary.Text = "请检查导联选择、幅度及时间参数；正在运行的波形保持不变。";
+        }
+    }
     internal TContourParameterEditor TContourParameters { get; } = new();
     internal InfarctionParameterEditor InfarctionParameters { get; } = new();
     internal int EcgSelection
@@ -30,6 +64,7 @@ internal sealed class DesignPreviewSettings : UserControl
             TContourParameters.Reset(value is >= 107 and <= 114 ? TContourProductPreset.Create(value - 107) : null);
             InfarctionParameters.Reset(value is >= 115 and <= 164 ? InfarctionProductPreset.Create((value - 115) % 10,
                 (Monitor.Simulation.Physiology.InfarctionTerritory)((value - 115) / 10 + 1)) : null);
+            RefreshShapeSummary();
         }
     }
     internal int RespirationSelection { get; set; }
@@ -84,6 +119,8 @@ internal sealed class DesignPreviewSettings : UserControl
     internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced)
     {
         _preview = preview; _respirationPreview = respirationPreview;
+        TContourParameters.Changed += RefreshShapeSummary;
+        InfarctionParameters.Changed += RefreshShapeSummary;
         AutomationProperties.SetName(Skin, "监护皮肤与固定行数");
         var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
         var instruction = Text("选择生理信号，再选择分组与具体波形；应用后更新监护和十二导联。");
@@ -345,11 +382,13 @@ internal sealed class DesignPreviewSettings : UserControl
     private void RefreshAdvanced(Button developer)
     {
         _advancedParameters.Children.Clear();
-        _advancedParameters.Children.Add(Text("当前波形高级参数 · 模板默认值（非运行值）"));
+        _advancedParameters.Children.Add(Text("当前波形高级参数"));
         _advancedParameters.Children.Add(DesktopInformationPages.Help("topic-8"));
         _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
-        _advancedParameters.Children.Add(Text(EcgTemplateSummary.Describe(config.Ecg)));
+        RefreshShapeSummary();
+        _advancedParameters.Children.Add(ShapeEditStatus);
+        _advancedParameters.Children.Add(ShapeEditSummary);
         if (config.Ecg.TContour is not null) { _advancedParameters.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedParameters.Children.Add(InfarctionParameters); }
         _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));

@@ -163,6 +163,73 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyCo2TimingEditing()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            Require(window.Settings.ReadCo2Timing() == (125, 250, 200), "CO2 timing defaults preserve reference");
+            foreach (int pattern in Enumerable.Range(0, 4))
+            {
+                window.Settings.RespirationSelection = pattern;
+                foreach (var timing in new[] { (DeadSpace: 200, Rise: 700, Fall: 300), (DeadSpace: 125, Rise: 250, Fall: 200) })
+                {
+                    window.Settings.Co2DeadSpace.Value = timing.DeadSpace;
+                    window.Settings.Co2Rise.Value = timing.Rise; window.Settings.Co2Fall.Value = timing.Fall;
+                    var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                    var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
+                    { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+                    var live = window.Session; window.ApplySettings();
+                    Require(!ReferenceEquals(live, window.Session), "CO2 shape timing applies to all respiratory templates");
+                    var expected = new LocalMonitorPreviewSession(baseline with
+                    { Co2DeadSpaceMilliseconds = timing.DeadSpace, Co2RiseMilliseconds = timing.Rise, Co2FallMilliseconds = timing.Fall }, window.Session.Display);
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    for (int i = 0; i < 240; i++)
+                    { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
+                    for (int channel = 0; channel < 7; channel++)
+                    {
+                        var actual = window.Session.Samples(channel, 0, expected.FrontierNs);
+                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "CO2 timing matches acquired shared model");
+                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.FrontierNs)) ==
+                            (channel != 4 || pattern == 3 || timing == (125, 250, 200)), "CO2 timing isolates gas channel and restores exact defaults");
+                    }
+                }
+            }
+            window.Settings.RespirationSelection = 0;
+            window.Settings.RespiratoryRate.Value = 60; window.Settings.InspirationPercent.Value = 10;
+            window.Settings.Co2Fall.Value = 100;
+            window.ApplySettings();
+            Require(window.Settings.ReadBreathingTiming() == (1000, 100) && window.Settings.Status.Text!.StartsWith("已应用", StringComparison.Ordinal),
+                "shorter CO2 fall permits valid inspiration previously rejected by fixed200ms limit");
+            var session = window.Session; var timer = window.ActiveTimer;
+            window.Settings.Co2Fall.Value = 101; window.ApplySettings();
+            Require(ReferenceEquals(session, window.Session) && window.Settings.Status.Text!.Contains("101", StringComparison.Ordinal) &&
+                window.Settings.BreathingTiming.Text!.Contains("101", StringComparison.Ordinal), "fall limit updates summary and rejection");
+            window.Settings.Co2Fall.Value = 100;
+            window.Settings.Co2DeadSpace.Value = 200; window.Settings.Co2Rise.Value = 700; window.ApplySettings();
+            Require(ReferenceEquals(session, window.Session) && window.Settings.Status.Text!.Contains("900", StringComparison.Ordinal),
+                "expiration equal to dead space plus rise rejects with current constraint");
+            foreach (var field in new[] { window.Settings.Co2DeadSpace, window.Settings.Co2Rise, window.Settings.Co2Fall })
+            {
+                decimal? previous = field.Value;
+                foreach (decimal? invalid in new decimal?[] { null, 1.5m })
+                {
+                    field.Value = invalid; window.ApplySettings();
+                    Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                        window.Settings.Status.Text!.Contains("1–10000", StringComparison.Ordinal), "invalid CO2 timing retains session and timer");
+                }
+                field.Value = previous;
+            }
+            window.Settings.Co2Rise.Value = 699; window.ApplySettings();
+            Require(!ReferenceEquals(session, window.Session), "expiration with one millisecond plateau applies");
+            window.Settings.RespiratoryRate.Value = 16; window.Settings.InspirationPercent.Value = 50;
+            window.Settings.Co2Rise.Value = 700; window.Settings.Co2Fall.Value = 300;
+            window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            Capture(window, "ui-preview-co2-timing-editor.png");
+            window.Width = 960; Capture(window, "ui-preview-co2-timing-editor-compact.png");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyCo2ResponseEditing()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -723,6 +790,7 @@ internal static class DesignPreviewSmokeChecks
             VerifySeededVitals(window);
             VerifyRespirationSignalEditing();
             VerifyCo2ResponseEditing();
+            VerifyCo2TimingEditing();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

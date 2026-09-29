@@ -131,8 +131,12 @@ internal sealed class DesignPreviewWindow : Window
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
             var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
             var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
+            var (co2DeadSpace, co2Rise, co2Fall) = Settings.ReadCo2Timing();
             config = config with
             {
+                Co2DeadSpaceMilliseconds = co2DeadSpace,
+                Co2RiseMilliseconds = co2Rise,
+                Co2FallMilliseconds = co2Fall,
                 Co2TransportDelayMilliseconds = co2Delay,
                 Co2DispersionStepMilliseconds = co2Dispersion,
                 RespAmplitudeCounts = respAmplitude,
@@ -175,6 +179,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Timing")
+        { Settings.Status.Text = "未应用：CO₂ 死腔、上升和下降时长须为 1–10000 ms 的整数，并满足当前吸呼时程。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Response")
         { Settings.Status.Text = "未应用：CO₂ 管路延迟须为 0–5000 ms 的整数，展宽步长须为 0–500 ms 的整数。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidRespirationSignal")
@@ -188,7 +194,7 @@ internal sealed class DesignPreviewWindow : Window
         catch (ArgumentException exception) when (exception.Message == "Preview.TContourChestRequired")
         { Settings.Status.Text = "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
-        { Settings.Status.Text = "未应用：吸气须至少200 ms，呼气须大于375 ms；请调整呼吸频率或吸气占比。原运行与画面保持不变。"; }
+        { Settings.Status.Text = "未应用：" + Settings.BreathingConstraintDescription() + "原运行与画面保持不变。"; }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。"; }
     }

@@ -123,6 +123,8 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+            var infarction = Settings.InfarctionParameters.Read(ecgConfig.Infarction);
+            config = config with { Infarction = infarction }; ecgConfig = ecgConfig with { Infarction = infarction };
             var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
             config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
@@ -165,6 +167,10 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InfarctionChestRequired")
+        { Settings.Status.Text = "未应用：梗死快照须至少选择一个胸导联。原运行与画面保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionDelay")
+        { Settings.Status.Text = "未应用：局部复极延长须为 0–500 ms 的整数，并满足当前心搏周期约束。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.TContourChestRequired")
         { Settings.Status.Text = "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")

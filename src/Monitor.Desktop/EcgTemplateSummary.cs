@@ -21,12 +21,15 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
-        if (config.Infarction is { Territory: not InfarctionTerritory.CustomChest, Components: null } infarction)
+        if (config.Infarction is { Components: null } infarction)
         {
             string local = infarction.Stage is InfarctionIllustrationStage.HyperacuteInjury or InfarctionIllustrationStage.AcuteMonophasic
-                ? $"ST–T 融合，T 时限不单独标注；局部 QRS {Ms(infarction.Stage == InfarctionIllustrationStage.HyperacuteInjury ? timing.QrsDurationNs * 6 / 5 : timing.QrsDurationNs)} ms"
-                : ventricular;
-            return $"{InfarctionProductPreset.TerritoryName(infarction.Territory)}独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
+                ? $"ST–T 融合，T 时限不单独标注；局部 QT {Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs)} ms · 局部 QRS {Ms(infarction.Stage == InfarctionIllustrationStage.HyperacuteInjury ? timing.QrsDurationNs * 6 / 5 : timing.QrsDurationNs)} ms"
+                : $"QRS {Ms(timing.QrsDurationNs)} ms · 局部 QT {Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs)} ms · T {Ms(timing.TDurationNs + infarction.RepolarizationDelayNs)} ms";
+            string region = infarction.Territory == InfarctionTerritory.CustomChest
+                ? string.Join("、", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))
+                : InfarctionProductPreset.TerritoryName(infarction.Territory);
+            return $"{region}独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
         }
         if (config.TContour is { } contour)
         {

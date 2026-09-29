@@ -995,13 +995,27 @@ internal static class DesignPreviewSmokeChecks
             for (int channel = 0; channel < 7; channel++)
             { Require(window.Session.Samples(channel, 0, zoneSource.FrontierNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.FrontierNs)), "zone edits reach shared acquired monitor channels"); }
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            var acceptedZones = zoneEditor.ReadZones(zonePair.Ecg.Infarction);
+            live = window.Session;
+            for (int group = 0; group < 4; group++)
+            {
+                zoneEditor.Groups.SelectedIndex = group;
+                Require(ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction) == acceptedZones,
+                    "parameter group navigation preserves draft and running session");
+                Capture(window, $"ui-preview-infarction-group-{group}.png");
+            }
+            window.Width = 960; zoneEditor.Groups.SelectedIndex = 0;
             Capture(window, "ui-preview-infarction-zones.png");
+            Require(zoneEditor.Groups.Bounds.Width > 0 && zoneEditor.Groups.Bounds.Width <= window.Width, "group navigation fits compact window");
+            window.Width = 1440;
             live = window.Session; zoneEditor.IschemiaRegion.SelectedIndex = -1; window.ApplySettings();
             Require(ReferenceEquals(live, window.Session), "missing zone choice rejects atomically");
             zoneEditor.SeparateRegions.IsChecked = false; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction) is null, "disabling separate zones restores shared region and ignores hidden invalid selection");
             window.Settings.EcgSelection = 164; window.ApplySettings();
             Require(zoneEditor.SeparateRegions.IsChecked != true, "template selection clears separate zone mode");
+            Require(zoneEditor.Groups.SelectedIndex == 0 && zoneEditor.Groups.Items.OfType<TabItem>().Skip(2).All(page => !page.IsEnabled),
+                "stage mode resets group selection and disables independent ST/QRS editing");
             Require(window.Settings.InfarctionParameters.ComponentsEnabled.IsChecked != true && window.Settings.InfarctionParameters.JPoint.Value == 0, "switching stages clears component overrides");
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
             Require(window.Settings.InfarctionParameters.Parent is not null, "infarction advanced editor is reachable");

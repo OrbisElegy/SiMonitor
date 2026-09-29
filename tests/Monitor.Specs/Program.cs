@@ -162,6 +162,7 @@ internal static class Program
             .. AtrialIllustrationSpecifications.All,
             .. AtrialShapeProductSpecifications.All,
             .. VentricularShapeProductSpecifications.All,
+            .. TContourProductSpecifications.All,
             .. VentricularIllustrationSpecifications.All,
             .. TContourSpecifications.All,
             .. StSegmentSpecifications.All,

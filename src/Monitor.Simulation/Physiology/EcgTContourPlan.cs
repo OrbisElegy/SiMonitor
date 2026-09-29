@@ -12,6 +12,14 @@ public sealed record EcgTContourPlan(int ChestMask, EcgTContourShape Shape, int 
 {
     private static readonly int[] LimbIndices = [0, 1, 3];
     public const string EvidenceId = "TContourIllustrationDraft@8";
+    public IReadOnlyList<EventWaveformBand> CreateLeadIIBands()
+    {
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(tContour: this);
+        return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
+            electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
+            { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());
+    }
+
     internal IReadOnlyList<ElectrodeWaveformPlan> Apply(IReadOnlyList<ElectrodeWaveformPlan> source)
     {
         if (ChestMask is < 1 or > 63 || !Enum.IsDefined(Target) || !Enum.IsDefined(Shape) || PeakMicrovolts is < 0 or > 4000 ||

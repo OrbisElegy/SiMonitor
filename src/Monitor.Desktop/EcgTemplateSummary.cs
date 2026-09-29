@@ -21,6 +21,13 @@ internal static class EcgTemplateSummary
         if (config.CardiacActivity == CardiacActivity.AtrialOnly)
         { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
         string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
+        if (config.TContour is { } contour)
+        {
+            string crossing = contour.Shape is EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive
+                ? $"；过零 {(contour.CrossingPositionPermille ?? 500) / 10m:0.#}% · 第二瓣 {contour.SecondPeakMicrovolts ?? contour.PeakMicrovolts} μV" : "";
+            return $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular +
+                $"；T 目标 {contour.Target} · 峰幅 {contour.PeakMicrovolts} μV" + crossing;
+        }
         if (config.Quinidine != QuinidineIllustration.Reference)
         { return $"P {Ms(timing.PDurationNs)} ms{(config.QuinidineNotchedP ? "（切迹）" : "")} · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular + $"；QU {Ms(QuinidineEffectReference.ResolveQuIntervalNs(config.Quinidine))} ms"; }
         if (config.DigitalisEffect)

@@ -10,6 +10,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0,
     RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
+    public EcgTContourPlan? TContour { get; init; }
     public EcgVentricularIllustration VentricularShape { get; init; }
     public EcgAtrialIllustration AtrialShape { get; init; }
     public QuinidineIllustration Quinidine { get; init; }
@@ -100,6 +101,15 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (TContour is not null)
+        {
+            if (VentricularShape != EcgVentricularIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference ||
+                Quinidine != QuinidineIllustration.Reference || QuinidineNotchedP || DigitalisEffect || DigitalisShape != DigitalisTShape.FishHook ||
+                Calcium != CalciumIllustration.Reference || HyperkalemiaRepolarization || HyperkalemiaConduction || HyperkalemiaAbsentP ||
+                HyperkalemiaFusion || HypokalemiaRepolarization || HypokalemiaInvertedT || HypokalemiaTuFusion || HypokalemiaConduction)
+            { throw new EventWaveformException("EcgTContour.ConflictingModes", "configuration"); }
+            _ = TContour.CreateLeadIIBands();
+        }
         if (!Enum.IsDefined(VentricularShape)) { throw new EventWaveformException("EcgVentricular.InvalidIllustration", "configuration"); }
         if (VentricularShape != EcgVentricularIllustration.Reference && (AtrialShape != EcgAtrialIllustration.Reference ||
             Quinidine != QuinidineIllustration.Reference || QuinidineNotchedP || DigitalisEffect || DigitalisShape != DigitalisTShape.FishHook ||
@@ -132,14 +142,14 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
         { throw new EventWaveformException("HypokalemiaRepolarization.ConflictingModes", "configuration"); }
         if (HyperkalemiaConduction && !HyperkalemiaRepolarization || HyperkalemiaAbsentP && !HyperkalemiaConduction)
         { throw new EventWaveformException("HyperkalemiaConduction.ConflictingModes", "configuration"); }
-        if ((HyperkalemiaRepolarization || HypokalemiaRepolarization || Calcium != CalciumIllustration.Reference || DigitalisEffect || Quinidine != QuinidineIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference || VentricularShape != EcgVentricularIllustration.Reference) && (ConductionPattern != AvConductionPattern.FixedPr ||
+        if ((HyperkalemiaRepolarization || HypokalemiaRepolarization || Calcium != CalciumIllustration.Reference || DigitalisEffect || Quinidine != QuinidineIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference || VentricularShape != EcgVentricularIllustration.Reference || TContour is not null) && (ConductionPattern != AvConductionPattern.FixedPr ||
             VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || CardiacActivity != (HyperkalemiaAbsentP ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular) ||
             IndependentVentricularPeriodMilliseconds is not null || IndependentVentricularOffsetMilliseconds is not null ||
             BundleBlock != EcgBundleBlockIllustration.Reference || SeededRate is not null ||
             Wpw || WpwNegativeV1 || WpwSmallerDelta || ShortPr || NormalPrDelta || ProlongedPrDelta ||
             Svt || SvtRbbb || SvtLbbb || Vt || VtFusion || VtCapture || VtBidirectional || VtTwisting ||
             Aivr || AivrFusion || AivrCapture || Ajr || Aar || AtrialEscape || IllustrateAfAberrancy || IllustrateAfSystemicPulseDeficit))
-        { throw new EventWaveformException(VentricularShape != EcgVentricularIllustration.Reference ? "EcgVentricular.ConflictingModes" : AtrialShape != EcgAtrialIllustration.Reference ? "EcgAtrial.ConflictingModes" : Quinidine != QuinidineIllustration.Reference ? "Quinidine.ConflictingModes" : DigitalisEffect ? "Digitalis.ConflictingModes" : Calcium != CalciumIllustration.Reference ? "Calcium.ConflictingModes" : HypokalemiaRepolarization ? "HypokalemiaRepolarization.ConflictingModes" : "HyperkalemiaRepolarization.ConflictingModes", "configuration"); }
+        { throw new EventWaveformException(TContour is not null ? "EcgTContour.ConflictingModes" : VentricularShape != EcgVentricularIllustration.Reference ? "EcgVentricular.ConflictingModes" : AtrialShape != EcgAtrialIllustration.Reference ? "EcgAtrial.ConflictingModes" : Quinidine != QuinidineIllustration.Reference ? "Quinidine.ConflictingModes" : DigitalisEffect ? "Digitalis.ConflictingModes" : Calcium != CalciumIllustration.Reference ? "Calcium.ConflictingModes" : HypokalemiaRepolarization ? "HypokalemiaRepolarization.ConflictingModes" : "HyperkalemiaRepolarization.ConflictingModes", "configuration"); }
         if (((AivrFusion || AivrCapture) && !Aivr) || (AivrFusion && AivrCapture)) { throw new EventWaveformException("Aivr.ConflictingModes", "configuration"); }
         if (((SvtRbbb || SvtLbbb) && !Svt) || (SvtRbbb && SvtLbbb)) { throw new EventWaveformException("Svt.ConflictingModes", "configuration"); }
         if (AtrialEscape && (Aar || Ajr || Aivr || Vt || VtFusion || VtCapture || VtBidirectional || VtTwisting || Svt ||

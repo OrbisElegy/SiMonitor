@@ -71,7 +71,25 @@ internal sealed class DesignPreviewSettings : UserControl
             RefreshShapeSummary();
         }
     }
-    internal int RespirationSelection { get; set; }
+    private int _respirationSelection;
+    internal int RespirationSelection
+    {
+        get => _respirationSelection;
+        set { _respirationSelection = value; RespSignalAmplitude.IsEnabled = value != 3; }
+    }
+    internal NumericUpDown RespSignalAmplitude { get; } = new() { Minimum = -1000, Maximum = 1000, Value = 1000, Increment = 50, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown RespCardiacArtifact { get; } = new() { Minimum = -200, Maximum = 200, Value = 0, Increment = 10, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal (int Amplitude, int Artifact) ReadRespirationSignal()
+    {
+        static int Read(NumericUpDown field)
+        {
+            decimal value = field.Value ?? throw new ArgumentException("Preview.InvalidRespirationSignal");
+            if (value < field.Minimum || value > field.Maximum || value != decimal.Truncate(value))
+            { throw new ArgumentException("Preview.InvalidRespirationSignal"); }
+            return checked((int)value);
+        }
+        return (RespirationSelection == 3 ? 1000 : Read(RespSignalAmplitude), Read(RespCardiacArtifact));
+    }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -396,8 +414,15 @@ internal sealed class DesignPreviewSettings : UserControl
         if (config.Ecg.TContour is not null) { _advancedParameters.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedParameters.Children.Add(InfarctionParameters); }
         _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
-        _advancedParameters.Children.Add(Text(RespirationSelection == 3 ? "当前无呼吸分量，不提供吸呼比、呼吸深度等编辑。" :
-            $"周期 {config.Physiology.BreathPeriodMilliseconds} ms · 吸气 {config.Physiology.InspirationMilliseconds} ms · 相对深度 {config.Physiology.RespAmplitudeCounts}"));
+        _advancedParameters.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
+        _advancedParameters.Children.Add(RespSignalAmplitude);
+        _advancedParameters.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
+        _advancedParameters.Children.Add(RespCardiacArtifact);
+        AutomationProperties.SetName(RespSignalAmplitude, "RESP 相对信号幅度，负值反相，不代表通气量");
+        AutomationProperties.SetName(RespCardiacArtifact, "RESP 心源性干扰幅度，0 关闭");
+        _advancedParameters.Children.Add(Text(RespirationSelection == 3
+            ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
+            : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
         _advancedParameters.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {

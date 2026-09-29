@@ -163,6 +163,49 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyRespirationSignalEditing()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int pattern in Enumerable.Range(0, 4))
+            {
+                window.Settings.RespirationSelection = pattern;
+                window.Settings.RespSignalAmplitude.Value = -400; window.Settings.RespCardiacArtifact.Value = 120;
+                window.ApplySettings();
+                var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
+                var expected = new LocalMonitorPreviewSession(baseline with { RespAmplitudeCounts = pattern == 3 ? 1000 : -400, RespCardiacArtifactCounts = 120 }, window.Session.Display);
+                var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
+                long end = expected.FrontierNs;
+                for (int channel = 0; channel < 7; channel++)
+                {
+                    Require(window.Session.Samples(channel, 0, end).SequenceEqual(expected.Samples(channel, 0, end)), "RESP signal edits match acquired shared source");
+                    bool same = window.Session.Samples(channel, 0, end).SequenceEqual(original.Samples(channel, 0, end));
+                    Require(same == (channel != 1), "RESP signal editing changes only impedance, retaining CO2 and all other channels");
+                }
+                Require(window.Settings.RespSignalAmplitude.IsEnabled == (pattern != 3), "absent respiration disables only respiratory signal amplitude");
+            }
+            window.Settings.RespirationSelection = 0;
+            var live = window.Session;
+            foreach (decimal? invalid in new decimal?[] { null, 1.5m })
+            {
+                window.Settings.RespSignalAmplitude.Value = invalid; window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session), "incomplete or fractional RESP amplitude rejects atomically");
+            }
+            window.Settings.RespSignalAmplitude.Value = 0; window.Settings.RespCardiacArtifact.Value = 0; window.ApplySettings();
+            for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(window.Session.Samples(1, 0, window.Session.FrontierNs).All(s => s.Value == 0) &&
+                window.Session.Samples(4, 0, window.Session.FrontierNs).Any(s => s.Value > 0), "zero impedance signal is not apnea or absent CO2");
+            window.Settings.RespCardiacArtifact.Value = null; live = window.Session; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("心源性干扰", StringComparison.Ordinal), "missing cardiac artifact gives actionable rejection");
+            window.Settings.RespCardiacArtifact.Value = 120; window.Settings.RespSignalAmplitude.Value = -400;
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            Capture(window, "ui-preview-resp-signal-editor.png");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifySoundSettings()
     {
         VerifyOutputFaultNotice();
@@ -609,6 +652,7 @@ internal static class DesignPreviewSmokeChecks
             for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Capture(window, "ui-preview-perfusion.png");
             VerifySeededVitals(window);
+            VerifyRespirationSignalEditing();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

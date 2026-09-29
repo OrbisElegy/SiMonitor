@@ -129,8 +129,11 @@ internal sealed class DesignPreviewWindow : Window
             var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
             config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
             var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
+            var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
             config = config with
             {
+                RespAmplitudeCounts = respAmplitude,
+                RespCardiacArtifactCounts = respArtifact,
                 BreathPeriodMilliseconds = breathPeriod,
                 InspirationMilliseconds = inspiration,
                 AbpPulsePermille = checked((int)((Settings.AbpPulseGain.Value ?? throw new ArgumentException("ABP pulse gain required")) * 1000)),
@@ -169,6 +172,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidRespirationSignal")
+        { Settings.Status.Text = "未应用：RESP 信号幅度须为 −1000–1000 的整数，心源性干扰须为 −200–200 的整数。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionComponents")
         { Settings.Status.Text = "未应用：请检查 QRS 形态、混合比例及 ST／T 分量的整数值。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InfarctionChestRequired")

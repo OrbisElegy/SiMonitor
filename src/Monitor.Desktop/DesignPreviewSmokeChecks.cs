@@ -909,6 +909,54 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for regional snapshot");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session), "regional snapshot permits independent no-ejection setting");
+            window.Settings.EjectionSelection = 0;
+            foreach (int choice in new[] { 118, 128, 136, 148, 164 })
+            {
+                window.Settings.EcgSelection = choice;
+                var editor = window.Settings.InfarctionParameters;
+                editor.Delay.Value = 80;
+                for (int i = 0; i < 6; i++) { editor.ChestLeads[i].IsChecked = i is 1 or 3; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                var edited = editor.Read(pair.Ecg.Infarction)!;
+                Require(edited.RepolarizationDelayNs == 80_000_000 && edited.Stage == pair.Ecg.Infarction!.Stage &&
+                    (choice < 135 ? edited.Territory == pair.Ecg.Infarction.Territory : edited.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.CustomChest && edited.ChestMask == 10), "regional editor preserves snapshot and limb territory or custom chest mask");
+                live = window.Session; window.ApplySettings();
+                Require(!ReferenceEquals(live, window.Session), "regional delay and mask apply atomically");
+                var (period, inspiration) = window.Settings.ReadBreathingTiming();
+                var source = new LocalMonitorPreviewSession(pair.Physiology with { Infarction = edited, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration }, window.Session.Display);
+                for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); source.Advance(50_000_000); }
+                for (int channel = 0; channel < 7; channel++)
+                { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(source.Samples(channel, 0, source.FrontierNs)), "edited region reaches shared acquired source"); }
+                if (choice >= 135)
+                {
+                    foreach (var lead in Enum.GetValues<Monitor.Simulation.Physiology.EcgLead>())
+                    {
+                        var actual = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg with { Infarction = edited }, lead, 0, 800_000_000);
+                        var baseline = StylePreviewCatalog.CreateProjectedPreview(ProjectedEcgDemoConfiguration.Default, lead, 0, 800_000_000);
+                        bool changed = !actual.SequenceEqual(baseline);
+                        Require(changed == (lead is Monitor.Simulation.Physiology.EcgLead.V2 or Monitor.Simulation.Physiology.EcgLead.V4), "custom infarction changes only selected chest leads");
+                    }
+                    Require(EcgTemplateSummary.Describe(pair.Ecg with { Infarction = edited }).Contains("V2、V4", StringComparison.Ordinal), "custom region summary names selected leads");
+                }
+            }
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 5;
+            Require(window.Settings.InfarctionParameters.Parent is not null, "infarction advanced editor is reachable");
+            Capture(window, "ui-preview-infarction-advanced.png");
+            var infarctionEditor = window.Settings.InfarctionParameters;
+            live = window.Session;
+            foreach (var lead in infarctionEditor.ChestLeads) { lead.IsChecked = false; }
+            window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal), "empty infarction mask preserves running session");
+            infarctionEditor.ChestLeads[1].IsChecked = true;
+            foreach (decimal? delay in new decimal?[] { null, 1.5m, 500 })
+            {
+                infarctionEditor.Delay.Value = delay; window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session), "missing, fractional or cycle-overlapping delay rejects atomically");
+            }
+            window.Settings.EcgSelection = 135;
+            Require(infarctionEditor.Delay.Value == 0 && infarctionEditor.ChestLeads.Select((lead, i) => (lead.IsChecked == true) == (i < 3)).All(matches => matches), "new chest template restores mask and delay defaults");
+            window.Settings.EcgSelection = 0; window.ApplySettings();
+            Require(!infarctionEditor.IsVisible && !ReferenceEquals(live, window.Session), "reference template clears infarction editing");
         }
         finally { window.Close(); }
     }

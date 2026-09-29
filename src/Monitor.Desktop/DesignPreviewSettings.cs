@@ -19,6 +19,7 @@ internal sealed class DesignPreviewSettings : UserControl
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];
     private int _ecgSelection;
     internal TContourParameterEditor TContourParameters { get; } = new();
+    internal InfarctionParameterEditor InfarctionParameters { get; } = new();
     internal int EcgSelection
     {
         get => _ecgSelection;
@@ -27,6 +28,8 @@ internal sealed class DesignPreviewSettings : UserControl
             if (_ecgSelection == value) { return; }
             _ecgSelection = value;
             TContourParameters.Reset(value is >= 107 and <= 114 ? TContourProductPreset.Create(value - 107) : null);
+            InfarctionParameters.Reset(value is >= 115 and <= 164 ? InfarctionProductPreset.Create((value - 115) % 10,
+                (Monitor.Simulation.Physiology.InfarctionTerritory)((value - 115) / 10 + 1)) : null);
         }
     }
     internal int RespirationSelection { get; set; }
@@ -348,6 +351,7 @@ internal sealed class DesignPreviewSettings : UserControl
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         _advancedParameters.Children.Add(Text(EcgTemplateSummary.Describe(config.Ecg)));
         if (config.Ecg.TContour is not null) { _advancedParameters.Children.Add(TContourParameters); }
+        if (config.Ecg.Infarction is not null) { _advancedParameters.Children.Add(InfarctionParameters); }
         _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
         _advancedParameters.Children.Add(Text(RespirationSelection == 3 ? "当前无呼吸分量，不提供吸呼比、呼吸深度等编辑。" :
             $"周期 {config.Physiology.BreathPeriodMilliseconds} ms · 吸气 {config.Physiology.InspirationMilliseconds} ms · 相对深度 {config.Physiology.RespAmplitudeCounts}"));

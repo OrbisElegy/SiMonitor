@@ -133,7 +133,10 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly ContentControl _generation = new();
     private readonly Dictionary<(int, int, int), StylePreviewData> _previews = [];
     private readonly Func<int, int, int, StylePreviewData> _preview;
-    private readonly StackPanel _advancedParameters = new() { Spacing = 16, Margin = new Thickness(20) };
+    private readonly StackPanel _advancedEcg = new() { Spacing = 16 };
+    private readonly StackPanel _advancedRespiration = new() { Spacing = 16 };
+    private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
+    private readonly StackPanel _advancedTools = new() { Spacing = 16 };
     internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
     private Control? _home;
     private Button? _returnFocus;
@@ -193,8 +196,10 @@ internal sealed class DesignPreviewSettings : UserControl
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
             ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),
             ("压力", Before(vitals, AbpPulseGain)));
+        SectionPages[5] = new SettingsSections("高级参数", ("心电图", _advancedEcg), ("呼吸", _advancedRespiration),
+            ("射血", _advancedEjection), ("开发工具", _advancedTools));
         string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
-        Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], Scroll(_advancedParameters)];
+        Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
@@ -299,7 +304,7 @@ internal sealed class DesignPreviewSettings : UserControl
             _generation.Content = shell; RestoreFocus(focusTarget); return;
         }
         var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-        parameters.Click += (_, _) => Tabs.SelectedIndex = 5;
+        parameters.Click += (_, _) => OpenAdvanced(channel);
         shell.Children.Add(parameters);
         var candidates = new WrapPanel { Orientation = Orientation.Horizontal };
         for (int i = 0; i < choices.Length; i++)
@@ -401,40 +406,45 @@ internal sealed class DesignPreviewSettings : UserControl
         }
         return panel;
     }
+    internal void OpenAdvanced(int channel)
+    {
+        Tabs.SelectedIndex = 5;
+        SectionPages[5].Sections.SelectedIndex = channel switch { 0 => 0, 1 => 1, _ => 2 };
+    }
     private void RefreshAdvanced(Button developer)
     {
-        _advancedParameters.Children.Clear();
-        _advancedParameters.Children.Add(Text("当前波形高级参数"));
-        _advancedParameters.Children.Add(DesktopInformationPages.Help("topic-8"));
-        _advancedParameters.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
+        _advancedEcg.Children.Clear(); _advancedRespiration.Children.Clear();
+        _advancedEjection.Children.Clear(); _advancedTools.Children.Clear();
+        _advancedEcg.Children.Add(DesktopInformationPages.Help("topic-8"));
+        _advancedEcg.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         RefreshShapeSummary();
-        _advancedParameters.Children.Add(ShapeEditStatus);
-        _advancedParameters.Children.Add(ShapeEditSummary);
-        if (config.Ecg.TContour is not null) { _advancedParameters.Children.Add(TContourParameters); }
-        if (config.Ecg.Infarction is not null) { _advancedParameters.Children.Add(InfarctionParameters); }
-        _advancedParameters.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
-        _advancedParameters.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
-        _advancedParameters.Children.Add(RespSignalAmplitude);
-        _advancedParameters.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
-        _advancedParameters.Children.Add(RespCardiacArtifact);
+        _advancedEcg.Children.Add(ShapeEditStatus);
+        _advancedEcg.Children.Add(ShapeEditSummary);
+        if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
+        if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
+        _advancedRespiration.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
+        _advancedRespiration.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
+        _advancedRespiration.Children.Add(RespSignalAmplitude);
+        _advancedRespiration.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
+        _advancedRespiration.Children.Add(RespCardiacArtifact);
         AutomationProperties.SetName(RespSignalAmplitude, "RESP 相对信号幅度，负值反相，不代表通气量");
         AutomationProperties.SetName(RespCardiacArtifact, "RESP 心源性干扰幅度，0 关闭");
-        _advancedParameters.Children.Add(Text(RespirationSelection == 3
+        _advancedRespiration.Children.Add(Text(RespirationSelection == 3
             ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
             : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
-        _advancedParameters.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
+        _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {
             var selected = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, EjectionSelection).Physiology;
             bool noEjection = !selected.VentricularMechanicalEnabled || selected.CardiacActivity is
                 Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
                 Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
-            _advancedParameters.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+            _advancedEjection.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
         }
-        catch (ArgumentException error) { _advancedParameters.Children.Add(Text("当前组合不兼容：" + error.Message)); }
-        _advancedParameters.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
-        _advancedParameters.Children.Add(developer);
+        catch (ArgumentException error) { _advancedEjection.Children.Add(Text("当前组合不兼容：" + error.Message)); }
+        _advancedTools.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
+        _advancedTools.Children.Add(developer);
     }
     private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => control.Focus(), DispatcherPriority.Loaded);
     private void BuildRows()

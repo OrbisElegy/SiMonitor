@@ -29,7 +29,7 @@ internal sealed class LiveMonitorView : UserControl
     internal MonitorNoticeLevel? HighestNotice => _notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
     internal IReadOnlyList<MonitorNotice> ActiveNotices => _notices;
     internal IReadOnlyList<double> PulseLevels => _opticalRows.Select(r => r.Bar.Level).ToArray();
-    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(8) };
+    private readonly Border _noticeBackground = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(0) };
     internal Border NoticeRegion => _noticeBackground;
     internal TextBlock AudioPauseStatus { get; } = new() { Foreground = Brushes.White, FontSize = 13, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = Avalonia.Media.TextAlignment.Right, TextTrimming = TextTrimming.CharacterEllipsis };
     internal Func<string>? BeatSourceText { get; set; }
@@ -108,7 +108,7 @@ internal sealed class LiveMonitorView : UserControl
         }
         Content = root; Refresh();
     }
-    private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(8), Child = text };
+    private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(0), Child = text };
     internal static IBrush? NumericBackground(TextBlock text) => ((Border)text.Parent!).Background;
 
     internal void Refresh()

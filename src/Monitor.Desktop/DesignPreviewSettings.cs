@@ -111,10 +111,11 @@ internal sealed class DesignPreviewSettings : UserControl
         SectionPages[2] = SettingsSections.Split("声音", Sound,
             ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
             ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
-        SectionPages[3] = SettingsSections.Split("报警", Alerts,
-            ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled),
-            ("其他测量参数", Alerts.AdditionalLimits), ("CO₂ 呼吸检测", Alerts.NoExpirationEnabled),
-            ("显示与联调", (Control)Alerts.TestLevel.Parent!), ("声音节奏", Alerts.InfoTone));
+        var alertGroups = new List<(string Title, Control Start)>
+        { ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled) };
+        alertGroups.AddRange(MeasuredLimitNotice.Descriptors.Select(d => (d.Label, (Control)Alerts.AdditionalLimits.Editors[d.Numeric])));
+        alertGroups.Add(("显示与联调", (Control)Alerts.TestLevel.Parent!)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
+        SectionPages[3] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
         SectionPages[4] = SettingsSections.Split("生命体征", vitals,
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
             ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),

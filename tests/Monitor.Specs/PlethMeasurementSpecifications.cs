@@ -10,11 +10,37 @@ internal static class PlethMeasurementSpecifications
     private static readonly Guid Channel = Guid.Parse("22222222-2222-4222-8222-222222222222");
     public static Specification[] All =>
     [
+        new(nameof(LowPerfusionRetainsQualifiedOpticalEstimate), LowPerfusionRetainsQualifiedOpticalEstimate),
         new(nameof(PulseRateUsesAcquiredPleth), PulseRateUsesAcquiredPleth),
         new(nameof(PulseRateRejectsInvalidInputAndRestores), PulseRateRejectsInvalidInputAndRestores),
         new(nameof(OpticalRatioUsesBothWavelengthsAndCalibration), OpticalRatioUsesBothWavelengthsAndCalibration),
         new(nameof(OpticalMissingAndPoorSignalsDoNotProduceSaturation), OpticalMissingAndPoorSignalsDoNotProduceSaturation),
     ];
+
+    private static void LowPerfusionRetainsQualifiedOpticalEstimate()
+    {
+        var calculator = Optical();
+        foreach (var (red, ir, expectedPi, questionable) in new[] { (12, 47, 470, false), (10, 20, 200, true), (14, 29, 290, true), (15, 30, 300, false), (3, 5, 50, true) })
+        {
+            var reading = calculator.Estimate(Pairs(red, ir), 3_992_000_000);
+            Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.SaturationMilliPercent is not null &&
+                reading.PerfusionMilliPercent == expectedPi && reading.IsQuestionable == questionable,
+                "low but coherent modulation reports calibrated saturation with separate PI qualification");
+        }
+        var rejected = calculator.Estimate(Pairs(2, 4), 3_992_000_000);
+        Check.That(rejected.SaturationMilliPercent is null && !rejected.IsQuestionable, "below teaching resolution floor never invents a questioned number");
+        foreach (var config in new[] { PhysiologyIllustrationConfiguration.SvtPreset,
+            PhysiologyIllustrationConfiguration.SvtPreset with { SvtRbbb = true }, PhysiologyIllustrationConfiguration.SvtPreset with { SvtLbbb = true } })
+        {
+            var session = new Monitor.Application.Presentation.LocalMonitorPreviewSession(config,
+                Monitor.Application.Presentation.MonitorDisplayConfiguration.Default(), true, 98000);
+            for (int i = 0; i < 320; i++) { session.Advance(50_000_000); }
+            var reading = session.Measurements!.SpO2;
+            Check.That(reading.Status == WaveformMeasurementStatus.Valid && reading.SaturationMilliPercent is >= 97000 and <= 99000 &&
+                reading.PerfusionMilliPercent is >= 300 and < 1000 && !reading.IsQuestionable,
+                "default SVT perfusion reports measured saturation at acceptable PI: " + reading);
+        }
+    }
 
     private static void PulseRateUsesAcquiredPleth()
     {
@@ -27,7 +53,7 @@ internal static class PlethMeasurementSpecifications
             var source = PhysiologyIllustrationSource.Create(config);
             var detector = new PlethPulseRateMeasurement(Channel); long last = 0; int count = 0;
             for (int step = 1; step <= 110; step++)
-                foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+                foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
                 {
                     count += detector.Consume(wire).Count;
                     last = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs + 192_000_000;
@@ -62,7 +88,7 @@ internal static class PlethMeasurementSpecifications
         var before = detector.Read(5_992_000_000);
         Check.That(before == restored.Read(5_992_000_000), "restored rate history agrees");
         Check.That(PlethPulseRateMeasurement.Restore(checkpoint).Read(192_000_000).Status == WaveformMeasurementStatus.WarmingUp, "checkpoint isolated from subsequent input");
-        foreach (var wire in new[] { Wire(29), Wire(30, scale: int.MaxValue), Wire(30, epoch: 0) })
+        foreach (byte[]? wire in new[] { Wire(29), Wire(30, scale: int.MaxValue), Wire(30, epoch: 0) })
         {
             bool rejected = false;
             try { detector.Consume(wire); } catch (Exception ex) when (ex is ArgumentException or OverflowException) { rejected = true; }

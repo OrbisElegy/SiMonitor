@@ -14,6 +14,8 @@ public sealed record OpticalSaturationReading(WaveformMeasurementStatus Status,
 {
     // Teaching PI: IR peak-to-peak / window mean *100%, not vendor calibration.
     public int? PerfusionMilliPercent { get; init; }
+    // iPM-style display convention, not a claim of vendor-calibrated PI.
+    public bool IsQuestionable => Status == WaveformMeasurementStatus.Valid && PerfusionMilliPercent is < 300;
 }
 
 // A bounded-window engineering estimator, not a clinically qualified oximeter.
@@ -50,7 +52,7 @@ public sealed class OpticalSaturationMeasurement
         long? last = null;
         BigInteger red = 0, infrared = 0, redSquares = 0, infraredSquares = 0, products = 0;
         bool poor = false;
-        int irMinimum = int.MaxValue, irMaximum = int.MinValue;
+        int irMinimum = int.MaxValue, irMaximum = int.MinValue, redMinimum = int.MaxValue, redMaximum = int.MinValue;
         foreach (var sample in samples)
         {
             if (sample is null || sample.SampleTimeNs < 0 || sample.SampleTimeNs > asOfSampleTimeNs ||
@@ -62,6 +64,7 @@ public sealed class OpticalSaturationMeasurement
             redSquares += (BigInteger)sample.Red * sample.Red;
             infraredSquares += (BigInteger)sample.Infrared * sample.Infrared;
             products += (BigInteger)sample.Red * sample.Infrared;
+            redMinimum = Math.Min(redMinimum, sample.Red); redMaximum = Math.Max(redMaximum, sample.Red);
             irMinimum = Math.Min(irMinimum, sample.Infrared); irMaximum = Math.Max(irMaximum, sample.Infrared);
         }
         if (last is null || asOfSampleTimeNs - last.Value > 500_000_000)
@@ -74,17 +77,21 @@ public sealed class OpticalSaturationMeasurement
         bool coherent = covariance > 0 && covariance * covariance * 100 >= redVariance * infraredVariance * 81;
         // A correlated runoff/drift is not pulsatile AC. Require a meaningful
         // excursion in both directions on each wavelength inside the same4s
-        // window. This is a bounded quality gate, not a motion classifier.
-        bool pulsatile = HasReversal(samples, true, Math.Max(1, (int)((red + WindowSamples * 1000 - 1) / (WindowSamples * 1000)))) &&
-            HasReversal(samples, false, Math.Max(1, (int)((infrared + WindowSamples * 1000 - 1) / (WindowSamples * 1000))));
+        // window. Reversal must also span10% of the observed range so tiny
+        // quantization ripples on a large runoff cannot qualify as pulsation.
+        // This is a bounded quality gate, not a motion classifier.
+        bool pulsatile = HasReversal(samples, true, Math.Max(Math.Max(1, (redMaximum - redMinimum + 9) / 10), (int)((red + WindowSamples * 20000 - 1) / (WindowSamples * 20000)))) &&
+            HasReversal(samples, false, Math.Max(Math.Max(1, (irMaximum - irMinimum + 9) / 10), (int)((infrared + WindowSamples * 20000 - 1) / (WindowSamples * 20000))));
         OpticalSaturationReading Reading(WaveformMeasurementStatus status, int? saturation, int? ratio) => new(status, saturation, ratio, last)
         {
             PerfusionMilliPercent = coherent && pulsatile || redVariance == 0 && infraredVariance == 0
                 ? (int)FixedPointMath.RoundDivideTiesToEven((Int128)(irMaximum - irMinimum) * WindowSamples * 100_000, (Int128)infrared) : null
         };
-        // AC rms / DC >=0.001 on both channels, positive correlation >=0.9.
+        // Engineering floor: AC rms/DC >=0.00005 on both channels and IR PI>=0.05%.
+        // Low but coherent pulsatility can retain a reportable, qualified value.
         // These are explicit engineering quality gates, not motion rejection.
-        if (redVariance * 1_000_000 < red * red || infraredVariance * 1_000_000 < infrared * infrared ||
+        if (redVariance * 400_000_000 < red * red || infraredVariance * 400_000_000 < infrared * infrared ||
+            (BigInteger)(irMaximum - irMinimum) * WindowSamples * 2000 < infrared ||
             !coherent || !pulsatile)
         { return Reading(WaveformMeasurementStatus.PoorSignal, null, null); }
         // R = (ACrms(red)/DC(red)) / (ACrms(IR)/DC(IR)).

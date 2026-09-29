@@ -19,8 +19,16 @@ public static class EcgVentricularIllustrations
         EcgVentricularIllustration.LeftHypertrophyWithStrain => 100_000_000,
         EcgVentricularIllustration.BiventricularCombinedSigns => 100_000_000,
         EcgVentricularIllustration.RightHypertrophyWithStrain or EcgVentricularIllustration.SevereRightQr or EcgVentricularIllustration.PulmonaryHeartSigns => 80_000_000,
-        _ => throw new EventWaveformException("EcgVentricular.InvalidIllustration", "ventricular"),
+        _ => throw new EventWaveformException("EcgVentricular.InvalidIllustration", nameof(illustration)),
     };
+
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(EcgVentricularIllustration illustration)
+    {
+        var electrodes = TextbookElectrodeReference.CreateElectrodes(ventricular: illustration);
+        return Array.AsReadOnly(electrodes[(int)EcgElectrode.LL].Bands.Concat(
+            electrodes[(int)EcgElectrode.RA].Bands.Select(band => band with
+            { TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked(-value)).ToArray()) })).ToArray());
+    }
 
     internal static IReadOnlyList<ElectrodeWaveformPlan> Apply(EcgVentricularIllustration illustration,
         IReadOnlyList<ElectrodeWaveformPlan> source, EcgCycleTiming timing)

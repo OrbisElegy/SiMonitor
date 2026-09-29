@@ -344,6 +344,7 @@ internal static class DesignPreviewSmokeChecks
         VerifyQuinidineProductStyles();
         VerifyHyperkalemiaFusionProductStyle();
         VerifyAtrialShapeProductStyles();
+        VerifyVentricularShapeProductStyles();
         VerifyPrematureSupraventricularProductStyles();
         VerifyPvcGroupProductStyles();
         VerifyBundleBlockProductStyles();
@@ -712,6 +713,42 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for atrial shape");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
             Require(!ReferenceEquals(live, window.Session), "atrial shape permits independent no-ejection setting");
+        }
+        finally { window.Close(); }
+    }
+
+    private static void VerifyVentricularShapeProductStyles()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            foreach (int choice in new[] { 101, 102, 103, 104, 105, 106, 102, 0 })
+            {
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                Require(!ReferenceEquals(previous, window.Session), "ventricular shape replaces preceding compound/rhythm source");
+                if (choice == 101) { continue; }
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require((int)pair.Physiology.VentricularShape == (choice == 0 ? 0 : choice - 101) &&
+                    pair.Physiology.VentricularShape == pair.Ecg.Ventricular && !pair.Ecg.HyperkalemiaFusion,
+                    "monitor and paper share ventricular shape and clear prior fusion");
+                for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                var reading = window.Session.Measurements!;
+                Require(reading.HeartRate.Status == WaveformMeasurementStatus.Valid && reading.HeartRate.MilliBeatsPerMinute == 75000 &&
+                    reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
+                    "ventricular shape preserves sample-derived electrical and mechanical measurements");
+                var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                    "ventricular shape card is actual selected acquired ECG");
+                Require(EcgTemplateSummary.Describe(pair.Ecg).Contains($"QRS {(choice is 102 or 104 ? 100 : 80)} ms", StringComparison.Ordinal),
+                    "advanced summary reports resolved QRS duration");
+                window.SelectPage(1); Capture(window, $"ui-preview-ventricular-shape-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "ventricular shape paper retains full twelve-lead record"); window.SelectPage(0);
+            }
+            window.Settings.EcgSelection = 106; window.ApplySettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for ventricular shape");
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "ventricular shape permits independent no-ejection setting");
         }
         finally { window.Close(); }
     }

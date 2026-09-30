@@ -736,33 +736,45 @@ internal static class DesignPreviewSmokeChecks
     }
     internal static void Verify()
     {
-        VerifyVisibleVariation();
-        VerifyStableSlowContours();
-        VerifyRespirationOverview();
-        VerifyPrebuiltStyles();
-        VerifyAtrialProductStyles();
-        VerifyAfVariantProductStyles();
-        VerifyStandstillProductStyles();
-        VerifyAdvancedTemplateDescriptions();
-        VerifyHyperkalemiaProductStyle();
-        VerifyHypokalemiaProductStyles();
-        VerifyCalciumProductStyles();
-        VerifyDigitalisProductStyles();
-        VerifyQuinidineProductStyles();
-        VerifyHyperkalemiaFusionProductStyle();
-        VerifyAtrialShapeProductStyles();
-        VerifyVentricularShapeProductStyles();
-        VerifyTContourProductStyles();
-        VerifyRegionalInfarctionProductStyles();
-        VerifyPrematureSupraventricularProductStyles();
-        VerifyPvcGroupProductStyles();
-        VerifyBundleBlockProductStyles();
-        VerifyPreexcitationProductStyles();
-        VerifyBlockProductStyles();
-        VerifyDisorganizedProductStyles();
-        VerifySvtProductStyles();
-        VerifyVtProductStyles();
-        VerifyAutomaticRhythmProductStyles();
+        // Each registration runs on its process-owned Avalonia dispatcher.
+        NativeSmokePartition.Run(VerifyVisibleVariation);
+        NativeSmokePartition.Run(VerifyStableSlowContours);
+        NativeSmokePartition.Run(VerifyRespirationOverview);
+        NativeSmokePartition.Run(VerifyPrebuiltStyles);
+        NativeSmokePartition.Run(VerifyAtrialProductStyles);
+        NativeSmokePartition.Run(VerifyAfVariantProductStyles);
+        NativeSmokePartition.Run(VerifyStandstillProductStyles);
+        NativeSmokePartition.Run(VerifyAdvancedTemplateDescriptions);
+        NativeSmokePartition.Run(VerifyHyperkalemiaProductStyle);
+        NativeSmokePartition.Run(VerifyHypokalemiaProductStyles);
+        NativeSmokePartition.Run(VerifyCalciumProductStyles);
+        NativeSmokePartition.Run(VerifyDigitalisProductStyles);
+        NativeSmokePartition.Run(VerifyQuinidineProductStyles);
+        NativeSmokePartition.Run(VerifyHyperkalemiaFusionProductStyle);
+        NativeSmokePartition.Run(VerifyAtrialShapeProductStyles);
+        NativeSmokePartition.Run(VerifyVentricularShapeProductStyles);
+        NativeSmokePartition.Run(VerifyTContourProductStyles);
+        NativeSmokePartition.Run(VerifyRegionalInfarctionProductStyles);
+        NativeSmokePartition.Run(VerifyPrematureSupraventricularProductStyles);
+        NativeSmokePartition.Run(VerifyPvcGroupProductStyles);
+        NativeSmokePartition.Run(VerifyBundleBlockProductStyles);
+        NativeSmokePartition.Run(VerifyPreexcitationProductStyles);
+        NativeSmokePartition.Run(VerifyBlockProductStyles);
+        NativeSmokePartition.Run(VerifyDisorganizedProductStyles);
+        NativeSmokePartition.Run(VerifySvtProductStyles);
+        NativeSmokePartition.Run(VerifyVtProductStyles);
+        NativeSmokePartition.Run(VerifyAutomaticRhythmProductStyles);
+        NativeSmokePartition.Run(VerifyRespirationSignalEditing);
+        NativeSmokePartition.Run(VerifyCo2ResponseEditing);
+        NativeSmokePartition.Run(VerifyCo2TimingEditing);
+        NativeSmokePartition.Run(VerifyCo2LevelEditing);
+        NativeSmokePartition.Run(VerifyRespirationPageReset);
+        NativeSmokePartition.Run(VerifyVitalInputPrecision);
+        NativeSmokePartition.Run(VerifyVariationRejectionMessages);
+        NativeSmokePartition.Run(VerifyIntegratedWindow);
+    }
+    private static void VerifyIntegratedWindow()
+    {
         var launched = MonitorApp.CreateLaunchWindow([]);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
@@ -1016,13 +1028,6 @@ internal static class DesignPreviewSmokeChecks
             for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Capture(window, "ui-preview-perfusion.png");
             VerifySeededVitals(window);
-            VerifyRespirationSignalEditing();
-            VerifyCo2ResponseEditing();
-            VerifyCo2TimingEditing();
-            VerifyCo2LevelEditing();
-            VerifyRespirationPageReset();
-            VerifyVitalInputPrecision();
-            VerifyVariationRejectionMessages();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

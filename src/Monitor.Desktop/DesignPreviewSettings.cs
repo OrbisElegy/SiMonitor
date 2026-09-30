@@ -622,6 +622,20 @@ internal sealed class DesignPreviewSettings : UserControl
             _slotRows.Children.Add(row); Slots.Add(new(channel, automatic, minimum, maximum, speed));
         }
     }
+    internal void RestoreDisplay(MonitorDisplayConfiguration display, int paperLayout)
+    {
+        Skin.SelectedIndex = (int)display.Skin;
+        for (int i = 0; i < display.Slots.Count; i++)
+        {
+            var saved = display.Slots[i]; var field = Slots[i];
+            field.Channel.SelectedIndex = saved.Channel;
+            field.Auto.IsChecked = saved.Automatic;
+            field.Minimum.Text = saved.Range.Minimum.ToString(CultureInfo.InvariantCulture);
+            field.Maximum.Text = saved.Range.Maximum.ToString(CultureInfo.InvariantCulture);
+            field.Speed.SelectedIndex = saved.SpeedTenthsMmPerSecond switch { 125 => 0, 250 => 1, _ => 2 };
+        }
+        PaperLayout.SelectedIndex = paperLayout;
+    }
     internal MonitorDisplayConfiguration ReadDisplay() => new((MonitorSkin)Skin.SelectedIndex, Slots.Select(slot =>
     {
         if (!double.TryParse(slot.Minimum.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double minimum) ||

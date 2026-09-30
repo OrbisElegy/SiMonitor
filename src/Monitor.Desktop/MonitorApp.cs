@@ -12,9 +12,10 @@ public sealed class MonitorApp : Avalonia.Application
     public override void Initialize() => DesktopFluentStyle.Install(this);
 
     // Default product entry and the retained preview alias share one runtime.
-    internal static Window CreateLaunchWindow(string[]? arguments) => arguments switch
+    internal static Window CreateLaunchWindow(string[]? arguments, bool persistDisplay = true) => arguments switch
     {
-        null or [] or ["--ui-preview"] => new DesignPreviewWindow(),
+        null or [] or ["--ui-preview"] => new DesignPreviewWindow(persistDisplay
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Monitor", "display-preferences.json") : null),
         ["--waveform-demo"] => new WaveformDemoWindow(),
         ["--physiology-demo"] => new WaveformDemoWindow(physiology: true),
         ["--electrode-demo"] => new WaveformDemoWindow(projected: true),

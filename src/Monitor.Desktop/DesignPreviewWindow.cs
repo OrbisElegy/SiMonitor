@@ -146,32 +146,32 @@ internal sealed class DesignPreviewWindow : Window
                 RespCardiacArtifactCounts = respArtifact,
                 BreathPeriodMilliseconds = breathPeriod,
                 InspirationMilliseconds = inspiration,
-                AbpPulsePermille = checked((int)((Settings.AbpPulseGain.Value ?? throw new ArgumentException("ABP pulse gain required")) * 1000)),
-                PaPulsePermille = checked((int)((Settings.PaPulseGain.Value ?? throw new ArgumentException("PA pulse gain required")) * 1000)),
-                CvpBaselineCentiMmHg = checked((int)((Settings.CvpBaseline.Value ?? throw new ArgumentException("CVP baseline required")) * 100)),
+                AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "ABP 脉搏分量倍率"),
+                PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "PA 脉搏分量倍率"),
+                CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "CVP 基线"),
                 Co2EndExpiratoryMmHg = co2Target
             };
             if (Settings.CardiacRateEnabled.IsChecked == true)
             {
                 if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
                 { throw new ArgumentException("Heart rate controls require reference sinus and1:1 conduction."); }
-                var rate = new SeededCardiacRate(checked((int)(Settings.HeartRate.Value ?? throw new ArgumentException("HR required"))),
-                    Settings.RateSeed.Text ?? "", checked((int)((Settings.RateVariation.Value ?? throw new ArgumentException("variation required")) * 10)));
+                var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "心率目标"),
+                    Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
                 config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
             }
-            decimal co2Amplitude = Settings.EtCo2Variation.Value ?? throw new ArgumentException("CO2 variation required");
+            int co2Amplitude = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
             if (co2Amplitude > 0 && co2Baseline != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
             if (co2Amplitude > 0)
-            { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, checked((int)(co2Amplitude * 100)), Settings.RateSeed.Text ?? "") }; }
+            { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2Amplitude, Settings.RateSeed.Text ?? "") }; }
             int? opticalTarget = Settings.ReadOpticalTarget();
             SeededOpticalSaturation? opticalVariation = null;
             if (opticalTarget is { } target)
             {
-                decimal amplitude = Settings.OpticalVariation.Value ?? throw new ArgumentException("SpO2 variation required");
-                if (amplitude > 0) { opticalVariation = new(target, checked((int)(amplitude * 1000)), Settings.RateSeed.Text ?? ""); }
+                int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "SpO₂ 波动幅度");
+                if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
             }
             var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-                opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: checked((int)((Settings.OpticalModulation.Value ?? 1) * 1000)), opticalVariation: opticalVariation);
+                opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: opticalTarget is null ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation);
             var ecg = CapturePaper(ecgConfig);
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             Settings.MarkShapeApplied(ecgConfig);
@@ -183,6 +183,8 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("Preview.InvalidVitalValue", StringComparison.Ordinal))
+        { Settings.Status.Text = $"未应用：请填写有效的 {exception.ParamName}。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Levels")
         { Settings.Status.Text = "未应用：CO₂ 基线须为 0–80、呼气末目标须为 5–80 mmHg 的整数；平台起始高度最多两位小数，须位于基线与呼气末目标之间。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.Co2BaselineVariationConflict")

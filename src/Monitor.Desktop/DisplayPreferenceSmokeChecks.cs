@@ -97,15 +97,19 @@ internal static class DisplayPreferenceSmokeChecks
             }
             finally { reopened.Close(); }
             string valid = File.ReadAllText(path);
-            var legacy = JsonNode.Parse(valid)!.AsObject(); legacy["Version"] = 1; legacy.Remove("Alarms"); legacy.Remove("Sound");
+            var legacy = JsonNode.Parse(valid)!.AsObject(); legacy["Version"] = 1; legacy.Remove("Alarms"); legacy.Remove("Sound"); legacy.Remove("Generator");
             File.WriteAllText(path, legacy.ToJsonString());
             var migrated = store.Load(out rejected);
             Require(!rejected && migrated.Alarms is null && migrated.PaperLayout == 1,
                 "version one display configuration remains readable with default alarms");
-            var versionTwo = JsonNode.Parse(valid)!.AsObject(); versionTwo["Version"] = 2; versionTwo.Remove("Sound");
+            var versionTwo = JsonNode.Parse(valid)!.AsObject(); versionTwo["Version"] = 2; versionTwo.Remove("Sound"); versionTwo.Remove("Generator");
             File.WriteAllText(path, versionTwo.ToJsonString());
             Require(store.Load(out rejected).Sound is null && !rejected, "version two retains alarms without requiring sound preferences");
+            var versionThree = JsonNode.Parse(valid)!.AsObject(); versionThree["Version"] = 3; versionThree.Remove("Generator");
+            File.WriteAllText(path, versionThree.ToJsonString());
+            Require(store.Load(out rejected).Generator is null && !rejected, "version three keeps sound without generator inputs");
             foreach (var edit in new Action<JsonObject>[] {
+                d => d.Remove("Generator"),
                 d => d.Remove("Sound"),
                 d => d["Sound"]!.AsObject().Remove("Volume"),
                 d => d["Sound"]!["Volume"] = 101,
@@ -127,7 +131,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 3", "\"Version\": 99"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 4", "\"Version\": 99"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

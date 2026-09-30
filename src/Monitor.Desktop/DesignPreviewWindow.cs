@@ -49,20 +49,37 @@ internal sealed class DesignPreviewWindow : Window
         _preferences = preferencesPath is null ? null : new(preferencesPath);
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
-        _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
-        _monitor = new(_session);
-        MonitorView = new(_monitor);
-        _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+        DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
+            ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
+        Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+        _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
+        _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
+        if (preferences.Generator is { } generator)
+        {
+            try
+            {
+                Settings.RestoreGenerator(generator);
+                var restored = BuildConfiguredSources();
+                Settings.MarkShapeApplied(restored.Configuration);
+                _session = restored.Session; _ecg = restored.Paper;
+            }
+            catch (Exception error) when (error is ArgumentException or OverflowException)
+            {
+                Settings.Sound.Close(); Settings = CreateSettings();
+                Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+                rejected = true;
+            }
+        }
+        _monitor = new(_session); MonitorView = new(_monitor);
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         if (preferences.Sound is { } sound) { Settings.Sound.RestorePreferences(sound, Settings.Alerts); }
         PreferenceNotice.IsVisible = rejected;
         if (rejected)
         {
-            PreferenceNotice.Text = "显示／报警／声音配置无法读取，已使用默认值。";
-            Settings.Status.Text = "显示／报警／声音配置无法读取，已使用默认值；应用有效设置后将重新保存。";
+            PreferenceNotice.Text = "部分本地配置无法恢复，相关设置已使用默认值。";
+            Settings.Status.Text = "部分本地配置无法恢复，相关设置已使用默认值；应用有效设置后将重新保存。";
         }
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
@@ -134,6 +151,64 @@ internal sealed class DesignPreviewWindow : Window
             _ => DesktopInformationPages.CreateAbout()
         };
     }
+    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper) BuildConfiguredSources()
+    {
+        if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
+            Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
+        { throw new ArgumentException("GeneratorPreferences.InvalidSelection"); }
+        var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+        var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
+        var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
+        config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
+        var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
+        config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
+        var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
+        var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
+        var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
+        var (co2DeadSpace, co2Rise, co2Fall) = Settings.ReadCo2Timing();
+        var (co2Baseline, co2Target, co2Plateau) = Settings.ReadCo2Levels();
+        config = config with
+        {
+            Co2BaselineMmHg = co2Baseline,
+            Co2PlateauStartCentiMmHg = co2Plateau,
+            Co2DeadSpaceMilliseconds = co2DeadSpace,
+            Co2RiseMilliseconds = co2Rise,
+            Co2FallMilliseconds = co2Fall,
+            Co2TransportDelayMilliseconds = co2Delay,
+            Co2DispersionStepMilliseconds = co2Dispersion,
+            RespAmplitudeCounts = respAmplitude,
+            RespCardiacArtifactCounts = respArtifact,
+            BreathPeriodMilliseconds = breathPeriod,
+            InspirationMilliseconds = inspiration,
+            AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "ABP 脉搏分量倍率"),
+            PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "PA 脉搏分量倍率"),
+            CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "CVP 基线"),
+            Co2EndExpiratoryMmHg = co2Target
+        };
+        if (Settings.CardiacRateEnabled.IsChecked == true)
+        {
+            if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
+            { throw new ArgumentException("Preview.CardiacRateRequiresSinus"); }
+            var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "心率目标"),
+                Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
+            config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
+        }
+        int co2Amplitude = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
+        if (co2Amplitude > 0 && co2Baseline != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
+        if (co2Amplitude > 0)
+        { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2Amplitude, Settings.RateSeed.Text ?? "") }; }
+        int? opticalTarget = Settings.ReadOpticalTarget();
+        SeededOpticalSaturation? opticalVariation = null;
+        if (opticalTarget is { } target)
+        {
+            int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "SpO₂ 波动幅度");
+            if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
+        }
+        var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
+            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: opticalTarget is null ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation);
+        var ecg = CapturePaper(ecgConfig);
+        return (next, ecgConfig, ecg);
+    }
     internal void ApplySettings()
     {
         try
@@ -142,57 +217,8 @@ internal sealed class DesignPreviewWindow : Window
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
-            var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
-            var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
-            var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
-            config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
-            var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
-            config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
-            var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
-            var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
-            var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
-            var (co2DeadSpace, co2Rise, co2Fall) = Settings.ReadCo2Timing();
-            var (co2Baseline, co2Target, co2Plateau) = Settings.ReadCo2Levels();
-            config = config with
-            {
-                Co2BaselineMmHg = co2Baseline,
-                Co2PlateauStartCentiMmHg = co2Plateau,
-                Co2DeadSpaceMilliseconds = co2DeadSpace,
-                Co2RiseMilliseconds = co2Rise,
-                Co2FallMilliseconds = co2Fall,
-                Co2TransportDelayMilliseconds = co2Delay,
-                Co2DispersionStepMilliseconds = co2Dispersion,
-                RespAmplitudeCounts = respAmplitude,
-                RespCardiacArtifactCounts = respArtifact,
-                BreathPeriodMilliseconds = breathPeriod,
-                InspirationMilliseconds = inspiration,
-                AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "ABP 脉搏分量倍率"),
-                PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "PA 脉搏分量倍率"),
-                CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "CVP 基线"),
-                Co2EndExpiratoryMmHg = co2Target
-            };
-            if (Settings.CardiacRateEnabled.IsChecked == true)
-            {
-                if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
-                { throw new ArgumentException("Preview.CardiacRateRequiresSinus"); }
-                var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "心率目标"),
-                    Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
-                config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
-            }
-            int co2Amplitude = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
-            if (co2Amplitude > 0 && co2Baseline != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
-            if (co2Amplitude > 0)
-            { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2Amplitude, Settings.RateSeed.Text ?? "") }; }
-            int? opticalTarget = Settings.ReadOpticalTarget();
-            SeededOpticalSaturation? opticalVariation = null;
-            if (opticalTarget is { } target)
-            {
-                int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "SpO₂ 波动幅度");
-                if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
-            }
-            var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-                opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: opticalTarget is null ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation);
-            var ecg = CapturePaper(ecgConfig);
+            var (next, ecgConfig, ecg) = BuildConfiguredSources();
+            var generator = _preferences is null ? null : Settings.CaptureGenerator();
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             Settings.MarkShapeApplied(ecgConfig);
             MonitorView = new(_monitor);
@@ -204,10 +230,10 @@ internal sealed class DesignPreviewWindow : Window
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
             if (_preferences is not null)
             {
-                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound));
+                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator));
                 PreferenceNotice.IsVisible = !saved;
-                PreferenceNotice.Text = saved ? "" : "显示／报警／声音配置保存失败；本次运行已生效。";
-                if (!saved) { Settings.Status.Text += "显示／报警／声音配置保存失败，重启后不会保留本次显示／报警／声音更改。"; }
+                PreferenceNotice.Text = saved ? "" : "本地配置保存失败；本次运行已生效。";
+                if (!saved) { Settings.Status.Text += "本地配置保存失败，重启后不会保留本次设置更改。"; }
             }
         }
         catch (ArgumentException exception) when (exception.Message is "SoundPreferences.Invalid" or "AlarmSound.InvalidTiming")

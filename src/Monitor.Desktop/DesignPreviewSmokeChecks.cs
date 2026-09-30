@@ -773,6 +773,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyVariationRejectionMessages);
         NativeSmokePartition.Run(VerifyIntegratedWindow);
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
+        NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {

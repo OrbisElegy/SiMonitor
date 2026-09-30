@@ -31,7 +31,7 @@ internal sealed class SettingsSections : UserControl
             BorderBrush = DesktopFluentStyle.Stroke,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(20),
-            Margin = new Thickness(12, 0, 0, 0),
+            Margin = new Thickness(0),
             Child = section.Content
         })).ToArray();
         StyleNavigation(Sections);
@@ -88,7 +88,7 @@ internal sealed class SettingsSections : UserControl
     internal static SettingsSections Split(string category, StackPanel owner, params (string Title, Control Start)[] groups)
     {
         var children = owner.Children.ToArray();
-        var indices = groups.Select(g => Array.IndexOf(children, g.Start)).ToArray();
+        int[] indices = groups.Select(g => Array.IndexOf(children, g.Start)).ToArray();
         if (indices[0] != 0 || indices.Any(i => i < 0) || !indices.SequenceEqual(indices.Order())) { throw new InvalidOperationException("Settings.InvalidGroups"); }
         owner.Children.Clear();
         return new(category, groups.Select((g, i) =>

@@ -46,6 +46,15 @@ internal static class DesignPreviewSmokeChecks
             Click(advanced); window.Settings.SectionPages[5].Sections.SelectedIndex = 1;
             Capture(window, "ui-refine-resp-compact.png");
             Require(!window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "呼吸 · 规则呼吸"), "redundant respiration heading removed");
+            var selectors = window.Settings.GetVisualDescendants().OfType<ComboBox>().Where(c => c.IsVisible &&
+                AutomationProperties.GetName(c) is "设置分类" or "高级参数参数组").ToArray();
+            Require(selectors.Length == 2 && Math.Abs(selectors[0].Bounds.Width - selectors[1].Bounds.Width) < 1 &&
+                Math.Abs(selectors[0].TranslatePoint(default, root)!.Value.X - selectors[1].TranslatePoint(default, root)!.Value.X) < 1,
+                "compact navigation selectors align and share width");
+            window.Settings.Tabs.SelectedIndex = 0; Capture(window, "ui-refine-return-generator-root.png");
+            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true),
+                "reentering generation starts at signal root");
+            window.Settings.Tabs.SelectedIndex = 5;
             window.Width = 1440; window.Height = 940; Capture(window, "ui-refine-resp-wide.png");
         }
         finally { window.Close(); }
@@ -812,6 +821,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
+        NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {
@@ -942,7 +952,11 @@ internal static class DesignPreviewSmokeChecks
             var legal = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "许可文档正文");
             Require(legal.IsReadOnly && legal.Text?.Contains("GNU AFFERO GENERAL PUBLIC LICENSE") == true, "about embeds offline project license text");
             var documents = window.GetVisualDescendants().OfType<ComboBox>().Single(t => AutomationProperties.GetName(t) == "开源许可与依赖文档");
-            Require(documents.ItemCount >= 5 && ReferenceEquals(helpSession, window.Session), "legal documents and informational navigation preserve running session");
+            Require(documents.ItemCount == 2 && ReferenceEquals(helpSession, window.Session), "own license documents and informational navigation preserve running session");
+            window.GetVisualDescendants().OfType<SettingsSections>().Single().Sections.SelectedIndex = 1;
+            Capture(window, "ui-preview-about-components.png");
+            Require(window.GetVisualDescendants().OfType<ComboBox>().Single(t => AutomationProperties.GetName(t) == "开源许可与依赖文档").ItemCount >= 3,
+                "third party documents occupy a separate page");
             window.SelectPage(2); Capture(window, "ui-preview-settings.png");
             var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
             int navigationCacheCount = window.Settings.PreviewCacheCount;

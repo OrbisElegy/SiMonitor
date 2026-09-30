@@ -47,6 +47,14 @@ public sealed record SeededCardiacRate
         }
         PreparedState = random.CaptureState();
     }
+    // Indexed preceding RR, including the established schedule across wrap.
+    // Reuses the teaching filling curve; not a calibrated stroke volume.
+    public int EjectionGainPermille(ulong ordinal)
+    {
+        int index = (int)(ordinal % (ulong)Slots.Length);
+        long interval = index == 0 ? PeriodNs * Slots.Length - Slots[^1] : Slots[index] - Slots[index - 1];
+        return interval >= FillingLimitedEjection.ReferencePeriodNs ? 1000 : FillingLimitedEjection.StrokeVolumePermille(interval);
+    }
     // Teaching morphology support, not patient-specific QT adaptation.
     public EcgCycleTiming Timing
     {

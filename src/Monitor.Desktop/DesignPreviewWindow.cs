@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Infrastructure.Preferences;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
@@ -36,19 +37,31 @@ internal sealed class DesignPreviewWindow : Window
     internal DispatcherTimer? ActiveTimer => _timer;
     internal DesignPreviewTrace? CurrentPaper => (_workspace.Content as Viewbox)?.Child as DesignPreviewTrace;
     internal LiveMonitorTrace MonitorTrace => _monitor;
-    internal DesignPreviewWindow()
+    private readonly DisplayPreferenceStore? _preferences;
+    internal TextBlock PreferenceNotice { get; } = Text("", 12);
+    internal DesignPreviewWindow(string? preferencesPath = null)
     {
         Title = "心电监护 · V0.5 Standalone（开发版）";
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
         Background = DesktopFluentStyle.Canvas; Foreground = DesktopFluentStyle.Text;
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        _session = new(PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(), enableMeasurements: true);
+        _preferences = preferencesPath is null ? null : new(preferencesPath);
+        bool rejected = false;
+        var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
+        _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
         _monitor = new(_session);
         MonitorView = new(_monitor);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
+        Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+        PreferenceNotice.IsVisible = rejected;
+        if (rejected)
+        {
+            PreferenceNotice.Text = "显示配置无法读取，已使用默认值。";
+            Settings.Status.Text = "显示配置无法读取，已使用默认值；应用有效设置后将重新保存。";
+        }
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
         Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
@@ -65,6 +78,7 @@ internal sealed class DesignPreviewWindow : Window
         brand.Children.Add(Text("心电监护", 21, true)); brand.Children.Add(Text("V0.5 · Standalone", 12));
         DockPanel.SetDock(brand, Dock.Top); sidebar.Children.Add(brand);
         var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
+        footer.Children.Add(PreferenceNotice);
         footer.Children.Add(_state); footer.Children.Add(Text("离线教学模拟\n不得用于临床决策", 12));
         DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
         string[] labels = ["监护波形", "十二导联", "设置", "帮助", "关于"];
@@ -122,6 +136,8 @@ internal sealed class DesignPreviewWindow : Window
     {
         try
         {
+            int paperLayout = Settings.PaperLayout.SelectedIndex;
+            if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
             var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
             var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
@@ -182,6 +198,13 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
+            if (_preferences is not null)
+            {
+                bool saved = _preferences.Save(new(next.Display, paperLayout));
+                PreferenceNotice.IsVisible = !saved;
+                PreferenceNotice.Text = saved ? "" : "显示配置保存失败；本次运行已生效。";
+                if (!saved) { Settings.Status.Text += "显示配置保存失败，重启后不会保留本次显示更改。"; }
+            }
         }
         catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")
         { Settings.Status.Text = "未应用：共用种子须为 64 个小写十六进制字符（0–9、a–f）；可在生命体征 → 共用随机种子中点击生成随机种子。原运行与画面保持不变。"; }

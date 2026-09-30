@@ -772,10 +772,11 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyVitalInputPrecision);
         NativeSmokePartition.Run(VerifyVariationRejectionMessages);
         NativeSmokePartition.Run(VerifyIntegratedWindow);
+        NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {
-        var launched = MonitorApp.CreateLaunchWindow([]);
+        var launched = MonitorApp.CreateLaunchWindow([], persistDisplay: false);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
         try

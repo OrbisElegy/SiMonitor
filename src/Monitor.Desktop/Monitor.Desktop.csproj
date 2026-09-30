@@ -33,15 +33,22 @@
   <Target Name="GenerateStylePreviews" AfterTargets="Build"
           Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)"
           Outputs="$(TargetDir)style-previews.bin"
-          Condition="'$(DesignTimeBuild)' != 'true'">
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(UsePrebuiltStylePreviews)' != 'true'">
     <Exec Command="dotnet &quot;$(TargetPath)&quot; --generate-style-previews &quot;$(TargetDir)style-previews.bin&quot;" />
     <ItemGroup>
       <FileWrites Include="$(TargetDir)style-previews.bin" />
     </ItemGroup>
   </Target>
   <Target Name="PublishStylePreviews" AfterTargets="ComputeFilesToPublish" DependsOnTargets="GenerateStylePreviews">
+    <Error Condition="'$(UsePrebuiltStylePreviews)' == 'true' And !Exists('$(StylePreviewBinary)')"
+           Text="A prebuilt style preview catalog is required: set StylePreviewBinary to an existing host-generated style-previews.bin." />
     <ItemGroup>
-      <ResolvedFileToPublish Include="$(TargetDir)style-previews.bin">
+      <ResolvedFileToPublish Include="$(StylePreviewBinary)" Condition="'$(UsePrebuiltStylePreviews)' == 'true'">
+        <RelativePath>style-previews.bin</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+      <ResolvedFileToPublish Include="$(TargetDir)style-previews.bin" Condition="'$(UsePrebuiltStylePreviews)' != 'true'">
         <RelativePath>style-previews.bin</RelativePath>
         <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
         <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

@@ -17,6 +17,8 @@ import struct
 import subprocess
 import tempfile
 
+from desktop_distribution import assemble, source_provenance
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -52,6 +54,7 @@ def main() -> int:
                 struct.unpack_from("<H", binary, header + 4)[0] != machines[args.rid]:
             parser.error(f"native audio binary does not match {args.rid}")
 
+    provenance = source_provenance(root)
     with tempfile.TemporaryDirectory(prefix="desktop-cross-", dir=artifacts) as temporary:
         stage = Path(temporary) / "source"
         shutil.copytree(root, stage, ignore=shutil.ignore_patterns(
@@ -77,6 +80,7 @@ def main() -> int:
             raise RuntimeError("Target publish omitted or changed the preview catalog")
         if native is not None and (target_output / native.name).read_bytes() != native.read_bytes():
             raise RuntimeError("Target publish omitted or changed the native audio DLL")
+        assemble(target_output, stage, args.rid, provenance)
         output.parent.mkdir(parents=True, exist_ok=True)
         target_output.replace(output)
     print(f"Published {args.rid}: {output}")

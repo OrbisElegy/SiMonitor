@@ -81,7 +81,7 @@ public sealed class VascularPressureSource
             Int128 firstOnsetNumerator = (Int128)(plan.InitialPressureCentiMmHg - plan.AsymptoticPressureCentiMmHg) *
                 FixedPointMath.Q32One * Decay(physiology.VentricularMechanicalOffsetNs);
             Int128 firstOnsetAbove = (firstOnsetNumerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
-            Int128 maximumAbove = Int128.Max(_referenceOnsetQ32, firstOnsetAbove);
+            var maximumAbove = Int128.Max(_referenceOnsetQ32, firstOnsetAbove);
             Int128 maximumShape = _referenceOnsetQ32 +
                 (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One *
                 (((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod);
@@ -124,7 +124,8 @@ public sealed class VascularPressureSource
             {
                 int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
                     _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) : 1000;
+                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) :
+                        _physiology.SeededRate?.EjectionGainPermille(item.CycleIndex) ?? 1000;
                 if (gain == 0) { return; }
                 long age = sourceTime - item.SimTimeNs;
                 long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;

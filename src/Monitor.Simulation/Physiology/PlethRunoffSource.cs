@@ -73,7 +73,8 @@ public sealed class PlethRunoffSource
         {
             int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
                 _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) : 1000;
+                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+                        _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
             if (gain == 0) { return; }
             long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
             long join = (long)((Int128)duration * _joinIndex / 128);
@@ -82,7 +83,7 @@ public sealed class PlethRunoffSource
                 (long)FixedPointMath.RoundDivideTiesToEven((Int128)_table[_joinIndex] * Tail(age - join), FixedPointMath.Q62One);
             sum += FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
         }, cancellationToken);
-        if (sum < 0 || sum > short.MaxValue * Q) { throw new EventWaveformException("PlethRunoff.AmplitudeOverflow", "time"); }
+        if (sum < 0 || sum > short.MaxValue * Q) { throw new EventWaveformException("PlethRunoff.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)sum;
     }
 

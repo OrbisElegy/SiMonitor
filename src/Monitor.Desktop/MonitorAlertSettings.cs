@@ -55,8 +55,8 @@ internal sealed class MonitorAlertSettings : StackPanel
         Row("提示与声音联调（明确标为测试）", TestLevel);
         Row("联调闪烁数值", TestNumeric);
         Children.Add(NoticeColorEnabled);
-        Children.Add(Text("报警数值背景每秒闪烁一次。关闭 Notice 颜色仅取消蓝色着色，提示文字与声音继续保留。"));
-        Children.Add(Text("联调不代表患者异常，不伪造探头脱落或更改测量值。声音须在声音页单独启用。"));
+        Children.Add(DesktopInformationPages.Help("settings-detail-10"));
+        Children.Add(DesktopInformationPages.Help("settings-detail-11"));
         Children.Add(InfoTone);
         Row("Info 单声间隔（秒）", InfoInterval); Row("Notice 三联音组间隔（秒）", NoticeInterval);
         Row("Warning（3+2）×2 组间隔（秒）", WarningInterval); Row("Critical 单声间隔（秒）", CriticalInterval);

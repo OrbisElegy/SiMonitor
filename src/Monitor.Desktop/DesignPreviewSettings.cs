@@ -146,7 +146,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal ListBox Tabs { get; } = new();
     internal Dictionary<int, SettingsSections> SectionPages { get; } = [];
-    private readonly ComboBox _compactCategory = new() { MinHeight = 44, MinWidth = 220 };
+    private readonly ComboBox _compactCategory = new() { MinHeight = 44, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
     private Action<double>? _adaptNavigation;
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -224,10 +224,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
         generation.Children.Add(cards);
         var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         more.Click += (_, _) => advanced();
-        generation.Children.Add(Text("具体波形提供预生成预览。浏览分类不会改变波形；选择后仍需应用。"));
+        generation.Children.Add(DesktopInformationPages.Help("settings-detail-1"));
         _home = Scroll(generation); _generation.Content = _home;
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
-        display.Children.Add(Text("监护皮肤决定固定槽位数；调整窗口不增减行数。每行可独立选通道和量程。"));
+        display.Children.Add(DesktopInformationPages.Help("settings-detail-2"));
         display.Children.Add(Skin);
         display.Children.Add(Text("纸质十二导联排布")); display.Children.Add(PaperLayout);
         AutomationProperties.SetName(PaperLayout, "纸质十二导联排布");
@@ -239,7 +239,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         display.Children.Add(headings);
         display.Children.Add(_slotRows);
         display.Children.Add(DesktopInformationPages.Help("topic-2"));
-        display.Children.Add(Text("十二导联：整张纸按显示区等比适配，保持纸格/波形/标定的相对比例；不校准屏幕毫米，允许高幅波形跨导联区域。"));
+        display.Children.Add(DesktopInformationPages.Help("settings-detail-3"));
         Skin.SelectionChanged += (_, _) => BuildRows(); BuildRows();
         var vitals = (StackPanel)VitalSigns();
         Control Before(StackPanel panel, Control control) => panel.Children[panel.Children.IndexOf(control) - 1];
@@ -264,10 +264,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ("射血", _advancedEjection), ("开发工具", _advancedTools));
         RespirationGroups.ItemsSource = new[]
         {
-            new TabItem { Header = "RESP 信号", Content = _respSignal, FontSize = 14, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, FontSize = 14, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 管路", Content = _co2Response, FontSize = 14, MinHeight = 44 }
+            new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 管路", Content = _co2Response, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 }
         };
+        RespirationGroups.Padding = new Thickness(0);
         RespirationGroups.SelectedIndex = 0;
         ResetRespirationPage.Click += (_, _) => ResetRespirationDraft();
         AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
@@ -285,6 +286,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         {
             if (!ReferenceEquals(args.Source, Tabs) || Tabs.SelectedIndex < 0) { return; }
             int selected = Tabs.SelectedIndex; _compactCategory.SelectedIndex = selected;
+            if (selected == 0) { _generation.Content = _home; }
             if (selected == 5) { RefreshAdvanced(more); }
             detail.Content = pages[selected];
         };
@@ -294,12 +296,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
             bool compact = width < 1040; Tabs.IsVisible = !compact; _compactCategory.IsVisible = compact;
             navigation.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 160);
         };
+        Tabs.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, args) =>
+        {
+            if (Tabs.SelectedIndex == 0) { _generation.Content = _home; }
+        }, handledEventsToo: true);
         Tabs.SelectedIndex = 0;
         var controls = new WrapPanel { Margin = new Thickness(20, 12), Orientation = Orientation.Horizontal };
         Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run);
         Apply.Click += (_, _) => apply(); Run.Click += (_, _) => run();
         var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
-        _compactCategory.Margin = new Thickness(20, 12); root.Children.Add(_compactCategory);
+        _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);
         Grid.SetRow(navigation, 1); root.Children.Add(navigation); Grid.SetRow(controls, 2); root.Children.Add(controls);
         Status.Margin = new Thickness(20, 0, 20, 16); Grid.SetRow(Status, 3); root.Children.Add(Status); Content = root;
     }
@@ -465,7 +471,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
         panel.Children.Add(GenerateSeed);
         GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-        panel.Children.Add(Text("使用系统加密随机源生成256位种子；应用后生效。保留种子与设置即可复现。"));
+        panel.Children.Add(DesktopInformationPages.Help("settings-detail-4"));
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
         panel.Children.Add(BreathingTiming);
@@ -493,7 +499,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         panel.Children.Add(DesktopInformationPages.Help("topic-6"));
         Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
         Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);
-        panel.Children.Add(Text("调整压力波形的脉搏分量，保留长间期回落；均压仍从采样计算。此项不是收缩压/舒张压目标，也不是显示缩放。"));
+        panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
         panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
@@ -560,9 +566,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _respSignal.Children.Add(RespCardiacArtifact);
         AutomationProperties.SetName(RespSignalAmplitude, "RESP 相对信号幅度，负值反相，不代表通气量");
         AutomationProperties.SetName(RespCardiacArtifact, "RESP 心源性干扰幅度，0 关闭");
-        _respSignal.Children.Add(Text(RespirationSelection == 3
-            ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
-            : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
+        if (RespirationSelection == 3) { _respSignal.Children.Add(Text("当前无呼吸分量")); }
         _co2Shape.Children.Add(Text("CO₂ 基线（mmHg，0–80；不高于呼气末目标）"));
         _co2Shape.Children.Add(Co2Baseline);
         _co2Shape.Children.Add(Co2CustomPlateau);
@@ -586,7 +590,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _co2Response.Children.Add(Co2DispersionStep);
         AutomationProperties.SetName(Co2TransportDelay, "CO₂ 管路延迟，毫秒");
         AutomationProperties.SetName(Co2DispersionStep, "CO₂ 展宽步长，毫秒");
-        _co2Response.Children.Add(Text("仅影响 CO₂ 采集波形；均设为 0 可关闭。展宽还会增加延迟，并可能改变测得的呼气末值。"));
+        _co2Response.Children.Add(DesktopInformationPages.Help("settings-detail-6"));
         _advancedRespiration.Children.Add(RespirationGroups);
         _advancedRespiration.Children.Add(ResetRespirationPage);
         _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));

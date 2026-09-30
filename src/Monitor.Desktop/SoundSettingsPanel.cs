@@ -65,7 +65,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         _play = play ?? playback.PlayAsync;
         Margin = new Thickness(20); Spacing = 16;
         Children.Add(Text("声音输出"));
-        Children.Add(Text("输出至系统默认音频设备。点击试听检查音量；监护提示声音须另行启用。"));
+        Children.Add(DesktopInformationPages.Help("settings-detail-7"));
         var volumeLabel = Text("声音音量：50%"); Children.Add(volumeLabel); Children.Add(Volume);
         AutomationProperties.SetName(Volume, "声音音量，百分比");
         Volume.PropertyChanged += (_, args) =>
@@ -83,13 +83,13 @@ internal sealed class SoundSettingsPanel : StackPanel
         {
             if (args.Property == Slider.ValueProperty) { beatVolumeLabel.Text = $"心搏相对音量：{HeartbeatVolume.Value:0}%"; }
         };
-        Children.Add(Text("心搏相对音量100%为原始音量；仅调整心搏音，不改变报警音。主音量仍控制全部声音。"));
+        Children.Add(DesktopInformationPages.Help("settings-detail-8"));
         Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
         AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG、PLETH或自动");
         BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); UpdateBeatSource(); Publish(); };
         Children.Add(_sourceStatus);
         Children.Add(new Expander { Header = "本次模拟音源切换记录（最近64条）", Content = _sourceHistory });
-        Children.Add(Text("自动模式优先有效ECG；改用稳定的PLETH后，ECG连续有效3秒才切回。两路均不可用时停止心搏提示音。"));
+        Children.Add(DesktopInformationPages.Help("settings-detail-9"));
         Children.Add(Text("心搏音高来源")); Children.Add(PitchSource);
         AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或SpO2 A曲线");
         PitchSource.SelectionChanged += (_, _) => { ResetPitchState(); OutputNoticeChanged?.Invoke(); };

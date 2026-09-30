@@ -53,17 +53,19 @@ internal static class DesktopInformationPages
         search.TextChanged += (_, _) => Refresh(); category.SelectionChanged += (_, _) => Refresh(); Refresh();
         return root;
     }
-    internal static Control CreateAbout()
+    internal static Control CreateAbout() => new SettingsSections("关于", ("Seele's SiMonitor", CreateLegalPage(false)), ("开源组件", CreateLegalPage(true)));
+    private static Grid CreateLegalPage(bool thirdParty)
     {
         var assembly = typeof(DesktopInformationPages).Assembly;
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto,Auto,*"), Margin = new Thickness(24) };
-        var title = new TextBlock { Text = ProductIdentity.Name + " · V0.5 开发版", FontSize = 24, FontWeight = FontWeight.SemiBold };
+        var title = new TextBlock { Text = thirdParty ? "开源组件" : ProductIdentity.Name + " · V0.5 开发版", FontSize = 24, FontWeight = FontWeight.SemiBold };
         root.Children.Add(title);
         var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);
         var notice = new TextBlock { Text = "原创代码：AGPL-3.0-only。第三方组件保留各自许可。以下为当前依赖清单及已随附的许可正文；完整发布包许可审核尚未完成。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         Grid.SetRow(notice, 2); root.Children.Add(notice);
-        var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith("Monitor.Legal.", StringComparison.Ordinal)).Order().ToArray();
+        var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith("Monitor.Legal.", StringComparison.Ordinal) &&
+            (thirdParty ? n is not ("Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md") : n is "Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md")).Order().ToArray();
         var selector = new ComboBox { ItemsSource = names.Select(n => n["Monitor.Legal.".Length..]).ToArray(), MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 12) };
         AutomationProperties.SetName(selector, "开源许可与依赖文档"); Grid.SetRow(selector, 3); root.Children.Add(selector);
         var text = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap };
@@ -74,7 +76,7 @@ internal static class DesktopInformationPages
             using var stream = assembly.GetManifestResourceStream(names[selector.SelectedIndex])!;
             using var reader = new StreamReader(stream); text.Text = reader.ReadToEnd();
         };
-        selector.SelectedIndex = Array.FindIndex(names, n => n == "Monitor.Legal.LICENSE");
+        selector.SelectedIndex = thirdParty ? 0 : Array.FindIndex(names, n => n == "Monitor.Legal.LICENSE");
         return root;
     }
 }

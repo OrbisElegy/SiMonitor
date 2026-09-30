@@ -65,6 +65,22 @@ class NativeAudioPeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'sa_test_render'):
             verify_native_audio_binary(pe_dll(exports=REQUIRED_AUDIO_EXPORTS | {'sa_test_render'}), 'win-x64')
 
+    def test_publish_rejects_invalid_audio_before_building(self):
+        for exports in (REQUIRED_AUDIO_EXPORTS | {'sa_test_render'}, REQUIRED_AUDIO_EXPORTS - {'sa_submit'}):
+            with self.subTest(exports=exports), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                binary = root / 'sim_audio_native.dll'
+                binary.write_bytes(pe_dll(exports=exports))
+                with patch('sys.argv', ['publish_desktop_cross.py', 'win-x64', '--native-audio-binary', str(binary)]), \
+                        patch.object(publisher, '__file__', str(root / 'tools/publish_desktop_cross.py')), \
+                        patch.object(publisher, 'source_provenance') as provenance, \
+                        patch.object(publisher.subprocess, 'run') as build, \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                    publisher.main()
+                self.assertEqual(error.exception.code, 2)
+                provenance.assert_not_called()
+                build.assert_not_called()
+
     def test_missing_required_export_is_rejected(self):
         for name in REQUIRED_AUDIO_EXPORTS:
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, name):

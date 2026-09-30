@@ -17,6 +17,8 @@ import struct
 import subprocess
 import tempfile
 
+from desktop_distribution import assemble, source_provenance
+
 
 REQUIRED_AUDIO_EXPORTS = {'sa_abi_version', 'sa_open', 'sa_submit', 'sa_start', 'sa_close', 'sa_info'}
 WINDOWS_MACHINES = {"win-x86": 0x014C, "win-x64": 0x8664, "win-arm64": 0xAA64}
@@ -131,6 +133,7 @@ def main() -> int:
         except ValueError as error:
             parser.error(str(error))
 
+    provenance = source_provenance(root)
     with tempfile.TemporaryDirectory(prefix="desktop-cross-", dir=artifacts) as temporary:
         stage = Path(temporary) / "source"
         shutil.copytree(root, stage, ignore=shutil.ignore_patterns(
@@ -156,6 +159,7 @@ def main() -> int:
             raise RuntimeError("Target publish omitted or changed the preview catalog")
         if native is not None and (target_output / native.name).read_bytes() != native.read_bytes():
             raise RuntimeError("Target publish omitted or changed the native audio DLL")
+        assemble(target_output, stage, args.rid, provenance)
         output.parent.mkdir(parents=True, exist_ok=True)
         target_output.replace(output)
     print(f"Published {args.rid}: {output}")

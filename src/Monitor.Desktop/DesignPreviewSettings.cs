@@ -186,6 +186,14 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly StackPanel _advancedEcg = new() { Spacing = 16 };
     private readonly StackPanel _advancedRespiration = new() { Spacing = 16 };
     internal TabControl RespirationGroups { get; } = new();
+    internal Button ResetRespirationPage { get; } = new()
+    {
+        Content = "恢复本页默认参数",
+        MinHeight = 44,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        HorizontalContentAlignment = HorizontalAlignment.Center,
+        VerticalContentAlignment = VerticalAlignment.Center
+    };
     private readonly StackPanel _respSignal = new() { Spacing = 16 };
     private readonly StackPanel _co2Shape = new() { Spacing = 16 };
     private readonly StackPanel _co2Response = new() { Spacing = 16 };
@@ -260,6 +268,7 @@ internal sealed class DesignPreviewSettings : UserControl
             new TabItem { Header = "CO₂ 管路", Content = _co2Response, MinHeight = 44 }
         };
         RespirationGroups.SelectedIndex = 0;
+        ResetRespirationPage.Click += (_, _) => ResetRespirationDraft();
         AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
@@ -480,6 +489,35 @@ internal sealed class DesignPreviewSettings : UserControl
         Tabs.SelectedIndex = 5;
         SectionPages[5].Sections.SelectedIndex = channel switch { 0 => 0, 1 => 1, _ => 2 };
     }
+    private void ResetRespirationDraft()
+    {
+        var defaults = PhysiologyDemoConfiguration.Default;
+        string page;
+        switch (RespirationGroups.SelectedIndex)
+        {
+            case 0:
+                RespSignalAmplitude.Value = defaults.RespAmplitudeCounts;
+                RespCardiacArtifact.Value = defaults.RespCardiacArtifactCounts;
+                page = "RESP 信号";
+                break;
+            case 1:
+                Co2Baseline.Value = defaults.Co2BaselineMmHg;
+                Co2CustomPlateau.IsChecked = false;
+                Co2PlateauStart.Value = 35;
+                Co2DeadSpace.Value = defaults.Co2DeadSpaceMilliseconds;
+                Co2Rise.Value = defaults.Co2RiseMilliseconds;
+                Co2Fall.Value = defaults.Co2FallMilliseconds;
+                page = "CO₂ 形态";
+                break;
+            case 2:
+                Co2TransportDelay.Value = defaults.Co2TransportDelayMilliseconds;
+                Co2DispersionStep.Value = defaults.Co2DispersionStepMilliseconds;
+                page = "CO₂ 管路";
+                break;
+            default: return;
+        }
+        Status.Text = $"已恢复 {page} 默认参数，尚未应用；当前运行保持不变。";
+    }
     private void RefreshAdvanced(Button developer)
     {
         _advancedEcg.Children.Clear(); _advancedRespiration.Children.Clear();
@@ -528,6 +566,7 @@ internal sealed class DesignPreviewSettings : UserControl
         AutomationProperties.SetName(Co2DispersionStep, "CO₂ 展宽步长，毫秒");
         _co2Response.Children.Add(Text("仅影响 CO₂ 采集波形；均设为 0 可关闭。展宽还会增加延迟，并可能改变测得的呼气末值。"));
         _advancedRespiration.Children.Add(RespirationGroups);
+        _advancedRespiration.Children.Add(ResetRespirationPage);
         _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {

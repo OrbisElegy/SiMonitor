@@ -163,6 +163,56 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyRespirationPageReset()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            window.Settings.RespirationSelection = 2;
+            window.Settings.RespiratoryRate.Value = 20; window.Settings.EtCo2Target.Value = 45;
+            window.Settings.RespSignalAmplitude.Value = -400; window.Settings.RespCardiacArtifact.Value = 120;
+            window.Settings.Co2Baseline.Value = 5; window.Settings.Co2CustomPlateau.IsChecked = true;
+            window.Settings.Co2PlateauStart.Value = 32.25m; window.Settings.Co2Rise.Value = 700;
+            window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
+            window.ApplySettings();
+            for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            var live = window.Session; var timer = window.ActiveTimer; long frontier = live.FrontierNs;
+            window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            void Reset(int group)
+            {
+                window.Settings.RespirationGroups.SelectedIndex = group;
+                window.Settings.ResetRespirationPage.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) && live.FrontierNs == frontier &&
+                    window.Settings.RespirationSelection == 2 && window.Settings.RespiratoryRate.Value == 20 && window.Settings.EtCo2Target.Value == 45 &&
+                    window.Settings.Status.Text!.Contains("尚未应用", StringComparison.Ordinal), "reset only edits draft and preserves template, vitals and session");
+            }
+            window.Settings.Co2PlateauStart.Value = null;
+            Reset(2);
+            Require(window.Settings.ReadCo2Response() == (0, 0) && window.Settings.Co2Baseline.Value == 5 &&
+                window.Settings.Co2PlateauStart.Value is null && window.Settings.RespSignalAmplitude.Value == -400,
+                "transport reset leaves other groups including invalid drafts intact");
+            Reset(1);
+            Require(window.Settings.ReadCo2Timing() == (125, 250, 200) && window.Settings.ReadCo2Levels() == (0, 45, null) &&
+                !window.Settings.Co2PlateauStart.IsEnabled && window.Settings.RespSignalAmplitude.Value == -400,
+                "shape reset clears overrides and invalid input while preserving gas target and signal");
+            window.Settings.RespCardiacArtifact.Value = null; Reset(0);
+            Require(window.Settings.ReadRespirationSignal() == (1000, 0), "signal reset repairs invalid signal draft");
+            window.ApplySettings(); Require(!ReferenceEquals(live, window.Session), "explicit application activates reset drafts");
+            var (period, inspiration) = window.Settings.ReadBreathingTiming();
+            var config = DesignPreviewWindow.ResolveStyle(0, 2, 0).Physiology with
+            { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration, Co2EndExpiratoryMmHg = 45 };
+            var reference = new LocalMonitorPreviewSession(config, window.Session.Display);
+            for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
+            for (int channel = 0; channel < 7; channel++)
+            { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "applied reset recovers source with retained template and vitals"); }
+            window.Settings.RespirationSelection = 3; window.Settings.RespSignalAmplitude.Value = -400;
+            live = window.Session; timer = window.ActiveTimer; frontier = live.FrontierNs;
+            window.Settings.ResetRespirationPage.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(!window.Settings.RespSignalAmplitude.IsEnabled && window.Settings.RespSignalAmplitude.Value == 1000 &&
+                ReferenceEquals(live, window.Session), "signal reset retains absent respiration applicability");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyCo2LevelEditing()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -881,6 +931,7 @@ internal static class DesignPreviewSmokeChecks
             VerifyCo2ResponseEditing();
             VerifyCo2TimingEditing();
             VerifyCo2LevelEditing();
+            VerifyRespirationPageReset();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

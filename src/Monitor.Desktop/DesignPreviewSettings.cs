@@ -185,6 +185,10 @@ internal sealed class DesignPreviewSettings : UserControl
     private readonly Func<int, int, int, StylePreviewData> _preview;
     private readonly StackPanel _advancedEcg = new() { Spacing = 16 };
     private readonly StackPanel _advancedRespiration = new() { Spacing = 16 };
+    internal TabControl RespirationGroups { get; } = new();
+    private readonly StackPanel _respSignal = new() { Spacing = 16 };
+    private readonly StackPanel _co2Shape = new() { Spacing = 16 };
+    private readonly StackPanel _co2Response = new() { Spacing = 16 };
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
@@ -249,6 +253,14 @@ internal sealed class DesignPreviewSettings : UserControl
             ("压力", Before(vitals, AbpPulseGain)));
         SectionPages[5] = new SettingsSections("高级参数", ("心电图", _advancedEcg), ("呼吸", _advancedRespiration),
             ("射血", _advancedEjection), ("开发工具", _advancedTools));
+        RespirationGroups.ItemsSource = new[]
+        {
+            new TabItem { Header = "RESP 信号", Content = _respSignal, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 管路", Content = _co2Response, MinHeight = 44 }
+        };
+        RespirationGroups.SelectedIndex = 0;
+        AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
         Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
@@ -472,6 +484,7 @@ internal sealed class DesignPreviewSettings : UserControl
     {
         _advancedEcg.Children.Clear(); _advancedRespiration.Children.Clear();
         _advancedEjection.Children.Clear(); _advancedTools.Children.Clear();
+        _respSignal.Children.Clear(); _co2Shape.Children.Clear(); _co2Response.Children.Clear();
         _advancedEcg.Children.Add(DesktopInformationPages.Help("topic-8"));
         _advancedEcg.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
@@ -481,20 +494,20 @@ internal sealed class DesignPreviewSettings : UserControl
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
         _advancedRespiration.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
-        _advancedRespiration.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
-        _advancedRespiration.Children.Add(RespSignalAmplitude);
-        _advancedRespiration.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
-        _advancedRespiration.Children.Add(RespCardiacArtifact);
+        _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
+        _respSignal.Children.Add(RespSignalAmplitude);
+        _respSignal.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
+        _respSignal.Children.Add(RespCardiacArtifact);
         AutomationProperties.SetName(RespSignalAmplitude, "RESP 相对信号幅度，负值反相，不代表通气量");
         AutomationProperties.SetName(RespCardiacArtifact, "RESP 心源性干扰幅度，0 关闭");
-        _advancedRespiration.Children.Add(Text(RespirationSelection == 3
+        _respSignal.Children.Add(Text(RespirationSelection == 3
             ? "当前无呼吸分量；仍可显示随机械心搏产生的心源性干扰。"
             : "调整阻抗电信号，不代表潮气量，不改变 CO₂。呼吸频率和吸呼比在生命体征页设置。"));
-        _advancedRespiration.Children.Add(Text("CO₂ 基线（mmHg，0–80；不高于呼气末目标）"));
-        _advancedRespiration.Children.Add(Co2Baseline);
-        _advancedRespiration.Children.Add(Co2CustomPlateau);
-        _advancedRespiration.Children.Add(Text("平台起始高度（mmHg，最多两位小数；基线至呼气末目标之间）"));
-        _advancedRespiration.Children.Add(Co2PlateauStart);
+        _co2Shape.Children.Add(Text("CO₂ 基线（mmHg，0–80；不高于呼气末目标）"));
+        _co2Shape.Children.Add(Co2Baseline);
+        _co2Shape.Children.Add(Co2CustomPlateau);
+        _co2Shape.Children.Add(Text("平台起始高度（mmHg，最多两位小数；基线至呼气末目标之间）"));
+        _co2Shape.Children.Add(Co2PlateauStart);
         AutomationProperties.SetName(Co2Baseline, "CO₂ 基线，毫米汞柱");
         AutomationProperties.SetName(Co2PlateauStart, "CO₂ 平台起始高度，毫米汞柱");
         if (_co2Timing.Children.Count == 0)
@@ -506,14 +519,15 @@ internal sealed class DesignPreviewSettings : UserControl
                 AutomationProperties.SetName(input, label);
             }
         }
-        _advancedRespiration.Children.Add(_co2Timing);
-        _advancedRespiration.Children.Add(Text("CO₂ 管路延迟（0–5000 ms）"));
-        _advancedRespiration.Children.Add(Co2TransportDelay);
-        _advancedRespiration.Children.Add(Text("CO₂ 展宽步长（0–500 ms）"));
-        _advancedRespiration.Children.Add(Co2DispersionStep);
+        _co2Shape.Children.Add(_co2Timing);
+        _co2Response.Children.Add(Text("CO₂ 管路延迟（0–5000 ms）"));
+        _co2Response.Children.Add(Co2TransportDelay);
+        _co2Response.Children.Add(Text("CO₂ 展宽步长（0–500 ms）"));
+        _co2Response.Children.Add(Co2DispersionStep);
         AutomationProperties.SetName(Co2TransportDelay, "CO₂ 管路延迟，毫秒");
         AutomationProperties.SetName(Co2DispersionStep, "CO₂ 展宽步长，毫秒");
-        _advancedRespiration.Children.Add(Text("仅影响 CO₂ 采集波形；均设为 0 可关闭。展宽还会增加延迟，并可能改变测得的呼气末值。"));
+        _co2Response.Children.Add(Text("仅影响 CO₂ 采集波形；均设为 0 可关闭。展宽还会增加延迟，并可能改变测得的呼气末值。"));
+        _advancedRespiration.Children.Add(RespirationGroups);
         _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {

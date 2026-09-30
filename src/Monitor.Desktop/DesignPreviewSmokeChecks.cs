@@ -233,6 +233,7 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.Status.Text!.StartsWith("已应用", StringComparison.Ordinal), "plateau equal to baseline accepted");
             window.Settings.Co2PlateauStart.Value = 32.25m; window.ApplySettings();
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            window.Settings.RespirationGroups.SelectedIndex = 1;
             Capture(window, "ui-preview-co2-level-editor.png");
             window.Width = 960; Capture(window, "ui-preview-co2-level-editor-compact.png");
         }
@@ -300,6 +301,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespiratoryRate.Value = 16; window.Settings.InspirationPercent.Value = 50;
             window.Settings.Co2Rise.Value = 700; window.Settings.Co2Fall.Value = 300;
             window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            window.Settings.RespirationGroups.SelectedIndex = 1;
             Capture(window, "ui-preview-co2-timing-editor.png");
             window.Width = 960; Capture(window, "ui-preview-co2-timing-editor-compact.png");
         }
@@ -357,6 +359,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespirationSelection = 0;
             window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
             window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            window.Settings.RespirationGroups.SelectedIndex = 2;
             Capture(window, "ui-preview-co2-response-editor.png");
             window.Width = 960; Capture(window, "ui-preview-co2-response-editor-compact.png");
         }
@@ -411,6 +414,17 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Tabs.SelectedIndex = 0; window.Settings.OpenAdvanced(1);
             Require(ReferenceEquals(live, window.Session) && window.Settings.RespSignalAmplitude.Value == -400 && window.Settings.RespCardiacArtifact.Value == 120,
                 "advanced group navigation and return preserve drafts without applying");
+            window.Settings.Co2CustomPlateau.IsChecked = true; window.Settings.Co2PlateauStart.Value = 32.25m;
+            window.Settings.Co2Rise.Value = 700; window.Settings.Co2TransportDelay.Value = 600;
+            window.Settings.RespirationGroups.SelectedIndex = 1;
+            window.Settings.RespirationGroups.SelectedIndex = 2;
+            window.Settings.Tabs.SelectedIndex = 0; window.Settings.OpenAdvanced(1);
+            Require(window.Settings.RespirationGroups.SelectedIndex == 2 && ReferenceEquals(live, window.Session) &&
+                window.Settings.Co2CustomPlateau.IsChecked == true && window.Settings.Co2PlateauStart.Value == 32.25m &&
+                window.Settings.Co2Rise.Value == 700 && window.Settings.Co2TransportDelay.Value == 600 &&
+                window.Settings.RespSignalAmplitude.Value == -400 && window.Settings.RespCardiacArtifact.Value == 120,
+                "respiration subpages retain selection and all signal/shape/response drafts without applying");
+            window.Settings.RespirationGroups.SelectedIndex = 0;
             Capture(window, "ui-preview-resp-signal-editor.png");
             window.Width = 960; Capture(window, "ui-preview-resp-signal-editor-compact.png");
             Require(window.Settings.SectionPages[5].Compact, "advanced groups use existing compact Fluent navigation");

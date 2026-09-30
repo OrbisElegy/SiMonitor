@@ -118,6 +118,38 @@ internal sealed class SoundSettingsPanel : StackPanel
         UpdateBeatSource();
     }
 
+    internal MonitorSoundPreferences CapturePreferences(MonitorAlertSettings alerts)
+    {
+        static int Percent(double value)
+        {
+            if (!double.IsFinite(value) || value != Math.Truncate(value) || value is < 0 or > 100)
+            { throw new ArgumentException("SoundPreferences.Invalid"); }
+            return (int)value;
+        }
+        var timing = new MonitorSoundTiming(alerts.InfoTone.IsChecked == true,
+            DesignPreviewSettings.ReadVitalValue(alerts.InfoInterval, 1000, "Info 声音间隔"),
+            DesignPreviewSettings.ReadVitalValue(alerts.NoticeInterval, 1000, "Notice 声音间隔"),
+            DesignPreviewSettings.ReadVitalValue(alerts.WarningInterval, 1000, "Warning 声音间隔"),
+            DesignPreviewSettings.ReadVitalValue(alerts.CriticalInterval, 1000, "Critical 声音间隔"));
+        var result = new MonitorSoundPreferences(Percent(Volume.Value), Percent(HeartbeatVolume.Value),
+            HeartbeatEnabled.IsChecked == true, BeatSource.SelectedIndex, PitchSource.SelectedIndex,
+            DesignPreviewSettings.ReadVitalValue(PauseSeconds, 1, "声音暂停时长"), timing);
+        result.Validate(); return result;
+    }
+    internal void RestorePreferences(MonitorSoundPreferences preferences, MonitorAlertSettings alerts)
+    {
+        preferences.Validate();
+        Volume.Value = preferences.Volume; HeartbeatVolume.Value = preferences.HeartbeatVolume;
+        HeartbeatEnabled.IsChecked = preferences.HeartbeatEnabled;
+        BeatSource.SelectedIndex = preferences.BeatSource; PitchSource.SelectedIndex = preferences.PitchSource;
+        PauseSeconds.Value = preferences.PauseSeconds;
+        alerts.InfoTone.IsChecked = preferences.Timing.InfoTone;
+        alerts.InfoInterval.Value = preferences.Timing.InfoMilliseconds / 1000m;
+        alerts.NoticeInterval.Value = preferences.Timing.NoticeMilliseconds / 1000m;
+        alerts.WarningInterval.Value = preferences.Timing.WarningMilliseconds / 1000m;
+        alerts.CriticalInterval.Value = preferences.Timing.CriticalMilliseconds / 1000m;
+    }
+
     internal async Task PreviewAsync()
     {
         if (_closed || _cancellation is not null || !Audition.IsEnabled) { return; }

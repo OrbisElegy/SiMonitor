@@ -37,10 +37,22 @@ internal static class DisplayPreferenceSmokeChecks
                     editor.WarningHigh.Value += 0.25m; editor.CriticalHigh.Value += 0.5m;
                 }
                 alarms.TestLevel.SelectedIndex = 1;
+                var sound = window.Settings.Sound;
+                sound.Volume.Value = 73; sound.HeartbeatVolume.Value = 62;
+                sound.HeartbeatEnabled.IsChecked = false; sound.BeatSource.SelectedIndex = 2;
+                sound.PitchSource.SelectedIndex = 0; sound.PauseSeconds.Value = 77;
+                alarms.InfoTone.IsChecked = true; alarms.InfoInterval.Value = 45;
+                alarms.NoticeInterval.Value = 12.25m; alarms.WarningInterval.Value = 6.5m;
+                alarms.CriticalInterval.Value = 1.75m;
                 Require(!File.Exists(path), "draft edits do not persist");
                 window.ApplySettings();
                 Require(File.Exists(path) && !window.PreferenceNotice.IsVisible, "applied display saves");
                 string saved = File.ReadAllText(path);
+                var soundSession = window.Session;
+                sound.BeatSource.SelectedIndex = -1; window.ApplySettings();
+                Require(ReferenceEquals(soundSession, window.Session) && File.ReadAllText(path) == saved,
+                    "invalid sound source cannot replace session or saved preferences");
+                sound.BeatSource.SelectedIndex = 2;
                 var beforeInvalidAlarm = window.Session;
                 alarms.WarningHeartRate.Value = 190; window.ApplySettings();
                 Require(ReferenceEquals(beforeInvalidAlarm, window.Session) && File.ReadAllText(path) == saved,
@@ -59,6 +71,11 @@ internal static class DisplayPreferenceSmokeChecks
             try
             {
                 var display = reopened.Session.Display;
+                Require(reopened.Settings.Sound.CapturePreferences(reopened.Settings.Alerts) ==
+                    new MonitorSoundPreferences(73, 62, false, 2, 0, 77, new(true, 45000, 12250, 6500, 1750)),
+                    "restart restores volume, beat modes, pause duration and exact alarm timing");
+                Require(!reopened.Settings.Sound.ResumeAlarmAudio.IsEnabled && reopened.Settings.Sound.PublishedAlarm is null,
+                    "restoration does not start a pause or publish an alarm");
                 var alarms = reopened.Settings.Alerts.CapturePreferences();
                 Require(alarms.HeartRate.Enabled && alarms.HeartRate.WarningHigh == 130250 &&
                     alarms.SpO2Enabled && alarms.SpO2Warning == 93500 && alarms.NoExpirationEnabled &&
@@ -80,11 +97,28 @@ internal static class DisplayPreferenceSmokeChecks
             }
             finally { reopened.Close(); }
             string valid = File.ReadAllText(path);
-            var legacy = JsonNode.Parse(valid)!.AsObject(); legacy["Version"] = 1; legacy.Remove("Alarms");
+            var legacy = JsonNode.Parse(valid)!.AsObject(); legacy["Version"] = 1; legacy.Remove("Alarms"); legacy.Remove("Sound");
             File.WriteAllText(path, legacy.ToJsonString());
             var migrated = store.Load(out rejected);
             Require(!rejected && migrated.Alarms is null && migrated.PaperLayout == 1,
                 "version one display configuration remains readable with default alarms");
+            var versionTwo = JsonNode.Parse(valid)!.AsObject(); versionTwo["Version"] = 2; versionTwo.Remove("Sound");
+            File.WriteAllText(path, versionTwo.ToJsonString());
+            Require(store.Load(out rejected).Sound is null && !rejected, "version two retains alarms without requiring sound preferences");
+            foreach (var edit in new Action<JsonObject>[] {
+                d => d.Remove("Sound"),
+                d => d["Sound"]!.AsObject().Remove("Volume"),
+                d => d["Sound"]!["Volume"] = 101,
+                d => d["Sound"]!["BeatSource"] = -1,
+                d => d["Sound"]!["PitchSource"] = 2,
+                d => d["Sound"]!["PauseSeconds"] = 0,
+                d => d["Sound"]!["Timing"] = null,
+                d => d["Sound"]!["Timing"]!["CriticalMilliseconds"] = 2001 })
+            {
+                var corruptSound = JsonNode.Parse(valid)!.AsObject(); edit(corruptSound);
+                File.WriteAllText(path, corruptSound.ToJsonString()); store.Load(out rejected);
+                Require(rejected, "missing or invalid sound preferences fall back safely");
+            }
             foreach (string member in new[] { "Alarms", "HeartRate", "SpO2Enabled", "Additional" })
             {
                 var incomplete = JsonNode.Parse(valid)!.AsObject();
@@ -93,7 +127,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 2", "\"Version\": 99"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 3", "\"Version\": 99"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

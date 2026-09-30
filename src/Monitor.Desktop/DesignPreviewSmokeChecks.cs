@@ -163,6 +163,50 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyVariationRejectionMessages()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            var live = window.Session; var timer = window.ActiveTimer;
+            void Reject(string text)
+            {
+                window.ApplySettings();
+                Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                    window.Settings.Status.Text!.Contains(text, StringComparison.Ordinal), "variation rejection names corrective action and preserves live state");
+            }
+            foreach (int source in Enumerable.Range(0, 3))
+            {
+                window.Settings.CardiacRateEnabled.IsChecked = source == 0;
+                window.Settings.EtCo2Variation.Value = source == 1 ? 1 : 0;
+                window.Settings.OpticalEnabled.IsChecked = source == 2;
+                window.Settings.OpticalVariation.Value = source == 2 ? 1 : 0;
+                foreach (string seed in new[] { "", new string('a', 63), new string('A', 64), new string('g', 64) })
+                { window.Settings.RateSeed.Text = seed; Reject("64 个小写十六进制字符"); }
+            }
+            window.Settings.RateSeed.Text = new string('1', 64);
+            window.Settings.CardiacRateEnabled.IsChecked = true;
+            window.Settings.EcgSelection = 1; Reject("关闭生命体征 → 心率");
+            window.Settings.EcgSelection = 0; window.Settings.EjectionSelection = 2; Reject("1:1 下传");
+            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = false;
+            window.Settings.OpticalEnabled.IsChecked = false; window.Settings.EtCo2Variation.Value = 1;
+            foreach (int target in new[] { 5, 80 })
+            { window.Settings.EtCo2Target.Value = target; Reject("5–80 mmHg"); }
+            window.Settings.EtCo2Target.Value = 40;
+            foreach (int pattern in new[] { 1, 2, 3 })
+            { window.Settings.RespirationSelection = pattern; Reject("仅支持规则呼吸"); }
+            window.Settings.EtCo2Variation.Value = 0; window.Settings.RateSeed.Text = "invalid dormant seed";
+            window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "turning variation off repairs conflict without requiring unused seed");
+            window.Settings.RespirationSelection = 0; window.Settings.EtCo2Target.Value = 6;
+            window.Settings.EtCo2Variation.Value = 1; window.Settings.RateSeed.Text = new string('1', 64);
+            live = window.Session; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "exact lower excursion boundary applies after correction");
+            window.Settings.EtCo2Target.Value = 79; live = window.Session; window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "exact upper excursion boundary applies after correction");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyVitalInputPrecision()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -978,6 +1022,7 @@ internal static class DesignPreviewSmokeChecks
             VerifyCo2LevelEditing();
             VerifyRespirationPageReset();
             VerifyVitalInputPrecision();
+            VerifyVariationRejectionMessages();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

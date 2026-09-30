@@ -408,8 +408,18 @@ internal sealed class DesignPreviewSettings : UserControl
         }
         shell.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
     }
+    internal static int ReadVitalValue(NumericUpDown field, int scale, string name)
+    {
+        if (field.Value is not { } value || value < field.Minimum || value > field.Maximum ||
+            value * scale != decimal.Truncate(value * scale))
+        {
+            throw new ArgumentException("Preview.InvalidVitalValue",
+                $"{name}（{field.Minimum}–{field.Maximum}，最小单位 {1m / scale}）");
+        }
+        return checked((int)(value * scale));
+    }
     internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true
-        ? checked((int)((OpticalTarget.Value ?? throw new ArgumentException("SpO2 target required")) * 1000)) : null;
+        ? ReadVitalValue(OpticalTarget, 1000, "SpO₂ 目标") : null;
     internal (int Period, int Inspiration) ReadBreathingTiming()
     {
         var timing = ReadCo2Timing();

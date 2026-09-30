@@ -163,6 +163,51 @@ internal static class DesignPreviewSmokeChecks
         window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
         Capture(window, "ui-preview-seeded-vitals.png");
     }
+    private static void VerifyVitalInputPrecision()
+    {
+        var window = new DesignPreviewWindow(); window.Show();
+        try
+        {
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.OpticalEnabled.IsChecked = true;
+            window.ApplySettings();
+            var live = window.Session; var timer = window.ActiveTimer;
+            foreach (var (field, invalid, valid, name) in new[]
+            {
+                (window.Settings.HeartRate, 75.5m, 75m, "心率目标"),
+                (window.Settings.RateVariation, .15m, .1m, "心搏周期波动"),
+                (window.Settings.EtCo2Variation, .015m, .01m, "CO₂ 逐呼吸波动"),
+                (window.Settings.AbpPulseGain, 1.0005m, 1.001m, "ABP 脉搏分量倍率"),
+                (window.Settings.PaPulseGain, 1.0005m, 1.001m, "PA 脉搏分量倍率"),
+                (window.Settings.CvpBaseline, 6.005m, 6.01m, "CVP 基线"),
+                (window.Settings.OpticalTarget, 98.0005m, 98.001m, "SpO₂ 目标"),
+                (window.Settings.OpticalVariation, .0005m, .001m, "SpO₂ 波动幅度"),
+                (window.Settings.OpticalModulation, 1.0005m, 1.001m, "光学脉动幅度")
+            })
+            {
+                decimal? original = field.Value;
+                foreach (decimal? value in new decimal?[] { invalid, null })
+                {
+                    field.Value = value; window.ApplySettings();
+                    Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                        window.Settings.Status.Text!.Contains(name, StringComparison.Ordinal) && window.Settings.Status.Text.Contains("最小单位", StringComparison.Ordinal),
+                        "unsupported vital precision or missing value rejects without silent truncation");
+                }
+                field.Value = valid; window.ApplySettings();
+                Require(!ReferenceEquals(live, window.Session), "exact source precision remains supported");
+                live = window.Session; timer = window.ActiveTimer; field.Value = original;
+            }
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.OpticalEnabled.IsChecked = false;
+            window.Settings.HeartRate.Value = null; window.Settings.RateVariation.Value = null;
+            window.Settings.OpticalTarget.Value = null; window.Settings.OpticalVariation.Value = null; window.Settings.OpticalModulation.Value = null;
+            window.ApplySettings();
+            Require(!ReferenceEquals(live, window.Session), "disabled cardiac and optical sources ignore dormant invalid drafts");
+            live = window.Session;
+            window.Settings.OpticalEnabled.IsChecked = true; window.ApplySettings();
+            Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("SpO₂ 目标", StringComparison.Ordinal),
+                "reenabling source restores field validation");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyRespirationPageReset()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -932,6 +977,7 @@ internal static class DesignPreviewSmokeChecks
             VerifyCo2TimingEditing();
             VerifyCo2LevelEditing();
             VerifyRespirationPageReset();
+            VerifyVitalInputPrecision();
         }
         finally { window.Close(); }
         Console.WriteLine("ok: responsive paper/live monitor, fixed skin slots, clipping, settings separation and timer lifecycle");

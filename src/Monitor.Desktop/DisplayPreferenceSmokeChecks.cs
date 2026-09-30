@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Text.Json.Nodes;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Preferences;
 
@@ -25,10 +26,26 @@ internal static class DisplayPreferenceSmokeChecks
                 window.Settings.Slots[0].Maximum.Text = "90";
                 window.Settings.Slots[0].Speed.SelectedIndex = 0;
                 window.Settings.PaperLayout.SelectedIndex = 1;
+                var alarms = window.Settings.Alerts;
+                alarms.HeartRateEnabled.IsChecked = true; alarms.WarningHeartRate.Value = 130.25m;
+                alarms.SpO2Enabled.IsChecked = true; alarms.WarningSpO2.Value = 93.5m;
+                alarms.NoExpirationEnabled.IsChecked = true; alarms.NoExpirationSeconds.Value = 35;
+                alarms.NoticeColorEnabled.IsChecked = false;
+                foreach (var d in MeasuredLimitNotice.Descriptors)
+                {
+                    var editor = alarms.AdditionalLimits.Editors[d.Numeric]; editor.Enabled.IsChecked = true;
+                    editor.WarningHigh.Value += 0.25m; editor.CriticalHigh.Value += 0.5m;
+                }
+                alarms.TestLevel.SelectedIndex = 1;
                 Require(!File.Exists(path), "draft edits do not persist");
                 window.ApplySettings();
                 Require(File.Exists(path) && !window.PreferenceNotice.IsVisible, "applied display saves");
                 string saved = File.ReadAllText(path);
+                var beforeInvalidAlarm = window.Session;
+                alarms.WarningHeartRate.Value = 190; window.ApplySettings();
+                Require(ReferenceEquals(beforeInvalidAlarm, window.Session) && File.ReadAllText(path) == saved,
+                    "invalid enabled alarm ordering preserves session and saved configuration");
+                alarms.WarningHeartRate.Value = 130.25m;
                 window.Settings.Slots[0].Minimum.Text = "invalid"; var live = window.Session;
                 window.ApplySettings();
                 Require(ReferenceEquals(live, window.Session) && File.ReadAllText(path) == saved, "invalid application preserves file and live state");
@@ -42,6 +59,18 @@ internal static class DisplayPreferenceSmokeChecks
             try
             {
                 var display = reopened.Session.Display;
+                var alarms = reopened.Settings.Alerts.CapturePreferences();
+                Require(alarms.HeartRate.Enabled && alarms.HeartRate.WarningHigh == 130250 &&
+                    alarms.SpO2Enabled && alarms.SpO2Warning == 93500 && alarms.NoExpirationEnabled &&
+                    alarms.NoExpirationSeconds == 35 && !alarms.NoticeColorEnabled &&
+                    alarms.Additional.Values.All(v => v.Enabled) && reopened.Settings.Alerts.TestLevel.SelectedIndex == 0,
+                    "restart restores alarm configuration without transient test notices");
+                foreach (var d in MeasuredLimitNotice.Descriptors)
+                {
+                    Require(alarms.Additional[d.Numeric].WarningHigh == d.TeachingDefaults.WarningHigh + d.Divisor / 4 &&
+                        alarms.Additional[d.Numeric].CriticalHigh == d.TeachingDefaults.CriticalHigh + d.Divisor / 2,
+                        "each measurement restores thresholds in its native units");
+                }
                 Require(display.Skin == MonitorSkin.ThreeRows && display.Slots[0] == new MonitorDisplaySlot(4, false, new(-2.5, 90), 125) &&
                     reopened.Settings.ReadDisplay().Slots.SequenceEqual(display.Slots) && reopened.Settings.PaperLayout.SelectedIndex == 1,
                     "restart restores applied configuration in source display and editors, ignoring uncommitted draft");
@@ -51,13 +80,38 @@ internal static class DisplayPreferenceSmokeChecks
             }
             finally { reopened.Close(); }
             string valid = File.ReadAllText(path);
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 1", "\"Version\": 2"),
+            var legacy = JsonNode.Parse(valid)!.AsObject(); legacy["Version"] = 1; legacy.Remove("Alarms");
+            File.WriteAllText(path, legacy.ToJsonString());
+            var migrated = store.Load(out rejected);
+            Require(!rejected && migrated.Alarms is null && migrated.PaperLayout == 1,
+                "version one display configuration remains readable with default alarms");
+            foreach (string member in new[] { "Alarms", "HeartRate", "SpO2Enabled", "Additional" })
+            {
+                var incomplete = JsonNode.Parse(valid)!.AsObject();
+                if (member == "Alarms") { incomplete.Remove(member); }
+                else { incomplete["Alarms"]!.AsObject().Remove(member); }
+                File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
+                Require(rejected, "missing alarm configuration members are rejected");
+            }
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 2", "\"Version\": 99"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {
                 File.WriteAllText(path, invalid);
                 Require(store.Load(out rejected).Display.Skin == MonitorSkin.FiveRows && rejected && File.ReadAllText(path) == invalid,
                     "malformed, incompatible and oversized files fall back without overwriting evidence");
+            }
+            foreach (var edit in new Action<JsonObject>[] {
+                a => a["HeartRate"]!["WarningHigh"] = 999999,
+                a => a["HeartRate"]!["WarningLow"] = null,
+                a => a["SpO2Critical"] = 99000,
+                a => a["NoExpirationSeconds"] = 121,
+                a => a["Additional"] = new JsonObject(),
+                a => a["Additional"] = null })
+            {
+                var corrupted = JsonNode.Parse(valid)!.AsObject(); edit(corrupted["Alarms"]!.AsObject());
+                File.WriteAllText(path, corrupted.ToJsonString()); store.Load(out rejected);
+                Require(rejected, "invalid alarm ranges, ordering and channel sets reject safely");
             }
             var damaged = new DesignPreviewWindow(path); damaged.Show();
             try { Require(damaged.PreferenceNotice.IsVisible && damaged.Settings.Status.Text!.Contains("默认值", StringComparison.Ordinal), "load failure is visible"); }

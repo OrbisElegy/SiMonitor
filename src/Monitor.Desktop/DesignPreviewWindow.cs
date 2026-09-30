@@ -56,11 +56,12 @@ internal sealed class DesignPreviewWindow : Window
         Settings = new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration, ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this));
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+        if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         PreferenceNotice.IsVisible = rejected;
         if (rejected)
         {
-            PreferenceNotice.Text = "显示配置无法读取，已使用默认值。";
-            Settings.Status.Text = "显示配置无法读取，已使用默认值；应用有效设置后将重新保存。";
+            PreferenceNotice.Text = "显示／报警配置无法读取，已使用默认值。";
+            Settings.Status.Text = "显示／报警配置无法读取，已使用默认值；应用有效设置后将重新保存。";
         }
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
@@ -136,6 +137,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         try
         {
+            var alarms = _preferences is null ? null : Settings.Alerts.CapturePreferences();
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
             var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
@@ -200,12 +202,14 @@ internal sealed class DesignPreviewWindow : Window
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
             if (_preferences is not null)
             {
-                bool saved = _preferences.Save(new(next.Display, paperLayout));
+                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms));
                 PreferenceNotice.IsVisible = !saved;
-                PreferenceNotice.Text = saved ? "" : "显示配置保存失败；本次运行已生效。";
-                if (!saved) { Settings.Status.Text += "显示配置保存失败，重启后不会保留本次显示更改。"; }
+                PreferenceNotice.Text = saved ? "" : "显示／报警配置保存失败；本次运行已生效。";
+                if (!saved) { Settings.Status.Text += "显示／报警配置保存失败，重启后不会保留本次显示／报警更改。"; }
             }
         }
+        catch (ArgumentException exception) when (exception.Message == "AlarmPreferences.Invalid")
+        { Settings.Status.Text = "未应用或保存：启用的报警阈值须完整且按 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限排列；SpO₂ 须 Critical 下限 < Warning 下限。CO₂ 未检出呼吸时限须为 5–120 秒。请检查报警页。原波形会话保持不变。"; }
         catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")
         { Settings.Status.Text = "未应用：共用种子须为 64 个小写十六进制字符（0–9、a–f）；可在生命体征 → 共用随机种子中点击生成随机种子。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.CardiacRateRequiresSinus")

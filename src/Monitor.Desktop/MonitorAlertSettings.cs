@@ -62,6 +62,45 @@ internal sealed class MonitorAlertSettings : StackPanel
         Row("Warning（3+2）×2 组间隔（秒）", WarningInterval); Row("Critical 单声间隔（秒）", CriticalInterval);
         Children.Add(Text("间隔从每组起点计算；音色和时序为可调教学实现。"));
     }
+    internal MonitorAlarmPreferences CapturePreferences()
+    {
+        static int? Read(NumericUpDown field, int scale)
+        {
+            if (field.Value is null) { return null; }
+            return DesignPreviewSettings.ReadVitalValue(field, scale, "报警阈值");
+        }
+        var result = new MonitorAlarmPreferences(
+            new(HeartRateEnabled.IsChecked == true, Read(CriticalLowHeartRate, 1000), Read(WarningLowHeartRate, 1000), Read(WarningHeartRate, 1000), Read(CriticalHeartRate, 1000)),
+            SpO2Enabled.IsChecked == true, Read(WarningSpO2, 1000), Read(CriticalSpO2, 1000),
+            NoExpirationEnabled.IsChecked == true, Read(NoExpirationSeconds, 1),
+            MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d =>
+            {
+                var editor = AdditionalLimits.Editors[d.Numeric];
+                return new MeasurementLimits(editor.Enabled.IsChecked == true, Read(editor.CriticalLow, d.Divisor),
+                    Read(editor.WarningLow, d.Divisor), Read(editor.WarningHigh, d.Divisor), Read(editor.CriticalHigh, d.Divisor));
+            }), NoticeColorEnabled.IsChecked == true);
+        result.Validate(); return result;
+    }
+    internal void RestorePreferences(MonitorAlarmPreferences preferences)
+    {
+        preferences.Validate();
+        HeartRateEnabled.IsChecked = preferences.HeartRate.Enabled;
+        CriticalLowHeartRate.Value = preferences.HeartRate.CriticalLow / 1000m;
+        WarningLowHeartRate.Value = preferences.HeartRate.WarningLow / 1000m;
+        WarningHeartRate.Value = preferences.HeartRate.WarningHigh / 1000m;
+        CriticalHeartRate.Value = preferences.HeartRate.CriticalHigh / 1000m;
+        SpO2Enabled.IsChecked = preferences.SpO2Enabled;
+        WarningSpO2.Value = preferences.SpO2Warning / 1000m; CriticalSpO2.Value = preferences.SpO2Critical / 1000m;
+        NoExpirationEnabled.IsChecked = preferences.NoExpirationEnabled; NoExpirationSeconds.Value = preferences.NoExpirationSeconds;
+        NoticeColorEnabled.IsChecked = preferences.NoticeColorEnabled;
+        foreach (var d in MeasuredLimitNotice.Descriptors)
+        {
+            var saved = preferences.Additional[d.Numeric]; var editor = AdditionalLimits.Editors[d.Numeric];
+            editor.Enabled.IsChecked = saved.Enabled;
+            editor.CriticalLow.Value = saved.CriticalLow / (decimal)d.Divisor; editor.WarningLow.Value = saved.WarningLow / (decimal)d.Divisor;
+            editor.WarningHigh.Value = saved.WarningHigh / (decimal)d.Divisor; editor.CriticalHigh.Value = saved.CriticalHigh / (decimal)d.Divisor;
+        }
+    }
     internal MonitorSoundTiming Timing => new(InfoTone.IsChecked == true, Milliseconds(InfoInterval), Milliseconds(NoticeInterval), Milliseconds(WarningInterval), Milliseconds(CriticalInterval));
     internal IEnumerable<MonitorNotice> Notices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {

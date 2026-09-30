@@ -12,7 +12,7 @@ namespace Monitor.Desktop;
 
 internal static class DesktopInformationPages
 {
-    internal sealed record Topic(string Id, string Category, string Text);
+    internal sealed record Topic(string Id, string Category, string Title, string Text);
     private static readonly Lazy<Topic[]> Topics = new(() =>
     {
         using var stream = typeof(DesktopInformationPages).Assembly.GetManifestResourceStream("Monitor.Help.Topics")!;
@@ -41,13 +41,17 @@ internal static class DesktopInformationPages
         {
             string[] words = (search.Text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             var matches = Topics.Value.Where(t => (category.SelectedIndex <= 0 || t.Category == categories[category.SelectedIndex]) &&
-                words.All(word => (t.Category + " " + t.Text).Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
+                words.All(word => (t.Category + " " + t.Title + " " + t.Text).Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
             panel.Children.Clear(); scroll.Offset = default;
             count.Text = matches.Length == 0 ? "没有匹配说明，请更换关键词或分类。" : $"找到 {matches.Length} 条说明";
             foreach (var group in matches.GroupBy(t => t.Category))
             {
                 panel.Children.Add(new TextBlock { Text = group.Key, FontSize = 20, FontWeight = FontWeight.SemiBold });
-                foreach (var entry in group) { panel.Children.Add(new SelectableTextBlock { Text = entry.Text, TextWrapping = TextWrapping.Wrap }); }
+                foreach (var entry in group)
+                {
+                    panel.Children.Add(new TextBlock { Text = entry.Title, FontSize = 16, FontWeight = FontWeight.SemiBold });
+                    panel.Children.Add(new SelectableTextBlock { Text = entry.Text, TextWrapping = TextWrapping.Wrap });
+                }
             }
         }
         search.TextChanged += (_, _) => Refresh(); category.SelectionChanged += (_, _) => Refresh(); Refresh();
@@ -62,8 +66,18 @@ internal static class DesktopInformationPages
         root.Children.Add(title);
         var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);
-        var notice = new TextBlock { Text = "原创代码：AGPL-3.0-only。第三方组件保留各自许可。以下为当前依赖清单及已随附的许可正文；完整发布包许可审核尚未完成。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
-        Grid.SetRow(notice, 2); root.Children.Add(notice);
+        var notice = new TextBlock { Text = "原创代码：AGPL-3.0-or-later。第三方组件保留各自许可。以下为当前依赖清单及已随附的许可正文；完整发布包许可审核尚未完成。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
+        var information = new StackPanel { Spacing = 12 };
+        if (!thirdParty)
+        {
+            information.Children.Add(new SelectableTextBlock { Text = ProductIdentity.CopyrightNotice, TextWrapping = TextWrapping.Wrap });
+            var repository = new HyperlinkButton { Content = "GitHub · OrbisElegy/SiMonitor", NavigateUri = new Uri(ProductIdentity.RepositoryUrl), HorizontalAlignment = HorizontalAlignment.Left };
+            AutomationProperties.SetName(repository, "项目 GitHub 仓库");
+            information.Children.Add(repository);
+            information.Children.Add(new TextBlock { Text = "仓库目前为私有，访问需要授权。", TextWrapping = TextWrapping.Wrap });
+        }
+        else { information.Children.Add(notice); }
+        Grid.SetRow(information, 2); root.Children.Add(information);
         var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith("Monitor.Legal.", StringComparison.Ordinal) &&
             (thirdParty ? n is not ("Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md") : n is "Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md")).Order().ToArray();
         var selector = new ComboBox { ItemsSource = names.Select(n => n["Monitor.Legal.".Length..]).ToArray(), MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 12) };

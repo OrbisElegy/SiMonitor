@@ -142,6 +142,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button ResetAll { get; } = new() { Content = "恢复全部默认设置", MinHeight = 44, Margin = new Thickness(12, 0, 0, 0) };
     internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal ListBox Tabs { get; } = new();
@@ -302,7 +303,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         }, handledEventsToo: true);
         Tabs.SelectedIndex = 0;
         var controls = new WrapPanel { Margin = new Thickness(20, 12), Orientation = Orientation.Horizontal };
-        Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run);
+        Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run); controls.Children.Add(ResetAll);
+        ToolTip.SetTip(ResetAll, "重置所有设置和未应用编辑，保存默认值，并从头开始模拟；声音保持关闭。");
         Apply.Click += (_, _) => apply(); Run.Click += (_, _) => run();
         var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
         _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);

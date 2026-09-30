@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 #include "sim_audio.h"
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_ENABLE_ONLY_SPECIFIC_BACKENDS
@@ -38,15 +38,15 @@ struct sa_output {
 #endif
 };
 
-static void snapshot_periods(sa_output* s)
+static void snapshot_periods(sa_output* output)
 {
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
     ma_IAudioClient3* client = NULL;
     MA_WAVEFORMATEX* format = NULL;
     ma_uint32 current = 0, normal = 0, fundamental = 0, minimum = 0, maximum = 0;
     HRESULT hr;
-    s->period_status = 2;
-    hr = ma_IAudioClient_QueryInterface((ma_IAudioClient*)s->device.wasapi.pAudioClientPlayback,
+    output->period_status = 2;
+    hr = ma_IAudioClient_QueryInterface((ma_IAudioClient*)output->device.wasapi.pAudioClientPlayback,
         &MA_IID_IAudioClient3, (void**)&client);
     if (SUCCEEDED(hr)) {
         hr = ma_IAudioClient3_GetCurrentSharedModeEnginePeriod(client, &format, &current);
@@ -55,39 +55,39 @@ static void snapshot_periods(sa_output* s)
             hr = ma_IAudioClient3_GetSharedModeEnginePeriod(client, format,
                 &normal, &fundamental, &minimum, &maximum);
             if (SUCCEEDED(hr)) {
-                s->default_period = normal; s->fundamental_period = fundamental;
-                s->minimum_period = minimum; s->maximum_period = maximum;
-                s->current_period = current;
-                s->engine_rate = format->nSamplesPerSec;
-                s->engine_channels = format->nChannels;
-                s->period_status = 1;
+                output->default_period = normal; output->fundamental_period = fundamental;
+                output->minimum_period = minimum; output->maximum_period = maximum;
+                output->current_period = current;
+                output->engine_rate = format->nSamplesPerSec;
+                output->engine_channels = format->nChannels;
+                output->period_status = 1;
             }
         }
-        if (format != NULL) ma_CoTaskMemFree((&s->context), format);
+        if (format != NULL) ma_CoTaskMemFree((&output->context), format);
         ma_IAudioClient3_Release(client);
     }
-    s->period_hr = (ma_uint32)hr;
+    output->period_hr = (ma_uint32)hr;
 #else
-    (void)s; /* Unsupported/test builds never synthesize Windows periods. */
+    (void)output; /* Unsupported/test builds never synthesize Windows periods. */
 #endif
 }
 
-static void consume(sa_output* s, float* pcm, ma_uint32 frames)
+static void consume(sa_output* output, float* pcm, ma_uint32 frames)
 {
     ma_uint32 done = 0;
     memset(pcm, 0, (size_t)frames * sizeof(float));
-    if (ma_atomic_load_32(&s->retired)) return;
+    if (ma_atomic_load_32(&output->retired)) return;
     while (done < frames) {
         void* p = NULL;
         ma_uint32 count = frames - done;
-        if (ma_pcm_rb_acquire_read(&s->ring, &count, &p) != MA_SUCCESS || count == 0) break;
+        if (ma_pcm_rb_acquire_read(&output->ring, &count, &p) != MA_SUCCESS || count == 0) break;
         memcpy(pcm + done, p, (size_t)count * sizeof(float));
-        ma_pcm_rb_commit_read(&s->ring, count);
+        ma_pcm_rb_commit_read(&output->ring, count);
         done += count;
     }
     if (done != frames) {
-        ma_atomic_store_32(&s->missing, frames - done);
-        ma_atomic_store_32(&s->retired, 1);
+        ma_atomic_store_32(&output->missing, frames - done);
+        ma_atomic_store_32(&output->retired, 1);
     }
 }
 static void data_callback(ma_device* device, void* output, const void* input, ma_uint32 frames)
@@ -100,14 +100,14 @@ static void notification_callback(const ma_device_notification* notification)
     if (notification->type == ma_device_notification_type_stopped ||
         notification->type == ma_device_notification_type_rerouted ||
         notification->type == ma_device_notification_type_interruption_began) {
-        sa_output* s = (sa_output*)notification->pDevice->pUserData;
-        ma_atomic_exchange_32(&s->retired, 2);
+        sa_output* output = (sa_output*)notification->pDevice->pUserData;
+        ma_atomic_exchange_32(&output->retired, 2);
     }
 }
 uint32_t sa_abi_version(void) { return 1; }
-int32_t sa_open(const char* id, uint32_t capacity_ms, sa_output** out)
+int32_t sa_open(const char* device_id_utf8, uint32_t capacity_ms, sa_output** out)
 {
-    sa_output* s;
+    sa_output* output;
     ma_backend backend;
     ma_device_config config;
 #ifdef _WIN32
@@ -115,21 +115,21 @@ int32_t sa_open(const char* id, uint32_t capacity_ms, sa_output** out)
 #endif
     if (!out) return -1;
     *out = NULL;
-    if (capacity_ms < 20 || capacity_ms > 100 || (id && !id[0])) return -1;
+    if (capacity_ms < 20 || capacity_ms > 100 || (device_id_utf8 && !device_id_utf8[0])) return -1;
 #ifdef SIM_AUDIO_TEST
-    if (id) return -2;
+    if (device_id_utf8) return -2;
     backend = ma_backend_null;
 #elif defined(_WIN32)
     backend = ma_backend_wasapi;
 #else
-    (void)id;
+    (void)device_id_utf8;
     return -2; /* Never silently fall back to null/another OS backend. */
 #endif
-    s = (sa_output*)calloc(1, sizeof(*s));
-    if (!s) return -2;
-    if (ma_context_init(&backend, 1, NULL, &s->context) != MA_SUCCESS) { free(s); return -2; }
-    if (ma_pcm_rb_init(ma_format_f32, 1, 48 * capacity_ms, NULL, NULL, &s->ring) != MA_SUCCESS) {
-        ma_context_uninit(&s->context); free(s); return -2;
+    output = (sa_output*)calloc(1, sizeof(*output));
+    if (!output) return -2;
+    if (ma_context_init(&backend, 1, NULL, &output->context) != MA_SUCCESS) { free(output); return -2; }
+    if (ma_pcm_rb_init(ma_format_f32, 1, 48 * capacity_ms, NULL, NULL, &output->ring) != MA_SUCCESS) {
+        ma_context_uninit(&output->context); free(output); return -2;
     }
     config = ma_device_config_init(ma_device_type_playback);
     config.playback.format = ma_format_f32;
@@ -140,74 +140,74 @@ int32_t sa_open(const char* id, uint32_t capacity_ms, sa_output** out)
     config.wasapi.noAutoConvertSRC = MA_TRUE;
     config.dataCallback = data_callback;
     config.notificationCallback = notification_callback;
-    config.pUserData = s;
+    config.pUserData = output;
 #ifdef _WIN32
-    if (id) {
+    if (device_id_utf8) {
         memset(&selected, 0, sizeof(selected));
-        if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, id, -1,
+        if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, device_id_utf8, -1,
                 (LPWSTR)selected.wasapi, 64)) {
-            ma_pcm_rb_uninit(&s->ring); ma_context_uninit(&s->context); free(s); return -1;
+            ma_pcm_rb_uninit(&output->ring); ma_context_uninit(&output->context); free(output); return -1;
         }
         config.playback.pDeviceID = &selected;
     }
 #endif
-    if (ma_device_init(&s->context, &config, &s->device) != MA_SUCCESS) {
-        ma_pcm_rb_uninit(&s->ring); ma_context_uninit(&s->context); free(s); return -2;
+    if (ma_device_init(&output->context, &config, &output->device) != MA_SUCCESS) {
+        ma_pcm_rb_uninit(&output->ring); ma_context_uninit(&output->context); free(output); return -2;
     }
-    snapshot_periods(s);
+    snapshot_periods(output);
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
     /* Own a reference for this stream generation, not a reroutable raw client. */
-    s->clock_hr = ma_IAudioClient_GetService((ma_IAudioClient*)s->device.wasapi.pAudioClientPlayback,
-        &sa_iid_audio_clock, (void**)&s->clock);
+    output->clock_hr = ma_IAudioClient_GetService((ma_IAudioClient*)output->device.wasapi.pAudioClientPlayback,
+        &sa_iid_audio_clock, (void**)&output->clock);
 #endif
-    *out = s;
+    *out = output;
     return 0;
 }
-int32_t sa_submit(sa_output* s, const float* pcm, uint32_t frames)
+int32_t sa_submit(sa_output* output, const float* pcm, uint32_t frames)
 {
     ma_uint32 done = 0, i;
-    if (!s || (!pcm && frames)) return -1;
-    if (ma_atomic_load_32(&s->retired)) return -4;
-    if (frames > ma_pcm_rb_available_write(&s->ring)) return -3;
+    if (!output || (!pcm && frames)) return -1;
+    if (ma_atomic_load_32(&output->retired)) return -4;
+    if (frames > ma_pcm_rb_available_write(&output->ring)) return -3;
     for (i = 0; i < frames; i++) if (!isfinite(pcm[i]) || fabsf(pcm[i]) > 1) return -1;
     while (done < frames) {
         void* p = NULL;
         ma_uint32 count = frames - done;
-        ma_pcm_rb_acquire_write(&s->ring, &count, &p);
+        ma_pcm_rb_acquire_write(&output->ring, &count, &p);
         memcpy(p, pcm + done, (size_t)count * sizeof(float));
-        ma_pcm_rb_commit_write(&s->ring, count);
+        ma_pcm_rb_commit_write(&output->ring, count);
         done += count;
     }
-    return ma_atomic_load_32(&s->retired) ? -4 : 0;
+    return ma_atomic_load_32(&output->retired) ? -4 : 0;
 }
-int32_t sa_start(sa_output* s)
+int32_t sa_start(sa_output* output)
 {
-    if (!s) return -1;
-    if (ma_atomic_load_32(&s->retired)) return -4;
-    return ma_device_start(&s->device) == MA_SUCCESS ? 0 : -2;
+    if (!output) return -1;
+    if (ma_atomic_load_32(&output->retired)) return -4;
+    return ma_device_start(&output->device) == MA_SUCCESS ? 0 : -2;
 }
-int32_t sa_close(sa_output* s)
+int32_t sa_close(sa_output* output)
 {
-    if (!s) return -1;
-    ma_atomic_store_32(&s->retired, 2);
-    if (ma_device_is_started(&s->device) && ma_device_stop(&s->device) != MA_SUCCESS) return -2;
-    ma_device_uninit(&s->device); /* Stops/joins device worker before freeing PCM. */
+    if (!output) return -1;
+    ma_atomic_store_32(&output->retired, 2);
+    if (ma_device_is_started(&output->device) && ma_device_stop(&output->device) != MA_SUCCESS) return -2;
+    ma_device_uninit(&output->device); /* Stops/joins device worker before freeing PCM. */
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
-    if (s->clock) s->clock->lpVtbl->Release(s->clock);
+    if (output->clock) output->clock->lpVtbl->Release(output->clock);
 #endif
-    ma_pcm_rb_uninit(&s->ring);
-    ma_context_uninit(&s->context);
-    free(s);
+    ma_pcm_rb_uninit(&output->ring);
+    ma_context_uninit(&output->context);
+    free(output);
     return 0;
 }
-uint32_t sa_info(sa_output* s, uint32_t key)
+uint32_t sa_info(sa_output* output, uint32_t key)
 {
-    if (!s) return 0;
+    if (!output) return 0;
     switch (key) {
-        case 1: return s->device.playback.internalSampleRate;
-        case 2: return s->device.playback.internalChannels;
+        case 1: return output->device.playback.internalSampleRate;
+        case 2: return output->device.playback.internalChannels;
         case 3:
-            switch (s->device.playback.internalFormat) {
+            switch (output->device.playback.internalFormat) {
                 case ma_format_f32: return 1;
                 case ma_format_s16: return 2;
                 case ma_format_s24: return 3;
@@ -215,37 +215,37 @@ uint32_t sa_info(sa_output* s, uint32_t key)
                 case ma_format_u8: return 5;
                 default: return 0;
             }
-        case 4: return s->device.playback.internalPeriodSizeInFrames;
+        case 4: return output->device.playback.internalPeriodSizeInFrames;
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
-        case 5: return s->device.wasapi.actualBufferSizeInFramesPlayback;
+        case 5: return output->device.wasapi.actualBufferSizeInFramesPlayback;
 #endif
-        case 6: return ma_atomic_load_32(&s->retired);
-        case 7: return ma_atomic_load_32(&s->missing);
-        case 8: return ma_pcm_rb_available_write(&s->ring); /* Producer only. */
-        case 10: return s->period_status;
-        case 11: return s->default_period;
-        case 12: return s->fundamental_period;
-        case 13: return s->minimum_period;
-        case 14: return s->maximum_period;
-        case 15: return s->current_period;
-        case 16: return s->engine_rate;
-        case 17: return s->period_hr;
-        case 18: return s->engine_channels;
+        case 6: return ma_atomic_load_32(&output->retired);
+        case 7: return ma_atomic_load_32(&output->missing);
+        case 8: return ma_pcm_rb_available_write(&output->ring); /* Producer only. */
+        case 10: return output->period_status;
+        case 11: return output->default_period;
+        case 12: return output->fundamental_period;
+        case 13: return output->minimum_period;
+        case 14: return output->maximum_period;
+        case 15: return output->current_period;
+        case 16: return output->engine_rate;
+        case 17: return output->period_hr;
+        case 18: return output->engine_channels;
         default: return 0;
     }
 }
-int32_t sa_clock_sample(sa_output* s, uint64_t* position,
+int32_t sa_clock_sample(sa_output* output, uint64_t* position,
     uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult)
 {
     if (!position || !frequency || !qpc_100ns || !hresult) return -1;
     *position = 0; *frequency = 0; *qpc_100ns = 0; *hresult = 0;
-    if (!s) return -1;
-    if (ma_atomic_load_32(&s->retired)) return -4;
+    if (!output) return -1;
+    if (ma_atomic_load_32(&output->retired)) return -4;
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
     {
-        IAudioClock* clock = s->clock;
+        IAudioClock* clock = output->clock;
         UINT64 p = 0, f = 0, q = 0;
-        HRESULT hr = s->clock_hr;
+        HRESULT hr = output->clock_hr;
         if (SUCCEEDED(hr) && clock != NULL) {
             hr = clock->lpVtbl->GetFrequency(clock, &f);
             if (hr == S_OK) hr = clock->lpVtbl->GetPosition(clock, &p, &q);
@@ -262,5 +262,5 @@ int32_t sa_clock_sample(sa_output* s, uint64_t* position,
     return -2;
 }
 #ifdef SIM_AUDIO_TEST
-void sa_test_render(sa_output* s, float* pcm, uint32_t frames) { consume(s, pcm, frames); }
+void sa_test_render(sa_output* output, float* pcm, uint32_t frames) { consume(output, pcm, frames); }
 #endif

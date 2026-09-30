@@ -1,7 +1,7 @@
 # 项目许可范围
 
 自V0.5起，项目原创代码使用GNU Affero General Public License version 3。
-本仓库原创代码按 **AGPL-3.0-only** 发布；未额外授予“或任何后续版本”的选择。
+许可标识为 **AGPL-3.0-or-later**：本仓库原创代码允许按第3版或任何后续版本使用。
 完整许可正文见仓库根目录[LICENSE](../LICENSE)，来源为
 [GNU官方纯文本](https://www.gnu.org/licenses/agpl-3.0.txt)。
 

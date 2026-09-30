@@ -87,7 +87,7 @@ Physical end-to-end audio latency is not a V0.5 acceptance gate.
 The manifest detects accidental changes; it is not a signature or authenticity
 proof. Retain the manifest when transferring this directory for testing.
 
-Project license: AGPL-3.0-only. Existing attribution and dependency materials
+Project license: AGPL-3.0-or-later. Existing attribution and dependency materials
 are under legal/. Third-party review and matching complete-source delivery
 are still required before a public binary release. These copied materials
 do not claim to be a complete third-party redistribution license bundle.

@@ -31,7 +31,7 @@ internal sealed class DesignPreviewWindow : Window
     private DispatcherTimer? _timer;
     private long _lastTick;
     private bool _closed;
-    internal DesignPreviewSettings Settings { get; }
+    internal DesignPreviewSettings Settings { get; private set; }
     internal int Page { get; private set; }
     internal LocalMonitorPreviewSession Session => _session;
     internal DispatcherTimer? ActiveTimer => _timer;
@@ -49,9 +49,6 @@ internal sealed class DesignPreviewWindow : Window
         _preferences = preferencesPath is null ? null : new(preferencesPath);
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
-        DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
-            ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
-            () => new WaveformDemoWindow(projected: true).Show(this));
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
         _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
@@ -81,16 +78,7 @@ internal sealed class DesignPreviewWindow : Window
             PreferenceNotice.Text = "部分本地配置无法恢复，相关设置已使用默认值。";
             Settings.Status.Text = "部分本地配置无法恢复，相关设置已使用默认值；应用有效设置后将重新保存。";
         }
-        MonitorView.AdditionalNotices = CurrentNotices;
-        MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
-        Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
-        Settings.Sound.AudioPauseChanged += () => MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
-        Settings.Sound.OutputNoticeChanged += () =>
-        {
-            if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
-        };
-        MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
-        Settings.Apply.Classes.Add("accent");
+        ConnectSettings();
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
         var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
@@ -127,6 +115,32 @@ internal sealed class DesignPreviewWindow : Window
         Grid.SetRow(card, 1); main.Children.Add(card); Content = root;
         Opened += (_, _) => Start(); Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         SelectPage(0); UpdateState();
+    }
+    private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
+            ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+            () => new WaveformDemoWindow(projected: true).Show(this));
+    private void ConnectSettings()
+    {
+        MonitorView.AdditionalNotices = CurrentNotices;
+        MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
+        Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
+        Settings.Sound.AudioPauseChanged += () => MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
+        Settings.Sound.OutputNoticeChanged += () =>
+        {
+            if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
+        };
+        MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
+        Settings.Apply.Classes.Add("accent");
+        Settings.ResetAll.Click += (_, _) => ResetAllSettings();
+    }
+    internal void ResetAllSettings()
+    {
+        Pause();
+        Settings.Sound.Close();
+        Settings = CreateSettings();
+        ConnectSettings();
+        ApplySettings();
+        if (!PreferenceNotice.IsVisible) { Settings.Status.Text = "已恢复全部默认设置并从头开始。"; }
     }
     internal void SelectPage(int page)
     {

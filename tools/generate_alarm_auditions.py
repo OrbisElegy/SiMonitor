@@ -147,7 +147,7 @@ document.querySelectorAll('audio').forEach(b=>{if(a!==b)b.pause()})}))</script><
 本包为原创合成、未替换正式运行音色。候选频谱/包络参数见 candidates.json。
 全部为48kHz、16位、单声道；每声有效段RMS=-24dBFS，不代表声压/等响校准。
 Info/Notice/Warning各展示一组，省略长重复等待；Critical展示八声。
-无商业录音；不宣称厂家复刻或IEC合规。许可随项目 AGPL-3.0-only。
+无商业录音；不宣称厂家复刻或IEC合规。许可随项目 AGPL-3.0-or-later。
 可用 Python 3 在解压目录执行：python generate_alarm_auditions.py --output rebuilt
 '''
     (destination / 'README.txt').write_text(readme, encoding='utf-8')

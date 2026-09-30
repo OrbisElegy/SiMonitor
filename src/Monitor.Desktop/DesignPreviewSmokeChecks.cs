@@ -86,7 +86,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifySeededVitals(DesignPreviewWindow window)
     {
-        var live = window.Session; var oldSeed = window.Settings.RateSeed.Text;
+        var live = window.Session; string? oldSeed = window.Settings.RateSeed.Text;
         window.Settings.GenerateSeed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         string generated = window.Settings.RateSeed.Text!;
         Require(generated.Length == 64 && generated.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') && generated != oldSeed && ReferenceEquals(live, window.Session), "OS seed button changes draft only with256-bit lowercase hex");
@@ -151,8 +151,8 @@ internal static class DesignPreviewSmokeChecks
             Require(pressureView.NumericBlocks[1].Text!.StartsWith("SYS/DIA ", StringComparison.Ordinal) && !pressureView.NumericBlocks[1].Text!.Contains("---", StringComparison.Ordinal),
                 "pressure secondary line presents waveform-derived systolic/diastolic values");
         }
-        var oldAbp = window.Session.Measurements!.AbpMean.MeanCentiMmHg;
-        var oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
+        int? oldAbp = window.Session.Measurements!.AbpMean.MeanCentiMmHg;
+        int? oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
         window.Settings.AbpPulseGain.Value = 1.5m;
         window.Settings.PaPulseGain.Value = .5m;
         window.ApplySettings();
@@ -164,7 +164,7 @@ internal static class DesignPreviewSmokeChecks
         window.ApplySettings();
         Require(ReferenceEquals(previous, window.Session), "missing pressure gain preserves live session");
         window.Settings.AbpPulseGain.Value = 1.5m;
-        var oldMean = window.Session.Measurements!.CvpMean.MeanCentiMmHg;
+        int? oldMean = window.Session.Measurements!.CvpMean.MeanCentiMmHg;
         previous = window.Session;
         window.Settings.CvpBaseline.Value = null;
         window.ApplySettings();
@@ -822,6 +822,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
+        NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {
@@ -939,12 +940,12 @@ internal static class DesignPreviewSmokeChecks
                 "settings navigation is a compact transparent list rather than a full-height slab");
             var helpSession = window.Session;
             window.SelectPage(3); Capture(window, "ui-preview-help.png");
-            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("声音始终跟随最高") == true), "help contains relocated alarm instructions");
-            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("模板默认参数") == true), "help catalog includes advanced instructions before visiting advanced settings");
+            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("报警声音始终对应当前最高") == true), "help contains relocated alarm instructions");
+            Require(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("模板说明中列出的") == true), "help catalog includes advanced instructions before visiting advanced settings");
             var helpSearch = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "搜索帮助");
-            helpSearch.Text = "CO₂ 共用"; Capture(window, "ui-preview-help-search.png");
+            helpSearch.Text = "呼气末 随机"; Capture(window, "ui-preview-help-search.png");
             var found = window.GetVisualDescendants().OfType<SelectableTextBlock>().ToArray();
-            Require(found.Length == 1 && found[0].Text!.Contains("CO₂使用共用种子", StringComparison.Ordinal), "multiple search words intersect and retain matching help");
+            Require(found.Length == 1 && found[0].Text!.Contains("一次呼气内保持同一生成目标", StringComparison.Ordinal), "multiple search words intersect and retain matching help");
             helpSearch.Text = "不存在的说明xyz"; Capture(window, "ui-preview-help-empty.png");
             Require(!window.GetVisualDescendants().OfType<SelectableTextBlock>().Any() && window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("没有匹配说明", StringComparison.Ordinal) == true), "empty search explains how to recover");
             helpSearch.Text = "";
@@ -1006,7 +1007,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-audio.png");
             var settingsSession = window.Session;
             var alarmGroups = window.Settings.SectionPages[3];
-            var alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
+            string?[] alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
             Require(alarmLabels.Contains("EtCO₂") && alarmLabels.Contains("PR · PLETH") && alarmLabels.Contains("ABP 平均压") &&
                 !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries");
             Require(ReferenceEquals(window.Settings.Alerts.NoExpirationEnabled.Parent,
@@ -1063,7 +1064,7 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Session.Ranges.RowCycle(0) == 2 && window.Session.Ranges.RowCycle(1) == 4 && window.Session.Ranges.RowCycle(2) == 1, "native sweep wraps twice with boundary range updates");
             window.SelectPage(0); Capture(window, "ui-preview-monitor-wrap.png");
             window.Pause(); long paused = window.Session.SimulationTimeNs;
-            var held = window.MonitorView.NumericTexts.ToArray();
+            string[] held = window.MonitorView.NumericTexts.ToArray();
             window.Pulse(timer, 50_000_000); Require(window.Session.SimulationTimeNs == paused, "pause holds simulation");
             Require(held.SequenceEqual(window.MonitorView.NumericTexts), "paused numerics hold with patient time");
             window.Start(); window.SelectPage(0); Require(window.Session.SimulationTimeNs == paused, "navigation/resume never regenerates history");
@@ -1854,7 +1855,7 @@ internal static class DesignPreviewSmokeChecks
                 window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = choice;
                 window.Settings.OpenAdvanced(0);
                 Capture(window, $"ui-preview-advanced-{choice}.png");
-                var text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+                string?[] text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
                 Require(text.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg)),
                     "advanced page renders the selected waveform semantics");
                 window.Settings.OpenAdvanced(3);
@@ -1898,7 +1899,7 @@ internal static class DesignPreviewSmokeChecks
                 long end = window.Session.FrontierNs, start = end - 3_000_000_000;
                 foreach (int channel in new[] { 2, 3, 5 })
                 {
-                    var values = window.Session.Samples(channel, start, end).Select(p => p.Value).ToArray();
+                    double[] values = window.Session.Samples(channel, start, end).Select(p => p.Value).ToArray();
                     Require(values.Zip(values.Skip(1)).Any(p => p.Second > p.First) == !noPulse,
                         $"standstill/PEA retain runoff without new Pleth/ABP/PA upstrokes: {choice}/{channel}");
                 }
@@ -2121,7 +2122,7 @@ internal static class DesignPreviewSmokeChecks
                     long group = choice switch { 44 => 1_600_000_000, 45 => 2_400_000_000, 46 or 50 => 4_000_000_000, 48 or 49 => 6_400_000_000, 51 or 52 => 3_200_000_000, _ => 3_000_000_000 };
                     Require(duration == 2 * group, "PVC preview covers two full groups including recovery interval");
                     var plan = pair.Physiology.ResolvePlan();
-                    var beats = Monitor.Simulation.Physiology.RegularPhysiologyTimeline.Start(plan).AdvanceBefore(group, 100)
+                    int beats = Monitor.Simulation.Physiology.RegularPhysiologyTimeline.Start(plan).AdvanceBefore(group, 100)
                         .Count(e => e.Kind == Monitor.Simulation.Physiology.PhysiologyCycleEventKind.VentricularMechanical);
                     Require(beats == (choice == 44 ? 2 : choice == 45 ? 3 : choice is 46 or 50 ? 5 : choice is 48 or 49 ? 8 : 4),
                         "PVC grouping preserves authored mechanical event count");
@@ -2562,10 +2563,10 @@ internal static class DesignPreviewSmokeChecks
         while (session.SimulationTimeNs < 6_000_000_000) { session.Advance(50_000_000); }
         for (int step = 0; step < 15; step++)
         {
-            var before = Raster(trace, 1000, 700);
+            byte[] before = Raster(trace, 1000, 700);
             int right = (int)(132 + 850 * session.FrontierNs / 20_000_000_000d) - 3;
             session.Advance(200_000_000);
-            var after = Raster(trace, 1000, 700);
+            byte[] after = Raster(trace, 1000, 700);
             foreach (int row in Enumerable.Range(0, slots.Length).Where(i => slots[i].Channel != 0))
                 for (int y = row * 100 + 10; y < row * 100 + 90; y++)
                     for (int x = 134; x < right; x++)
@@ -2585,7 +2586,7 @@ internal static class DesignPreviewSmokeChecks
         int calibrationPixels = Enumerable.Range(9, 100).Count(y => Green(calibrationX, y) || Green(calibrationX - 1, y));
         Require(Math.Abs(calibrationPixels - 100 * 1000 / 2700d) < 4, "ECG calibration has a true 1mV height at current range");
         double baselineY = 9 + 100 * (1 - 1200 / 2700d);
-        var inkRows = Enumerable.Range(9, 100).Where(y => Green(calibrationX, y) || Green(calibrationX - 1, y)).ToArray();
+        int[] inkRows = Enumerable.Range(9, 100).Where(y => Green(calibrationX, y) || Green(calibrationX - 1, y)).ToArray();
         Require(Math.Abs((inkRows[0] + inkRows[^1]) / 2d - baselineY) < 2,
             "monitor calibration is centered on baseline, from minus to plus 0.5mV");
         data = Raster(trace, 800, 600);

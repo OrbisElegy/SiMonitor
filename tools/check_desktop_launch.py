@@ -18,7 +18,7 @@ def main():
     parser.add_argument('assembly', type=Path)
     args = parser.parse_args()
     assembly = args.assembly.resolve(strict=True)
-    title = '心电监护 · V0.5 Standalone（开发版）'
+    title = "Seele's SiMonitor · V0.5 Standalone（开发版）"
     for options in ([], ['--ui-preview']):
         with tempfile.TemporaryDirectory(prefix='monitor-startup-') as directory:
             with tempfile.TemporaryFile(mode='w+t') as log:

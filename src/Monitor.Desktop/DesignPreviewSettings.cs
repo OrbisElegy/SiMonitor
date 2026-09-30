@@ -225,7 +225,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         more.Click += (_, _) => advanced();
         generation.Children.Add(Text("具体波形提供预生成预览。浏览分类不会改变波形；选择后仍需应用。"));
-        _home = generation; _generation.Content = generation;
+        _home = Scroll(generation); _generation.Content = _home;
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(Text("监护皮肤决定固定槽位数；调整窗口不增减行数。每行可独立选通道和量程。"));
         display.Children.Add(Skin);
@@ -264,16 +264,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ("射血", _advancedEjection), ("开发工具", _advancedTools));
         RespirationGroups.ItemsSource = new[]
         {
-            new TabItem { Header = "RESP 信号", Content = _respSignal, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 管路", Content = _co2Response, MinHeight = 44 }
+            new TabItem { Header = "RESP 信号", Content = _respSignal, FontSize = 14, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, FontSize = 14, MinHeight = 44 },
+            new TabItem { Header = "CO₂ 管路", Content = _co2Response, FontSize = 14, MinHeight = 44 }
         };
         RespirationGroups.SelectedIndex = 0;
         ResetRespirationPage.Click += (_, _) => ResetRespirationDraft();
         AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
-        Control[] pages = [Scroll(_generation), SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
+        Control[] pages = [_generation, SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
@@ -343,9 +343,15 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     private void OpenChooser(string title, int channel, string[] choices, Func<int> read, Action<int> write, string? activeGroup = null, bool focusSelection = false)
     {
-        string Group(int i) => channel == 0 ? i switch { 0 or 1 or 3 => "窦性心律", 4 or 6 or 7 or 8 or 9 or 31 or 36 or 37 or 38 or 39 or 40 or 41 => "房性心律", 5 or 32 or 42 or 43 => "交界性心律", >= 23 and <= 25 => "室上性心动过速", >= 10 and <= 19 => "房室传导阻滞", >= 53 and <= 58 => "室内传导阻滞", >= 59 and <= 65 => "预激与PR变异", >= 66 and <= 71 => "房性心律", 72 or 73 or 74 => "静止与电机械分离", >= 75 and <= 98 => "电解质与药物形态", >= 99 and <= 101 => "心房形态", >= 102 and <= 106 => "心室形态", >= 107 and <= 114 => "T波形态", >= 115 and <= 124 => "下壁梗死形态", >= 125 and <= 134 => "侧壁梗死形态", >= 135 and <= 144 => "前间壁梗死形态", >= 145 and <= 154 => "前壁梗死形态", >= 155 and <= 164 => "广泛前壁梗死形态", _ => "室性心律" }
+        string Group(int i) => channel == 0 ? EcgChooserGroups.For(i)
             : channel == 1 ? i == 0 ? "规则呼吸" : "异常呼吸示意" : i == 0 ? "节律相关" : "异常射血示意";
-        var shell = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
+        var shell = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(20) };
+        var header = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 0, 12) };
+        shell.Children.Add(header);
+        var body = new StackPanel { Spacing = 12 };
+        var scroll = SettingsScroll.Create(body);
+        Grid.SetRow(scroll, 1); shell.Children.Add(scroll);
+
         var navigation = new WrapPanel { Orientation = Orientation.Horizontal };
         var back = new Button { Content = "返回波形设置", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
         back.Click += (_, _) => { _generation.Content = _home; if (_returnFocus is { } origin) { RestoreFocus(origin); } };
@@ -353,16 +359,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Button focusTarget = back;
         if (activeGroup is not null)
         {
-            var parent = new Button { Content = "返回" + title + "分组", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+            var parent = new Button { Content = "返回" + title + "分组", Margin = new Thickness(0, 0, 12, 0), MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
             parent.Click += (_, _) => OpenChooser(title, channel, choices, read, write);
             navigation.Children.Add(parent);
         }
-        shell.Children.Add(navigation);
-        shell.Children.Add(new TextBlock { Text = "波形生成 / " + title + (activeGroup is null ? "" : " / " + activeGroup), FontSize = 20, FontWeight = FontWeight.SemiBold });
-        shell.Children.Add(Text("当前选择：" + choices[read()] + " · 应用后生效"));
+        header.Children.Add(navigation);
+        header.Children.Add(new TextBlock { Text = "波形生成 / " + title + (activeGroup is null ? "" : " / " + activeGroup), FontSize = 20, FontWeight = FontWeight.SemiBold });
+        header.Children.Add(Text("当前选择：" + choices[read()] + " · 应用后生效"));
         if (activeGroup is null)
         {
-            foreach (string group in Enumerable.Range(0, choices.Length).Select(Group).Distinct())
+            foreach (string group in channel == 0 ? EcgChooserGroups.Ordered : Enumerable.Range(0, choices.Length).Select(Group).Distinct())
             {
                 bool current = group == Group(read());
                 var button = new Button
@@ -377,14 +383,14 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 };
                 AutomationProperties.SetName(button, group + (current ? "，当前分组" : "，选择分组"));
                 button.Click += (_, _) => OpenChooser(title, channel, choices, read, write, group);
-                shell.Children.Add(button);
+                body.Children.Add(button);
                 if (current) { focusTarget = button; }
             }
             _generation.Content = shell; RestoreFocus(focusTarget); return;
         }
         var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         parameters.Click += (_, _) => OpenAdvanced(channel);
-        shell.Children.Add(parameters);
+        navigation.Children.Add(parameters);
         var candidates = new WrapPanel { Orientation = Orientation.Horizontal };
         for (int i = 0; i < choices.Length; i++)
         {
@@ -412,7 +418,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             }
             candidates.Children.Add(candidate);
         }
-        shell.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
+        body.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
     }
     internal static int ReadVitalValue(NumericUpDown field, int scale, string name)
     {
@@ -547,7 +553,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _advancedEcg.Children.Add(ShapeEditSummary);
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
-        _advancedRespiration.Children.Add(Text("呼吸 · " + RespirationChoices[RespirationSelection]));
+        ToolTip.SetTip(RespirationGroups, "当前呼吸模板：" + RespirationChoices[RespirationSelection]);
         _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
         _respSignal.Children.Add(RespSignalAmplitude);
         _respSignal.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
@@ -596,7 +602,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _advancedTools.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
         _advancedTools.Children.Add(developer);
     }
-    private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => control.Focus(), DispatcherPriority.Loaded);
+    private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => { control.Focus(); control.BringIntoView(); }, DispatcherPriority.Loaded);
     private void BuildRows()
     {
         if (Skin.SelectedIndex < 0) { return; }
@@ -650,7 +656,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return new MonitorDisplaySlot(slot.Channel.SelectedIndex, slot.Auto.IsChecked == true, new(minimum, maximum), slot.Speed.SelectedIndex switch { 0 => 125, 1 => 250, 2 => 500, _ => 0 });
     }).ToArray());
     private static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap };
-    private static ScrollViewer Scroll(Control content) => new() { Content = content, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private static ScrollViewer Scroll(Control content) => SettingsScroll.Create(content);
     private static StackPanel Note(string title, string body)
     {
         var panel = new StackPanel { Spacing = 18, Margin = new Thickness(32) };

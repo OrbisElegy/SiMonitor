@@ -47,7 +47,7 @@ public sealed class MainWindow : Window
 
     public MainWindow()
     {
-        Title = "心电监护教学模拟";
+        Title = ProductIdentity.Name;
         Width = 1280;
         Height = 720;
         MinWidth = 640;
@@ -111,7 +111,7 @@ public sealed class MainWindow : Window
     internal void ShowDemoNotice()
     {
         Dispatcher.UIThread.VerifyAccess();
-        Title = "心电监护教学模拟 — 合成记录交互验证";
+        Title = ProductIdentity.Name + " — 合成记录交互验证";
         _demoNotice.IsVisible = true;
     }
     internal event EventHandler? PublicationChanging;

@@ -5,9 +5,9 @@ using Monitor.Application.Presentation;
 
 namespace Monitor.Infrastructure.Preferences;
 
-public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null);
+public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null);
 
-// Local display and alarm configuration only: no patient data, waveform state or audio opt-in.
+// Local display, alarm and sound preferences; no waveform state or audio opt-in.
 public sealed class DisplayPreferenceStore(string path)
 {
     private const int MaximumBytes = 32768;
@@ -22,6 +22,7 @@ public sealed class DisplayPreferenceStore(string path)
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
+        public MonitorSoundPreferences? Sound { get; init; }
     }
     public DisplayPreferences Load(out bool rejected)
     {
@@ -34,12 +35,14 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
-            if (data.Version == 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
+            if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
+            if (data.Version == 3 && data.Sound is null) { throw new ArgumentException("Preferences.MissingSound"); }
+            data.Sound?.Validate();
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms);
+                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound);
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
@@ -51,9 +54,11 @@ public sealed class DisplayPreferenceStore(string path)
         if (preferences.PaperLayout is < 0 or > 1) { throw new ArgumentException("Preferences.InvalidPaperLayout"); }
         var alarms = preferences.Alarms ?? MonitorAlarmPreferences.Default;
         alarms.Validate();
+        var sound = preferences.Sound ?? MonitorSoundPreferences.Default; sound.Validate();
         var data = new Document
         {
-            Version = 2,
+            Version = 3,
+            Sound = sound,
             Alarms = alarms,
             Skin = preferences.Display.Skin,
             PaperLayout = preferences.PaperLayout,

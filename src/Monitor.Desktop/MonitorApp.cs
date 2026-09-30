@@ -49,7 +49,7 @@ public sealed class MonitorApp : Avalonia.Application
                     if (valid) { NativeSmokePartition.Run(() => DesktopCaptureSmokeChecks.Verify(window)); }
                     if (valid) { NativeSmokePartition.Run(() => DesktopDemoSmokeChecks.Verify()); }
                     if (valid) { NativeSmokePartition.Run(() => DesktopMeasurementSmokeChecks.Verify()); }
-                    if (valid) { NativeSmokePartition.Run(() => DesignPreviewSmokeChecks.Verify()); }
+                    if (valid) { DesignPreviewSmokeChecks.Verify(); }
                     if (valid) { WaveformDemoSmokeChecks.Verify(); }
                     if (valid) { NativeSmokePartition.Run(() => ProjectedEcgDemoSmokeChecks.Verify()); }
                     if (valid && NativeSmokePartition.Index == 0)

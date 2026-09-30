@@ -154,7 +154,7 @@ internal sealed class DesignPreviewWindow : Window
             if (Settings.CardiacRateEnabled.IsChecked == true)
             {
                 if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
-                { throw new ArgumentException("Heart rate controls require reference sinus and1:1 conduction."); }
+                { throw new ArgumentException("Preview.CardiacRateRequiresSinus"); }
                 var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "心率目标"),
                     Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
                 config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
@@ -183,6 +183,14 @@ internal sealed class DesignPreviewWindow : Window
             Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
             SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
         }
+        catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")
+        { Settings.Status.Text = "未应用：共用种子须为 64 个小写十六进制字符（0–9、a–f）；可在生命体征 → 共用随机种子中点击生成随机种子。原运行与画面保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "Preview.CardiacRateRequiresSinus")
+        { Settings.Status.Text = "未应用：心率调整仅支持窦性参考及 1:1 下传；请关闭生命体征 → 心率中的调整开关，或改用兼容模板。原运行与画面保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "SeededCo2.InvalidRange")
+        { Settings.Status.Text = "未应用：CO₂ 呼气末目标减去／加上波动幅度后，须仍在 5–80 mmHg 内；请在生命体征 → 呼吸与 CO₂ 中调整目标或幅度。原运行与画面保持不变。"; }
+        catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
+        { Settings.Status.Text = "未应用：CO₂ 逐呼吸随机波动目前仅支持规则呼吸；请在生命体征 → 呼吸与 CO₂ 中将波动幅度设为 0，或选择规则呼吸。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message.StartsWith("Preview.InvalidVitalValue", StringComparison.Ordinal))
         { Settings.Status.Text = $"未应用：请填写有效的 {exception.ParamName}。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Levels")

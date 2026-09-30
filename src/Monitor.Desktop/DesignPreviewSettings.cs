@@ -450,7 +450,7 @@ internal sealed class DesignPreviewSettings : UserControl
         panel.Children.Add(CardiacRateEnabled);
         Add("心率目标（bpm，30–180）", HeartRate);
         Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
-        Add("波动共用种子（64位小写十六进制）", RateSeed);
+        Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
         panel.Children.Add(GenerateSeed);
         GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         panel.Children.Add(Text("使用系统加密随机源生成256位种子；应用后生效。保留种子与设置即可复现。"));

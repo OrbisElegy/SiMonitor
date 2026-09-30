@@ -57,7 +57,7 @@ internal static class DesktopInformationPages
     {
         var assembly = typeof(DesktopInformationPages).Assembly;
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto,Auto,*"), Margin = new Thickness(24) };
-        var title = new TextBlock { Text = "心电监护 · V0.5 开发版", FontSize = 24, FontWeight = FontWeight.SemiBold };
+        var title = new TextBlock { Text = ProductIdentity.Name + " · V0.5 开发版", FontSize = 24, FontWeight = FontWeight.SemiBold };
         root.Children.Add(title);
         var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);

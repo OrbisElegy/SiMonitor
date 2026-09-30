@@ -24,20 +24,16 @@ internal sealed class SettingsSections : UserControl
     internal bool Compact => _compact.IsVisible;
     internal SettingsSections(string category, params (string Title, Control Content)[] sections)
     {
-        var pages = sections.Select(section => new ScrollViewer
+        var pages = sections.Select(section => SettingsScroll.Create(new Border
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = new Border
-            {
-                Background = DesktopFluentStyle.Surface,
-                CornerRadius = new CornerRadius(8),
-                BorderBrush = DesktopFluentStyle.Stroke,
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(20),
-                Margin = new Thickness(12, 0, 0, 0),
-                Child = section.Content
-            }
-        }).ToArray();
+            Background = DesktopFluentStyle.Surface,
+            CornerRadius = new CornerRadius(8),
+            BorderBrush = DesktopFluentStyle.Stroke,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(20),
+            Margin = new Thickness(12, 0, 0, 0),
+            Child = section.Content
+        })).ToArray();
         StyleNavigation(Sections);
         Sections.ItemsSource = sections.Select(s => Item(s.Title)).ToArray();
         _compact.ItemsSource = sections.Select(s => s.Title).ToArray();

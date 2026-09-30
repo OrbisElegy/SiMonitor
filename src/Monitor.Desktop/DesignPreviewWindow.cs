@@ -41,7 +41,7 @@ internal sealed class DesignPreviewWindow : Window
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
     internal DesignPreviewWindow(string? preferencesPath = null)
     {
-        Title = "心电监护 · V0.5 Standalone（开发版）";
+        Title = ProductIdentity.WindowTitle;
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
         Background = DesktopFluentStyle.Canvas; Foreground = DesktopFluentStyle.Text;
@@ -94,7 +94,7 @@ internal sealed class DesignPreviewWindow : Window
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
         var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
-        brand.Children.Add(Text("心电监护", 21, true)); brand.Children.Add(Text("V0.5 · Standalone", 12));
+        brand.Children.Add(Text(ProductIdentity.Name, 16, true)); brand.Children.Add(Text("V0.5 · Standalone", 12));
         DockPanel.SetDock(brand, Dock.Top); sidebar.Children.Add(brand);
         var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
         footer.Children.Add(PreferenceNotice);

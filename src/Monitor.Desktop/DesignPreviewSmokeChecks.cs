@@ -13,6 +13,43 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    private static void VerifyUiRefinement()
+    {
+        var groups = Enumerable.Range(0, DesignPreviewSettings.EcgChoiceCount).GroupBy(EcgChooserGroups.For).ToArray();
+        Require(groups.Sum(g => g.Count()) == 165 && groups.All(g => g.Count() <= 10) &&
+            groups.Select(g => g.Key).ToHashSet().SetEquals(EcgChooserGroups.Ordered) && EcgChooserGroups.Ordered.Distinct().Count() == EcgChooserGroups.Ordered.Count, "all ECG presets have bounded explicit groups");
+        Require(EcgChooserGroups.For(2) != EcgChooserGroups.For(26) && EcgChooserGroups.For(26) != EcgChooserGroups.For(21) &&
+            EcgChooserGroups.For(75) != EcgChooserGroups.For(87), "ectopy, tachycardia, fibrillation and drug groups stay distinct");
+        var window = new DesignPreviewWindow { Width = 1000, Height = 720 }; window.Show();
+        try
+        {
+            window.SelectPage(2); Capture(window, "ui-refine-home.png");
+            Require(window.Title == ProductIdentity.WindowTitle, "formal product name used in title");
+            Button Named(string prefix) => window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith(prefix, StringComparison.Ordinal) == true);
+            void Click(Button button) => button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Click(Named("心电图样式，")); Capture(window, "ui-refine-groups.png");
+            Click(Named("室性早搏，")); Capture(window, "ui-refine-pvc-top.png");
+            var viewer = window.Settings.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Content is StackPanel panel && panel.Children.OfType<WrapPanel>().Any());
+            var back = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回心电图分组");
+            var advanced = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "当前波形高级参数");
+            var root = (Control)window.Content!;
+            var backPosition = back.TranslatePoint(default, root);
+            viewer.Offset = new Vector(0, viewer.Extent.Height);
+            Capture(window, "ui-refine-pvc-scrolled.png");
+            Require(viewer.Offset.Y > 100 && back.TranslatePoint(default, root) == backPosition &&
+                advanced.TranslatePoint(default, root)!.Value.Y < 300, "navigation and advanced action stay fixed while cards scroll");
+            var first = viewer.GetVisualDescendants().OfType<Button>().First();
+            back.Focus(); first.Focus(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(viewer.Offset.Y > 100, "programmatic focus restoration does not jump to first card");
+            back.Focus(); first.Focus(Avalonia.Input.NavigationMethod.Tab); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(viewer.Offset.Y < 50, "keyboard navigation still reveals focused card");
+            Click(advanced); window.Settings.SectionPages[5].Sections.SelectedIndex = 1;
+            Capture(window, "ui-refine-resp-compact.png");
+            Require(!window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "呼吸 · 规则呼吸"), "redundant respiration heading removed");
+            window.Width = 1440; window.Height = 940; Capture(window, "ui-refine-resp-wide.png");
+        }
+        finally { window.Close(); }
+    }
     private static void VerifyVisibleVariation()
     {
         var window = new DesignPreviewWindow(); window.Show();
@@ -774,6 +811,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyIntegratedWindow);
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
+        NativeSmokePartition.Run(VerifyUiRefinement);
     }
     private static void VerifyIntegratedWindow()
     {

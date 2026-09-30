@@ -236,7 +236,7 @@ internal sealed class WaveformDemoWindow : Window
         if (projected || physiology) { ConductionInput.ItemsSource = ConductionInput.ItemsSource!.Cast<string>().Append("窦性心律不齐（固定序列）").ToArray(); }
         if (projected || physiology) { ConductionInput.ItemsSource = ConductionInput.ItemsSource!.Cast<string>().Append("窦性停搏（无逸搏固定例）").ToArray(); }
         _physiology = physiology && !projected;
-        Title = projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth / ABP / CO₂ / PA / CVP 演示 — 教学模拟" : "合成波形开发演示 — 教学模拟";
+        Title = ProductIdentity.Name + " · " + (projected ? "12 导联电极投影演示 — 教学模拟" : physiology ? "事件驱动 ECG / Resp / Pleth / ABP / CO₂ / PA / CVP 演示 — 教学模拟" : "合成波形开发演示 — 教学模拟");
         ShapeButton.IsVisible = !physiology && !projected;
         Width = 1040 + (projected ? 85 : 0);
         Height = projected ? 900 : physiology ? 700 : 520;
@@ -1166,7 +1166,7 @@ internal sealed class WaveformDemoWindow : Window
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
         PressureOffsets = pressureOffsets;
-        var pressureValues = new[] { pressureOffsets.Abp, pressureOffsets.Pa, pressureOffsets.Cvp };
+        int[] pressureValues = new[] { pressureOffsets.Abp, pressureOffsets.Pa, pressureOffsets.Cvp };
         for (int index = 0; index < pressureValues.Length; index++)
         { PressureZeroInputs[index].Text = (pressureValues[index] / 100m).ToString("0.##", CultureInfo.InvariantCulture); }
         PressureZeroStatus.Text = $"已应用压力偏移（mmHg）：ABP {PressureZeroInputs[0].Text}，PA {PressureZeroInputs[1].Text}，CVP {PressureZeroInputs[2].Text}。";

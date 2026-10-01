@@ -47,16 +47,37 @@ def verify(directory):
     return data
 
 
+def runtime_pack_legal(directory, source, rid):
+    """Find license files for the runtime pack recorded by this publish."""
+    deps = json.loads((directory / "Monitor.Desktop.deps.json").read_text(encoding="utf-8"))
+    prefix = f"runtimepack.Microsoft.NETCore.App.Runtime.{rid}/"
+    matches = [key for key in deps["libraries"] if key.startswith(prefix)]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one .NET runtime pack for {rid}: {matches}")
+    version = matches[0][len(prefix):]
+    assets = json.loads((source / "src/Monitor.Desktop/obj/project.assets.json").read_text(encoding="utf-8"))
+    package_name = f"microsoft.netcore.app.runtime.{rid}"
+    for folder in assets["packageFolders"]:
+        package = Path(folder) / package_name / version
+        license_path = package / "LICENSE.TXT"
+        notice_path = package / "THIRD-PARTY-NOTICES.TXT"
+        if license_path.is_file() and notice_path.is_file() and license_path.stat().st_size and notice_path.stat().st_size:
+            return matches[0], license_path, notice_path
+    raise ValueError(f"Missing license or notices for .NET runtime pack {matches[0]}")
+
+
 def assemble(directory, source, rid, provenance):
     directory, source = Path(directory), Path(source)
     executable = "Monitor.Desktop.exe" if rid.startswith("win-") else "Monitor.Desktop"
-    required = [executable, "Monitor.Desktop.dll", "Monitor.Desktop.runtimeconfig.json", "style-previews.bin"]
+    required = [executable, "Monitor.Desktop.dll", "Monitor.Desktop.runtimeconfig.json",
+                "Monitor.Desktop.deps.json", "style-previews.bin"]
     if rid.startswith("win-"):
         required += ["sim_audio_native.dll", "LICENSE.miniaudio"]
     for name in required:
         if not (directory / name).is_file() or (directory / name).stat().st_size == 0:
             raise ValueError(f"Missing published asset: {name}")
     inventory(directory)  # reject links before copying metadata into the package
+    runtime_name, runtime_license, runtime_notices = runtime_pack_legal(directory, source, rid)
     for reserved in [MANIFEST, "distribution-info.txt", "legal"]:
         if (directory / reserved).exists():
             raise ValueError(f"Distribution metadata already exists: {reserved}")
@@ -68,6 +89,10 @@ def assemble(directory, source, rid, provenance):
         shutil.copyfile(source / relative, target)
     shutil.copytree(source / "eng/licenses", legal / "eng/licenses")
     shutil.copyfile(source / "native/sim_audio_native/vendor/LICENSE.miniaudio", legal / "LICENSE.miniaudio")
+    runtime_legal = legal / "runtime" / runtime_name.replace("/", "-")
+    runtime_legal.mkdir(parents=True)
+    shutil.copyfile(runtime_license, runtime_legal / "LICENSE.TXT")
+    shutil.copyfile(runtime_notices, runtime_legal / "THIRD-PARTY-NOTICES.TXT")
     info = f"""Seele's SiMonitor V0.5 standalone candidate ({rid})
 
 Offline launch: run {executable} without arguments; keep this directory intact.
@@ -87,10 +112,10 @@ Physical end-to-end audio latency is not a V0.5 acceptance gate.
 The manifest detects accidental changes; it is not a signature or authenticity
 proof. Retain the manifest when transferring this directory for testing.
 
-Project license: AGPL-3.0-or-later. Existing attribution and dependency materials
-are under legal/. Third-party review and matching complete-source delivery
-are still required before a public binary release. These copied materials
-do not claim to be a complete third-party redistribution license bundle.
+Project license: AGPL-3.0-or-later. Locked NuGet package licenses, upstream
+notices and the selected {runtime_name} notices are under legal/.
+Matching complete-source delivery and final release acceptance remain required
+before a public binary release.
 """
     (directory / "distribution-info.txt").write_text(info, encoding="utf-8")
     data = {"schema": SCHEMA, "rid": rid, "releaseAccepted": False,

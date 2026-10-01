@@ -66,7 +66,7 @@ internal static class DesktopInformationPages
         root.Children.Add(title);
         var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);
-        var notice = new TextBlock { Text = "原创代码：AGPL-3.0-or-later。第三方组件保留各自许可。以下为当前依赖清单及已随附的许可正文；完整发布包许可审核尚未完成。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
+        var notice = new TextBlock { Text = "原创代码：AGPL-3.0-or-later。第三方组件保留各自许可。以下为锁定依赖的许可、上游声明及对应清单；自包含发布包另附其 .NET 运行时声明。公开发布前仍需核对最终分发包与对应源码。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         var information = new StackPanel { Spacing = 12 };
         if (!thirdParty)
         {

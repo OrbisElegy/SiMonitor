@@ -17,6 +17,13 @@ class DistributionTests(unittest.TestCase):
         self.source = self.root / "source"
         self.output = self.root / "output"
         self.output.mkdir()
+        self.runtime = self.root / "packages/microsoft.netcore.app.runtime.win-x64/10.0.12"
+        self.runtime.mkdir(parents=True)
+        (self.runtime / "LICENSE.TXT").write_text("runtime license")
+        (self.runtime / "THIRD-PARTY-NOTICES.TXT").write_text("runtime notices")
+        assets = self.source / "src/Monitor.Desktop/obj/project.assets.json"
+        assets.parent.mkdir(parents=True)
+        assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}))
         for name in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md",
                      "docs/infirmary-source-notice.md", "eng/licenses/vendor.txt",
                      "native/sim_audio_native/vendor/LICENSE.miniaudio"]:
@@ -26,6 +33,8 @@ class DistributionTests(unittest.TestCase):
         for name in ["Monitor.Desktop.exe", "Monitor.Desktop.dll", "Monitor.Desktop.runtimeconfig.json",
                      "style-previews.bin", "sim_audio_native.dll", "LICENSE.miniaudio"]:
             (self.output / name).write_bytes(b"fixture")
+        (self.output / "Monitor.Desktop.deps.json").write_text(json.dumps({"libraries": {
+            "runtimepack.Microsoft.NETCore.App.Runtime.win-x64/10.0.12": {"type": "runtimepack"}}}))
 
     def assemble(self):
         assemble(self.output, self.source, "win-x64", {"commit": "test", "workingTreeDirty": True})
@@ -36,6 +45,7 @@ class DistributionTests(unittest.TestCase):
         self.assertFalse(result["releaseAccepted"])
         self.assertTrue(result["source"]["workingTreeDirty"])
         self.assertIn("legal/eng/licenses/vendor.txt", result["files"])
+        self.assertIn("legal/runtime/runtimepack.Microsoft.NETCore.App.Runtime.win-x64-10.0.12/THIRD-PARTY-NOTICES.TXT", result["files"])
         self.assertNotIn(MANIFEST, result["files"])
         self.assertEqual((self.output / "legal/LICENSE").read_bytes(), (self.source / "LICENSE").read_bytes())
         with self.assertRaises(ValueError):
@@ -67,6 +77,12 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.assemble()
         self.assertFalse((self.output / MANIFEST).exists())
+
+    def test_missing_runtime_notice_fails_before_writing_metadata(self):
+        (self.runtime / "THIRD-PARTY-NOTICES.TXT").unlink()
+        with self.assertRaisesRegex(ValueError, "Missing license or notices"):
+            self.assemble()
+        self.assertFalse((self.output / "legal").exists())
 
     def test_symlink_rejected(self):
         try:

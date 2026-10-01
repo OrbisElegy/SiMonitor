@@ -68,7 +68,7 @@ def assemble(directory, source, rid, provenance):
         shutil.copyfile(source / relative, target)
     shutil.copytree(source / "eng/licenses", legal / "eng/licenses")
     shutil.copyfile(source / "native/sim_audio_native/vendor/LICENSE.miniaudio", legal / "LICENSE.miniaudio")
-    info = f"""Seele's SiMonitor V0.5 standalone development candidate ({rid})
+    info = f"""Seele's SiMonitor V0.5 standalone candidate ({rid})
 
 Offline launch: run {executable} without arguments; keep this directory intact.
 No .NET SDK installation is required for this self-contained package.

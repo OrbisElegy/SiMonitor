@@ -14,12 +14,15 @@ public sealed class MonitorApp : Avalonia.Application
     // Default product entry and the retained preview alias share one runtime.
     internal static Window CreateLaunchWindow(string[]? arguments, bool persistDisplay = true) => arguments switch
     {
-        null or [] or ["--ui-preview"] => new DesignPreviewWindow(persistDisplay
+        null or [] => new DesignPreviewWindow(persistDisplay
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Monitor", "display-preferences.json") : null),
+#if !SIMONITOR_RELEASE
+        ["--ui-preview"] => CreateLaunchWindow([], persistDisplay),
         ["--waveform-demo"] => new WaveformDemoWindow(),
         ["--physiology-demo"] => new WaveformDemoWindow(physiology: true),
         ["--electrode-demo"] => new WaveformDemoWindow(projected: true),
-        ["--study-demo"] or ["--smoke-test"] => new MainWindow(),
+        ["--product-check"] or ["--study-demo"] or ["--smoke-test"] => new MainWindow(),
+#endif
         _ => throw new ArgumentException("Desktop.UnsupportedLaunch", nameof(arguments))
     };
 
@@ -28,10 +31,16 @@ public sealed class MonitorApp : Avalonia.Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = CreateLaunchWindow(desktop.Args);
+#if !SIMONITOR_RELEASE
             if (desktop.MainWindow is not MainWindow window)
             {
                 base.OnFrameworkInitializationCompleted();
                 return;
+            }
+            if (desktop.Args is ["--product-check"])
+            {
+                window.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                { ProductReleaseChecks.Verify(); desktop.Shutdown(0); }, DispatcherPriority.Background);
             }
             if (desktop.Args is ["--study-demo"]) { DesktopStudyDemo.Start(window); }
             if (desktop.Args is ["--smoke-test"])
@@ -65,6 +74,7 @@ public sealed class MonitorApp : Avalonia.Application
                     desktop.Shutdown(valid ? 0 : 1);
                 }, DispatcherPriority.Background);
             }
+#endif
         }
         base.OnFrameworkInitializationCompleted();
     }

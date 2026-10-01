@@ -52,11 +52,14 @@ internal sealed class MonitorAlertSettings : StackPanel
             { Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds); }
         }
         Children.Add(DesktopInformationPages.Help("topic-14"));
-        Row("提示与声音联调（明确标为测试）", TestLevel);
-        Row("联调闪烁数值", TestNumeric);
+        if (ProductIdentity.DevelopmentFeatures)
+        {
+            Row("提示与声音联调（明确标为测试）", TestLevel);
+            Row("联调闪烁数值", TestNumeric);
+        }
         Children.Add(NoticeColorEnabled);
         Children.Add(DesktopInformationPages.Help("settings-detail-10"));
-        Children.Add(DesktopInformationPages.Help("settings-detail-11"));
+        if (ProductIdentity.DevelopmentFeatures) { Children.Add(DesktopInformationPages.Help("settings-detail-11")); }
         Children.Add(InfoTone);
         Row("Info 单声间隔（秒）", InfoInterval); Row("Notice 三联音组间隔（秒）", NoticeInterval);
         Row("Warning（3+2）×2 组间隔（秒）", WarningInterval); Row("Critical 单声间隔（秒）", CriticalInterval);
@@ -124,7 +127,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         int? delay = NoExpirationSeconds.Value is { } seconds && seconds == decimal.Truncate(seconds) ? checked((int)seconds) : null;
         if (NoExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, delay, snapshot.SampleTimeNs, snapshot.Capnography.Activity) is { } absence)
         { yield return absence; }
-        if (TestLevel.SelectedIndex > 0)
+        if (ProductIdentity.DevelopmentFeatures && TestLevel.SelectedIndex > 0)
         {
             yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))
             { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null };

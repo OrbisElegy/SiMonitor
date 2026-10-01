@@ -16,7 +16,7 @@ internal static class DesktopInformationPages
     private static readonly Lazy<Topic[]> Topics = new(() =>
     {
         using var stream = typeof(DesktopInformationPages).Assembly.GetManifestResourceStream("Monitor.Help.Topics")!;
-        return JsonSerializer.Deserialize<Topic[]>(stream)!;
+        return JsonSerializer.Deserialize<Topic[]>(stream)!.Where(t => ProductIdentity.DevelopmentFeatures || t.Id != "settings-detail-11").ToArray();
     });
     internal static Control Help(string id)
     {
@@ -62,7 +62,7 @@ internal static class DesktopInformationPages
     {
         var assembly = typeof(DesktopInformationPages).Assembly;
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto,Auto,*"), Margin = new Thickness(24) };
-        var title = new TextBlock { Text = thirdParty ? "开源组件" : ProductIdentity.Name + " · V0.5 开发版", FontSize = 24, FontWeight = FontWeight.SemiBold };
+        var title = new TextBlock { Text = thirdParty ? "开源组件" : ProductIdentity.Name + " · " + ProductIdentity.VersionLabel, FontSize = 24, FontWeight = FontWeight.SemiBold };
         root.Children.Add(title);
         var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);

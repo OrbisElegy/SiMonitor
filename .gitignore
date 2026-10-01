@@ -9,3 +9,7 @@ artifacts/
 *.trx
 *.pyc
 __pycache__/
+
+# Reproducible third-party downloads; populated by tools/fetch_dependencies.py
+.cache/
+native/sim_audio_native/vendor/miniaudio.h

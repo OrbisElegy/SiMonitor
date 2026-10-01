@@ -15,8 +15,9 @@ does not imply release acceptance.
 - CMake 3.20 or newer and a C compiler for native audio
 - On Windows, Visual Studio C++ Build Tools and the Windows SDK
 
-Use `python3` below on Linux and macOS, or `py -3` on Windows. The scripts
-restore pinned dependencies and verify downloaded native source hashes.
+Run all commands from the repository root. Use `python3` below on Linux and
+macOS, or `py -3` on Windows. The scripts restore pinned dependencies and
+verify downloaded native source hashes.
 
 ## Build
 
@@ -41,13 +42,21 @@ The product output is under `artifacts/release/`. The regular development
 build is under `src/Monitor.Desktop/bin/Release/net10.0/`. The native audio
 backend currently targets Windows WASAPI.
 
+`artifacts/` contains generated output and is intentionally ignored by Git;
+the build scripts create it. Native wrapper sources are tracked under
+`native/sim_audio_native/`. The dependency script fetches the pinned
+`vendor/miniaudio.h` into that directory and verifies its SHA-256 before
+building. Fetch dependencies before reviewing that upstream header.
+See the [native audio guide](native/sim_audio_native/README.md) for source
+locations, output layouts, and native diagnostics.
+
 ## Verify
 
 ```sh
+python3 tools/fetch_dependencies.py
 python3 tools/verify_dependency_ledger.py
-dotnet restore Monitor.slnx --locked-mode -p:NuGetAudit=false
-dotnet build Monitor.slnx --no-restore
-dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build
+dotnet build Monitor.slnx --no-restore --configuration Release
+dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --configuration Release
 ```
 
 ## License and attribution

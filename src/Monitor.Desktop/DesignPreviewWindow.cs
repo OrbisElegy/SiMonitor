@@ -178,18 +178,18 @@ internal sealed class DesignPreviewWindow : Window
         config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
         var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
         var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
-        var (co2Delay, co2Dispersion) = Settings.ReadCo2Response();
-        var (co2DeadSpace, co2Rise, co2Fall) = Settings.ReadCo2Timing();
-        var (co2Baseline, co2Target, co2Plateau) = Settings.ReadCo2Levels();
+        var (co2DelayMilliseconds, co2DispersionMilliseconds) = Settings.ReadCo2Response();
+        var (co2DeadSpaceMilliseconds, co2RiseMilliseconds, co2FallMilliseconds) = Settings.ReadCo2Timing();
+        var (co2BaselineMmHg, co2TargetMmHg, co2PlateauCentiMmHg) = Settings.ReadCo2Levels();
         config = config with
         {
-            Co2BaselineMmHg = co2Baseline,
-            Co2PlateauStartCentiMmHg = co2Plateau,
-            Co2DeadSpaceMilliseconds = co2DeadSpace,
-            Co2RiseMilliseconds = co2Rise,
-            Co2FallMilliseconds = co2Fall,
-            Co2TransportDelayMilliseconds = co2Delay,
-            Co2DispersionStepMilliseconds = co2Dispersion,
+            Co2BaselineMmHg = co2BaselineMmHg,
+            Co2PlateauStartCentiMmHg = co2PlateauCentiMmHg,
+            Co2DeadSpaceMilliseconds = co2DeadSpaceMilliseconds,
+            Co2RiseMilliseconds = co2RiseMilliseconds,
+            Co2FallMilliseconds = co2FallMilliseconds,
+            Co2TransportDelayMilliseconds = co2DelayMilliseconds,
+            Co2DispersionStepMilliseconds = co2DispersionMilliseconds,
             RespAmplitudeCounts = respAmplitude,
             RespCardiacArtifactCounts = respArtifact,
             BreathPeriodMilliseconds = breathPeriod,
@@ -197,7 +197,7 @@ internal sealed class DesignPreviewWindow : Window
             AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "ABP 脉搏分量倍率"),
             PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "PA 脉搏分量倍率"),
             CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "CVP 基线"),
-            Co2EndExpiratoryMmHg = co2Target
+            Co2EndExpiratoryMmHg = co2TargetMmHg
         };
         if (Settings.CardiacRateEnabled.IsChecked == true)
         {
@@ -207,10 +207,10 @@ internal sealed class DesignPreviewWindow : Window
                 Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
             config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
         }
-        int co2Amplitude = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
-        if (co2Amplitude > 0 && co2Baseline != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
-        if (co2Amplitude > 0)
-        { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2Amplitude, Settings.RateSeed.Text ?? "") }; }
+        int co2AmplitudeCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
+        if (co2AmplitudeCentiMmHg > 0 && co2BaselineMmHg != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
+        if (co2AmplitudeCentiMmHg > 0)
+        { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2AmplitudeCentiMmHg, Settings.RateSeed.Text ?? "") }; }
         int? opticalTarget = Settings.ReadOpticalTarget();
         SeededOpticalSaturation? opticalVariation = null;
         if (opticalTarget is { } target)
@@ -379,7 +379,7 @@ internal sealed class DesignPreviewWindow : Window
         var source = PhysiologyDemoSource.Create(ResolveStyle(0, resp, 0).Physiology);
         List<(long, double)> samples = [];
         for (int step = 1; step <= 217; step++)
-            foreach (var wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
+            foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             {
                 var block = WaveformEnvelopeCodec.Decode(wire);
                 var plane = block.Planes.Single(p => p.ChannelId == PhysiologyDemoSource.ChannelId(1));
@@ -397,7 +397,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         var source = ProjectedEcgDemoSource.Create(configuration); List<WaveformEnvelope> output = [];
         for (int step = 1; step <= 56; step++)
-        { foreach (var bytes in source.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { output.Add(WaveformEnvelopeCodec.Decode(bytes)); } }
+        { foreach (byte[] bytes in source.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { output.Add(WaveformEnvelopeCodec.Decode(bytes)); } }
         return output.Take(55).ToArray();
     }
     private static TextBlock Text(string value, double size, bool strong = false) => new()

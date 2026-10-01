@@ -69,7 +69,7 @@ def main() -> int:
             raise RuntimeError(f"Host preview catalog was not generated: {catalog}")
         target_output = Path(temporary) / "publish"
         command = ["dotnet", "publish", str(project), "-c", "Release", "-r", args.rid,
-                   "--self-contained", "true", *common,
+                   "--self-contained", "true", *common, "-p:ProductRelease=true",
                    "-p:UsePrebuiltStylePreviews=true", f"-p:StylePreviewBinary={catalog}",
                    "-o", str(target_output)]
         if native is not None:

@@ -92,7 +92,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal NumericUpDown Co2TransportDelay { get; } = new() { Minimum = 0, Maximum = 5000, Value = 0, Increment = 100, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown Co2DispersionStep { get; } = new() { Minimum = 0, Maximum = 500, Value = 0, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal (int Delay, int Dispersion) ReadCo2Response()
+    internal (int DelayMilliseconds, int DispersionMilliseconds) ReadCo2Response()
     {
         static int Read(NumericUpDown field)
         {
@@ -106,7 +106,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown Co2DeadSpace { get; } = new() { Minimum = 1, Maximum = 10000, Value = 125, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown Co2Rise { get; } = new() { Minimum = 1, Maximum = 10000, Value = 250, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown Co2Fall { get; } = new() { Minimum = 1, Maximum = 10000, Value = 200, Increment = 25, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal (int DeadSpace, int Rise, int Fall) ReadCo2Timing()
+    internal (int DeadSpaceMilliseconds, int RiseMilliseconds, int FallMilliseconds) ReadCo2Timing()
     {
         static int Read(NumericUpDown field)
         {
@@ -120,12 +120,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal string BreathingConstraintDescription()
     {
         var timing = ReadCo2Timing();
-        return $"吸气须至少 {timing.Fall} ms，呼气须大于 {timing.DeadSpace + timing.Rise} ms；请调整 CO₂ 时长、呼吸频率或吸气占比。";
+        return $"吸气须至少 {timing.FallMilliseconds} ms，呼气须大于 {timing.DeadSpaceMilliseconds + timing.RiseMilliseconds} ms；请调整 CO₂ 时长、呼吸频率或吸气占比。";
     }
     internal NumericUpDown Co2Baseline { get; } = new() { Minimum = 0, Maximum = 80, Value = 0, Increment = 1, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal CheckBox Co2CustomPlateau { get; } = new() { Content = "自定义 CO₂ 平台起始高度" };
     internal NumericUpDown Co2PlateauStart { get; } = new() { Minimum = 0, Maximum = 80, Value = 35, Increment = .25m, Width = 180, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = false };
-    internal (int Baseline, int Target, int? Plateau) ReadCo2Levels()
+    internal (int BaselineMmHg, int TargetMmHg, int? PlateauCentiMmHg) ReadCo2Levels()
     {
         static int Read(NumericUpDown field, int scale)
         {
@@ -134,11 +134,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
             { throw new ArgumentException("Preview.InvalidCo2Levels"); }
             return checked((int)(value * scale));
         }
-        int baseline = Read(Co2Baseline, 1), target = Read(EtCo2Target, 1);
-        int? plateau = Co2CustomPlateau.IsChecked == true ? Read(Co2PlateauStart, 100) : null;
-        if (baseline > target || plateau < baseline * 100 || plateau > target * 100)
+        int baselineMmHg = Read(Co2Baseline, 1), targetMmHg = Read(EtCo2Target, 1);
+        int? plateauCentiMmHg = Co2CustomPlateau.IsChecked == true ? Read(Co2PlateauStart, 100) : null;
+        if (baselineMmHg > targetMmHg || plateauCentiMmHg < baselineMmHg * 100 || plateauCentiMmHg > targetMmHg * 100)
         { throw new ArgumentException("Preview.InvalidCo2Levels"); }
-        return (baseline, target, plateau);
+        return (baselineMmHg, targetMmHg, plateauCentiMmHg);
     }
     internal int EjectionSelection { get; set; }
     internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -255,14 +255,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var alertGroups = new List<(string Title, Control Start)>
         { ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled) };
         alertGroups.AddRange(MeasuredLimitNotice.Descriptors.Select(d => (d.Label, (Control)Alerts.AdditionalLimits.Editors[d.Numeric])));
-        alertGroups.Add(("显示与联调", (Control)Alerts.TestLevel.Parent!)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
+        alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
         SectionPages[3] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
         SectionPages[4] = SettingsSections.Split("生命体征", vitals,
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
             ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),
             ("压力", Before(vitals, AbpPulseGain)));
-        SectionPages[5] = new SettingsSections("高级参数", ("心电图", _advancedEcg), ("呼吸", _advancedRespiration),
-            ("射血", _advancedEjection), ("开发工具", _advancedTools));
+        var advancedGroups = new List<(string Title, Control Content)>
+        { ("心电图", _advancedEcg), ("呼吸", _advancedRespiration), ("射血", _advancedEjection) };
+        if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
+        SectionPages[5] = new SettingsSections("高级参数", advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[]
         {
             new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
@@ -448,7 +450,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         if (rate is < 6 or > 60 || fraction is < 10 or > 90) { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
         int period = checked((int)decimal.Round(60000 / rate, 0, MidpointRounding.ToEven));
         int inspiration = checked((int)decimal.Round(period * fraction / 100, 0, MidpointRounding.ToEven));
-        if (inspiration < timing.Fall || period - inspiration <= timing.DeadSpace + timing.Rise)
+        if (inspiration < timing.FallMilliseconds || period - inspiration <= timing.DeadSpaceMilliseconds + timing.RiseMilliseconds)
         { throw new ArgumentException("Preview.InvalidBreathingTiming"); }
         return (period, inspiration);
     }

@@ -108,6 +108,44 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('--no-restore', calls[4][1])
         self.assertIn('-m:7', calls[4][1])
 
+    def test_product_build_uses_prebuilt_assets_and_replaces_output(self):
+        catalog = self.root / 'src/Monitor.Desktop/bin/Release/net10.0/style-previews.bin'
+        catalog.parent.mkdir(parents=True)
+        catalog.write_bytes(b'catalog')
+        output = self.root / 'artifacts/release'
+        output.mkdir(parents=True)
+        (output / 'old-development-file').write_text('old')
+        calls = []
+        def run(command, **kwargs):
+            calls.append(command)
+            if '-o' in command:
+                stage = Path(command[command.index('-o') + 1])
+                stage.mkdir()
+                (stage / 'Monitor.Desktop.dll').write_bytes(b'product')
+                (stage / 'style-previews.bin').write_bytes(b'catalog')
+        with patch.object(build, 'ROOT', self.root), patch.object(build.subprocess, 'run', side_effect=run):
+            build.build_product('Release', 8)
+        self.assertIn('-p:ProductRelease=false', calls[0])
+        self.assertIn('-p:ProductRelease=true', calls[1])
+        self.assertIn('-p:UsePrebuiltStylePreviews=true', calls[1])
+        self.assertFalse((output / 'old-development-file').exists())
+        self.assertEqual((output / 'Monitor.Desktop.dll').read_bytes(), b'product')
+
+    def test_failed_product_build_preserves_previous_output(self):
+        catalog = self.root / 'src/Monitor.Desktop/bin/Release/net10.0/style-previews.bin'
+        catalog.parent.mkdir(parents=True)
+        catalog.write_bytes(b'catalog')
+        output = self.root / 'artifacts/release'
+        output.mkdir(parents=True)
+        (output / 'Monitor.Desktop.dll').write_bytes(b'previous')
+        def run(command, **kwargs):
+            if '-o' in command:
+                raise build.subprocess.CalledProcessError(1, command)
+        with patch.object(build, 'ROOT', self.root), patch.object(build.subprocess, 'run', side_effect=run):
+            with self.assertRaises(build.subprocess.CalledProcessError):
+                build.build_product('Release', 8)
+        self.assertEqual((output / 'Monitor.Desktop.dll').read_bytes(), b'previous')
+
 
 if __name__ == '__main__':
     unittest.main()

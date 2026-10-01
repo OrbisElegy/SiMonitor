@@ -8,6 +8,15 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+#if SIMONITOR_RELEASE
+        if (args.Length != 0)
+        {
+            Console.Error.WriteLine("Usage: Monitor.Desktop");
+            return 2;
+        }
+#else
+        if (args.Length == 2 && args[0] == "--product-check")
+        { ProductReleaseChecks.AssemblyPath = Path.GetFullPath(args[1]); args = ["--product-check"]; }
         if (args.Length == 2 && args[0] == "--generate-style-previews")
         { return StylePreviewCatalog.Generate(Path.GetFullPath(args[1])); }
         if (args.Length > 0 && args[0] == "--smoke-shard")
@@ -15,11 +24,12 @@ internal static class Program
             if (!NativeSmokePartition.Configure(args)) { return 2; }
             args = ["--smoke-test"];
         }
-        if (args.Length != 0 && !(args.Length == 1 && args[0] is "--ui-preview" or "--smoke-test" or "--study-demo" or "--waveform-demo" or "--physiology-demo" or "--electrode-demo"))
+        if (args.Length != 0 && !(args.Length == 1 && args[0] is "--product-check" or "--ui-preview" or "--smoke-test" or "--study-demo" or "--waveform-demo" or "--physiology-demo" or "--electrode-demo"))
         {
             Console.Error.WriteLine("Usage: Monitor.Desktop [--ui-preview | --smoke-test | --study-demo | --waveform-demo | --physiology-demo | --electrode-demo]");
             return 2;
         }
+#endif
         return AppBuilder.Configure<MonitorApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
     }
 }

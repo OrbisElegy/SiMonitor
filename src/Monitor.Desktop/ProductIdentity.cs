@@ -22,5 +22,13 @@ internal static class ProductIdentity
         You should have received a copy of the GNU Affero General Public License
         along with this program. If not, see <https://www.gnu.org/licenses/>.
         """;
+#if SIMONITOR_RELEASE
+    internal static bool DevelopmentFeatures => false;
+    internal const string VersionLabel = "V0.5";
+    internal const string WindowTitle = Name + " · V0.5 Standalone";
+#else
+    internal static bool DevelopmentFeatures => true;
+    internal const string VersionLabel = "V0.5 开发版";
     internal const string WindowTitle = Name + " · V0.5 Standalone（开发版）";
+#endif
 }

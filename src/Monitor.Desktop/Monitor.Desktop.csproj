@@ -5,6 +5,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(ProductRelease)' == 'true'">
+    <DefineConstants>$(DefineConstants);SIMONITOR_RELEASE</DefineConstants>
+    <Version>0.5.0</Version>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ProductRelease)' == 'true'">
+    <Compile Remove="*SmokeChecks.cs;NativeSmokePartition.cs;ProductReleaseChecks.cs" />
+  </ItemGroup>
+  <Target Name="RequireProductCatalog" BeforeTargets="PrepareForBuild" Condition="'$(ProductRelease)' == 'true'">
+    <Error Condition="'$(UsePrebuiltStylePreviews)' != 'true' Or !Exists('$(StylePreviewBinary)')" Text="Product release requires a prebuilt catalog. Use python tools/build_release.py." />
+  </Target>
+  <Target Name="CopyProductCatalog" AfterTargets="Build" Condition="'$(ProductRelease)' == 'true'">
+    <Copy SourceFiles="$(StylePreviewBinary)" DestinationFiles="$(TargetDir)style-previews.bin" />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="../Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
   </ItemGroup>

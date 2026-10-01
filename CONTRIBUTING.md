@@ -62,10 +62,14 @@ Codex contributions made with gpt-5.6-sol use
 `Co-authored-by: gpt-5.6-sol <codex@localhost>` instead. Add a trailer for
 each participating model/tool combination. Do not infer model identity
 from the tool name or add tool attribution to an unassisted contribution.
+An unassisted contribution does not require a `Co-authored-by` trailer.
 
 The `Signed-off-by` name and email must exactly match the human author.
-Use `git commit -s` to add this trailer. The sign-off trailer is not a
-cryptographic signature.
+Use `git commit -s` to add this trailer from the committer identity.
+The `--author` option changes only the author, so ensure that its name and
+email match the committer when using `-s`, including spaces in the name.
+With your own identity configured above, `git commit -s` needs no
+`--author` override. The sign-off trailer is not a cryptographic signature.
 
 GPG signing is optional and is a contributor's personal choice. To enable
 OpenPGP signing locally, replace the key placeholder with your own key ID:

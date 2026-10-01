@@ -58,7 +58,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="desktop-cross-", dir=artifacts) as temporary:
         stage = Path(temporary) / "source"
         shutil.copytree(root, stage, ignore=shutil.ignore_patterns(
-            ".git", "artifacts", "bin", "obj", ".agents", ".codex", "__pycache__"))
+            ".git", ".cache", "artifacts", "bin", "obj", ".agents", ".codex", "__pycache__"))
         project = stage / "src/Monitor.Desktop/Monitor.Desktop.csproj"
         common = ["-p:NuGetAudit=false", "-p:UseSharedCompilation=false",
                   f"-m:{min(32, os.cpu_count() or 1)}"]

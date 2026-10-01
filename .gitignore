@@ -9,6 +9,7 @@ artifacts/
 *.trx
 *.pyc
 __pycache__/
+.vscode/
 
 # Reproducible third-party downloads; populated by tools/fetch_dependencies.py
 .cache/

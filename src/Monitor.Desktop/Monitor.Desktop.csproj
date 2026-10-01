@@ -4,10 +4,10 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <Version>0.5.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(ProductRelease)' == 'true'">
     <DefineConstants>$(DefineConstants);SIMONITOR_RELEASE</DefineConstants>
-    <Version>0.5.0</Version>
   </PropertyGroup>
   <ItemGroup Condition="'$(ProductRelease)' == 'true'">
     <Compile Remove="*SmokeChecks.cs;NativeSmokePartition.cs;ProductReleaseChecks.cs" />

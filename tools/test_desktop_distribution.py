@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from desktop_distribution import MANIFEST, assemble, verify
+from desktop_distribution import MANIFEST, assemble, product_version, verify
 
 
 class DistributionTests(unittest.TestCase):
@@ -24,6 +24,8 @@ class DistributionTests(unittest.TestCase):
         assets = self.source / "src/Monitor.Desktop/obj/project.assets.json"
         assets.parent.mkdir(parents=True)
         assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}))
+        self.project = self.source / "src/Monitor.Desktop/Monitor.Desktop.csproj"
+        self.project.write_text('<Project><PropertyGroup><Version>0.5.0</Version></PropertyGroup></Project>', encoding="utf-8")
         for name in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md",
                      "docs/infirmary-source-notice.md", "eng/licenses/vendor.txt",
                      "native/sim_audio_native/vendor/LICENSE.miniaudio"]:
@@ -64,6 +66,28 @@ class DistributionTests(unittest.TestCase):
         (self.output / "unexpected.txt").write_text("extra")
         with self.assertRaisesRegex(ValueError, "extra=.*unexpected"):
             verify(self.output)
+
+    def test_info_uses_project_version_and_current_audio_behavior(self):
+        self.project.write_text('<Project><PropertyGroup><Version>1.2.3-test</Version></PropertyGroup></Project>', encoding="utf-8")
+        self.assemble()
+        info = (self.output / "distribution-info.txt").read_text(encoding="utf-8")
+        self.assertIn("Seele's SiMonitor 1.2.3-test standalone candidate", info)
+        self.assertNotIn("V0.5", info)
+
+    def test_invalid_product_version_fails_before_metadata(self):
+        for content in ('<Project/>', '<Project><PropertyGroup><Version>$(OtherVersion)</Version></PropertyGroup></Project>'):
+            with self.subTest(content=content):
+                self.project.write_text(content, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "explicit product Version"):
+                    self.assemble()
+                self.assertFalse((self.output / "legal").exists())
+                self.assertFalse((self.output / MANIFEST).exists())
+
+    def test_product_version_ignores_conditional_overrides(self):
+        self.project.write_text('<Project><PropertyGroup><Version>0.5.0</Version></PropertyGroup>'
+                                '<PropertyGroup Condition="false"><Version>9.0</Version></PropertyGroup>'
+                                '</Project>', encoding="utf-8")
+        self.assertEqual(product_version(self.source), "0.5.0")
 
     def test_missing_required_asset_does_not_write_metadata(self):
         (self.output / "sim_audio_native.dll").unlink()

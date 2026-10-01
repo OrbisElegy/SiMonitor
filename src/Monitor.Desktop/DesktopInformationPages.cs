@@ -28,7 +28,7 @@ internal static class DesktopInformationPages
     {
         var root = new Grid { RowDefinitions = new("Auto,Auto,*"), Margin = new Thickness(24) };
         var filters = new Grid { ColumnDefinitions = new("200,*") };
-        var categories = Topics.Value.Select(t => t.Category).Distinct().Prepend("全部分类").ToArray();
+        string[] categories = Topics.Value.Select(t => t.Category).Distinct().Prepend("全部分类").ToArray();
         var category = new ComboBox { ItemsSource = categories, SelectedIndex = 0, MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 12, 0) };
         var search = new TextBox { PlaceholderText = "搜索说明，例如：心率、量程、声音", MinHeight = 44 };
         AutomationProperties.SetName(category, "帮助分类"); AutomationProperties.SetName(search, "搜索帮助");
@@ -64,7 +64,11 @@ internal static class DesktopInformationPages
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto,Auto,*"), Margin = new Thickness(24) };
         var title = new TextBlock { Text = thirdParty ? "开源组件" : ProductIdentity.Name + " · " + ProductIdentity.VersionLabel, FontSize = 24, FontWeight = FontWeight.SemiBold };
         root.Children.Add(title);
-        var version = new SelectableTextBlock { Text = "构建版本：" + (assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString()), Margin = new Thickness(0, 12) };
+        string buildVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? assembly.GetName().Version?.ToString(3) ?? "未知";
+        int revisionStart = buildVersion.IndexOf('+') + 1;
+        const int shortRevisionLength = 7;
+        if (revisionStart > 0 && buildVersion.Length > revisionStart + shortRevisionLength) { buildVersion = buildVersion[..(revisionStart + shortRevisionLength)]; }
+        var version = new SelectableTextBlock { Text = "构建版本：" + buildVersion, Margin = new Thickness(0, 12) };
         Grid.SetRow(version, 1); root.Children.Add(version);
         var notice = new TextBlock { Text = "原创代码：AGPL-3.0-or-later。第三方组件保留各自许可。以下为锁定依赖的许可、上游声明及对应清单；自包含发布包另附其 .NET 运行时声明。公开发布前仍需核对最终分发包与对应源码。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         var information = new StackPanel { Spacing = 12 };
@@ -74,11 +78,10 @@ internal static class DesktopInformationPages
             var repository = new HyperlinkButton { Content = "GitHub · OrbisElegy/SiMonitor", NavigateUri = new Uri(ProductIdentity.RepositoryUrl), HorizontalAlignment = HorizontalAlignment.Left };
             AutomationProperties.SetName(repository, "项目 GitHub 仓库");
             information.Children.Add(repository);
-            information.Children.Add(new TextBlock { Text = "仓库目前为私有，访问需要授权。", TextWrapping = TextWrapping.Wrap });
         }
         else { information.Children.Add(notice); }
         Grid.SetRow(information, 2); root.Children.Add(information);
-        var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith("Monitor.Legal.", StringComparison.Ordinal) &&
+        string[] names = assembly.GetManifestResourceNames().Where(n => n.StartsWith("Monitor.Legal.", StringComparison.Ordinal) &&
             (thirdParty ? n is not ("Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md") : n is "Monitor.Legal.LICENSE" or "Monitor.Legal.license-scope.md")).Order().ToArray();
         var selector = new ComboBox { ItemsSource = names.Select(n => n["Monitor.Legal.".Length..]).ToArray(), MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 12) };
         AutomationProperties.SetName(selector, "开源许可与依赖文档"); Grid.SetRow(selector, 3); root.Children.Add(selector);

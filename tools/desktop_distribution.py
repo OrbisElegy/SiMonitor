@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 
 MANIFEST = "distribution-manifest.json"
 SCHEMA = "MonitorDesktopDistribution@1"
@@ -66,8 +67,20 @@ def runtime_pack_legal(directory, source, rid):
     raise ValueError(f"Missing license or notices for .NET runtime pack {matches[0]}")
 
 
+def product_version(source):
+    project = source / "src/Monitor.Desktop/Monitor.Desktop.csproj"
+    root = ET.fromstring(project.read_text(encoding="utf-8"))
+    versions = [element.text.strip() for group in root.findall("PropertyGroup")
+                if not group.get("Condition") for element in group.findall("Version")
+                if not element.get("Condition") and element.text and element.text.strip()]
+    if len(versions) != 1 or "$" in versions[0]:
+        raise ValueError("Expected one explicit product Version in Monitor.Desktop.csproj")
+    return versions[0]
+
+
 def assemble(directory, source, rid, provenance):
     directory, source = Path(directory), Path(source)
+    version = product_version(source)
     executable = "Monitor.Desktop.exe" if rid.startswith("win-") else "Monitor.Desktop"
     required = [executable, "Monitor.Desktop.dll", "Monitor.Desktop.runtimeconfig.json",
                 "Monitor.Desktop.deps.json", "style-previews.bin"]
@@ -93,7 +106,7 @@ def assemble(directory, source, rid, provenance):
     runtime_legal.mkdir(parents=True)
     shutil.copyfile(runtime_license, runtime_legal / "LICENSE.TXT")
     shutil.copyfile(runtime_notices, runtime_legal / "THIRD-PARTY-NOTICES.TXT")
-    info = f"""Seele's SiMonitor V0.5 standalone candidate ({rid})
+    info = f"""Seele's SiMonitor {version} standalone candidate ({rid})
 
 Offline launch: run {executable} without arguments; keep this directory intact.
 No .NET SDK installation is required for this self-contained package.
@@ -108,7 +121,7 @@ For a clean default configuration, close the app and move that file aside.
 
 Teaching simulator only; not for clinical decisions or patient monitoring.
 This candidate does not assert Windows soak, audio-fault or release acceptance.
-Physical end-to-end audio latency is not a V0.5 acceptance gate.
+This candidate does not establish physical end-to-end audio latency.
 The manifest detects accidental changes; it is not a signature or authenticity
 proof. Retain the manifest when transferring this directory for testing.
 

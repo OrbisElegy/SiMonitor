@@ -73,8 +73,11 @@ def main():
             raise ValueError(f'Duplicate ledger package: {key}')
         if not entry.get('license'):
             raise ValueError(f'Missing package license: {key}')
-        if entry.get('license_file') and not (root / entry['license_file']).is_file():
-            raise ValueError(f'Missing license file: {key}')
+        if not entry.get('license_file'):
+            raise ValueError(f'Missing bundled license mapping: {key}')
+        for field in ('license_file', 'notice_file'):
+            if entry.get(field) and not (root / entry[field]).is_file():
+                raise ValueError(f'Missing {field}: {key}')
         entries[key] = entry['content_hash_sha512_base64']
     seen = set()
     for folder in ('src', 'tests'):
@@ -91,6 +94,9 @@ def main():
         raise ValueError(f'Unreferenced ledger packages: {entries.keys() - seen}')
     print(f'ok: {len(seen)} locked dependency versions match license/hash ledger')
     for entry in ledger['native_dependencies']:
+        if entry.get('license') and (not entry.get('license_file') or
+                                     not (root / entry['license_file']).is_file()):
+            raise ValueError(f'Missing native license file: {entry["id"]}')
         for source in entry.get('source_files', []):
             if not entry.get('license') or not entry.get('commit'):
                 raise ValueError(f'Unpinned native source: {entry["id"]}')

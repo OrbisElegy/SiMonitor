@@ -7,3 +7,4 @@
 
 # Preserve byte-identical upstream source and notices for hash verification.
 native/sim_audio_native/vendor/* -text -whitespace
+eng/licenses/* -text -eol -whitespace

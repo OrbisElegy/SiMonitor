@@ -36,8 +36,14 @@ def validate(message: str, author: str) -> list[str]:
     trailers = paragraphs[-1].splitlines() if len(paragraphs) > 1 else []
     signoffs = [line for line in lines if line.lower().startswith('signed-off-by:')]
     expected = f'Signed-off-by: {author}'
-    if signoffs != [expected] or expected not in trailers:
-        errors.append('exactly one Signed-off-by trailer must match the Git author name and email')
+    if len(signoffs) != 1:
+        errors.append(f'exactly one Signed-off-by trailer is required; expected: {expected}')
+    elif signoffs[0] != expected:
+        errors.append(f'sign-off does not match the Git author; expected: {expected}; '
+                      f'found: {signoffs[0]}. git commit -s uses the committer identity; '
+                      '--author does not change it')
+    elif expected not in trailers:
+        errors.append('Signed-off-by must be in the final trailer paragraph')
     if author.endswith('@localhost>'):
         errors.append('Git author must be a human contributor, not a tool identity')
     coauthors = [line for line in lines if line.lower().startswith(('co-authored-by:', 'co-author:'))]
@@ -56,7 +62,12 @@ def main() -> int:
     if match is None:
         print('error: could not resolve the Git author identity', file=sys.stderr)
         return 1
-    errors = validate(message_path.read_text(encoding="utf-8"), match[1])
+    # commit-msg runs before Git removes editor comments. Use Git's own
+    # comment handling, including core.commentChar, without rewriting the file.
+    message = subprocess.check_output(
+        ['git', 'stripspace', '--strip-comments'],
+        input=message_path.read_text(encoding="utf-8"), text=True)
+    errors = validate(message, match[1])
 
     for error in errors:
         print(f"error: {error}", file=sys.stderr)

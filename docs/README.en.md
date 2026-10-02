@@ -4,7 +4,7 @@
 
 Seele's SiMonitor is a teaching simulator for ECG and other patient-monitor waveforms. **It is not a medical device and must not be used for clinical monitoring, diagnosis, or treatment.**
 
-The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records. A locally built product is a candidate for inspection, not evidence of release acceptance.
+The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records. 
 
 For a shorter overview, see the [English summary](english-summary.md). Read the [contribution guide](../CONTRIBUTING.md) before contributing.
 

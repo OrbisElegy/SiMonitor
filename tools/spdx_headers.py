@@ -18,11 +18,15 @@ def comment(path):
     suffix = Path(path).suffix.lower()
     if suffix == '.cs':
         return '// ', ''
+    if suffix in ('.js', '.mjs', '.cjs'):
+        return '// ', ''
     if suffix in ('.c', '.h'):
         return '/* ', ' */'
     if suffix in ('.csproj', '.props', '.targets', '.slnx') or name == 'NuGet.Config':
         return '<!-- ', ' -->'
     if suffix in ('.py', '.sh', '.ps1') or name in ('commit-msg', 'CMakeLists.txt'):
+        return '# ', ''
+    if suffix in ('.yml', '.yaml') and Path(path).parts[:2] == ('.github', 'workflows'):
         return '# ', ''
     return None
 

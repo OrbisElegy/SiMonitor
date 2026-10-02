@@ -33,6 +33,26 @@ class SpdxHeaderTests(unittest.TestCase):
             self.assertTrue(exempt(path), path)
             self.assertEqual(with_header(path, data), data)
 
+    def test_workflows_and_javascript_require_headers_but_issue_forms_do_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for path, data in (('.github/workflows/ci.yml', b'name: CI\n'),
+                               ('.github/workflows/check.yaml', b'name: Check\n'),
+                               ('.github/tests/triage.cjs', b'const value = 1;\n'),
+                               ('tools/check.mjs', b'export const value = 1;\n'),
+                               ('tools/check.js', b'const value = 1;\n')):
+                with self.subTest(path=path):
+                    target = root / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(data)
+                    self.assertFalse(exempt(path))
+                    with self.assertRaisesRegex(ValueError, 'Missing SPDX header'):
+                        check_or_write(root, [path], True)
+                    target.write_bytes(with_header(path, data))
+                    self.assertEqual(check_or_write(root, [path], True), 1)
+        for path in ('.github/ISSUE_TEMPLATE/bug.yml', '.github/config.yaml', 'settings.yml'):
+            self.assertTrue(exempt(path), path)
+
     def test_adapted_tables_preserve_both_license_terms(self):
         data = b'// Adapted from Infirmary Integrated\n// Apache-2.0; see license\nclass Table {}\n'
         self.assertIn(ADAPTED_LICENSE.encode(), with_header('Table.cs', data).splitlines()[0])

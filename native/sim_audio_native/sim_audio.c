@@ -87,7 +87,11 @@ static void consume(sa_output* output, float* pcm, ma_uint32 frames)
     }
     if (done != frames) {
         ma_atomic_store_32(&output->missing, frames - done);
-        ma_atomic_store_32(&output->retired, 1);
+#if defined(SIM_AUDIO_TEST) && defined(SIM_AUDIO_TEST_BEFORE_UNDERRUN)
+        SIM_AUDIO_TEST_BEFORE_UNDERRUN(output);
+#endif
+        /* A concurrent stop/reroute notification must keep its retirement reason. */
+        ma_atomic_compare_and_swap_32(&output->retired, 0, 1);
     }
 }
 static void data_callback(ma_device* device, void* output, const void* input, ma_uint32 frames)

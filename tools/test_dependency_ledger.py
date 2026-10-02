@@ -14,6 +14,12 @@ from unittest.mock import patch
 import verify_dependency_ledger as verifier
 
 
+def read_text_with_gbk_default(path, encoding=None, errors=None):
+    """Model Windows locale decoding without requiring a GBK host or UTF-8 mode."""
+    with path.open(encoding=encoding or 'gbk', errors=errors) as stream:
+        return stream.read()
+
+
 class SourceAdaptationTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -21,10 +27,10 @@ class SourceAdaptationTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.license = self.root / 'eng/licenses/adapted.txt'
         self.license.parent.mkdir(parents=True)
-        self.license.write_text('Bundled test license\n')
+        self.license.write_text('Bundled test license\n', encoding='utf-8')
         self.notice = self.root / 'docs/adapted-notice.md'
         self.notice.parent.mkdir()
-        self.notice.write_text('Upstream author attribution and local modifications.\n')
+        self.notice.write_text('Upstream author attribution and local modifications.\n', encoding='utf-8')
         self.relative = 'eng/physiology/adapted.json'
         self.path = self.root / self.relative
         self.path.parent.mkdir()
@@ -52,7 +58,7 @@ class SourceAdaptationTests(unittest.TestCase):
         self.ledger = {'source_adaptations': [self.entry]}
 
     def write_manifest(self):
-        self.path.write_text(json.dumps(self.manifest))
+        self.path.write_text(json.dumps(self.manifest), encoding='utf-8')
 
     def verify(self):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -60,6 +66,41 @@ class SourceAdaptationTests(unittest.TestCase):
 
     def test_complete_committed_evidence_passes_without_upstream_checkout(self):
         self.verify()
+
+    def test_utf8_manifest_and_notice_with_gbk_default(self):
+        for resource in ('manifest', 'notice'):
+            with self.subTest(resource=resource):
+                self.manifest['source_path'] = ('upstream/波形₂.cs' if resource == 'manifest'
+                                                else 'upstream/waveforms.cs')
+                self.entry['source_path'] = self.manifest['source_path']
+                self.path.write_text(json.dumps(self.manifest, ensure_ascii=False), encoding='utf-8')
+                self.notice.write_text('上游波形归属₂\n' if resource == 'notice' else 'Attribution\n',
+                                       encoding='utf-8')
+                with patch.object(Path, 'read_text', read_text_with_gbk_default):
+                    self.verify()
+
+    def test_main_reads_utf8_ledger_and_lock_with_gbk_default(self):
+        self.ledger.update(direct_packages=[{
+            'id': 'Test.Package', 'version': '1.0', 'license': 'Apache-2.0',
+            'license_file': self.entry['license_file'],
+            'content_hash_sha512_base64': 'test-content-hash',
+        }], transitive_packages=[], native_dependencies=[])
+        lock = self.root / 'src/Test/packages.lock.json'
+        lock.parent.mkdir(parents=True)
+        lock_data = {'dependencies': {'net10.0': {'Test.Package': {
+            'type': 'Direct', 'resolved': '1.0', 'contentHash': 'test-content-hash',
+        }}}}
+        ledger_path = self.root / 'eng/dependencies.json'
+        for resource in ('ledger', 'lock'):
+            with self.subTest(resource=resource):
+                self.ledger['description'] = '依赖账本₂' if resource == 'ledger' else 'Dependency ledger'
+                lock_data['description'] = '锁定依赖₂' if resource == 'lock' else 'Dependency lock'
+                ledger_path.write_text(json.dumps(self.ledger, ensure_ascii=False), encoding='utf-8')
+                lock.write_text(json.dumps(lock_data, ensure_ascii=False), encoding='utf-8')
+                with patch.object(verifier, '__file__', str(self.root / 'tools/verify_dependency_ledger.py')), \
+                        patch.object(Path, 'read_text', read_text_with_gbk_default), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    verifier.main()
 
     def test_missing_entry_or_entire_section_is_rejected(self):
         for ledger in ({}, {'source_adaptations': []}):
@@ -69,7 +110,7 @@ class SourceAdaptationTests(unittest.TestCase):
                     self.verify()
 
     def test_new_unregistered_adaptation_is_rejected(self):
-        (self.path.parent / 'new-adaptation.json').write_text(json.dumps(self.manifest))
+        (self.path.parent / 'new-adaptation.json').write_text(json.dumps(self.manifest), encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'Unregistered.*new-adaptation.json'):
             self.verify()
 
@@ -84,7 +125,7 @@ class SourceAdaptationTests(unittest.TestCase):
             self.verify()
 
     def test_changed_license_bytes_are_rejected(self):
-        self.license.write_text('Different license\n')
+        self.license.write_text('Different license\n', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'license hash mismatch'):
             self.verify()
 
@@ -94,7 +135,7 @@ class SourceAdaptationTests(unittest.TestCase):
                 if contents is None:
                     self.notice.unlink()
                 else:
-                    self.notice.write_text(contents)
+                    self.notice.write_text(contents, encoding='utf-8')
                 with self.assertRaisesRegex(ValueError, 'attribution notice'):
                     self.verify()
 
@@ -103,7 +144,7 @@ class SourceAdaptationTests(unittest.TestCase):
                       'license', 'license_file', 'license_sha256'):
             with self.subTest(field=field):
                 changed = dict(self.manifest, **{field: 'different'})
-                self.path.write_text(json.dumps(changed))
+                self.path.write_text(json.dumps(changed), encoding='utf-8')
                 with self.assertRaisesRegex(ValueError, 'mismatch'):
                     self.verify()
         self.write_manifest()
@@ -162,14 +203,14 @@ class SourceAdaptationTests(unittest.TestCase):
         lock = self.root / 'src/Test/packages.lock.json'
         lock.parent.mkdir(parents=True)
         lock.write_text(json.dumps({'dependencies': {'net10.0': {'Test.Package': {
-            'type': 'Direct', 'resolved': '1.0', 'contentHash': 'test-content-hash'}}}}))
+            'type': 'Direct', 'resolved': '1.0', 'contentHash': 'test-content-hash'}}}}), encoding='utf-8')
         ledger_path = self.root / 'eng/dependencies.json'
         with patch.object(verifier, '__file__', str(self.root / 'tools/verify_dependency_ledger.py')):
-            ledger_path.write_text(json.dumps(self.ledger))
+            ledger_path.write_text(json.dumps(self.ledger), encoding='utf-8')
             with contextlib.redirect_stdout(io.StringIO()):
                 verifier.main()
             self.ledger['source_adaptations'] = []
-            ledger_path.write_text(json.dumps(self.ledger))
+            ledger_path.write_text(json.dumps(self.ledger), encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'Unregistered source adaptations'):
                 verifier.main()
 

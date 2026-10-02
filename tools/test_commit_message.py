@@ -73,13 +73,13 @@ class CommitHookIntegrationTests(unittest.TestCase):
         editor.write_text(
             'import sys\nfrom pathlib import Path\n'
             'path = Path(sys.argv[1])\n'
-            'path.write_text("build: check commit hook\\n" + path.read_text())\n',
+            'path.write_text("build: check commit hook\\n" + path.read_text(encoding="utf-8"), encoding="utf-8")\n',
             encoding='utf-8')
         self.env['GIT_EDITOR'] = shlex.join([sys.executable, str(editor)])
 
     def git(self, *args, check=True):
         return subprocess.run(['git', *args], cwd=self.repo, env=self.env,
-                              text=True, capture_output=True, check=check)
+                              encoding='utf-8', capture_output=True, check=check)
 
     def assert_unassisted_commit(self):
         message = self.git('log', '-1', '--format=%B').stdout

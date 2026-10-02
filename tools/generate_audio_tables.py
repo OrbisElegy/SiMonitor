@@ -31,18 +31,22 @@ def generate():
     return '\n'.join(lines + ['    ];', '}', ''])
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     path = Path(__file__).resolve().parents[1] / 'src/Monitor.Infrastructure/Audio/SineTable.cs'
     expected = generate()
     if args.check:
-        if path.read_text() != expected:
+        if path.read_text(encoding='utf-8') != expected:
             raise SystemExit('audio sine table differs from offline authoring')
         print('ok: original Q31 quarter-sine table matches offline authoring')
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(expected)
+        path.write_text(expected, encoding='utf-8')
     generate_selected(args.check)
     generate_pitch(args.check)
+
+
+if __name__ == '__main__':
+    main()

@@ -19,22 +19,22 @@ class DistributionTests(unittest.TestCase):
         self.output.mkdir()
         self.runtime = self.root / "packages/microsoft.netcore.app.runtime.win-x64/10.0.12"
         self.runtime.mkdir(parents=True)
-        (self.runtime / "LICENSE.TXT").write_text("runtime license")
-        (self.runtime / "THIRD-PARTY-NOTICES.TXT").write_text("runtime notices")
+        (self.runtime / "LICENSE.TXT").write_text("runtime license", encoding="utf-8")
+        (self.runtime / "THIRD-PARTY-NOTICES.TXT").write_text("runtime notices", encoding="utf-8")
         assets = self.source / "src/Monitor.Desktop/obj/project.assets.json"
         assets.parent.mkdir(parents=True)
-        assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}))
+        assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}), encoding="utf-8")
         for name in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md",
                      "docs/infirmary-source-notice.md", "eng/licenses/vendor.txt",
                      "native/sim_audio_native/vendor/LICENSE.miniaudio"]:
             path = self.source / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("test material " + name)
+            path.write_text("test material " + name, encoding="utf-8")
         for name in ["Monitor.Desktop.exe", "Monitor.Desktop.dll", "Monitor.Desktop.runtimeconfig.json",
                      "style-previews.bin", "sim_audio_native.dll", "LICENSE.miniaudio"]:
             (self.output / name).write_bytes(b"fixture")
         (self.output / "Monitor.Desktop.deps.json").write_text(json.dumps({"libraries": {
-            "runtimepack.Microsoft.NETCore.App.Runtime.win-x64/10.0.12": {"type": "runtimepack"}}}))
+            "runtimepack.Microsoft.NETCore.App.Runtime.win-x64/10.0.12": {"type": "runtimepack"}}}), encoding="utf-8")
 
     def assemble(self):
         assemble(self.output, self.source, "win-x64", {"commit": "test", "workingTreeDirty": True})
@@ -61,7 +61,7 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing=.*style-previews"):
             verify(self.output)
         path.write_bytes(b"fixture")
-        (self.output / "unexpected.txt").write_text("extra")
+        (self.output / "unexpected.txt").write_text("extra", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "extra=.*unexpected"):
             verify(self.output)
 
@@ -95,16 +95,16 @@ class DistributionTests(unittest.TestCase):
     def test_manifest_damage(self):
         self.assemble()
         manifest = self.output / MANIFEST
-        data = json.loads(manifest.read_text())
+        data = json.loads(manifest.read_text(encoding="utf-8"))
         data.pop("rid")
-        manifest.write_text(json.dumps(data))
+        manifest.write_text(json.dumps(data), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Unsupported"):
             verify(self.output)
         data["schema"] = "unknown"
-        manifest.write_text(json.dumps(data))
+        manifest.write_text(json.dumps(data), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Unsupported"):
             verify(self.output)
-        manifest.write_text("null")
+        manifest.write_text("null", encoding="utf-8")
         with self.assertRaises(ValueError):
             verify(self.output)
 

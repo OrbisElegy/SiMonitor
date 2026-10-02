@@ -15,9 +15,9 @@ def main():
     specs = root / 'tests/Monitor.Specs/bin/Debug/net10.0/Monitor.Specs.dll'
     subprocess.run(['dotnet', str(specs), '--audio-native-check', str(lib)], check=True)
     # This must refuse the null sink rather than silently "play" into it.
-    result = subprocess.run(['dotnet', str(specs), '--audio-native-audition', str(lib)], capture_output=True, text=True)
-    if result.returncode != 1 or 'TestBackendRejected' not in result.stderr:
-        raise RuntimeError('Audition failed to reject the test backend: ' + result.stderr)
+    result = subprocess.run(['dotnet', str(specs), '--audio-native-audition', str(lib)], capture_output=True)
+    if result.returncode != 1 or b'TestBackendRejected' not in result.stderr:
+        raise RuntimeError(f'Audition failed to reject the test backend: {result.stderr!r}')
     print('PASS production audition refuses test library')
 
 

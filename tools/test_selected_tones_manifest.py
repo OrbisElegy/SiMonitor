@@ -41,7 +41,7 @@ class SelectedToneManifestTests(unittest.TestCase):
         pitch.generate(True)
 
     def test_missing_or_incorrect_bank_entry_is_rejected(self):
-        original = json.loads(self.path.read_text())
+        original = json.loads(self.path.read_text(encoding='utf-8'))
         for defect in ('missing', 'frames', 'sha256'):
             with self.subTest(defect=defect):
                 manifest = json.loads(json.dumps(original))
@@ -50,7 +50,7 @@ class SelectedToneManifestTests(unittest.TestCase):
                     del manifest['voices']['HeartbeatPitchA']
                 else:
                     entry[defect] = 1 if defect == 'frames' else '0' * 64
-                self.path.write_text(json.dumps(manifest, indent=2) + '\n')
+                self.path.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
                 with self.assertRaises(AssertionError):
                     tones.generate(True)
                 with self.assertRaisesRegex(SystemExit, 'manifest entry'):

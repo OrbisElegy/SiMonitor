@@ -41,7 +41,7 @@ def main():
     def run(task):
         name, command = task
         started = time.monotonic()
-        with (output / (name + '.log')).open('w') as log:
+        with (output / (name + '.log')).open('wb') as log:
             result = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT, check=False)
         return name, result.returncode, time.monotonic() - started
 
@@ -53,17 +53,18 @@ def main():
             if status != 0:
                 failures.append(name)
     for kind, id_pattern, total_pattern, first in [
-        ('specs', r'^ok (\d+) -', r'; total (\d+)\)', 1),
-        ('native', r'^ok: native scenario (\d+) ', r'^native scenarios total: (\d+)', 0),
+        ('specs', rb'^ok (\d+) -', rb'; total (\d+)\)', 1),
+        ('native', rb'^ok: native scenario (\d+) ', rb'^native scenarios total: (\d+)', 0),
     ]:
         logs = [output / (name + '.log') for name, _ in tasks if name.startswith(kind + '-')]
         if not logs:
             continue
         ids, totals = [], []
         for path in logs:
-            text = path.read_text()
-            ids.extend(map(int, re.findall(id_pattern, text, re.MULTILINE)))
-            totals.extend(map(int, re.findall(total_pattern, text, re.MULTILINE)))
+            # Subprocesses own their output encoding; coverage markers are ASCII.
+            data = path.read_bytes()
+            ids.extend(map(int, re.findall(id_pattern, data, re.MULTILINE)))
+            totals.extend(map(int, re.findall(total_pattern, data, re.MULTILINE)))
         if len(totals) != len(logs) or len(set(totals)) != 1 or sorted(ids) != list(range(first, first + totals[0])):
             failures.append(kind + '-coverage')
             print(f'FAIL {kind}: missing, duplicate or incomplete shard coverage')

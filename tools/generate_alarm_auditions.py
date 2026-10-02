@@ -83,7 +83,7 @@ def generate(destination):
     source = ROOT / 'eng/audio/alarm-audition-candidates.json'
     if not source.exists():
         source = ROOT / 'candidates.json'
-    config = json.loads(source.read_text())
+    config = json.loads(source.read_text(encoding='utf-8'))
     rate = config['sample_rate_hz']
     destination.mkdir(parents=True, exist_ok=True)
     manifest = {'schema': 'Monitor.AlarmAuditionFiles@1', 'files': []}
@@ -123,7 +123,7 @@ def generate(destination):
                      f'<p>整组试听：Info → Notice → Warning → Critical（中间静音分隔）</p>'
                      f'<audio controls preload="none" src="{name}"></audio>'
                      f'<table><tr>{"".join(cells)}</tr></table></section>')
-    (destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    (destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     (destination / 'candidates.json').write_bytes(source.read_bytes())
     (destination / 'index.html').write_text('''<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>监护报警音试听 A/B/C</title>
@@ -162,7 +162,11 @@ Info/Notice/Warning各展示一组，省略长重复等待；Critical展示八�
     print(destination / 'alarm-auditions.zip')
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/alarm-auditions')
     generate(parser.parse_args().output.resolve())
+
+
+if __name__ == '__main__':
+    main()

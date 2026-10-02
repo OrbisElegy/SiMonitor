@@ -57,7 +57,7 @@ def validate(message: str, author: str) -> list[str]:
 
 def main() -> int:
     message_path = Path(sys.argv[1])
-    identity = subprocess.check_output(['git', 'var', 'GIT_AUTHOR_IDENT'], text=True).strip()
+    identity = subprocess.check_output(['git', 'var', 'GIT_AUTHOR_IDENT'], encoding='utf-8').strip()
     match = IDENTITY.fullmatch(identity)
     if match is None:
         print('error: could not resolve the Git author identity', file=sys.stderr)
@@ -66,7 +66,7 @@ def main() -> int:
     # comment handling, including core.commentChar, without rewriting the file.
     message = subprocess.check_output(
         ['git', 'stripspace', '--strip-comments'],
-        input=message_path.read_text(encoding="utf-8"), text=True)
+        input=message_path.read_text(encoding="utf-8"), encoding='utf-8')
     errors = validate(message, match[1])
 
     for error in errors:

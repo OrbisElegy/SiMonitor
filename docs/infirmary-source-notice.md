@@ -1,105 +1,96 @@
-# Infirmary Integrated source attribution
+# Infirmary Integrated 来源与归属声明
 
-The arterial seed is adapted from Infirmary Integrated by Ibi Keller (Tanjera),
-fixed commit `0e0eccd2f6e0705b77641a024c20a35cbf9b90e1`, licensed under Apache-2.0.
-The project attribution in Waveform.Draw.cs reads “By Ibi Keller (Tanjera),
-(c) 2017-2023”; the plots file has no separate copyright header.
+动脉波形种子改编自 Ibi Keller（Tanjera）的 Infirmary Integrated，
+来源固定于提交 `0e0eccd2f6e0705b77641a024c20a35cbf9b90e1`，
+按 Apache-2.0 许可。上游 `Waveform.Draw.cs` 中的归属声明原文为
+“By Ibi Keller (Tanjera), (c) 2017-2023”；绘图数据文件没有单独的版权标头。
 
-- [Original ABP_Default vertices](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Dictionary.Plots.cs)
-- [Original drawing/reference usage](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Draw.cs)
-- [Original license](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/License.md)
+- [原始 ABP_Default 顶点](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Dictionary.Plots.cs)
+- [原始绘制与引用方式](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Draw.cs)
+- [原始许可证](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/License.md)
 
-The full license text (trailing whitespace normalized) is retained in `eng/licenses/infirmary-integrated-LICENSE.md`.
-The complete recursive tree for this commit contained no NOTICE file.
-Adaptations are limited to the waveform vertices documented below; upstream
-drawing code, timers and other assets are not included.
+完整许可正文保存在 `eng/licenses/infirmary-integrated-LICENSE.md`，
+仅规范化了行尾空白。该提交的完整递归文件树中没有 NOTICE 文件。
+改编仅限下述波形顶点；未纳入上游绘制代码、定时器或其他资源。
 
-`eng/physiology/infirmary-arterial-pulse.json` preserves all 76 original ABP
-vertices as decimal strings, source-file SHA-256, canonical vertex SHA-256,
-license SHA-256 and explicit local modifications. Regeneration checks vertex and
-license hashes, then emits per-table little-endian Q32 SHA-256. Files required to
-redistribute this adaptation include the license and this attribution notice.
+`eng/physiology/infirmary-arterial-pulse.json` 以十进制字符串保留全部 76 个
+原始 ABP 顶点，并记录源文件 SHA-256、规范顶点 SHA-256、许可证 SHA-256
+和明确的本地修改。重新生成时校验顶点与许可证哈希，然后为每张表输出
+小端 Q32 数据的 SHA-256。再分发此改编内容时，应附上许可证和本归属声明。
 
-Local changes: normalize original peak 0.8 to 1; replace vertices 35/36/37 with
-0.34/0.32/0.36 to create a local notch and recovery absent in the original
-monotonic decline; linearly resample exact rational values into 256 Q32 points.
-The final zero endpoint closes the periodic LUT without an invented jump.
-The upstream 10 ms drawing grid and 360 ms systole ratio are not acquisition timing;
-this implementation uses explicit pulse duration and native 125 Hz pressure sampling.
-Upstream random beat modifiers and timers are not imported.
+本地修改：将原始峰值 0.8 归一化为 1；把第 35／36／37 号顶点替换为
+0.34／0.32／0.36，以形成原始单调下降段中没有的局部切迹及回升；
+将精确有理数线性重采样为 256 个 Q32 点。末端零值使周期 LUT 闭合，
+不凭空引入跳变。上游 10 ms 绘图网格及 360 ms 收缩期比例并非采集时序；
+本实现使用明确的脉搏时长和原生 125 Hz 压力采样。
+未引入上游随机搏动修饰和定时器。
 
-`ArterialPulsePlan` adds explicit mechanical transit, baseline and pulse height.
-Its illustrative source is not a qualified arterial-site preset or a model of
-catheter dynamics. Baseline persistence without mechanical events is a caller
-configuration, not a simulated circulatory-arrest pressure decay. SYS/DIA/MAP,
-damping, flush and transducer faults remain unimplemented.
+`ArterialPulsePlan` 加入明确的机械传播延迟、基线和脉搏高度。
+这一示意信号源不是经过验证的动脉测点预设，也不是导管动力学模型。
+没有机械事件时仍保持基线，属于调用方配置，不能解释为模拟循环骤停后的压力衰减。
+SYS／DIA／MAP、阻尼、冲洗及传感器故障尚未实现。
 
-Source inspection uses the public links pinned to the commit above.
-Regeneration uses the committed manifests and license text; an upstream
-checkout is not a build dependency.
-The native physiology demo displays this pressure source.
+来源核对使用上述固定提交的公开链接。重新生成依赖已提交的清单和许可正文，
+不要求检出上游仓库。原生生理演示会显示该压力信号源。
 
-## CO2 adaptation
+## CO₂ 改编
 
-The same pinned plots file also supplies 224 `ETCO2_Default` vertices, recorded
-in `eng/physiology/infirmary-capnogram.json` with source/vertex/license hashes.
-The same Apache-2.0 attribution applies.
-No additional upstream code or assets were copied. Regeneration requires only
-committed manifests and license text, not the local clone or network.
+同一固定版本的绘图数据文件还提供 224 个 `ETCO2_Default` 顶点，
+记录在 `eng/physiology/infirmary-capnogram.json` 中，附有源文件、顶点和
+许可证哈希。同样适用 Apache-2.0 许可及归属声明。
+未复制其他上游代码或资源。重新生成只需已提交的清单和许可正文，
+无需本地上游克隆或网络。
 
-Changes: prepend zero and a dead-space segment; split original indices 0..14 for
-rise (with zero prepended), 14..212 for plateau, 212..223 for fall; normalize by 0.7
-and exactly resample to 512 Q32 entries. Table phase anchors 0/32/96/480/512 are
-mapped to explicit event-relative timing. The final endpoint is zero. The original
-10 ms drawing interval is not treated as a source sample rate or physiological
-time constant. Peak aligns with next inspiration, and the fall continues into
-that inspiration. The plateau's shape still comes from the upstream seed; it is
-not a validated capnogram preset or an independently adjustable slope model.
+修改方式：在开头补入零值和死腔段；将原始索引 0..14（前补零值）
+用于上升段、14..212 用于平台段、212..223 用于下降段；
+按 0.7 归一化，再精确重采样为 512 个 Q32 项。
+表相位锚点 0／32／96／480／512 映射到明确的事件相对时序，末端值为零。
+原始 10 ms 绘图间隔不作为信号源采样率或生理时间常数。
+峰值与下一次吸气对齐，下降段延续到该次吸气中。
+平台形状仍来自上游种子，不是经过验证的二氧化碳波形预设，
+也不是可独立调节斜率的模型。
 
-## Pulmonary artery adaptation
+## 肺动脉波形改编
 
-The same pinned source file supplies 76 PA_Default vertices, retained in
-`eng/physiology/infirmary-pulmonary-artery.json` with source/vertex/license hashes
-under the same Apache-2.0 attribution. The manifest records the pinned source-file hash.
-The independent PA seed is not an ABP-derived shape. No drawing timers, random
-modifiers or fixed intrathoracic amplitude multipliers were copied.
+同一固定源文件提供 76 个 `PA_Default` 顶点，保存在
+`eng/physiology/infirmary-pulmonary-artery.json` 中，附有源文件、顶点、
+许可证哈希，并适用同一 Apache-2.0 归属声明。清单记录了固定版本的源文件哈希。
+独立的 PA 种子并非从 ABP 形状推导。未复制上游绘图定时器、随机修饰，
+也未复制固定的胸腔内压力幅度倍率。
 
-Local changes: normalize by original peak 0.87, retain original indices 0..45
-(including notch/recovery), replace indices 46..75 with an exact linear decay
-from index 45 = 0.09 to zero, then resample 256 Q32 points. This removes unqualified
-oscillation and below-baseline ringing from the source illustration; measurement
-system ringing will need a separate artifact model. Original 10 ms drawing spacing
-and 220 ms systole metadata are not imported as physiological timing constants.
-The manifest records all changes and the generator verifies hashes. Native PA
-pixels do not constitute a validated RV/PA model or measured PAP values.
+本地修改：按原始峰值 0.87 归一化，保留原始索引 0..45（包括切迹及回升），
+再将索引 46..75 替换为从索引 45 的 0.09 精确线性下降至零的序列，
+最后重采样为 256 个 Q32 点。这样去除了源示意波形中未经验证的振荡和
+低于基线的振铃；测量系统的振铃仍需单独建立伪影模型。
+原始 10 ms 绘图间隔和 220 ms 收缩期元数据均未作为生理时序常数引入。
+清单记录所有修改，生成器校验哈希。原生 PA 像素不代表经过验证的
+右心室／肺动脉模型或实测肺动脉压力值。
 
-## CVP component adaptation
+## 中心静脉压分量改编
 
-`eng/physiology/infirmary-cvp-components.json` retains both 95-point upstream
-CVP_Atrioventricular and CVP_Ventricular seeds with canonical combined hash,
-pinned source-file hash and the existing Apache-2.0 license reference.
-The source-file hash identifies the same pinned upstream plots file.
+`eng/physiology/infirmary-cvp-components.json` 保留上游各 95 点的
+`CVP_Atrioventricular` 和 `CVP_Ventricular` 种子，记录组合后的规范哈希、
+固定版本的源文件哈希及现有 Apache-2.0 许可证引用。
+源文件哈希标识的是同一个固定版本的上游绘图数据文件。
 
-Local A extraction uses atrioventricular indices 0..43, removes the straight
-endpoint baseline, clamps negative detrending residue to zero, normalizes the
-remaining maximum and resamples 128 Q32 points. V extraction uses ventricular
-indices 36..86, normalizes its 0.81 peak and resamples 128 points. These are adapted
-shape portions, not a claim that the original arrays provided independently
-validated a/v mechanisms. C, X/Y descent and respiratory unit envelopes are new
-project-authored smoothstep shapes recorded separately in the manifest. Their
-phase, magnitude and event binding are explicit source parameters. Upstream
-whole-complex selection and intrathoracic amplitude multipliers are not copied.
-No mean-CVP estimator, full valve physiology or clinical preset is implied.
+本地 A 波提取使用房室波形索引 0..43，去除直线终点基线，
+将去趋势后为负的余量钳制为零，归一化剩余峰值，再重采样为 128 个 Q32 点。
+V 波提取使用心室波形索引 36..86，将其 0.81 峰值归一化，
+再重采样为 128 点。它们只是改编的形状片段，不能据此声称原始数组
+提供了分别经过验证的 a 波和 v 波机制。C 波、X／Y 降支及呼吸单位包络
+为项目原创的 smoothstep 形状，在清单中另行记录；
+其相位、幅度和事件绑定均为明确的信号源参数。
+未复制上游整组复合波形的选择方式或胸腔内压力幅度倍率。
+这里不隐含平均 CVP 估计器、完整瓣膜生理或临床预设。
 
+## 呼气波形的可选运行时调整
 
-Optional plateau-start pressure in CapnogramPlan additionally remaps the adapted
-ETCO2_Default rise and C-to-D amplitudes at runtime using exact rational fixed-point
-rounding. The original generated seed, timing landmarks and inspiratory fall are
-retained; omitted plateau configuration reproduces the prior seed scaling.
+`CapnogramPlan` 可选的平台起始压力还会在运行时按精确有理数定点舍入，
+重新映射改编后的 `ETCO2_Default` 上升段和 C 至 D 段的幅度。
+原始生成种子、时序标志点和吸气期间的下降段保持不变；
+省略平台配置时，仍产生原先种子的缩放结果。
 
-
-Optional CapnogramPlan dispersion splits the adapted CO2 table into symmetric
-quarter/half/quarter delayed paths, with fixed-point residue retained in the
-middle path. The project-authored response is a runtime modification; the
-imported seed and attribution are unchanged, and disabling it preserves prior
-output. It is not an upstream or manufacturer-specified response kernel.
+可选展宽会将改编后的 CO₂ 表拆成对称的四分之一／二分之一／四分之一延迟路径，
+定点余数保留在中间路径。这一项目原创的响应属于运行时修改；
+引入的种子及归属声明不变，禁用后保留此前输出。
+它不是上游或制造商指定的响应核。

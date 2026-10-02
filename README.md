@@ -4,7 +4,7 @@
 
 Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**本项目不是医疗器械，不用于临床监护、诊断或治疗。**
 
-仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。本地产品构建仅是待检查的候选产物，不代表已通过发布验收。
+仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。
 
 技术资料的英文概览见 [英文摘要](docs/english-summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
@@ -33,7 +33,7 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 - CMake 3.20 或更新版本，以及用于编译原生音频模块的 C 编译器。
 - Windows 上还需要 Visual Studio C++ Build Tools 和 Windows SDK。
 
-以下命令均从仓库根目录执行。Linux 和 macOS 使用 `python3`；Windows 将命令中的 `python3` 替换为 `py -3`。构建脚本会恢复锁定的依赖，并校验下载的原生源码的 SHA-256。
+以下命令均从仓库根目录执行。Linux 和 macOS 使用 `python3`；Windows 端请将命令中的 `python3` 替换为 `py -3`。构建脚本会恢复锁定的依赖，并校验下载的原生源码的 SHA-256。
 
 ## 构建与运行
 
@@ -43,7 +43,7 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 python3 tools/build.py --jobs 32
 ```
 
-这条命令准备依赖、编译生产用原生音频库并构建 Release 配置的完整解决方案。构建结果位于 `src/Monitor.Desktop/bin/Release/net10.0/`。运行桌面应用：
+该命令准备依赖、编译生产用原生音频库并构建 Release 配置的完整解决方案。构建结果位于 `src/Monitor.Desktop/bin/Release/net10.0/`。运行桌面应用：
 
 ```sh
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release

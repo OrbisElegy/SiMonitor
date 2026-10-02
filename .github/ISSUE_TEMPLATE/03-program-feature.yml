@@ -1,0 +1,98 @@
+name: 程序功能建议 / Program feature request
+description: 界面、工作流、设置、声音等功能改进 / UI, workflow, settings, audio, and other application improvements.
+title: "[Feature] "
+labels: [enhancement, "area:program", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请描述具体需求与使用场景，一事一报。波形或测量能力建议请使用“波形功能建议”。
+        Describe one concrete need and use case. Use the waveform feature form for waveform or measurement capabilities.
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 反馈类型 / Issue type
+      options:
+        - 程序功能建议 / Program feature request
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 当前版本 / Current version
+      description: 关于页版本或 commit；尚未运行请说明。About version or commit; say if you have not run the application.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与待解决问题 / Use case and problem
+      description: 谁在何种场景需要此功能？当前版本存在哪些不足？Who needs this, in what situation, and what limits the current version?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议行为与验收标准 / Proposed behavior and acceptance criteria
+      description: 描述用户如何操作、应看到什么结果，以及一个可验证的完成示例。Describe the user interaction, expected result, and a verifiable example of success.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案 / Alternatives considered
+      description: 当前解决办法、尝试过的现有功能及不足；没有可写“无”。Current workaround, existing features considered, and their limits; write none if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 环境、范围与附件 / Environment, scope, and attachments
+      description: 涉及的平台、相关设置、草图或参考链接；***请移除***个人信息、密钥和患者标识。Relevant platforms, settings, mockups, or links; ***PLEASE REMOVE*** personal information, secrets, and patient identifiers.
+  - type: dropdown
+    id: content-origin
+    attributes:
+      label: 内容来源与人工审核 / Content origin and human review
+      description: |
+        “人工审核”指人类已阅读并核验本次即将提交的完整内容；仅布置任务或批准 Agent 运行不计为审核。
+        Human review means a person has read and checked the complete content of this submission. Assigning a task or authorizing an agent to run does not count as review.
+      multiple: false
+      options:
+        - 人类编写并提交 / Written and submitted by a human
+        - AI 参与编写，人类已逐项审核本次提交内容 / AI-assisted, with this submission fully reviewed by a human
+        - Agent 自动提交，本次内容未经人类审核 / Submitted automatically by an AI agent without human review
+        - 无法确认是否经过人类审核 / Human review status is unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: pr-intent
+    attributes:
+      label: 是否愿意自行提交 PR？ / Will you submit a PR?
+      description: 这是意愿声明，不会自动分配任务，也不影响反馈受理。This declares intent; it does not assign the issue or determine whether the report is accepted.
+      options:
+        - 愿意，计划自行实现并提交 PR / Yes, I plan to implement and submit a PR
+        - 愿意，但需要实现指导 / Yes, with implementation guidance
+        - 暂不确定，想先讨论方案 / Unsure, I would like to discuss first
+        - 不计划提交 PR / No, I do not plan to submit a PR
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 实现思路或所需帮助 / Implementation idea or help needed
+      description: 若有 PR 意愿，请补充方案、拟修改模块或需要的帮助；已有 PR 可贴链接。If interested, describe the approach, affected modules, or help needed; link any existing PR.
+  - type: checkboxes
+    id: submission-checklist
+    attributes:
+      label: 提交前确认 / Submission checklist
+      description: 请逐项阅读，仅勾选符合事实的声明。Read each item and check only true statements. 
+      options:
+        - label: 我已搜索现有 issues，未找到相同反馈。 / I searched existing issues and found no duplicate.
+          required: true
+        - label: 我理解本项目仅用于教学模拟。 / I understand this project is for teaching simulation only.
+          required: true
+        - label: "I'm checking these boxes blindly."
+          required: false
+        - label: 我已核对以上信息，并愿意按需补充定位材料。 / I checked the information above and can provide clarification if needed.
+          required: true

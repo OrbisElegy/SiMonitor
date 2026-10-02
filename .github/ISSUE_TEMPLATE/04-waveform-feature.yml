@@ -1,0 +1,115 @@
+name: 波形功能建议 / Waveform feature request
+description: 新波形、预设、生理模型或测量能力 / New waveforms, presets, physiological models, or measurements.
+title: "[Waveform feature] "
+labels: [enhancement, "area:waveform", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请描述一个具体的教学需求。现有波形异常请使用“波形问题”表单。
+        Describe one concrete teaching need. Use the waveform problem form for defects in existing behavior.
+        附件请移除个人信息、密钥和患者标识。Remove personal information, secrets, and patient identifiers from attachments.
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 反馈类型 / Issue type
+      options:
+        - 波形功能建议 / Waveform feature request
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 当前版本 / Current version
+      description: 关于页版本或 commit；尚未运行请说明。About version or commit; say if you have not run the application.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: 教学场景与现有不足 / Teaching use case and current gap
+      description: 目标学习者、教学目标，以及现有预设或功能为何无法满足。Target learners, teaching objective, and why existing presets or features are insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 波形或测量能力描述 / Proposed waveform or measurement
+      description: 涉及的通道/导联、预设或病理现象、形态特征、参数范围与单位、通道关系、适用条件及不涵盖的情形。Channels/leads, presets or conditions, morphology, parameter ranges/units, channel relationships, assumptions, and exclusions.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 专业参考依据 / Supporting references
+      description: 附教材版次/页码、论文 DOI、指南章节或公开链接，并指出支持建议的具体内容；暂无资料请说明并标明推测。Cite edition/pages, DOI, guideline sections, or links and explain the support; if unavailable, say so and mark hypotheses.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收与验证方法 / Acceptance and validation
+      description: 给出代表性输入、预期波形/数值、边界情形及比较方法；允许提出待讨论的标准。Representative inputs, expected traces/values, boundaries, and comparison methods; proposed criteria may remain open for discussion.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已考虑的替代方案 / Alternatives considered
+      description: 能否通过现有预设或参数实现？尝试了什么？没有可写“无”。Can existing presets or parameters achieve this? What have you tried? Write none if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: expertise
+    attributes:
+      label: 波形相关专业知识声明 / Waveform expertise declaration
+      description: 声明相关学科、学习/培训背景与阅图或研究经验，以及本问题中不确定的部分；无正式训练可如实填写。不需真实姓名、单位或证件；声明不等于资质认证。Describe relevant education/training, interpretation or research experience, and limits of your knowledge. No formal training is a valid answer. No identity, employer, or credentials required; this is self-reported.
+    validations:
+      required: true
+  - type: dropdown
+    id: content-origin
+    attributes:
+      label: 内容来源与人工审核 / Content origin and human review
+      description: |
+        “人工审核”指人类已阅读并核验本次即将提交的完整内容；仅布置任务或批准 Agent 运行不计为审核。
+        Human review means a person has read and checked the complete content of this submission. Assigning a task or authorizing an agent to run does not count as review.
+      multiple: false
+      options:
+        - 人类编写并提交 / Written and submitted by a human
+        - AI 参与编写，人类已逐项审核本次提交内容 / AI-assisted, with this submission fully reviewed by a human
+        - Agent 自动提交，本次内容未经人类审核 / Submitted automatically by an AI agent without human review
+        - 无法确认是否经过人类审核 / Human review status is unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: pr-intent
+    attributes:
+      label: 是否愿意自行提交 PR？ / Will you submit a PR?
+      description: 这是意愿声明，不会自动分配任务，也不影响反馈受理。This declares intent; it does not assign the issue or determine whether the report is accepted.
+      options:
+        - 愿意，计划自行实现并提交 PR / Yes, I plan to implement and submit a PR
+        - 愿意，但需要实现指导 / Yes, with implementation guidance
+        - 暂不确定，想先讨论方案 / Unsure, I would like to discuss first
+        - 不计划提交 PR / No, I do not plan to submit a PR
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 实现思路或所需帮助 / Implementation idea or help needed
+      description: 若有 PR 意愿，请补充模型/算法方案、验证计划或需要的帮助；已有 PR 可贴链接。If interested, describe the model/algorithm, validation plan, or help needed; link any existing PR.
+  - type: checkboxes
+    id: submission-checklist
+    attributes:
+      label: 提交前确认 / Submission checklist
+      description: 请逐项阅读，仅勾选符合事实的声明。Read each item and check only true statements. 
+      options:
+        - label: 我已搜索现有 issues，未找到相同反馈。 / I searched existing issues and found no duplicate.
+          required: true
+        - label: 我理解本项目仅用于教学模拟。 / I understand this project is for teaching simulation only.
+          required: true
+        - label: "I'm checking these boxes blindly."
+          required: false
+        - label: 我已核对以上信息，并愿意按需补充定位材料。 / I checked the information above and can provide clarification if needed.
+          required: true

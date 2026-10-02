@@ -1,0 +1,136 @@
+name: 波形问题 / Waveform problem
+description: 波形形态、生理合理性、通道关系或测量异常 / Morphology, physiology, channel relationships, or measurements.
+title: "[Waveform] "
+labels: [bug, "area:waveform", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请一事一报，并区分直接观察、参考资料结论与自己的推测。新增波形能力请使用“波形功能建议”。
+        Report one concern; distinguish observations, references, and hypotheses. Use the waveform feature form for new capabilities.
+        附件请移除个人信息、密钥和患者标识。Remove personal information, secrets, and patient identifiers from attachments.
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: 反馈类型 / Issue type
+      options:
+        - 波形问题 / Waveform problem
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本与来源 / Version and source
+      description: 关于页版本、下载来源；源码构建请随附 commit hash。About version and download source; include commit hash for source builds.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境 / Environment
+      description: 操作系统版本、CPU 架构、显示缩放比例。OS version, architecture, and display scale.
+    validations:
+      required: true
+  - type: dropdown
+    id: channels
+    attributes:
+      label: 涉及通道 / Affected channels
+      multiple: true
+      options:
+        - ECG
+        - RESP
+        - CO2
+        - PLETH / SpO2
+        - ABP
+        - PA
+        - CVP
+        - 其他或不确定 / Other or unsure
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: 预设、参数与显示设置 / Presets, parameters, and display
+      description: 填写适用项；未改动写默认，未知请说明。Complete applicable items; write default for unchanged settings and identify unknowns.
+      placeholder: |
+        预设名称或 ID、导联 / Preset names or IDs and leads:
+        心率、呼吸、压力、SpO2 等输入及单位 / Vital inputs and units:
+        高级参数、随机变异与共享种子（启用时） / Advanced settings, variation, shared seed if enabled:
+        扫描速度、增益/量程、显示布局 / Sweep speed, gain/range, layout:
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤与发生时间 / Reproduction and timing
+      description: 从启动/应用配置开始列步骤，指出经过的模拟时间、异常位置、出现频率，以及重启后能否复现。Steps from launch/apply; simulation time, affected interval, frequency, and reproducibility after restart.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际波形或测量结果 / Observed waveform or measurement
+      description: 描述具体偏差，附有时间轴、比例/单位和通道标识的截图或录屏；无法提供时说明原因。Describe the discrepancy; attach captures with time, scale/units, and channel labels, or explain why unavailable.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果与参考依据 / Expected result and supporting references
+      description: 说明预期形态、数值范围或通道关系及适用条件；附教材版次/页码、论文 DOI、指南章节或公开链接。无参考资料请写“暂无”并标明推测。Explain expected behavior and conditions; cite edition/pages, DOI, guideline section, or links. If none, say so and mark hypotheses.
+    validations:
+      required: true
+  - type: textarea
+    id: expertise
+    attributes:
+      label: 波形相关专业知识声明 / Waveform expertise declaration
+      description: 声明相关学科、学习/培训背景与阅图或研究经验，以及本问题中不确定的部分；无正式训练可如实填写。不需真实姓名、单位或证件；声明不等于资质认证。Describe relevant education/training, interpretation or research experience, and limits of your knowledge. No formal training is a valid answer. No identity, employer, or credentials required; this is self-reported.
+    validations:
+      required: true
+  - type: dropdown
+    id: content-origin
+    attributes:
+      label: 内容来源与人工审核 / Content origin and human review
+      description: |
+        “人工审核”指人类已阅读并核验本次即将提交的完整内容；仅布置任务或批准 Agent 运行不计为审核。
+        Human review means a person has read and checked the complete content of this submission. Assigning a task or authorizing an agent to run does not count as review.
+      multiple: false
+      options:
+        - 人类编写并提交 / Written and submitted by a human
+        - AI 参与编写，人类已逐项审核本次提交内容 / AI-assisted, with this submission fully reviewed by a human
+        - Agent 自动提交，本次内容未经人类审核 / Submitted automatically by an AI agent without human review
+        - 无法确认是否经过人类审核 / Human review status is unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: pr-intent
+    attributes:
+      label: 是否愿意自行提交 PR？ / Will you submit a PR?
+      description: 这是意愿声明，不会自动分配任务，也不影响反馈受理。This declares intent; it does not assign the issue or determine whether the report is accepted.
+      options:
+        - 愿意，计划自行实现并提交 PR / Yes, I plan to implement and submit a PR
+        - 愿意，但需要实现指导 / Yes, with implementation guidance
+        - 暂不确定，想先讨论方案 / Unsure, I would like to discuss first
+        - 不计划提交 PR / No, I do not plan to submit a PR
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 实现思路或所需帮助 / Implementation idea or help needed
+      description: 若有 PR 意愿，请补充方案、验证方法或需要的帮助；已有 PR 可贴链接。If interested, describe the approach, validation, or help needed; link any existing PR.
+  - type: checkboxes
+    id: submission-checklist
+    attributes:
+      label: 提交前确认 / Submission checklist
+      description: 请逐项阅读，仅勾选符合事实的声明。Read each item and check only true statements.
+      options:
+        - label: 我已搜索现有 issues，未找到相同反馈。 / I searched existing issues and found no duplicate.
+          required: true
+        - label: 我理解本项目仅用于教学模拟。 / I understand this project is for teaching simulation only.
+          required: true
+        - label: "I'm checking these boxes blindly."
+          required: false
+        - label: 我已核对以上信息，并愿意按需补充定位材料。 / I checked the information above and can provide clarification if needed.
+          required: true

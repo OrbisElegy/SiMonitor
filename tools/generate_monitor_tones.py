@@ -45,13 +45,17 @@ def generate(check):
     path = folder / 'manifest.json'
     data = json.dumps(manifest, indent=2) + '\n'
     if check:
-        assert path.read_text() == data
+        assert path.read_text(encoding='utf-8') == data
     else:
-        path.write_text(data)
+        path.write_text(data, encoding='utf-8')
     print('PASS: selected A/A4 voices match frozen PCM16 assets')
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     generate(parser.parse_args().check)
+
+
+if __name__ == '__main__':
+    main()

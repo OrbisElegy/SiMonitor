@@ -334,22 +334,22 @@ def main():
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text())
-    chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text())
-    wpw = json.loads((root / 'eng/physiology/wpw-positive-v1.json').read_text())
-    wpw_smaller = json.loads((root / 'eng/physiology/wpw-smaller-delta.json').read_text())
-    wpw_negative = json.loads((root / 'eng/physiology/wpw-negative-v1.json').read_text())
-    lpfb = json.loads((root / 'eng/physiology/left-posterior-fascicular-illustration.json').read_text())
-    lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text())
-    quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text())
-    digitalis = json.loads((root / 'eng/physiology/digitalis-effect.json').read_text())
-    high_k_fusion = json.loads((root / 'eng/physiology/hyperkalemia-fusion.json').read_text())
-    high_k_qrs = json.loads((root / 'eng/physiology/hyperkalemia-qrs-voltage.json').read_text())
-    pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(), parse_float=Fraction)
-    arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text())
-    capnogram = json.loads((root / 'eng/physiology/infirmary-capnogram.json').read_text())
-    pulmonary = json.loads((root / 'eng/physiology/infirmary-pulmonary-artery.json').read_text())
-    cvp = json.loads((root / 'eng/physiology/infirmary-cvp-components.json').read_text())
+    manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text(encoding='utf-8'))
+    chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text(encoding='utf-8'))
+    wpw = json.loads((root / 'eng/physiology/wpw-positive-v1.json').read_text(encoding='utf-8'))
+    wpw_smaller = json.loads((root / 'eng/physiology/wpw-smaller-delta.json').read_text(encoding='utf-8'))
+    wpw_negative = json.loads((root / 'eng/physiology/wpw-negative-v1.json').read_text(encoding='utf-8'))
+    lpfb = json.loads((root / 'eng/physiology/left-posterior-fascicular-illustration.json').read_text(encoding='utf-8'))
+    lafb = json.loads((root / 'eng/physiology/left-anterior-fascicular-illustration.json').read_text(encoding='utf-8'))
+    quinidine = json.loads((root / 'eng/physiology/quinidine-effect.json').read_text(encoding='utf-8'))
+    digitalis = json.loads((root / 'eng/physiology/digitalis-effect.json').read_text(encoding='utf-8'))
+    high_k_fusion = json.loads((root / 'eng/physiology/hyperkalemia-fusion.json').read_text(encoding='utf-8'))
+    high_k_qrs = json.loads((root / 'eng/physiology/hyperkalemia-qrs-voltage.json').read_text(encoding='utf-8'))
+    pleth = json.loads((root / 'eng/physiology/pleth-pulse-reference.json').read_text(encoding='utf-8'), parse_float=Fraction)
+    arterial = json.loads((root / 'eng/physiology/infirmary-arterial-pulse.json').read_text(encoding='utf-8'))
+    capnogram = json.loads((root / 'eng/physiology/infirmary-capnogram.json').read_text(encoding='utf-8'))
+    pulmonary = json.loads((root / 'eng/physiology/infirmary-pulmonary-artery.json').read_text(encoding='utf-8'))
+    cvp = json.loads((root / 'eng/physiology/infirmary-cvp-components.json').read_text(encoding='utf-8'))
     if hashlib.sha256((root / cvp['license_file']).read_bytes()).hexdigest() != cvp['license_sha256']:
         raise ValueError('upstream CVP license evidence changed')
     if hashlib.sha256((root / pulmonary['license_file']).read_bytes()).hexdigest() != pulmonary['license_sha256']:
@@ -358,21 +358,21 @@ def main():
         raise ValueError('upstream CO2 license evidence changed')
     if hashlib.sha256((root / arterial['license_file']).read_bytes()).hexdigest() != arterial['license_sha256']:
         raise ValueError('upstream ABP license evidence changed')
-    st = json.loads((root / 'eng/physiology/st-segment-illustration.json').read_text())
-    infarction = json.loads((root / 'eng/physiology/infarction-illustration.json').read_text())
-    right_ventricular = json.loads((root / 'eng/physiology/right-ventricular-illustration.json').read_text())
-    biventricular = json.loads((root / 'eng/physiology/biventricular-illustration.json').read_text())
-    severe_right = json.loads((root / 'eng/physiology/severe-right-ventricular-illustration.json').read_text())
-    pulmonary_heart = json.loads((root / 'eng/physiology/pulmonary-heart-illustration.json').read_text())
-    t_contour = json.loads((root / 'eng/physiology/t-contour-illustration.json').read_text())
-    escape = json.loads((root / 'eng/physiology/complete-avb-ventricular-illustration.json').read_text())
-    flutter = json.loads((root / 'eng/physiology/atrial-flutter-illustration.json').read_text())
+    st = json.loads((root / 'eng/physiology/st-segment-illustration.json').read_text(encoding='utf-8'))
+    infarction = json.loads((root / 'eng/physiology/infarction-illustration.json').read_text(encoding='utf-8'))
+    right_ventricular = json.loads((root / 'eng/physiology/right-ventricular-illustration.json').read_text(encoding='utf-8'))
+    biventricular = json.loads((root / 'eng/physiology/biventricular-illustration.json').read_text(encoding='utf-8'))
+    severe_right = json.loads((root / 'eng/physiology/severe-right-ventricular-illustration.json').read_text(encoding='utf-8'))
+    pulmonary_heart = json.loads((root / 'eng/physiology/pulmonary-heart-illustration.json').read_text(encoding='utf-8'))
+    t_contour = json.loads((root / 'eng/physiology/t-contour-illustration.json').read_text(encoding='utf-8'))
+    escape = json.loads((root / 'eng/physiology/complete-avb-ventricular-illustration.json').read_text(encoding='utf-8'))
+    flutter = json.loads((root / 'eng/physiology/atrial-flutter-illustration.json').read_text(encoding='utf-8'))
     flutter_shapes = dict(flutter['tables'])
     flutter_shapes['AmplitudesQ32'] = {'values_q32': [value * (1 << 32) for value in flutter['authored_choices']['electrodeAmplitudesMicrovolts']]}
-    fibrillation = json.loads((root / 'eng/physiology/atrial-fibrillation-illustration.json').read_text())
-    ventricular_disorganization = json.loads((root / 'eng/physiology/ventricular-disorganization-illustration.json').read_text())
-    rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text())
-    lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text())
+    fibrillation = json.loads((root / 'eng/physiology/atrial-fibrillation-illustration.json').read_text(encoding='utf-8'))
+    ventricular_disorganization = json.loads((root / 'eng/physiology/ventricular-disorganization-illustration.json').read_text(encoding='utf-8'))
+    rbbb = json.loads((root / 'eng/physiology/right-bundle-block-illustration.json').read_text(encoding='utf-8'))
+    lbbb = json.loads((root / 'eng/physiology/left-bundle-block-illustration.json').read_text(encoding='utf-8'))
     outputs = {
         root / 'src/Monitor.Simulation/Physiology/WpwSmallerTables.cs': render(
             'Monitor.Simulation.Physiology', 'WpwSmallerTables',
@@ -455,10 +455,10 @@ def main():
     for target, expected in outputs.items():
         expected = with_header(target.name, expected.encode()).decode()
         if args.check:
-            if target.read_text() != expected:
+            if target.read_text(encoding='utf-8') != expected:
                 raise SystemExit(f'Morphology differs from reproducible output: {target.name}')
         else:
-            target.write_text(expected)
+            target.write_text(expected, encoding='utf-8')
     if args.check:
         print('ok: ECG/ST, Resp, Pleth, ABP, CO2, PA and CVP Q32 tables match offline authoring')
 

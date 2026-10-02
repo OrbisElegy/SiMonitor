@@ -129,9 +129,13 @@ section{background:white;border-radius:12px;padding:20px;margin:20px 0}audio{wid
     print(f'PASS: anchor, monotonic curves,180 timed events and{len(files)} assets: {folder}')
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/beat-pitch-auditions')
     args = parser.parse_args()
     generate(args.output, args.check)
+
+
+if __name__ == '__main__':
+    main()

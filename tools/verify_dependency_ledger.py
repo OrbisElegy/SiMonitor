@@ -10,7 +10,7 @@ def verify_source_adaptations(root, ledger):
     """Check committed adaptation evidence without fetching the upstream project."""
     manifests = {}
     for path in sorted((root / 'eng').rglob('*.json')):
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding='utf-8'))
         if isinstance(data, dict) and 'upstream_commit' in data:
             manifests[path.relative_to(root).as_posix()] = data
     registered = set()
@@ -33,7 +33,7 @@ def verify_source_adaptations(root, ledger):
         if hashlib.sha256(license_path.read_bytes()).hexdigest() != entry['license_sha256']:
             raise ValueError(f'Adaptation license hash mismatch: {identifier}')
         notice = root / entry['notice_file']
-        if not notice.is_file() or not notice.read_text().strip():
+        if not notice.is_file() or not notice.read_text(encoding='utf-8').strip():
             raise ValueError(f'Missing adaptation attribution notice: {identifier}')
         paths = entry.get('manifests')
         if not isinstance(paths, list) or not paths:
@@ -64,7 +64,7 @@ def verify_source_adaptations(root, ledger):
 
 def main():
     root = Path(__file__).resolve().parent.parent
-    ledger = json.loads((root / 'eng/dependencies.json').read_text())
+    ledger = json.loads((root / 'eng/dependencies.json').read_text(encoding='utf-8'))
     verify_source_adaptations(root, ledger)
     entries = {}
     for entry in ledger['direct_packages'] + ledger['transitive_packages']:
@@ -82,7 +82,7 @@ def main():
     seen = set()
     for folder in ('src', 'tests'):
         for lock in sorted((root / folder).glob('*/packages.lock.json')):
-            for packages in json.loads(lock.read_text())['dependencies'].values():
+            for packages in json.loads(lock.read_text(encoding='utf-8'))['dependencies'].values():
                 for name, package in packages.items():
                     if package['type'].lower() == 'project':
                         continue

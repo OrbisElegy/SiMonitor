@@ -44,16 +44,16 @@ class SpdxHeaderTests(unittest.TestCase):
     def test_check_rejects_missing_or_wrong_headers(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / 'a.cs').write_text('class A {}\n')
-            (root / 'a.json').write_text('{}\n')
+            (root / 'a.cs').write_text('class A {}\n', encoding='utf-8')
+            (root / 'a.json').write_text('{}\n', encoding='utf-8')
             paths = ['a.cs', 'a.json']
             with self.assertRaisesRegex(ValueError, 'Missing'):
                 check_or_write(root, paths, True)
             check_or_write(root, paths, False)
             self.assertEqual(check_or_write(root, paths, True), 1)
-            self.assertEqual((root / 'a.json').read_text(), '{}\n')
+            self.assertEqual((root / 'a.json').read_text(encoding='utf-8'), '{}\n')
             self.assertFalse((root / 'a.json.license').exists())
-            (root / 'a.cs').write_text('// ' + TAG + 'MIT\nclass A {}\n')
+            (root / 'a.cs').write_text('// ' + TAG + 'MIT\nclass A {}\n', encoding='utf-8')
             with self.assertRaisesRegex(ValueError, 'Unexpected'):
                 check_or_write(root, paths, True)
 

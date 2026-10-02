@@ -139,13 +139,13 @@ before a public binary release.
 
 def source_provenance(root):
     def git(*args):
-        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
-    return {"commit": git("rev-parse", "HEAD"),
+        return subprocess.check_output(["git", *args], cwd=root).strip()
+    return {"commit": git("rev-parse", "HEAD").decode("ascii"),
             "workingTreeDirty": bool(git("status", "--porcelain", "--untracked-files=normal")),
-            "dotnetSdk": subprocess.check_output(["dotnet", "--version"], cwd=root, text=True).strip()}
+            "dotnetSdk": subprocess.check_output(["dotnet", "--version"], cwd=root, encoding="ascii").strip()}
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="Published directory to verify")
     args = parser.parse_args()
@@ -154,3 +154,7 @@ if __name__ == "__main__":
     except (OSError, ValueError) as error:
         parser.exit(1, f"FAIL: {error}\n")
     print(f"PASS: {len(result['files'])} files match the {result['rid']} candidate manifest")
+
+
+if __name__ == "__main__":
+    main()

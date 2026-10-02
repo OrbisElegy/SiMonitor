@@ -9,6 +9,7 @@ The default checks launch without arguments. For a development build, add
 This is Linux startup evidence, not Windows release qualification.
 """
 import argparse
+import locale
 from pathlib import Path
 import re
 import subprocess
@@ -20,7 +21,7 @@ def has_monitor_window(tree, process_id):
     # Version and development suffixes vary with the build and saved language.
     for window_id in re.findall(r'^\s*(0x[0-9a-fA-F]+) "Seele\'s SiMonitor · [^"\n]+":', tree, re.MULTILINE):
         result = subprocess.run(['xprop', '-id', window_id, '_NET_WM_PID'],
-                                capture_output=True, text=True, timeout=5)
+                                capture_output=True, encoding=locale.getencoding(), timeout=5)
         if result.returncode == 0 and re.search(
                 rf'^_NET_WM_PID\(CARDINAL\) = {process_id}\s*$', result.stdout, re.MULTILINE):
             return True
@@ -35,7 +36,7 @@ def main():
     assembly = args.assembly.resolve(strict=True)
     for options in ([[], ['--ui-preview']] if args.development else [[]]):
         with tempfile.TemporaryDirectory(prefix='monitor-startup-') as directory:
-            with tempfile.TemporaryFile(mode='w+t') as log:
+            with tempfile.TemporaryFile(mode='w+b') as log:
                 process = subprocess.Popen(['dotnet', str(assembly), *options], cwd=directory,
                                            stdout=log, stderr=subprocess.STDOUT)
                 try:
@@ -43,15 +44,15 @@ def main():
                     while True:
                         if process.poll() is not None:
                             log.seek(0)
-                            raise RuntimeError(f'Client exited: {process.returncode}\n{log.read()}')
+                            raise RuntimeError(f'Client exited: {process.returncode}\n{log.read()!r}')
                         tree = subprocess.run(['xwininfo', '-root', '-tree'], check=True,
-                                              capture_output=True, text=True, timeout=5).stdout
+                                              capture_output=True, encoding=locale.getencoding(), timeout=5).stdout
                         if has_monitor_window(tree, process.pid):
                             print(f'PASS: {options or "default"} opens integrated monitor from external cwd')
                             break
                         if time.monotonic() >= deadline:
                             log.seek(0)
-                            raise RuntimeError(f'Monitor window did not appear\n{tree}\n{log.read()}')
+                            raise RuntimeError(f'Monitor window did not appear\n{tree}\n{log.read()!r}')
                         time.sleep(.1)
                 finally:
                     process.terminate()

@@ -5,11 +5,13 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import build
+import build_native_audio
 import fetch_dependencies as fetch
 
 
@@ -30,7 +32,7 @@ class BootstrapTests(unittest.TestCase):
         self.write_manifest()
 
     def write_manifest(self):
-        (self.root / 'eng/dependencies.json').write_text(json.dumps({'native_dependencies': [{'source_files': [self.item]}]}))
+        (self.root / 'eng/dependencies.json').write_text(json.dumps({'native_dependencies': [{'source_files': [self.item]}]}), encoding='utf-8')
 
     def prepare(self, **kwargs):
         fetch.fetch_native(self.root, **kwargs)
@@ -89,8 +91,8 @@ class BootstrapTests(unittest.TestCase):
         def run(command, **kwargs):
             self.assertIn('--locked-mode', command)
             config = Path(command[command.index('--configfile') + 1])
-            self.assertIn('<clear />', config.read_text())
-            self.assertNotIn('http', config.read_text())
+            self.assertIn('<clear />', config.read_text(encoding='utf-8'))
+            self.assertNotIn('http', config.read_text(encoding='utf-8'))
         with patch.object(fetch.subprocess, 'run', side_effect=run):
             fetch.restore_managed(self.root, offline=True)
 
@@ -108,13 +110,41 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('--no-restore', calls[4][1])
         self.assertIn('-m:7', calls[4][1])
 
+    def test_native_test_build_runs_ctest_but_production_only_does_not(self):
+        binary_name = ('sim_audio_native.dll' if sys.platform == 'win32' else
+                       'libsim_audio_native.dylib' if sys.platform == 'darwin' else 'libsim_audio_native.so')
+        for name in ('native-audio', 'native-audio-test'):
+            folder = self.root / 'artifacts' / name
+            folder.mkdir(parents=True)
+            (folder / binary_name).write_bytes(b'fixture')
+        test_folder = self.root / 'artifacts/native-audio-test'
+        ctest = ['ctest', '--test-dir', str(test_folder), '--build-config', 'Release',
+                 '--output-on-failure', '--no-tests=error']
+        for production_only in (False, True):
+            with self.subTest(production_only=production_only):
+                calls = []
+                args = ['build_native_audio.py', '--jobs', '1'] + (['--production-only'] if production_only else [])
+                with patch('sys.argv', args), \
+                        patch.object(build_native_audio, '__file__', str(self.root / 'tools/build_native_audio.py')), \
+                        patch.object(build_native_audio, 'fetch_native'), \
+                        patch.object(build_native_audio.subprocess, 'run', side_effect=lambda cmd, **kw: calls.append(cmd)):
+                    build_native_audio.main()
+                self.assertEqual([cmd for cmd in calls if cmd[0] == 'ctest'], [] if production_only else [ctest])
+                if not production_only:
+                    test_configure = next(cmd for cmd in calls
+                                          if cmd[:2] == ['cmake', '-S'] and str(test_folder) in cmd)
+                    self.assertIn('-DSIM_AUDIO_TEST=ON', test_configure)
+                    self.assertIn('-DBUILD_TESTING=ON', test_configure)
+                    test_build = ['cmake', '--build', str(test_folder), '--config', 'Release', '--parallel', '1']
+                    self.assertGreater(calls.index(ctest), calls.index(test_build))
+
     def test_product_build_uses_prebuilt_assets_and_replaces_output(self):
         catalog = self.root / 'src/Monitor.Desktop/bin/Release/net10.0/style-previews.bin'
         catalog.parent.mkdir(parents=True)
         catalog.write_bytes(b'catalog')
         output = self.root / 'artifacts/release'
         output.mkdir(parents=True)
-        (output / 'old-development-file').write_text('old')
+        (output / 'old-development-file').write_text('old', encoding='utf-8')
         calls = []
         def run(command, **kwargs):
             calls.append(command)

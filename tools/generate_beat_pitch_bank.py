@@ -21,7 +21,7 @@ def generate(check=False):
     data = build_pitch_bank()
     path = ROOT / 'src/Monitor.Infrastructure/Audio/SelectedTones/HeartbeatPitchA.pcm'
     manifest_path = path.with_name('manifest.json')
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     entry = manifest_entry(data)
     if check:
         if path.read_bytes() != data:
@@ -31,11 +31,15 @@ def generate(check=False):
     else:
         path.write_bytes(data)
         manifest['voices']['HeartbeatPitchA'] = entry
-        manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+        manifest_path.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print('PASS: selected A pitch bank,28 voices')
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     generate(parser.parse_args().check)
+
+
+if __name__ == '__main__':
+    main()

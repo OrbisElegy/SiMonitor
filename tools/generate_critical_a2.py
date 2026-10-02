@@ -16,7 +16,7 @@ from generate_alarm_auditions import ROOT, pulse, write_wave
 
 
 def generate(destination):
-    config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text())
+    config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text(encoding='utf-8'))
     candidate = next(c for c in config['candidates'] if c['id'] == 'A')
     rate = config['sample_rate_hz']
     reference = pulse(config, candidate, 'Critical', 0)
@@ -63,12 +63,16 @@ def generate(destination):
         'level_matching': 'same peak as A Critical; no long-tail RMS boost',
         'mixing': 'gaps contain silence; no beep or lower-priority alarm mixing implemented'
     }
-    (destination / 'A2-Critical.json').write_text(json.dumps(metadata, indent=2) + '\n')
+    (destination / 'A2-Critical.json').write_text(json.dumps(metadata, indent=2) + '\n', encoding='utf-8')
     print('PASS: six pulses, 1500ms period, declining1s tails, exact500ms zero-PCM gaps')
     print(path)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/alarm-auditions')
     generate(parser.parse_args().output.resolve())
+
+
+if __name__ == '__main__':
+    main()

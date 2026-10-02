@@ -37,8 +37,13 @@ def main():
              '-DSIM_AUDIO_TEST=' + ('ON' if testing else 'OFF'), '-DCMAKE_BUILD_TYPE=Release'],
             ['cmake', '--build', str(folder), '--config', 'Release', '--parallel', str(args.jobs)],
         ]
+        if testing:
+            commands[0].append('-DBUILD_TESTING=ON')
         for cmd in commands:
             subprocess.run(cmd, check=True)
+        if testing:
+            subprocess.run(['ctest', '--test-dir', str(folder), '--build-config', 'Release',
+                            '--output-on-failure', '--no-tests=error'], check=True)
         name = 'sim_audio_native.dll' if sys.platform == 'win32' else ('libsim_audio_native.dylib' if sys.platform == 'darwin' else 'libsim_audio_native.so')
         binary = folder / name
         if not binary.exists():
@@ -57,7 +62,7 @@ def main():
                 'miniaudio_commit': 'f40cf03f80cdb7e741d43e53b7e706e8c1394bcf',
                 'hardware_qualified': False, 'binaries': rows}
     p = root / 'artifacts/native-audio/build-evidence.json'
-    p.write_text(json.dumps(manifest, indent=2) + '\n')
+    p.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print('Binary evidence:', p)
 
 

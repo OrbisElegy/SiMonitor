@@ -45,11 +45,15 @@ def generate(destination):
         'mix': 'linear sum; no ducking, gap scheduling or per-file normalization',
         'scope': 'heartbeat plus highest alarm only; not concurrent alarm priorities',
         'files': files,
-    }, indent=2) + '\n')
+    }, indent=2) + '\n', encoding='utf-8')
     print('PASS: independent clock, onset/tail overlap, exact mixing and decoded PCM checks')
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/alarm-auditions')
     generate(parser.parse_args().output.resolve())
+
+
+if __name__ == '__main__':
+    main()

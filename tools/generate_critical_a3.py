@@ -10,7 +10,7 @@ from generate_alarm_auditions import ROOT, pulse, write_wave
 
 
 def critical_voice():
-    config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text())
+    config = json.loads((ROOT / 'eng/audio/alarm-audition-candidates.json').read_text(encoding='utf-8'))
     candidate = next(c for c in config['candidates'] if c['id'] == 'A')
     rate = config['sample_rate_hz']
     reference = pulse(config, candidate, 'Critical', 0)
@@ -74,13 +74,17 @@ def generate(destination):
         'overlap': 'additive tails; former500ms gap no longer forced silent',
         'beep_overlay': 'illustrative795Hz/100ms at1150ms after each onset; not measured HR or production arbitration',
         'files': [{'file': main.name, 'sha256': main_sha}, {'file': overlay.name, 'sha256': overlay_sha}]
-    }, indent=2) + '\n')
+    }, indent=2) + '\n', encoding='utf-8')
     print('PASS: natural tail, exact additive overlap, sub-LSB final fade and unclipped decoded PCM')
     print(main)
     print(overlay)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/alarm-auditions')
     generate(parser.parse_args().output.resolve())
+
+
+if __name__ == '__main__':
+    main()

@@ -1,79 +1,72 @@
-# Long-RR Pleth runoff investigation
+# 长 RR 间期 Pleth 衰减调研
 
-The reported SpO₂ trace is the relative photoplethysmographic pulse (Pleth),
-not the numeric oxygen saturation. The previous desktop source used a finite
-512 ms pulse (shorter for some modes), returning exactly zero at its endpoint.
-Consequently a long RR interval contained an artificially early flat segment.
-This is a source limitation, not a sweep or vertical-scale fault.
+界面上标为 SpO₂ 的波形是相对光电容积脉搏波（Pleth），并非血氧饱和度数值。
+此前桌面版的源使用有限的 512 ms 脉搏（某些模式更短），在终点恰好归零。
+因此，较长的 RR 间期会过早出现一段平线。这是信号源的局限，
+并非扫描显示或纵轴量程故障。
 
-## Evidence and limits
+## 证据与边界
 
-- Allen and Murray, *Effects of filtering on multi-site photoplethysmography
-  pulse waveform characteristics* (Computers in Cardiology 2004),
-  https://eprints.ncl.ac.uk/202434 . Their measured PPG contains a pulsatile
-  component on a slowly varying baseline; high-pass filtering changes shape.
-- Williamson et al., *The Hybrid Excess and Decay (HED) model* (2022),
-  https://doi.org/10.12688/wellcomeopenres.17855.1 . The published version1
-  describes component waves plus decay; its displayed review status was
-  awaiting peer review. This provides a modelling precedent, not validation
-  of our parameters or of prolonged absent ejection.
+- Allen 和 Murray，*Effects of filtering on multi-site photoplethysmography
+  pulse waveform characteristics*（Computers in Cardiology 2004），
+  https://eprints.ncl.ac.uk/202434 。其测得的 PPG 包含叠加在缓慢变化基线上的
+  脉动分量；高通滤波会改变波形。
+- Williamson 等，*The Hybrid Excess and Decay (HED) model*（2022），
+  https://doi.org/10.12688/wellcomeopenres.17855.1 。已发表的第 1 版描述了
+  分量波及其衰减；当时显示的审稿状态为等待同行评审。该文可作为建模先例，
+  但不能验证本项目参数，也不能验证长时间无射血情景。
 
-These support representing a diastolic tail and distinguishing optical display
-from absolute arterial pressure. They do not establish that all monitors must
-continue visibly descending throughout every pause, nor that SpO₂ must fall
-with this tail. With no new effective ejection, a decaying pulsatile component
-can approach baseline; quantization eventually makes it flat. DC tissue/blood
-volume, filters, gain control, noise and saturation estimation remain outside
-this teaching source. We do not copy the HED model or infer its fitted values.
+这些资料支持为舒张期设置尾部，并区分光学信号显示与绝对动脉压力。
+它们不能证明所有监护仪在每次暂停期间都必须持续显示可见下降，
+也不能证明 SpO₂ 数值须随该尾部下降。没有新的有效射血时，衰减的脉动分量
+可以趋近基线；经过量化后最终仍会成为平线。组织和血容量的直流分量、滤波器、
+增益控制、噪声及血氧饱和度估计均不属于该教学信号源。本项目没有复制 HED 模型，
+也没有借用其拟合参数。
 
-## Implemented teaching model
+## 已实现的教学模型
 
-`PlethSmoothRunoff@1` keeps the rounded peak and descending shoulder of
-`PlethPulseIllustrationDraft@2`. At plain LUT index88/128 (352ms after arrival
-for nominal512ms duration), amplitude0.44 joins
-`A * (1 + u/tau) * exp(-u/tau)`, where u is time since join and tau defaults400ms.
-The optional notched source joins at72/128. The zero initial tail slope matches
-the smooth shoulder endpoint. Tau100ms..2s and the default400ms are explicit
-author choices, not calibrated optical/vascular constants. The finite LUT is
-preserved for existing callers; the physiology demo selects the new source.
+`PlethSmoothRunoff@1` 保留 `PlethPulseIllustrationDraft@2` 的圆滑峰顶和下降肩部。
+普通 LUT 在索引 88/128 处接入尾部：按标称 512 ms 脉搏时长计算，
+该位置是到达后 352 ms，幅度为 0.44。尾部公式为
+`A * (1 + u/tau) * exp(-u/tau)`，其中 `u` 是接入后的时间，
+`tau` 默认 400 ms。可选的带切迹信号源在索引 72/128 接入。
+尾部的初始斜率为零，与平滑肩部终点相接。
+`tau` 的范围 100 ms～2 s 及默认值 400 ms 均为明确的作者选择，
+不是已标定的光学或血管常数。现有调用方继续使用原有限 LUT；
+生理演示选择新的信号源。
 
-Each effective mechanical event contributes separately. Prior tails remain
-when a new event arrives or an event is skipped. Existing premature-beat gains
-and3/4 duration scaling apply to original beat ordinals, with unchanged transit
-delay and a separate tail time constant. Zero-gain ejection contributes nothing
-without erasing earlier pulses. This model affects only the Pleth source; ECG,
-blood-pressure sources and SpO₂ numeric logic remain independent.
+每次有效机械事件单独贡献波形。新事件到来或跳过一次事件时，
+先前事件的尾部仍然存在。已有的早搏增益和 3/4 时长缩放仍作用于原始搏动序号，
+传输延迟不变，尾部时间常数单独设置。零增益射血不产生新贡献，
+也不会抹除较早的脉搏。该模型只影响 Pleth 信号源；
+ECG、血压信号源和 SpO₂ 数值逻辑保持独立。
 
-## Bounded deterministic reconstruction
+## 有界的确定性重建
 
-There is no online regression fit, accumulated numerical integration, or scan
-from the simulation epoch. Reconstruction directly indexes a fixed history:
-longest join time +64tau. Default support25.952s reserves at most33 events at
-RR800ms. Construction rejects more than4096 possible events or a conservative
-sum exceeding int16; accepted values are never clipped to hide overflow.
+实现中没有在线回归拟合、累计数值积分，也不从仿真起点开始扫描。
+重建直接索引固定长度的历史：最长接入时间加上 `64tau`。
+默认支持长度为 25.952 s，在 RR 为 800 ms 时至多保留 33 次事件。
+构建时若可能事件数超过 4096，或保守求和超过 int16 范围，即拒绝配置；
+不会截断已接受的数值以掩盖溢出。
 
-Decay uses a1us trapezoidal Q62 factor,27 repeated-square powers and fixed-point
-fractional interpolation. At64tau decay is exactly zero in this representation.
-Runtime/Fork share the immutable source; external restore revalidates plans and
-pending acquisition samples. Work is bounded by configured history and minimum
-RR, independent of the elapsed simulation time. Acquisition remains at125Hz
-with200ms blocks and a2s processing delay.
+衰减使用步长 1 µs 的梯形 Q62 因子、27 次重复平方及定点小数插值。
+在 `64tau` 处，该表示中的衰减恰好为零。Runtime 与 Fork 共用不可变信号源；
+外部恢复时重新校验计划和待发布采集样本。工作量受配置的历史长度和最小 RR 限制，
+不随已运行的仿真时间增长。采集仍为 125 Hz、每块 200 ms、处理延迟 2 s。
 
-## Verification
+## 验证
 
-Four specifications cover legacy peak/shoulder parity, independent analytic
-tail comparison,2:1/4:1 long RR, no-mechanics and zero-gain PVC, overlapping sums,
-checkpoint/wire identity, tampered pending samples, rejection/cancellation,
-atomic budget failure and late queries. Existing premature-mode native checks
-compare all Pleth wire samples; AF/grouped block/stride checks now require
-continued decay during missing beats rather than immediate zero.
+四组规格测试覆盖旧峰顶和肩部的一致性、与独立解析尾部的比较、
+2:1／4:1 长 RR、无机械活动和零增益 PVC、重叠求和、检查点与 wire 数据一致性、
+待发布样本篡改、拒绝与取消、原子预算失败以及远期查询。
+已有的早搏模式原生检查会比较所有 Pleth wire 样本；
+房颤、分组块和步幅检查现要求缺搏期间持续衰减，而非立即归零。
 
-An initial Linux run measured2000 evaluations at40s and3600s as118.3ms and119.0ms;
-near the maximum timestamp266.2ms. These are observations, not timing assertions
-or Windows benchmarks. All three use the same33-event bound and produce the
-same steady-state phase values. The native suite also retains its wall-clock
-catch-up tests. Manual Windows visual validation is not yet complete.
+一次初步 Linux 运行中，分别在 40 s 和 3600 s 处进行 2000 次求值，
+耗时 118.3 ms 和 119.0 ms；接近最大时间戳时为 266.2 ms。
+这些是观察值，不是性能断言或 Windows 基准。三种情况均受相同的 33 次事件上界约束，
+且稳态相位值相同。原生测试套件还保留按墙钟时间追赶的测试。
+Windows 人工可视化验证尚未完成。
 
-Other ECG, respiratory, perfusion and acquisition-artifact coverage remains
-incomplete. This fix is not a complete optical
-sensor model or a physiological validation of prolonged circulatory arrest.
+其他 ECG、呼吸、灌注和采集伪影的覆盖仍不完整。此修复既不是完整的光学传感器模型，
+也不是对长期循环骤停的生理学验证。

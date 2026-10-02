@@ -40,6 +40,18 @@ the corresponding layout under `artifacts/native-audio-test/`. The actual
 binary paths, hashes, host architecture and build commands are recorded in
 `artifacts/native-audio/build-evidence.json`.
 
+The test build also includes a deterministic retirement regression. Run it with:
+
+```sh
+ctest --test-dir artifacts/native-audio-test --build-config Release --output-on-failure
+```
+
+It drives the actual consumer and notification callback in both possible orders
+around underrun retirement. Stop, reroute and interruption notifications must
+retain reason 2; an ordinary underrun still produces reason 1. The test uses an
+isolated PCM ring and no device worker or hardware. Its scheduling hook is compiled
+only into the regression executable, never either shared library.
+
 Use `python3 tools/build.py` for dependency preparation, the production native
 library and a managed Release build. This combined command does not build the
 null-backend test library. When building Desktop on Windows, the project copies

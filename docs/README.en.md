@@ -8,6 +8,24 @@ The repository contains a .NET desktop application, a deterministic simulation l
 
 For a shorter overview, see the [English summary](english-summary.md). Read the [contribution guide](../CONTRIBUTING.md) before contributing.
 
+## Screenshots
+
+**Main monitor view**
+
+![Main monitor view showing ECG and other vital-sign waveforms](screenshot/screenshot%20%281%29.png)
+
+**Low pulse-rate alarm**
+
+![Monitor view showing a low pulse-rate alarm](screenshot/screenshot%20%282%29.png)
+
+**12-lead ECG**
+
+![12-lead ECG snapshot](screenshot/screenshot%20%283%29.png)
+
+**Waveform presets**
+
+![Settings view showing waveform presets and preview cards](screenshot/screenshot%20%284%29.png)
+
 ## Requirements
 
 - Python 3.11 or newer.

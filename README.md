@@ -8,6 +8,24 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 
 技术资料的英文概览见 [英文摘要](docs/english-summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
+## 运行截图
+
+**主监护界面**
+
+![显示心电图及其他生命体征波形的主监护界面](docs/screenshot/screenshot%20%281%29.png)
+
+**低脉率报警**
+
+![显示低脉率报警的监护界面](docs/screenshot/screenshot%20%282%29.png)
+
+**十二导联心电图**
+
+![十二导联心电图快照](docs/screenshot/screenshot%20%283%29.png)
+
+**波形预设设置**
+
+![显示波形预设及预览卡片的设置界面](docs/screenshot/screenshot%20%284%29.png)
+
 ## 环境要求
 
 - Python 3.11 或更新版本。

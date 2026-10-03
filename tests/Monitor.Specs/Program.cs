@@ -60,6 +60,7 @@ internal static class Program
             .. SeededRateSpecifications.All,
             .. SeededCo2Specifications.All,
             .. MeasuredLimitSpecifications.All,
+            .. PressureLimitSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

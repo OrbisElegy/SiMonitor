@@ -823,6 +823,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyUiRefinement);
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
+        NativeSmokePartition.Run(PressureAlarmSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {
@@ -2503,6 +2504,16 @@ internal static class DesignPreviewSmokeChecks
         }
         Require(extra.Editors[MonitorNumeric.RespirationRate].CriticalHigh.Value == 1, "switching editor retains prior limits");
         var notices = settings.Notices(snapshot).ToArray();
+        Require(notices.Length == 4 && notices.All(n => n.Numeric is not (MonitorNumeric.AbpMean or MonitorNumeric.PaMean or MonitorNumeric.CvpMean)),
+            "pressure confirmation does not delay the other measured limit channels");
+        long start = snapshot.SampleTimeNs;
+        for (long elapsed = 200_000_000; elapsed <= PressureLimitNotice.HighConfirmationNs; elapsed += 200_000_000)
+        {
+            snapshot = snapshot with { SampleTimeNs = start + elapsed };
+            notices = settings.Notices(snapshot).ToArray();
+            if (elapsed < PressureLimitNotice.HighConfirmationNs)
+            { Require(notices.Length == 4, "pressure remains pending before its confirmation time"); }
+        }
         Require(notices.Length == 7 && notices.All(n => n.Level == MonitorNoticeLevel.Critical) && notices.Select(n => n.Id).Distinct().Count() == 7,
             "all enabled sampled measurements coexist with distinct IDs");
         var view = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
@@ -2519,6 +2530,8 @@ internal static class DesignPreviewSmokeChecks
             "CO2 failure clears its highlight while independent RESP condition stays");
         foreach (var editor in extra.Editors.Values) { editor.Enabled.IsChecked = false; }
         Require(!settings.Notices(snapshot).Any(), "disabling limits clears conditions without editing samples");
+        extra.Editors[MonitorNumeric.AbpMean].Enabled.IsChecked = true;
+        Require(!settings.Notices(snapshot).Any(), "reenabling pressure cannot reuse the old alarm");
     }
     private static void VerifyNumericAlarmHighlights(LiveMeasurementSnapshot snapshot)
     {

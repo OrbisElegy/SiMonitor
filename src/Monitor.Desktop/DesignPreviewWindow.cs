@@ -234,6 +234,7 @@ internal sealed class DesignPreviewWindow : Window
             var (next, ecgConfig, ecg) = BuildConfiguredSources();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
+            Settings.Alerts.AdditionalLimits.Reset();
             Settings.MarkShapeApplied(ecgConfig);
             MonitorView = new(_monitor);
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;

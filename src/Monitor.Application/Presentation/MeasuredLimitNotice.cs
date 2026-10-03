@@ -8,7 +8,8 @@ public sealed record MeasurementLimitDescriptor(MonitorNumeric Numeric, string I
     int Divisor, int Minimum, int Maximum, MeasurementLimits TeachingDefaults);
 
 // Values and limits use the measurement's native integer units. These are
-// immediate local teaching conditions, not diagnostic or latched episodes.
+// instantaneous local teaching conditions. PressureLimitNotice adds temporal
+// validation for pressure channels before these conditions reach presentation.
 public static class MeasuredLimitNotice
 {
     public static IReadOnlyList<MeasurementLimitDescriptor> Descriptors { get; } = Array.AsReadOnly(new MeasurementLimitDescriptor[]
@@ -39,12 +40,15 @@ public static class MeasuredLimitNotice
         bool low = measured < wl, high = measured > wh;
         if (!low && !high) { return null; }
         bool critical = measured < cl || measured > ch;
-        return new(descriptor.Id + (low ? "-low" : "-high"), critical ? MonitorNoticeLevel.Critical : MonitorNoticeLevel.Warning,
-            descriptor.Label + (critical ? low ? " 极低" : " 极高" : low ? " 低" : " 高"))
-        { Numeric = numeric };
+        return CreateNotice(descriptor, low, critical);
     }
 
-    private static (WaveformMeasurementStatus Status, int? Value) Read(MonitorNumeric numeric, LiveMeasurementSnapshot s) => numeric switch
+    internal static MonitorNotice CreateNotice(MeasurementLimitDescriptor descriptor, bool low, bool critical) =>
+        new(descriptor.Id + (low ? "-low" : "-high"), critical ? MonitorNoticeLevel.Critical : MonitorNoticeLevel.Warning,
+            descriptor.Label + (critical ? low ? " 极低" : " 极高" : low ? " 低" : " 高"))
+        { Numeric = descriptor.Numeric };
+
+    internal static (WaveformMeasurementStatus Status, int? Value) Read(MonitorNumeric numeric, LiveMeasurementSnapshot s) => numeric switch
     {
         MonitorNumeric.RespirationRate => (s.ImpedanceRespiration.Status, s.ImpedanceRespiration.MilliBreathsPerMinute),
         MonitorNumeric.PulseRate => (s.PulseRate.Status, s.PulseRate.MilliBeatsPerMinute),

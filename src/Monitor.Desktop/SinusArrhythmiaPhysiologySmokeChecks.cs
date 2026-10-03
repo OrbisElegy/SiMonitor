@@ -12,7 +12,7 @@ internal static class SinusArrhythmiaPhysiologySmokeChecks
     {
         var config = PhysiologyDemoConfiguration.SinusArrhythmiaPreset;
         var blocks = PhysiologyChannelSmokeChecks.Verify("SinusArrhythmia", config, SinusArrhythmiaReference.CreatePlan(),
-            SinusArrhythmiaReference.CreateLeadIIBands(), FixedPerfusionPresets.PulmonaryOverlap, verifyMechanicalSuppression: true);
+            SinusArrhythmiaReference.CreateLeadIIBands(), FixedPerfusionPresets.FillingPulmonaryOverlap, verifyMechanicalSuppression: true);
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

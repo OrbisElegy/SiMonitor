@@ -10,12 +10,15 @@ public static class AtrialFlutterReference
     public static bool IsPattern(AvConductionPattern pattern) => pattern is AvConductionPattern.AtrialFlutterIllustration or AvConductionPattern.VariableAtrialFlutterIllustration;
     public static RegularPhysiologyPlan CreateVariablePlan() => CreatePlan(2) with { ConductionPattern = AvConductionPattern.VariableAtrialFlutterIllustration };
 
+    internal const long VariableGroupDurationNs = 1_800_000_000;
+    internal static ReadOnlySpan<long> VariableCycleOffsetsNs => [0, 400_000_000, 1_000_000_000];
+
     internal static void VisitVariable(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        const long groupDuration = 1_800_000_000;
-        ReadOnlySpan<long> slots = [0, 400_000_000, 1_000_000_000];
+        const long groupDuration = VariableGroupDurationNs;
+        ReadOnlySpan<long> slots = VariableCycleOffsetsNs;
         Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;
         for (int slot = 0; slot < slots.Length; slot++)
         {

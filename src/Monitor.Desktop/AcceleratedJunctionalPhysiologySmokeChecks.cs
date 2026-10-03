@@ -25,9 +25,9 @@ internal static class AcceleratedJunctionalPhysiologySmokeChecks
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, AcceleratedJunctionalReference.CreateLeadIIBands()).GenerateBefore(6_000_000_000, 1500, 100);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("AJR physiology monitorII mismatch."); }
-        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pleth);
-        var abp = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Arterial);
-        var pa = VascularPressureSource.Create(plan, FixedPerfusionPresets.PulmonaryOverlap.Pulmonary);
+        var pleth = PlethRunoffSource.Create(plan, FixedPerfusionPresets.AcceleratedSupraventricular.Pleth);
+        var abp = VascularPressureSource.Create(plan, FixedPerfusionPresets.AcceleratedSupraventricular.Arterial);
+        var pa = VascularPressureSource.Create(plan, FixedPerfusionPresets.AcceleratedSupraventricular.Pulmonary);
         foreach (int row in new[] { 2, 3, 5 })
         {
             short[] samples = MechanicalUncouplingSmokeChecks.Samples(blocks, row);
@@ -40,7 +40,7 @@ internal static class AcceleratedJunctionalPhysiologySmokeChecks
             }
             if (samples.Skip(250).Distinct().Count() < 10) { throw new InvalidOperationException("AJR perfusion became flat."); }
         }
-        var cvpPlan = FixedPerfusionPresets.PulmonaryOverlap.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
+        var cvpPlan = FixedPerfusionPresets.AcceleratedSupraventricular.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
         var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(6_000_000_000, 750, 200);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 6).Zip(cvp).Any(p => p.First != p.Second.NormalizedValue))
         { throw new InvalidOperationException("AJR CVP overlap mismatch."); }

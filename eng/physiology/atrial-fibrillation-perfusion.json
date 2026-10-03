@@ -1,5 +1,5 @@
 {
-  "id": "AtrialFibrillationPerfusionIllustration@2",
+  "id": "AtrialFibrillationPerfusionIllustration@3",
   "references": [
     {
       "url": "https://pubmed.ncbi.nlm.nih.gov/3249036/",
@@ -18,23 +18,16 @@
       "summary": [
         "Primary haemodynamic study reports absent aortic valve opening with very short cycles or short cycles after long cycles; it does not establish our thresholds or a mandatory RV response."
       ]
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/9316536/",
+      "summary": [
+        "Primary matched-average-rate study supports an independent haemodynamic effect of irregular RR; not numeric calibration."
+      ]
     }
   ],
   "authored_choices": {
-    "firstBeatGainPermille": 800,
-    "precedingRrBands": [
-      {
-        "belowNs": 600000000,
-        "gainPermille": 400
-      },
-      {
-        "belowNs": 900000000,
-        "gainPermille": 800
-      },
-      {
-        "otherwiseGainPermille": 1000
-      }
-    ],
+    "firstBeatGainPermille": 750,
     "plethAmplitudeCounts": 1250,
     "plethNominalDurationNs": 512000000,
     "abpMorphologyDurationNs": 600000000,
@@ -60,20 +53,28 @@
       "firstSelectedOrdinal": 16,
       "firstSystemicArrivalNs": 13126000000,
       "startup": "ordinals0/1 keep ordinary gains"
+    },
+    "precedingRrFilling": {
+      "model": "CardiacFillingPerfusionIllustration@2",
+      "nonFillingNs": 300000000,
+      "effectiveAtrialDurationNs": 0,
+      "maximumGainPermille": 750,
+      "initialRrNs": 800000000
     }
   },
   "invariants": [
     "Coarse and fine AF share events and gain",
     "Gain uses original electrical/mechanical ordinal and immediately preceding electrical RR, never accumulated ejection history",
-    "Pressure input, morphology and reference use matching beat strength",
+    "Pressure input and contour use linear beat strength once; optical pulse uses the same gain",
     "No random state, epoch scan or added beats; zero gain only in explicitly opted-in systemic example",
     "Opt-in flags default false and reject unrelated rhythms or simultaneous premature weighting"
   ],
   "limitations": [
-    "Not a physiological stroke-volume or filling model; thresholds/weights are authored",
+    "Continuous RR-dependent teaching filling approximation, not a calibrated AF stroke-volume model; no coordinated normal atrial contraction",
     "One authored systemic pulse-deficit example; no pulse detection, quantitative pulse-deficit reporting or general filling/valve model",
     "No AF aberrancy, CVP filling, independent right-heart or optical SpO2 calibration",
     "Same ABP/PA gain is a simplified coupled teaching choice, not validated biventricular haemodynamics",
-    "Preserving PA/CVP when selecting a systemic deficit does not assert that real RV/venous haemodynamics are invariant."
+    "Preserving PA/CVP when selecting a systemic deficit does not assert that real RV/venous haemodynamics are invariant.",
+    "No contractile restitution or preload/afterload feedback; preceding RR alone does not represent all AF haemodynamics"
   ]
 }

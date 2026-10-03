@@ -46,14 +46,15 @@ internal static class AtrialFibrillationDeficitSpecifications
                 double removedPressure = 0;
                 foreach (var e in omitted)
                 {
+                    int gain = AtrialFibrillationPerfusion.GainPermille(plan.ConductionPattern, e.CycleIndex);
                     long age = t - e.SimTimeNs;
                     if (age >= 0)
-                    { removedPleth += (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(age + 160_000_000) * 400, 1000); }
+                    { removedPleth += (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(age + 160_000_000) * gain, 1000); }
                     double elapsed = age - Pressure.TransitDelayNs;
                     if (elapsed < 0) { continue; }
                     double input = elapsed <= Pressure.EjectionDurationNs ? 1 - Math.Exp(-elapsed / Pressure.TimeConstantNs) :
                         (1 - Math.Exp(-(double)Pressure.EjectionDurationNs / Pressure.TimeConstantNs)) * Math.Exp(-(elapsed - Pressure.EjectionDurationNs) / Pressure.TimeConstantNs);
-                    removedPressure += 12000 * input;
+                    removedPressure += 30000 * gain / 1000.0 * input;
                 }
                 Check.That(original.EvaluateAt(t) - pulse.EvaluateAt(t) == removedPleth, "only omitted contributions are removed, including their later tails");
                 Check.That(Math.Abs((originalPressure.EvaluateAt(t) - pressure.EvaluateAt(t)) / (double)FixedPointMath.Q32One - removedPressure) < 0.00001,
@@ -97,7 +98,7 @@ internal static class AtrialFibrillationDeficitSpecifications
         Reject(() => PlethRunoffSource.Create(plan, Pleth with { UseAtrialFibrillationPerfusion = false }));
         Reject(() => VascularPressureSource.Create(plan, Pressure with { UseAtrialFibrillationPerfusion = false }));
         foreach (ulong ordinal in new[] { 0UL, 1UL, ulong.MaxValue })
-        { Check.That(AtrialFibrillationPerfusion.GainPermille(plan.ConductionPattern, ordinal, true) is 0 or 400 or 800 or 1000, "startup and endpoint arithmetic cannot underflow"); }
+        { Check.That(AtrialFibrillationPerfusion.GainPermille(plan.ConductionPattern, ordinal, true) is >= 0 and <= 750, "startup and endpoint arithmetic cannot underflow"); }
         var late = RegularPhysiologyTimeline.Start(plan).CaptureState() with { CursorSimTimeNs = 3_600_000_000_000 };
         var lateEvents = RegularPhysiologyTimeline.Restore(late).AdvanceBefore(3_620_000_000_000, 100)
             .Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).ToArray();

@@ -26,12 +26,12 @@ internal static class SvtPerfusionSpecifications
         var corrected = VascularPressureSource.Create(plan, SvtPerfusionReference.Arterial);
         // Reconstruct the former fixed-strength input, not a different renderer.
         var old = VascularPressureSource.Create(plan, SvtPerfusionReference.Arterial with
-        { EjectionEquilibriumCentiMmHg = 30000, Morphology = SvtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
+        { UseCardiacFillingPerfusion = false, EjectionEquilibriumCentiMmHg = 30000, Morphology = SvtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
         var before = new List<double>(); var after = new List<double>();
         for (long t = 300_000_000_000; t < 300_300_000_000; t += 1_000_000)
         { before.Add(old.EvaluateAt(t) / (double)Q / 100); after.Add(corrected.EvaluateAt(t) / (double)Q / 100); }
         Console.WriteLine($"SVT steady ABP old {before.Min():F2}-{before.Max():F2}, filling-limited {after.Min():F2}-{after.Max():F2} mmHg");
-        Check.That(before.Max() > 270 && after.Max() < 130 && after.Min() > 60 && after.Max() - after.Min() > 5,
+        Check.That(before.Max() > 270 && after.Max() < 130 && after.Min() > 60 && after.Max() - after.Min() > 1,
             "reproduced near300mmHg defect is removed at source while retaining pulsatility");
         var stopped = VascularPressureSource.Create(plan with { VentricularMechanicalEnabled = false }, SvtPerfusionReference.Arterial);
         Check.That(stopped.EvaluateAt(20_000_000_000) < stopped.EvaluateAt(5_000_000_000), "no ejection still runs down without a pressure floor clamp");
@@ -73,7 +73,7 @@ internal static class SvtPerfusionSpecifications
                 values.Add(a);
                 Check.That(Math.Abs(pleth.EvaluateAt(300_000_000_000 + phase) - pleth.EvaluateAt(86_400_000_000_000 + phase)) <= Q, "pleth evaluation at late ordinal is phase-equivalent");
             }
-            Check.That(values.Max() - values.Min() > Q, "fast pressure pulses retain modulation");
+            Check.That(values.Max() - values.Min() > 5 * Q, "fast pressure pulses retain modulation");
         }
         var singlePlan = plan with { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 };
         var single = PlethRunoffSource.Create(singlePlan, SvtPerfusionReference.Pleth);

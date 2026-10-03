@@ -41,7 +41,7 @@
   ],
   "limitations": [
     "Authored event replacement, not AV conduction, refractory or focus-reset mechanism",
-    "Fixed ejection strengths retained, no calibrated capture stroke volume or VT pressure",
+    "Per-beat filling uses actual330/420ms capture intervals and atrial phase; no calibrated capture contractility or VT pressure",
     "Pressure morphology follows existing minimum-RR normalization, not a clinical hemodynamic prediction",
     "Optional fusion remains a separate slot; no polymorphic VT/TdP or onset/termination"
   ],

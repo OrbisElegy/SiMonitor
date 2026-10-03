@@ -25,4 +25,16 @@ public static class FixedPerfusionPresets
         Pulmonary = SinglePulse.Pulmonary with
         { Morphology = SinglePulse.Pulmonary.Morphology! with { MaximumPulseOverlap = 2 } }
     };
+
+    public static FixedPerfusionPreset FillingSinglePulse { get; } = WithCardiacFilling(SinglePulse);
+    public static FixedPerfusionPreset FillingPulmonaryOverlap { get; } = WithCardiacFilling(PulmonaryOverlap);
+    public static FixedPerfusionPreset AcceleratedVentricular => FillingSinglePulse;
+    public static FixedPerfusionPreset AcceleratedSupraventricular => FillingPulmonaryOverlap;
+
+    private static FixedPerfusionPreset WithCardiacFilling(FixedPerfusionPreset preset) => preset with
+    {
+        Pleth = preset.Pleth with { UseCardiacFillingPerfusion = true },
+        Arterial = preset.Arterial with { UseCardiacFillingPerfusion = true },
+        Pulmonary = preset.Pulmonary with { UseCardiacFillingPerfusion = true }
+    };
 }

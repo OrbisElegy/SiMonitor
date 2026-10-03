@@ -20,8 +20,16 @@ internal static class PerfusionAuditSmokeChecks
             var plan = abp.Timeline.Plan;
             var pressure = abp.VascularPressure ?? throw new InvalidOperationException("Missing reservoir");
             if (i is >= 23 and <= 25 && pressure != SvtPerfusionReference.Arterial ||
-                i is >= 26 and <= 30 && pressure != VtPerfusionReference.Arterial)
+                i is >= 26 and <= 30 && pressure != VtPerfusionReference.Arterial ||
+                i is 31 or 32 && pressure != FixedPerfusionPresets.AcceleratedSupraventricular.Arterial ||
+                i is >= 33 and <= 35 && pressure != FixedPerfusionPresets.AcceleratedVentricular.Arterial)
             { throw new InvalidOperationException("Fast template bypassed filling-limited reference"); }
+            bool expectedFilling = CardiacFillingPerfusion.Supports(plan);
+            var pleth = state.Channels.Single(c => c.ChannelId == PhysiologyIllustrationSource.ChannelId(2)).Generator.PlethRunoff;
+            var pulmonary = state.Channels.Single(c => c.ChannelId == PhysiologyIllustrationSource.ChannelId(5)).Generator.VascularPressure;
+            if (pressure.UseCardiacFillingPerfusion != expectedFilling ||
+                pleth?.UseCardiacFillingPerfusion != expectedFilling || pulmonary?.UseCardiacFillingPerfusion != expectedFilling)
+            { throw new InvalidOperationException($"Rhythm {i} ({plan.ConductionPattern}) bypassed its shared perfusion strategy"); }
             var source = VascularPressureSource.Create(plan, pressure);
             double[] samples = Enumerable.Range(0, 100).Select(n => source.EvaluateAt(300_000_000_000L + n * 20_000_000L) / (double)FixedPointMath.Q32One / 100).ToArray();
             if (samples.Any(v => !double.IsFinite(v) || v < 0)) { throw new InvalidOperationException("Invalid pressure"); }
@@ -37,6 +45,7 @@ internal static class PerfusionAuditSmokeChecks
                 pressure.UsePrematureBeatPerfusion,
                 pressure.UseAtrialFibrillationPerfusion,
                 pressure.UseConductedFlutterPerfusion,
+                pressure.UseCardiacFillingPerfusion,
                 SampledAbpMinimum = samples.Min(),
                 SampledAbpMaximum = samples.Max()
             });
@@ -48,7 +57,7 @@ internal static class PerfusionAuditSmokeChecks
             var config = PhysiologyIllustrationConfiguration.Default with { SeededRate = schedule };
             var generator = PhysiologyIllustrationSource.Create(config).CaptureState().Channels[3].Generator;
             var corrected = VascularPressureSource.Create(generator.Timeline.Plan, generator.VascularPressure!);
-            var unchanged = VascularPressureSource.Create(generator.Timeline.Plan with { SeededRate = null }, generator.VascularPressure!);
+            var unchanged = VascularPressureSource.Create(generator.Timeline.Plan with { SeededRate = null }, generator.VascularPressure! with { UseCardiacFillingPerfusion = false });
             double[] values = Enumerable.Range(0, 100).Select(n => corrected.EvaluateAt(300_000_000_000L + n * 20_000_000L) / (double)FixedPointMath.Q32One / 100).ToArray();
             if (rate == 180 && (values.Max() >= 180 || values.Max() >= unchanged.EvaluateAt(300_000_000_000) / (double)FixedPointMath.Q32One / 100)) { throw new InvalidOperationException("Fast seeded rate still overpumps"); }
             for (ulong beat = 0; beat < 512; beat++)

@@ -53,19 +53,21 @@ internal sealed class DesignPreviewWindow : Window
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
         _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
+        Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
         if (preferences.Generator is { } generator)
         {
             try
             {
                 Settings.RestoreGenerator(generator);
                 var restored = BuildConfiguredSources();
-                Settings.MarkShapeApplied(restored.Configuration);
+                Settings.MarkParametersApplied(restored.Configuration, restored.Physiology);
                 _session = restored.Session; _ecg = restored.Paper;
             }
             catch (Exception error) when (error is ArgumentException or OverflowException)
             {
                 Settings.Sound.Close(); Settings = CreateSettings();
                 Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+                Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
                 rejected = true;
             }
         }
@@ -165,7 +167,7 @@ internal sealed class DesignPreviewWindow : Window
             _ => DesktopInformationPages.CreateAbout()
         };
     }
-    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper) BuildConfiguredSources()
+    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources()
     {
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
             Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
@@ -221,7 +223,7 @@ internal sealed class DesignPreviewWindow : Window
         var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
             opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: opticalTarget is null ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation);
         var ecg = CapturePaper(ecgConfig);
-        return (next, ecgConfig, ecg);
+        return (next, ecgConfig, ecg, config);
     }
     internal void ApplySettings()
     {
@@ -231,11 +233,11 @@ internal sealed class DesignPreviewWindow : Window
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
-            var (next, ecgConfig, ecg) = BuildConfiguredSources();
+            var (next, ecgConfig, ecg, physiology) = BuildConfiguredSources();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             Pause(); _session = next; _monitor = new(next); _ecg = ecg;
             Settings.Alerts.AdditionalLimits.Reset();
-            Settings.MarkShapeApplied(ecgConfig);
+            Settings.MarkParametersApplied(ecgConfig, physiology);
             MonitorView = new(_monitor);
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;

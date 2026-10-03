@@ -56,6 +56,37 @@ internal static class DesignPreviewSmokeChecks
                 "reentering generation starts at signal root");
             window.Settings.Tabs.SelectedIndex = 5;
             window.Width = 1440; window.Height = 940; Capture(window, "ui-refine-resp-wide.png");
+            string? initialEcg = window.Settings.AppliedEcgParameters.Text;
+            string? initialRespiration = window.Settings.AppliedRespirationParameters.Text;
+            window.Settings.Tabs.SelectedIndex = 0;
+            window.Settings.EcgSelection = 148;
+            window.Settings.RespSignalAmplitude.Value = -650;
+            window.Settings.OpenAdvanced(0);
+            Capture(window, "ui-refine-ecg-editor.png");
+            Require(window.Settings.InfarctionParameters.IsVisible && window.Settings.InfarctionParameters.Parent is not null &&
+                window.Settings.ShapeEditSummary.Parent is null &&
+                window.Settings.AppliedEcgParameters.Text == initialEcg &&
+                window.Settings.AppliedRespirationParameters.Text == initialRespiration,
+                "ECG editor omits parameter summary and drafts do not alter applied overview");
+            window.ApplySettings();
+            string? appliedEcg = window.Settings.AppliedEcgParameters.Text;
+            string? appliedRespiration = window.Settings.AppliedRespirationParameters.Text;
+            Require(appliedEcg != initialEcg && appliedRespiration!.Contains("-650", StringComparison.Ordinal),
+                "successful apply publishes accepted ECG and respiratory parameters together");
+            window.Settings.InfarctionParameters.Delay.Value = null;
+            window.Settings.RespSignalAmplitude.Value = 350;
+            var session = window.Session;
+            window.ApplySettings();
+            window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
+            Require(ReferenceEquals(session, window.Session) && window.Settings.AppliedEcgParameters.Text == appliedEcg &&
+                window.Settings.AppliedRespirationParameters.Text == appliedRespiration,
+                "failed apply and overview navigation retain the active parameter snapshot");
+            Capture(window, "ui-refine-applied-parameters-wide.png");
+            window.Width = 960; Capture(window, "ui-refine-applied-parameters-compact.png");
+            window.ResetAllSettings();
+            Require(window.Settings.AppliedEcgParameters.Text == initialEcg &&
+                window.Settings.AppliedRespirationParameters.Text == initialRespiration,
+                "full reset restores the applied parameter overview");
         }
         finally { window.Close(); }
     }
@@ -1032,8 +1063,10 @@ internal static class DesignPreviewSmokeChecks
             VerifySoundSettings();
             window.Settings.Tabs.SelectedIndex = 3; Capture(window, "ui-preview-alarms.png");
             window.Settings.Tabs.SelectedIndex = 4; Capture(window, "ui-preview-vitals.png");
-            window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-advanced.png");
-            Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "advanced parameters track current selected style");
+            window.Settings.Tabs.SelectedIndex = 5;
+            window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
+            Capture(window, "ui-preview-advanced.png");
+            Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "applied parameter page shows the active style");
             Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 6, "all six categories remain available through settings navigation");
             var source = window.Session;
             window.Settings.Slots[0].Minimum.Text = "NaN";
@@ -1854,11 +1887,13 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 72, 74, 73, 20, 0 })
             {
                 window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = choice;
+                window.ApplySettings();
                 window.Settings.OpenAdvanced(0);
+                window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
                 Capture(window, $"ui-preview-advanced-{choice}.png");
                 string?[] text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
-                Require(text.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg)),
-                    "advanced page renders the selected waveform semantics");
+                Require(text.Any(t => t?.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg), StringComparison.Ordinal) == true),
+                    "applied parameter page renders the accepted waveform semantics");
                 window.Settings.OpenAdvanced(3);
                 Capture(window, $"ui-preview-advanced-ejection-{choice}.png");
                 text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();

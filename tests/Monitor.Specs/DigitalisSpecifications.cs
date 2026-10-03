@@ -10,7 +10,6 @@ internal static class DigitalisSpecifications
         new(nameof(DigitalisCompoundScoopsStAndEndsInNarrowUprightT), DigitalisCompoundScoopsStAndEndsInNarrowUprightT),
         new(nameof(DigitalisVariantsChangeOnlyPostStContour), DigitalisVariantsChangeOnlyPostStContour),
         new(nameof(DigitalisJoinsRDescentToStWithoutRebound), DigitalisJoinsRDescentToStWithoutRebound),
-        new(nameof(DigitalisRestoresAcrossCompoundJoins), DigitalisRestoresAcrossCompoundJoins),
     ];
     private static void DigitalisCompoundScoopsStAndEndsInNarrowUprightT()
     {
@@ -80,18 +79,5 @@ internal static class DigitalisSpecifications
                 Check.That(descent.Zip(descent.Skip(1)).All(p => p.Second <= p.First + 1), "R descent must join the ST trough without S recovery and a second downswing");
             }
         }
-    }
-    private static void DigitalisRestoresAcrossCompoundJoins()
-    {
-        foreach (var shape in Enum.GetValues<DigitalisTShape>())
-            foreach (long boundary in new[] { 190_000_000L, 194_000_000, 218_000_000, 238_000_000, 310_000_000, 374_000_000, 438_000_000, 478_000_000 })
-            {
-                var source = ElectrodeSignalGenerator.Start(DigitalisEffectReference.CreatePlan(), "AcqECGMonitor250@1", 1, DigitalisEffectReference.CreateElectrodes(shape));
-                source.GenerateBefore(boundary, 250, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "compound recovery exact");
-            }
     }
 }

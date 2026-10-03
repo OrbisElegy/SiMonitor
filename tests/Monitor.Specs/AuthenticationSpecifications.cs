@@ -13,10 +13,8 @@ internal static class AuthenticationSpecifications
     [
         new(nameof(ValidLoginIssuesBoundPrincipal), ValidLoginIssuesBoundPrincipal),
         new(nameof(FifthFailureLocksAccountAndSource), FifthFailureLocksAccountAndSource),
-        new(nameof(LockExpiresAfterFrozenDuration), LockExpiresAfterFrozenDuration),
         new(nameof(SourceFailuresThrottleDifferentAccounts), SourceFailuresThrottleDifferentAccounts),
         new(nameof(UnknownAccountUsesDummyVerifier), UnknownAccountUsesDummyVerifier),
-        new(nameof(RejectedAttemptIsAuditedWithoutEnumeration), RejectedAttemptIsAuditedWithoutEnumeration),
         new(nameof(IncompatibleDummyVerifierIsRejected), IncompatibleDummyVerifierIsRejected),
         new(nameof(DisabledAccountIsRejected), DisabledAccountIsRejected),
         new(nameof(SessionTimeBoundariesFailClosed), SessionTimeBoundariesFailClosed),
@@ -55,19 +53,9 @@ internal static class AuthenticationSpecifications
         Check.That(locked.ReasonCode == "identity.account.locked", "correct password cannot bypass lock");
         Check.That(fixture.Tracker.AuditRecords[^1].ReasonCode == "identity.account.locked",
             "an attempt rejected by an active lock must be audited");
-    }
-
-    private static void LockExpiresAfterFrozenDuration()
-    {
-        AuthenticationFixture fixture = new();
-        for (int attempt = 0; attempt < 5; attempt++)
-        {
-            fixture.Authenticate(fixture.WrongPassword);
-        }
-
         fixture.Clock.Advance(TimeSpan.FromMinutes(15));
         Check.That(fixture.Authenticate(fixture.Password).Kind == AuthenticationOutcomeKind.Accepted,
-            "lock must expire at the frozen 15-minute boundary");
+            "lock expires at the frozen 15-minute boundary");
     }
 
     private static void SourceFailuresThrottleDifferentAccounts()
@@ -94,30 +82,18 @@ internal static class AuthenticationSpecifications
         int before = fixture.Hasher.VerifyCount;
         InstitutionAuthenticationResult result = fixture.Authenticate(
             fixture.WrongPassword,
-            username: "missing-user");
+            username: "missing-user",
+            sourceAddress: "192.0.2.77");
         Check.That(result.ReasonCode == "identity.password.invalid", "unknown account must look invalid");
         Check.That(fixture.Hasher.VerifyCount == before + 1, "unknown account must execute dummy verify");
         Check.That(fixture.Hasher.LastVerifier == fixture.DummyVerifier,
             "unknown account must use the configured dummy verifier");
-    }
-
-    private static void RejectedAttemptIsAuditedWithoutEnumeration()
-    {
-        AuthenticationFixture fixture = new();
-        InstitutionAuthenticationResult result = fixture.Authenticate(
-            fixture.WrongPassword,
-            username: "missing-user",
-            sourceAddress: "192.0.2.77");
         AuthenticationFailureAuditRecord audit = fixture.Tracker.AuditRecords.Single();
-        Check.That(result.ReasonCode == audit.ReasonCode &&
-            audit.ReasonCode == "identity.password.invalid",
-            "the audit must preserve the public non-enumerating rejection code");
-        Check.That(audit.CanonicalUsername == "MISSING-USER" &&
-            audit.SourceAddress == "192.0.2.77" &&
-            audit.Context == InstitutionAuthenticationContext.Teaching,
-            "the audit must bind the normalized account, source and context");
-        Check.That(audit.PrincipalId is null,
-            "an unknown account audit must not invent a principal identity");
+        Check.That(result.ReasonCode == audit.ReasonCode && audit.ReasonCode == "identity.password.invalid",
+            "audit preserves the public non-enumerating rejection code");
+        Check.That(audit.CanonicalUsername == "MISSING-USER" && audit.SourceAddress == "192.0.2.77" &&
+            audit.Context == InstitutionAuthenticationContext.Teaching && audit.PrincipalId is null,
+            "audit binds the normalized account, source and context without inventing a principal");
     }
 
     private static void DisabledAccountIsRejected()

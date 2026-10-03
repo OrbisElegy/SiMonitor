@@ -26,7 +26,6 @@ internal static class SweepFrameReconstructionSpecifications
         new(nameof(StoppingPublicationFencesEveryOwnedTicket), StoppingPublicationFencesEveryOwnedTicket),
         new(nameof(StoppingPumpDiscardsPendingAndRejectsAdmission), StoppingPumpDiscardsPendingAndRejectsAdmission),
         new(nameof(ConcurrentStopLeavesOneFinalImmutableSnapshot), ConcurrentStopLeavesOneFinalImmutableSnapshot),
-        new(nameof(RestoredPumpIsIndependentFromStoppedLifecycle), RestoredPumpIsIndependentFromStoppedLifecycle),
         new(nameof(QueuedFramesCoalesceToTheLatestRequest), QueuedFramesCoalesceToTheLatestRequest),
         new(nameof(QueueFailureReleasesWorkerAndPreservesPublishedFrame), QueueFailureReleasesWorkerAndPreservesPublishedFrame),
         new(nameof(ConcurrentQueuePumpsConsumeOnePendingRequest), ConcurrentQueuePumpsConsumeOnePendingRequest),
@@ -312,20 +311,6 @@ internal static class SweepFrameReconstructionSpecifications
             "pump stop fences active work without deadlock or subsequent pending consumption");
     }
 
-    private static void RestoredPumpIsIndependentFromStoppedLifecycle()
-    {
-        SweepFrameWorkPump original = new(2, 2);
-        original.Enqueue(Input());
-        original.ProcessNext();
-        PublishedSweepFrame saved = original.Stop()!;
-        var restored = SweepFrameWorkPump.Restore(2, 2, saved.Checkpoint);
-        restored.Enqueue(Input(20));
-        Check.That(restored.ProcessNext() == SweepFramePublicationStatus.Published &&
-            restored.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20 &&
-            ReferenceEquals(saved, original.CapturePublished()) && original.ProcessNext() is null,
-            "restoring completed input creates a new active lifecycle without reopening the stopped instance");
-    }
-
     private static void QueuedFramesCoalesceToTheLatestRequest()
     {
         SweepFrameWorkPump queue = new(2, 2);
@@ -377,6 +362,12 @@ internal static class SweepFrameReconstructionSpecifications
         var restored = SweepFrameWorkPump.Restore(2, 2, published.Checkpoint);
         Check.That(restored.ProcessNext() is null && restored.CapturePublished()!.Frame.Segments.SequenceEqual(published.Frame.Segments),
             "restore reconstructs owned completed inputs without resurrecting transient pending jobs");
+        PublishedSweepFrame stopped = queue.Stop()!;
+        restored.Enqueue(Input(20));
+        Check.That(restored.ProcessNext() == SweepFramePublicationStatus.Published &&
+            restored.CapturePublished()!.Frame.Geometry.PlotWidthPixels == 20 &&
+            ReferenceEquals(stopped, queue.CapturePublished()) && queue.ProcessNext() is null,
+            "restored lifecycle publishes new work without reopening or changing the stopped original");
     }
 
     private static void OlderWorkCannotOverwriteANewerPublication()

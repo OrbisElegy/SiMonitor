@@ -16,7 +16,6 @@ internal static class MechanicalUncouplingSpecifications
     [
         new(nameof(UncouplingPreservesElectricalAtrialAndRespiratoryEvents), UncouplingPreservesElectricalAtrialAndRespiratoryEvents),
         new(nameof(UncoupledSourceKeepsEcgWithoutPulseOrCardiacArtifact), UncoupledSourceKeepsEcgWithoutPulseOrCardiacArtifact),
-        new(nameof(UncoupledNativeStreamsRecoverIdentically), UncoupledNativeStreamsRecoverIdentically),
         new(nameof(UncouplingDefaultsAndFailurePreserveState), UncouplingDefaultsAndFailurePreserveState),
     ];
 
@@ -54,26 +53,15 @@ internal static class MechanicalUncouplingSpecifications
     private static void UncoupledSourceKeepsEcgWithoutPulseOrCardiacArtifact()
     {
         var normal = Group(true).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var off = Group(false, 160).AdvanceTo(8_000_000_000, 2000, 40, 100);
+        var off = NativeRecoveryChecks.Verify(() => Group(false, 160),
+            [160_000_000, 240_000_000, 320_000_000, 2_000_000_000, 2_191_999_999,
+             2_192_000_000, 4_000_000_000, 8_000_000_000],
+            2000, 40, 100, 30, "uncoupled ECG, Pleth and Resp");
         Check.That(Samples(off, Ecg).SequenceEqual(Samples(normal, Ecg)) && Samples(off, Ecg).Any(value => value > 500),
             "QRS and repolarization continue with unchanged native ECG");
         Check.That(Samples(off, Pleth).All(value => value == 0) && Samples(normal, Pleth).Any(value => value > 0),
             "continued ECG never synthesizes missing mechanical pulses");
         Check.That(Samples(off, Resp).SequenceEqual(Samples(normal, Resp)), "breathing persists without ventricular cardiac artifact");
-    }
-
-    private static void UncoupledNativeStreamsRecoverIdentically()
-    {
-        var expected = Group(false, 160).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var group = Group(false, 160);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "uncoupled mixed-rate samples, block clocks and configuration survive every split restore");
     }
 
     private static void UncouplingDefaultsAndFailurePreserveState()

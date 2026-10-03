@@ -10,9 +10,7 @@ internal static class NumericDeterminismSpecifications
         new(nameof(TiesToEvenAndSaturationMatchFrozenVectors),
             TiesToEvenAndSaturationMatchFrozenVectors),
         new(nameof(PeriodicLookupMatchesFrozenVectors), PeriodicLookupMatchesFrozenVectors),
-        new(nameof(BiquadMatchesFrozenVectors), BiquadMatchesFrozenVectors),
-        new(nameof(BiquadPropagatesIntermediateSaturation),
-            BiquadPropagatesIntermediateSaturation),
+        new(nameof(BiquadMatchesFrozenVectorsAndPropagatesSaturation), BiquadMatchesFrozenVectorsAndPropagatesSaturation),
     ];
 
     private static void TiesToEvenAndSaturationMatchFrozenVectors()
@@ -87,7 +85,7 @@ internal static class NumericDeterminismSpecifications
         }
     }
 
-    private static void BiquadMatchesFrozenVectors()
+    private static void BiquadMatchesFrozenVectorsAndPropagatesSaturation()
     {
         FixedBiquadCoefficients coefficients = new(
             1L << 60,
@@ -117,13 +115,10 @@ internal static class NumericDeterminismSpecifications
                 "FixedBiquadDF2T must preserve the frozen per-product evaluation order");
             state = actual.State;
         }
-    }
 
-    private static void BiquadPropagatesIntermediateSaturation()
-    {
-        FixedBiquadCoefficients coefficients = new(long.MaxValue, 0, 0, 0, 0);
-        FixedBiquadStep step = FixedBiquadDf2T.Step(default, coefficients, long.MaxValue);
-        Check.That(step.OutputQ32 == long.MaxValue && step.Saturated,
+        FixedBiquadStep saturated = FixedBiquadDf2T.Step(default,
+            new FixedBiquadCoefficients(long.MaxValue, 0, 0, 0, 0), long.MaxValue);
+        Check.That(saturated.OutputQ32 == long.MaxValue && saturated.Saturated,
             "an intermediate coefficient product saturation must reach the step result");
     }
 

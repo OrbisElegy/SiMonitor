@@ -17,7 +17,6 @@ internal static class RespiratoryTransitionSpecifications
         new(nameof(CycleLimitRetainsPreviouslyTriggeredTails), CycleLimitRetainsPreviouslyTriggeredTails),
         new(nameof(LastCompleteBreathKeepsStableEventIdentity), LastCompleteBreathKeepsStableEventIdentity),
         new(nameof(TransitionPreservesPrefixAndCo2Response), TransitionPreservesPrefixAndCo2Response),
-        new(nameof(ScheduledActivitySurvivesRecovery), ScheduledActivitySurvivesRecovery),
         new(nameof(InvalidSchedulesAndLateFailureReject), InvalidSchedulesAndLateFailureReject),
     ];
 
@@ -71,7 +70,10 @@ internal static class RespiratoryTransitionSpecifications
         var normal = Group(RespiratoryActivity.Breathing, null).AdvanceTo(10_000_000_000, 1250, 40, 100);
         foreach (var activity in new[] { RespiratoryActivity.Absent, RespiratoryActivity.EffortOnly })
         {
-            var changed = Group(activity, 1).AdvanceTo(10_000_000_000, 1250, 40, 100);
+            var changed = NativeRecoveryChecks.Verify(() => Group(activity, 1),
+                [1_200_000_000, 2_190_000_000, 3_200_000_000, 3_999_999_999, 4_000_000_000,
+                 4_000_000_001, 4_600_000_000, 4_800_000_000, 5_000_000_000, 8_000_000_000, 10_000_000_000],
+                1250, 40, 100, 40, $"scheduled {activity}");
             Check.That(changed.Take(20).Zip(normal.Take(20)).All(pair => pair.First.SequenceEqual(pair.Second)),
                 "all wire samples before the completed-breath boundary remain identical");
             short[] co2 = Samples(changed, Co2);
@@ -80,23 +82,6 @@ internal static class RespiratoryTransitionSpecifications
             short[] resp = Samples(changed, Resp);
             Check.That(activity == RespiratoryActivity.Absent ? resp.Skip(500).All(value => value == 0)
                 : resp.SequenceEqual(Samples(normal, Resp)), "thoracic effort either stops at the next cycle or continues independently of gas");
-        }
-    }
-
-    private static void ScheduledActivitySurvivesRecovery()
-    {
-        foreach (var activity in new[] { RespiratoryActivity.Absent, RespiratoryActivity.EffortOnly })
-        {
-            var expected = Group(activity, 1).AdvanceTo(10_000_000_000, 1250, 40, 100);
-            var group = Group(activity, 1);
-            List<byte[]> actual = [];
-            for (int step = 1; step <= 50; step++)
-            {
-                actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-                group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-            }
-            Check.That(actual.Count == 40 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-                "scheduled transition and pending response tails recover byte-for-byte without missing or duplicated blocks");
         }
     }
 

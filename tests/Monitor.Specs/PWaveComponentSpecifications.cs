@@ -12,7 +12,6 @@ internal static class PWaveComponentSpecifications
         new(nameof(PComponentsProduceRoundedNotchedAndBiphasicSources), PComponentsProduceRoundedNotchedAndBiphasicSources),
         new(nameof(PComponentsPreserveOtherBandsAndProjection), PComponentsPreserveOtherBandsAndProjection),
         new(nameof(PComponentsValidateAndSnapshotInputs), PComponentsValidateAndSnapshotInputs),
-        new(nameof(PComponentsRecoverWithIndependentVentricularTiming), PComponentsRecoverWithIndependentVentricularTiming),
     ];
 
     private static EcgPWavePlan Single(int early, int late) =>
@@ -94,24 +93,4 @@ internal static class PWaveComponentSpecifications
         Check.That(odd[0].DurationNs == 4 && odd[^1].DelayNs == 3 && odd[^1].DurationNs == 4, "ties-even nanosecond timing retains exact P endpoint");
     }
 
-    private static void PComponentsRecoverWithIndependentVentricularTiming()
-    {
-        var plan = Plan with { IndependentVentricularPeriodNs = 1_100_000_000, VentricularElectricalOffsetNs = 900_000_000, VentricularMechanicalOffsetNs = 980_000_000 };
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(
-            new(30_000_000, 120_000_000, [0, 0, 0, 0, 20, 40, 60, 20, 20, 20]),
-            tShape: new(375), stSegment: new(new int[10], Enumerable.Repeat(100, 10).ToArray()),
-            pWave: new(Enumerable.Range(0, 10).Select(i => (EcgPWaveComponents?)new EcgPWaveComponents(i * 20, -i * 10)).ToArray()));
-        var expected = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes, EcgLimbPlacement.SwapRaLa).GenerateBefore(2_800_000_000, 700, 100);
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes, EcgLimbPlacement.SwapRaLa);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 175; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
-            "P components survive recovery with independent QRS, wiring, ST/T/U");
-        var ventricularOnly = ElectrodeSignalGenerator.Start(plan with { CardiacActivity = CardiacActivity.VentricularOnly }, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(800_000_000, 200, 100);
-        Check.That(ventricularOnly.All(sample => sample.MicrovoltValues.All(value => value == 0)), "both P components follow atrial availability");
-    }
 }

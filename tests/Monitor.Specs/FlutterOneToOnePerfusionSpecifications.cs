@@ -88,9 +88,13 @@ internal static class FlutterOneToOnePerfusionSpecifications
                 long b = source.EvaluateAt(86_400_000_000_000 + phase);
                 Check.That(Math.Abs(a - b) <= Q && a > pressure.AsymptoticPressureCentiMmHg * Q && a < short.MaxValue * Q, "pressure remains periodic and unsaturated after one day");
                 values.Add(a);
-                Check.That(Math.Abs(pleth.EvaluateAt(200_000_000_000 + phase) - pleth.EvaluateAt(86_400_000_000_000 + phase)) <= Q, "pleth evaluation at late ordinal is phase-equivalent");
             }
             Check.That(values.Max() - values.Min() > Q, "fast pressure pulses retain modulation");
+        }
+        for (long phase = 0; phase < 200_000_000; phase += 10_000_000)
+        {
+            Check.That(Math.Abs(pleth.EvaluateAt(200_000_000_000 + phase) - pleth.EvaluateAt(86_400_000_000_000 + phase)) <= Q,
+                "pleth evaluation at late ordinal is phase-equivalent");
         }
         var singlePlan = plan with { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 };
         var single = PlethRunoffSource.Create(singlePlan, FlutterOneToOnePerfusionReference.Pleth);

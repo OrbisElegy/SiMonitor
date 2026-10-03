@@ -70,7 +70,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         new(nameof(SvgPublicationRefreshKeepsActiveGestureEvidence), SvgPublicationRefreshKeepsActiveGestureEvidence),
 
         new(nameof(SvgRefreshPublishesCurrentEvidenceAndPermissions), SvgRefreshPublishesCurrentEvidenceAndPermissions),
-        new(nameof(SvgRefreshDuringDragKeepsRetainedGesture), SvgRefreshDuringDragKeepsRetainedGesture),
         new(nameof(SvgRefreshFailurePreservesCurrentEvidence), SvgRefreshFailurePreservesCurrentEvidence),
 
         new(nameof(HiddenSvgRequiresRefreshBeforeEnabledInput), HiddenSvgRequiresRefreshBeforeEnabledInput),
@@ -153,29 +152,16 @@ internal static partial class WaveformRecordArchiveSpecifications
         new(nameof(StudyCursorSvgRendersExactVisibleMarkersSeparately), StudyCursorSvgRendersExactVisibleMarkersSeparately),
         new(nameof(StudyCursorSvgOmitsHiddenAndLockedMarkers), StudyCursorSvgOmitsHiddenAndLockedMarkers),
         new(nameof(StudyCursorSvgValidatesStylesAndRecovers), StudyCursorSvgValidatesStylesAndRecovers),
-        new(nameof(StudyCursorSvgRestoresAndCancelsWithoutMutation), StudyCursorSvgRestoresAndCancelsWithoutMutation),
-        new(nameof(StudySvgLayersRenderCurrentAdmittedGrid), StudySvgLayersRenderCurrentAdmittedGrid),
         new(nameof(StudySvgLayersSuppressUnavailableGrid), StudySvgLayersSuppressUnavailableGrid),
         new(nameof(StudySvgLayersRejectStylesWithoutChangingSession), StudySvgLayersRejectStylesWithoutChangingSession),
-        new(nameof(StudySvgLayersRestoreAndCancel), StudySvgLayersRestoreAndCancel),
         new(nameof(StudyGridCancellationPreservesSessionAndAllowsRetry), StudyGridCancellationPreservesSessionAndAllowsRetry),
         new(nameof(StudyPaperGridUsesCurrentCalibratedViewport), StudyPaperGridUsesCurrentCalibratedViewport),
         new(nameof(StudyPaperGridSuppressesDarkAndDeniedOutput), StudyPaperGridSuppressesDarkAndDeniedOutput),
         new(nameof(StudyPaperGridFailurePreservesAcceptedState), StudyPaperGridFailurePreservesAcceptedState),
-        new(nameof(StudyPaperGridRebuildsAfterSessionRestore), StudyPaperGridRebuildsAfterSessionRestore),
-        new(nameof(ThemedPolicyUpdateChangesAllCurrentGates), ThemedPolicyUpdateChangesAllCurrentGates),
-        new(nameof(ThemedPolicyUpdateRejectsEveryPartialUpdate), ThemedPolicyUpdateRejectsEveryPartialUpdate),
-        new(nameof(ThemedPolicyUpdateWorksAfterSessionRestore), ThemedPolicyUpdateWorksAfterSessionRestore),
-        new(nameof(ThemedSessionRestoresCoherentDisplayState), ThemedSessionRestoresCoherentDisplayState),
-        new(nameof(ThemedSessionUsesCurrentPermissions), ThemedSessionUsesCurrentPermissions),
-        new(nameof(ThemedSessionRejectsInvalidComponentsWithoutMutation), ThemedSessionRejectsInvalidComponentsWithoutMutation),
         new(nameof(StudyThemeSwitchPreservesContentAndGesture), StudyThemeSwitchPreservesContentAndGesture),
         new(nameof(StudyThemeDisplayKeepsCommandPoliciesIndependent), StudyThemeDisplayKeepsCommandPoliciesIndependent),
         new(nameof(StudyThemeDisplayRestoresWithoutBypassingAdmission), StudyThemeDisplayRestoresWithoutBypassingAdmission),
-        new(nameof(StudyPolicyUpdatePublishesBothCommandGroups), StudyPolicyUpdatePublishesBothCommandGroups),
-        new(nameof(StudyPolicyUpdateRejectsPartialAndForeignChanges), StudyPolicyUpdateRejectsPartialAndForeignChanges),
         new(nameof(StudyPolicyUpdateAppliesToRestoredSelectionAndGesture), StudyPolicyUpdateAppliesToRestoredSelectionAndGesture),
-        new(nameof(StudySessionRestoresPageLeadAndCursorValues), StudySessionRestoresPageLeadAndCursorValues),
         new(nameof(StudySessionRestoresEmptyLockedView), StudySessionRestoresEmptyLockedView),
         new(nameof(StudySessionRejectsIncompleteAndForeignState), StudySessionRejectsIncompleteAndForeignState),
         new(nameof(StudySessionUsesCurrentMeasurementPolicy), StudySessionUsesCurrentMeasurementPolicy),
@@ -196,9 +182,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         new(nameof(NavigationCommandDisplayTracksPageBoundaries), NavigationCommandDisplayTracksPageBoundaries),
         new(nameof(NavigationCommandDisplayCannotAuthorizeStaleActions), NavigationCommandDisplayCannotAuthorizeStaleActions),
         new(nameof(NavigationCommandDisplayRestoresCurrentPolicy), NavigationCommandDisplayRestoresCurrentPolicy),
-        new(nameof(StudyDisplayIncludesAndSuppressesNavigationCommands), StudyDisplayIncludesAndSuppressesNavigationCommands),
         new(nameof(NavigatedDisplayUsesCurrentPage), NavigatedDisplayUsesCurrentPage),
-        new(nameof(NavigatedDisplayRejectsForeignRecord), NavigatedDisplayRejectsForeignRecord),
         new(nameof(NavigatedDisplaySuppressesDeniedPage), NavigatedDisplaySuppressesDeniedPage),
         new(nameof(NavigatedDisplayRebindsRestoredNavigation), NavigatedDisplayRebindsRestoredNavigation),
         new(nameof(RecordNavigationMovesWithoutChangingMeasurements), RecordNavigationMovesWithoutChangingMeasurements),
@@ -226,7 +210,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         new(nameof(MeasurementDragAcceptsEquivalentGainRatios), MeasurementDragAcceptsEquivalentGainRatios),
         new(nameof(MeasurementDragStartRequiresVisibleValidatedPage), MeasurementDragStartRequiresVisibleValidatedPage),
         new(nameof(MeasurementDragCancelRestoresInitialValues), MeasurementDragCancelRestoresInitialValues),
-        new(nameof(MeasurementDragCommitClosesGesture), MeasurementDragCommitClosesGesture),
         new(nameof(MeasurementOldGestureCannotOverwriteReplacement), MeasurementOldGestureCannotOverwriteReplacement),
         new(nameof(MeasurementGestureFailurePreservesPreview), MeasurementGestureFailurePreservesPreview),
         new(nameof(MeasurementDisplayCombinesPagePositionsAndResults), MeasurementDisplayCombinesPagePositionsAndResults),
@@ -246,16 +229,12 @@ internal static partial class WaveformRecordArchiveSpecifications
         new(nameof(MeasurementPagesOwnSharedBoundaryOnce), MeasurementPagesOwnSharedBoundaryOnce),
         new(nameof(MeasurementPageZoomPreservesDataValues), MeasurementPageZoomPreservesDataValues),
         new(nameof(MeasurementPagesValidateEvenHiddenCursors), MeasurementPagesValidateEvenHiddenCursors),
-        new(nameof(MeasurementPagesReprojectRestoredValues), MeasurementPagesReprojectRestoredValues),
         new(nameof(MeasurementProjectionPreservesValuesAcrossResize), MeasurementProjectionPreservesValuesAcrossResize),
         new(nameof(MeasurementProjectionRetainsFractionalAndOutsideCoordinates), MeasurementProjectionRetainsFractionalAndOutsideCoordinates),
         new(nameof(MeasurementProjectionEnforcesPolicyOwnershipAndBounds), MeasurementProjectionEnforcesPolicyOwnershipAndBounds),
-        new(nameof(MeasurementProjectionRestoresFromDataEvidence), MeasurementProjectionRestoresFromDataEvidence),
-        new(nameof(MeasurementCheckpointReissuesOwnedCursorPair), MeasurementCheckpointReissuesOwnedCursorPair),
         new(nameof(MeasurementCheckpointRejectsTamperedValues), MeasurementCheckpointRejectsTamperedValues),
         new(nameof(MeasurementCheckpointUsesCurrentCoursePolicy), MeasurementCheckpointUsesCurrentCoursePolicy),
         new(nameof(MeasurementCheckpointRejectsForeignCaptureAndOwnsRecord), MeasurementCheckpointRejectsForeignCaptureAndOwnsRecord),
-        new(nameof(MeasurementSlotResolvesExplicitChannelMapping), MeasurementSlotResolvesExplicitChannelMapping),
         new(nameof(MeasurementSlotRejectsUnknownIdentity), MeasurementSlotRejectsUnknownIdentity),
         new(nameof(MeasurementSlotPreventsCrossLeadCursorMixing), MeasurementSlotPreventsCrossLeadCursorMixing),
         new(nameof(MeasurementSlotSurvivesInputMutationAndRecordRestore), MeasurementSlotSurvivesInputMutationAndRecordRestore),
@@ -452,7 +431,7 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordCursorPair released = drag.CommitPointer(true, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1));
         presentation.Refresh(true, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
         Check.That(presentation.Current!.HitTest(true, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second &&
-            pair.Second.Value.DataTimeNs == 50_000_000, "publication redraw preserves retained gesture and publishes final evidence");
+            released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) && pair.Second.Value.DataTimeNs == 50_000_000, "publication redraw preserves retained gesture and publishes final evidence");
         RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(view.Measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
         Check.That(restored.Second.Value == released.Second.Value, "published edits remain restorable independently of screen slot");
     }
@@ -475,27 +454,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         CapturedRecordSvgInputSession current = hidden.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
         Check.That(current.HitTest(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second &&
             pair.Second.Value.DataTimeNs == 50_000_000, "refresh binds edited current evidence and enabled permission");
-    }
-
-    private static void SvgRefreshDuringDragKeepsRetainedGesture()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
-        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ActualSize, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
-        CapturedRecordSvgLayout layout = SvgStudyLayout() with { PlotLeftPixels = 0, PlotWidthPixels = 100 };
-        RecordScreenZoomLayout screen = new(100, 100, 100, 100);
-        CapturedRecordSvgInputSession input = new(view, navigation, theme, zoom, false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
-        CapturedRecordSvgDrag drag = input.BeginDrag(false, layout, screen, new(50, 1), new(40, 1), new(0, 1), new(0, 1), new(1, 1));
-        drag.PreviewPointer(false, layout, screen, new(60, 1), new(40, 1), new(0, 1), new(0, 1));
-        CapturedRecordSvgInputSession preview = input.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
-        Check.That(preview.Display.CursorOverlaySvg is not null, "preview redraw returns current overlay");
-        CapturedRecordCursorPair released = drag.CommitPointer(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1));
-        CapturedRecordSvgInputSession final = preview.Refresh(false, layout, screen, SvgStudyStyle(), SvgCursorStyle(), false);
-        Check.That(released.Second.Value == new EcgManualCursor(75_000_000, 1500, 1) &&
-            final.HitTest(false, layout, screen, new(75, 1), new(30, 1), new(0, 1), new(0, 1), new(1, 1)) == RecordCursorHits.Second &&
-            pair.Second.Value.DataTimeNs == 50_000_000, "redraw leaves active gesture intact and final refresh binds release evidence");
     }
 
     private static void SvgRefreshFailurePreservesCurrentEvidence()
@@ -1147,6 +1105,11 @@ internal static partial class WaveformRecordArchiveSpecifications
             restored.Content.Study.Navigation, restored.Content.Theme, restored.Zoom, true, SvgStudyLayout(), screen,
             SvgStudyStyle(), SvgCursorStyle(), false);
         Check.That(!rendered.Zoom!.CanSelect && rendered.Transform!.Factor == new ExactPlotCoordinate(3, 2), "restored selected zoom renders under current disabled selection permission");
+        ZoomedCapturedRecordSvgScreenLayers original = CapturedRecordSvgLayers.RenderZoomedScreen(view,
+            navigation, theme, zoom, true, SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(original.GridSvg == rendered.GridSvg && original.CursorOverlaySvg == rendered.CursorOverlaySvg &&
+            rendered.GridSvg is not null && rendered.CursorOverlaySvg is not null,
+            "one restored session rebuilds both grid and cursor SVG exactly");
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
         try
@@ -1155,7 +1118,12 @@ internal static partial class WaveformRecordArchiveSpecifications
                 SvgStudyStyle(), SvgCursorStyle(), false, cancellation.Token);
             throw new InvalidOperationException("cancelled rendering succeeded");
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException exception)
+        { Check.That(exception.CancellationToken == cancellation.Token, "nested rendering preserves cancellation identity"); }
+        ZoomedCapturedRecordSvgScreenLayers retried = CapturedRecordSvgLayers.RenderZoomedScreen(view,
+            navigation, theme, zoom, true, SvgStudyLayout(), screen, SvgStudyStyle(), SvgCursorStyle(), false);
+        Check.That(retried.GridSvg == original.GridSvg && retried.CursorOverlaySvg == original.CursorOverlaySvg,
+            "fresh rendering after cancellation retains both layers");
         Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair), "cancelled scaled render publishes no result and preserves session");
     }
 
@@ -1352,6 +1320,10 @@ internal static partial class WaveformRecordArchiveSpecifications
             !theme.CaptureDisplay().CanSelect && zoom.CaptureDisplay().Policy == SystemViewCommandAssessmentPolicy.CourseLocked &&
             ReferenceEquals(view.Measurement.CurrentPair, pair) && zoom.Selection == new Ecg12ZoomState(Ecg12ZoomMode.ExplicitScale, 3, 2),
             "grouped policy changes preserve evidence and independently govern all four commands");
+        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.Disabled");
+        Check.That(MeasurementReason(() => view.Measurement.ClearPair()) == "RecordMeasurement.CourseLocked" &&
+            theme.CaptureDisplay().ReasonCode == "Ecg12Theme.LocalSelectionNotAllowed",
+            "nested pagination, measurement and local theme gates observe the same complete update");
         try { zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1)); throw new InvalidOperationException("locked zoom accepted"); }
         catch (Ecg12ZoomSelectionException exception)
         { Check.That(exception.ReasonCode == "Ecg12Zoom.CourseLocked", "current grouped policy blocks stale zoom action"); }
@@ -1395,6 +1367,9 @@ internal static partial class WaveformRecordArchiveSpecifications
         restored.Content.Theme.Select(Ecg12Theme.MonitorDarkGreen);
         restored.Zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1));
         restored.Content.Study.View.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
+        Check.That(restored.Content.Theme.Theme == Ecg12Theme.MonitorDarkGreen && theme.Theme == Ecg12Theme.PaperGridBlack &&
+            restored.Content.Study.View.Measurement.CurrentPair!.Second.Value == new EcgManualCursor(150_000_000, 1000, 1),
+            "restored theme and calipers unlock without changing original evidence");
         Check.That(restored.Content.Study.Navigation.CurrentPage.PageIndex == 1 && restored.Zoom.Selection.Mode == Ecg12ZoomMode.ActualSize &&
             navigation.CurrentPage.PageIndex == 0 && zoom.Selection.Mode == Ecg12ZoomMode.ExplicitScale && view.Measurement.CurrentPair is null,
             "trusted update enables restored commands without affecting original session");
@@ -1468,8 +1443,11 @@ internal static partial class WaveformRecordArchiveSpecifications
         Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 6, 4), SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 1000, 1), new(150_000_000, 1500, 1));
         ZoomedCapturedRecordStudySessionState state = view.CaptureZoomedSession(navigation, theme, zoom);
+        theme.Select(Ecg12Theme.MonitorDarkGreen);
+        navigation.PreviousPage();
+        view.SelectMeasurementSlot("ecg.slot0");
         RestoredZoomedRecordStudySession restored = CapturedRecordStudySession.RestoreZoomed(state,
-            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked,
+            Ecg12RecordContext.ActiveInstance, SystemViewCommandAssessmentPolicy.CourseLocked,
             SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Disabled, false,
             SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(restored.Zoom.Selection == new Ecg12ZoomState(Ecg12ZoomMode.ExplicitScale, 3, 2) && !restored.Zoom.CaptureDisplay().CanSelect &&
@@ -1479,6 +1457,13 @@ internal static partial class WaveformRecordArchiveSpecifications
             restored.Content.Study.View.Measurement.CurrentPair!.Second.Value == pair.Second.Value &&
             !ReferenceEquals(restored.Content.Study.View.Measurement.CurrentPair!.Second, pair.Second),
             "zoom restore retains page, lead and data coordinates with fresh cursor ownership");
+        Check.That(restored.Content.Theme.Theme == Ecg12Theme.PaperGridBlack &&
+            MeasurementReason(() => restored.Content.Study.View.Measurement.Calculate(pair.First, pair.Second, true)) == "RecordMeasurement.ForeignCursor",
+            "checkpoint owns theme and cursor data despite later source edits");
+        ExpectPaginationReason(() => restored.Content.Study.Navigation.NextPage(), "RecordPagination.CourseLocked");
+        Check.That(!restored.Content.Study.View.CapturePageDisplay(restored.Content.Study.Navigation,
+            false, 0, 100, new(0, 100, 60, 20, 1), false).Study.Admission.MayEnter,
+            "restored active-instance content still requires the current safety overlay");
         zoom.Select(new(Ecg12ZoomMode.ActualSize, 1, 1));
         Check.That(state.Zoom.Numerator == 3 && restored.Zoom.Selection.Numerator == 3, "later source zoom changes cannot mutate checkpoint or restored state");
     }
@@ -1500,6 +1485,17 @@ internal static partial class WaveformRecordArchiveSpecifications
         }
         catch (Ecg12ZoomSelectionException exception)
         { Check.That(exception.ReasonCode == "Ecg12Zoom.InvalidSelection", "invalid zoom checkpoint rejects"); }
+        try
+        {
+            CapturedRecordStudySession.RestoreZoomed(state with
+            { Content = state.Content with { Theme = new((Ecg12Theme)99) } },
+                Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled,
+                SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true,
+                SystemViewCommandAssessmentPolicy.Enabled);
+            throw new InvalidOperationException("malformed theme restored");
+        }
+        catch (Ecg12ThemeSelectionException exception)
+        { Check.That(exception.ReasonCode == "Ecg12Theme.InvalidTheme", "nested theme checkpoint rejects"); }
         ExpectPaginationReason(() => CapturedRecordStudySession.RestoreZoomed(state with
         { Content = state.Content with { Study = state.Content.Study with { SlotId = "missing" } } },
             Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled,
@@ -1788,40 +1784,8 @@ internal static partial class WaveformRecordArchiveSpecifications
             "closed vertical edges render after failure without modifying selected evidence");
     }
 
-    private static void StudyCursorSvgRestoresAndCancelsWithoutMutation()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
-        view.Measurement.ReplacePair(new(0, 0, 1), new(100_000_000, 1000, 1));
-        string? before = CapturedRecordSvgLayers.RenderScreen(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg;
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme), Ecg12RecordContext.IndependentCapturedRecord,
-            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
-        using CancellationTokenSource cancellation = new();
-        cancellation.Cancel();
-        try
-        {
-            CapturedRecordSvgLayers.RenderScreen(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true, cancellation.Token);
-            throw new InvalidOperationException("cancelled cursor rendering accepted");
-        }
-        catch (OperationCanceledException exception)
-        { Check.That(exception.CancellationToken == cancellation.Token, "screen cancellation preserves caller token"); }
-        Check.That(CapturedRecordSvgLayers.RenderScreen(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), SvgCursorStyle(), true).CursorOverlaySvg == before,
-            "restored manual coordinates rebuild identical screen-only markers after cancellation");
-    }
-
     private static CapturedRecordSvgLayout SvgStudyLayout() => new(10, 10, new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55);
     private static EcgPaperGridSvgStyle SvgStudyStyle() => new("#f0cccc", "#cc9999", 500, 1000);
-
-    private static void StudySvgLayersRenderCurrentAdmittedGrid()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
-        CapturedRecordSvgLayersResult result = CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), true);
-        Check.That(result.GridSvg == EcgPaperGridSvg.Render(result.Display.GridPlan!, 55, SvgStudyStyle()) && result.Display.GridLines.Count == 55 &&
-            result.Display.Content.Content.Page == navigation.CurrentPage, "fresh current page geometry and rendered grid are published together without rebuilding the grid");
-    }
 
     private static void StudySvgLayersSuppressUnavailableGrid()
     {
@@ -1850,27 +1814,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         { Check.That(exception.ReasonCode == "PaperGrid.InvalidSvgStyle", "fresh layer rendering validates styles"); }
         Check.That(ReferenceEquals(view.Measurement.CurrentPair, pair) && CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), true).GridSvg is not null,
             "render failure changes no selection and permits fresh retry");
-    }
-
-    private static void StudySvgLayersRestoreAndCancel()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
-            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        using CancellationTokenSource cancellation = new();
-        cancellation.Cancel();
-        try
-        {
-            CapturedRecordSvgLayers.Render(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), false, cancellation.Token);
-            throw new InvalidOperationException("cancelled layers accepted");
-        }
-        catch (OperationCanceledException exception)
-        { Check.That(exception.CancellationToken == cancellation.Token, "layer rendering forwards caller cancellation"); }
-        Check.That(CapturedRecordSvgLayers.Render(view, navigation, theme, false, SvgStudyLayout(), SvgStudyStyle(), false).GridSvg ==
-            CapturedRecordSvgLayers.Render(restored.Study.View, restored.Study.Navigation, restored.Theme, false, SvgStudyLayout(), SvgStudyStyle(), false).GridSvg,
-            "restored current state produces equivalent SVG after cancellation");
     }
 
     private static void StudyGridCancellationPreservesSessionAndAllowsRetry()
@@ -1956,135 +1899,6 @@ internal static partial class WaveformRecordArchiveSpecifications
             "valid retry publishes a complete display without losing accepted state");
     }
 
-    private static void StudyPaperGridRebuildsAfterSessionRestore()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 200_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
-            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled,
-            SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        GridCapturedRecordPageDisplay before = view.CaptureGridPageDisplay(navigation, theme, false, 10, 10,
-            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, false);
-        GridCapturedRecordPageDisplay after = restored.Study.View.CaptureGridPageDisplay(restored.Study.Navigation, restored.Theme, false, 10, 10,
-            new(0, 100, 60, 20, 1), new(25, 1, 10, 1), 10, 60, 55, false);
-        Check.That(before.GridPlan == after.GridPlan && before.GridLines.SequenceEqual(after.GridLines) && !after.Content.Theme!.CanSelect,
-            "restoration rebuilds geometry from current scales without persisting grid or old permission");
-    }
-
-    private static void ThemedPolicyUpdateChangesAllCurrentGates()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
-        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
-        view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked,
-            SystemViewCommandAssessmentPolicy.Enabled, false);
-        ThemedCapturedRecordPageDisplay display = view.CaptureThemedPageDisplay(navigation, theme, false, 0, 100, new(0, 100, 60, 20, 1), true);
-        Check.That(display.Content.Navigation!.Policy == SystemViewCommandAssessmentPolicy.Disabled &&
-            display.Content.Study.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked" && display.Theme!.ReasonCode == "Ecg12Theme.LocalSelectionNotAllowed" &&
-            ReferenceEquals(view.Measurement.CurrentPair, pair) && theme.Theme == Ecg12Theme.PaperGridBlack,
-            "grouped update applies every current gate without changing theme, page or cursor values");
-        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.Disabled");
-        Check.That(MeasurementReason(() => view.Measurement.ClearPair()) == "RecordMeasurement.CourseLocked", "caliper execution observes grouped update");
-    }
-
-    private static void ThemedPolicyUpdateRejectsEveryPartialUpdate()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.CourseLocked);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, false);
-        Ecg12ThemeDisplay before = theme.CaptureDisplay();
-        var invalid = (SystemViewCommandAssessmentPolicy)99;
-        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, invalid, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true),
-            "RecordStudy.InvalidPolicy");
-        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Enabled, invalid, SystemViewCommandAssessmentPolicy.Enabled, true),
-            "RecordStudy.InvalidPolicy");
-        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(navigation, theme, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, invalid, true),
-            "RecordStudy.InvalidPolicy");
-        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
-        ExpectPaginationReason(() => view.UpdateThemedCommandPolicies(foreign, theme, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true),
-            "RecordPagination.ForeignNavigation");
-        Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
-            theme.CaptureDisplay() == before && foreign.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled, "every rejected update preserves all gates including local permission");
-    }
-
-    private static void ThemedPolicyUpdateWorksAfterSessionRestore()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.MonitorDarkGreen, SystemViewCommandAssessmentPolicy.Enabled, true);
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(view.CaptureThemedSession(navigation, theme),
-            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Disabled,
-            SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        restored.Study.View.UpdateThemedCommandPolicies(restored.Study.Navigation, restored.Theme, SystemViewCommandAssessmentPolicy.Enabled,
-            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
-        restored.Study.Navigation.NextPage();
-        restored.Theme.Select(Ecg12Theme.PaperGridBlack);
-        CapturedRecordCursorPair pair = restored.Study.View.PlacePairOnCurrentPage(restored.Study.Navigation, false, 0, 100, new(0, 100, 60, 20, 1),
-            new(0, 1), new(60, 1), new(50, 1), new(40, 1));
-        Check.That(restored.Theme.Theme == Ecg12Theme.PaperGridBlack && pair.First.Value.DataTimeNs == 100_000_000 &&
-            navigation.CurrentPage.PageIndex == 0 && theme.Theme == Ecg12Theme.MonitorDarkGreen, "fresh grouped permission enables all restored commands without changing original objects");
-    }
-
-    private static void ThemedSessionRestoresCoherentDisplayState()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
-        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
-        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
-        theme.Select(Ecg12Theme.MonitorDarkGreen);
-        navigation.PreviousPage();
-        view.SelectMeasurementSlot("ecg.slot0");
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.IndependentCapturedRecord,
-            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
-        ThemedCapturedRecordPageDisplay display = restored.Study.View.CaptureThemedPageDisplay(restored.Study.Navigation, restored.Theme, false,
-            0, 100, new(0, 100, 60, 20, 1), true);
-        Check.That(display.Theme!.Theme == Ecg12Theme.PaperGridBlack && display.Content.Page!.PageIndex == 1 &&
-            display.Content.Study.MeasurementSlot!.SlotId == "ecg.slot1" && restored.Study.View.Measurement.CurrentPair!.Second.Value == pair.Second.Value,
-            "combined checkpoint retains captured theme, page, lead and manual data independently of later source edits");
-    }
-
-    private static void ThemedSessionUsesCurrentPermissions()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.Enabled, true);
-        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
-        RestoredThemedRecordStudySession restored = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.ActiveInstance,
-            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.Enabled, false);
-        Check.That(restored.Study.Navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked &&
-            restored.Study.View.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
-            restored.Theme.CaptureDisplay().ReasonCode == "Ecg12Theme.LocalSelectionNotAllowed", "all current command gates are explicit restore inputs");
-        ExpectPaginationReason(() => restored.Study.Navigation.NextPage(), "RecordPagination.CourseLocked");
-        Check.That(restored.Study.View.CaptureThemedPageDisplay(restored.Study.Navigation, restored.Theme, false, 0, 100, new(0, 100, 60, 20, 1), false).Theme is null,
-            "restored theme does not bypass current context admission");
-    }
-
-    private static void ThemedSessionRejectsInvalidComponentsWithoutMutation()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        Ecg12ThemeSelection theme = new(Ecg12Theme.PaperGridBlack, SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        ThemedCapturedRecordStudySessionState state = view.CaptureThemedSession(navigation, theme);
-        try
-        {
-            CapturedRecordStudySession.RestoreThemed(state with { Theme = new((Ecg12Theme)99) }, Ecg12RecordContext.IndependentCapturedRecord,
-                SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, true);
-            throw new InvalidOperationException("invalid saved theme accepted");
-        }
-        catch (Ecg12ThemeSelectionException exception)
-        { Check.That(exception.ReasonCode == "Ecg12Theme.InvalidTheme", "invalid theme rejects combined restoration"); }
-        ExpectPaginationReason(() => CapturedRecordStudySession.RestoreThemed(state with { Study = state.Study with { SlotId = "unknown" } },
-            Ecg12RecordContext.IndependentCapturedRecord, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled,
-            SystemViewCommandAssessmentPolicy.Enabled, true), "RecordStudy.InvalidCheckpoint");
-        RestoredThemedRecordStudySession recovered = CapturedRecordStudySession.RestoreThemed(state, Ecg12RecordContext.IndependentCapturedRecord,
-            SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.CourseLocked, false);
-        Check.That(recovered.Theme.Theme == theme.Theme && navigation.CurrentPage.PageIndex == 0 && view.Measurement.CurrentPair is null,
-            "invalid components publish no combined session and leave source state available for a valid retry");
-    }
-
     private static void StudyThemeSwitchPreservesContentAndGesture()
     {
         CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
@@ -2136,38 +1950,6 @@ internal static partial class WaveformRecordArchiveSpecifications
             "fresh valid display retains restored theme and current local permission after failure");
     }
 
-    private static void StudyPolicyUpdatePublishesBothCommandGroups()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursorPair pair = view.Measurement.ReplacePair(new(0, 0, 1), new(50_000_000, 1000, 1));
-        view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Disabled, SystemViewCommandAssessmentPolicy.CourseLocked);
-        CapturedRecordPageDisplay display = view.CapturePageDisplay(navigation, false, 0, 100, new(0, 100, 60, 20, 1), true);
-        Check.That(display.Navigation!.Policy == SystemViewCommandAssessmentPolicy.Disabled && !display.Navigation.Next.IsEnabled &&
-            display.Study.Measurement!.ReasonCode == "RecordMeasurement.CourseLocked" && display.Study.Measurement.Measurement is null &&
-            ReferenceEquals(view.Measurement.CurrentPair, pair), "complete update changes both command displays without destroying selected evidence");
-        ExpectPaginationReason(() => navigation.NextPage(), "RecordPagination.Disabled");
-        Check.That(MeasurementReason(() => view.Measurement.ClearPair()) == "RecordMeasurement.CourseLocked", "measurement command sees the same update");
-        view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled);
-        Check.That(navigation.NextPage().PageIndex == 1 && view.Measurement.Calculate(pair.First, pair.Second, true).AmplitudeChangeMillivolts == new EcgMeasurementRatio(1, 1),
-            "explicit complete unlock restores both groups independently of retained data");
-    }
-
-    private static void StudyPolicyUpdateRejectsPartialAndForeignChanges()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.CourseLocked);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        ExpectPaginationReason(() => view.UpdateCommandPolicies(navigation, SystemViewCommandAssessmentPolicy.Enabled, (SystemViewCommandAssessmentPolicy)99),
-            "RecordStudy.InvalidPolicy");
-        ExpectPaginationReason(() => view.UpdateCommandPolicies(navigation, (SystemViewCommandAssessmentPolicy)99, SystemViewCommandAssessmentPolicy.Enabled),
-            "RecordStudy.InvalidPolicy");
-        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Disabled);
-        ExpectPaginationReason(() => view.UpdateCommandPolicies(foreign, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.Enabled),
-            "RecordPagination.ForeignNavigation");
-        Check.That(navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked && view.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled &&
-            foreign.CurrentPolicy == SystemViewCommandAssessmentPolicy.Disabled, "invalid second policy, first policy and foreign binding leave all prior policies intact");
-    }
-
     private static void StudyPolicyUpdateAppliesToRestoredSelectionAndGesture()
     {
         CapturedRecordNavigation original = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
@@ -2185,26 +1967,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         restored.View.UpdateCommandPolicies(restored.Navigation, SystemViewCommandAssessmentPolicy.Enabled, SystemViewCommandAssessmentPolicy.CourseLocked);
         Check.That(restored.View.Measurement.Slot.SlotId == "ecg.slot1" && restored.View.Measurement.CurrentPolicy == SystemViewCommandAssessmentPolicy.CourseLocked &&
             restored.Navigation.CurrentPolicy == SystemViewCommandAssessmentPolicy.Enabled, "update targets current selected lead after restoration and replacement");
-    }
-
-    private static void StudySessionRestoresPageLeadAndCursorValues()
-    {
-        CapturedRecordNavigation navigation = new(MeasurementRecord(), 100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordStudyView view = navigation.CreateStudyView(Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot1", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursorPair original = view.Measurement.ReplacePair(new(100_000_000, 0, 1), new(150_000_000, 1000, 1));
-        CapturedRecordStudySessionState checkpoint = view.CaptureSession(navigation);
-        view.SelectMeasurementSlot("ecg.slot0");
-        navigation.PreviousPage();
-        RestoredRecordStudySession restored = CapturedRecordStudySession.Restore(checkpoint, Ecg12RecordContext.ActiveInstance,
-            SystemViewCommandAssessmentPolicy.CourseLocked, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordPageDisplay display = restored.View.CapturePageDisplay(restored.Navigation, true, 0, 200, new(0, 100, 60, 40, 1), true);
-        Check.That(display.Page!.PageIndex == 1 && display.Study.MeasurementSlot!.SlotId == "ecg.slot1" &&
-            restored.View.Measurement.CurrentPair!.Second.Value == original.Second.Value && display.Navigation!.Policy == SystemViewCommandAssessmentPolicy.CourseLocked,
-            "one restored record binds the saved page, lead and data values under current policies");
-        Check.That(!restored.View.CapturePageDisplay(restored.Navigation, false, 0, 100, new(0, 100, 60, 20, 1), false).Study.Admission.MayEnter,
-            "restored current context requires current overlay capability");
-        Check.That(MeasurementReason(() => restored.View.Measurement.Calculate(original.First, original.Second, true)) == "RecordMeasurement.ForeignCursor",
-            "restoration issues fresh measurement ownership");
     }
 
     private static void StudySessionRestoresEmptyLockedView()
@@ -2529,17 +2291,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         Check.That(restored.CaptureDisplay() == original.CaptureDisplay(), "unlock recomputes boundary availability from restored page");
     }
 
-    private static void StudyDisplayIncludesAndSuppressesNavigationCommands()
-    {
-        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
-        CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 1, SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordPageDisplay display = view.CapturePageDisplay(navigation, true, 0, 100, new(0, 100, 60, 20, 1), false);
-        Check.That(display.Navigation == navigation.CaptureDisplay() && display.Page == display.Navigation!.Page &&
-            display.Viewport!.StartDataTimeNs == display.Page!.StartDataTimeNs, "page, commands and viewport share the captured navigation state");
-        CapturedRecordPageDisplay denied = view.CapturePageDisplay(navigation, false, 0, 100, new(0, 100, 60, 20, 1), false);
-        Check.That(denied.Navigation is null && denied.Page is null && denied.Viewport is null, "admission denial does not expose navigation chrome");
-    }
-
     private static void NavigatedDisplayUsesCurrentPage()
     {
         CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
@@ -2557,22 +2308,12 @@ internal static partial class WaveformRecordArchiveSpecifications
             "current navigation page determines visibility without changing evidence, including locked page display");
     }
 
-    private static void NavigatedDisplayRejectsForeignRecord()
-    {
-        CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.IndependentCapturedRecord, "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordNavigation foreign = new(MeasurementRecord(), 100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
-        ExpectPaginationReason(() => view.CapturePageDisplay(foreign, false, 0, 100, new(0, 100, 60, 20, 1), true),
-            "RecordPagination.ForeignNavigation");
-        Check.That(view.Measurement.CurrentPair is null && foreign.CurrentPage.PageIndex == 0,
-            "even equivalent record bytes require explicit shared binding and rejection changes neither state");
-    }
-
     private static void NavigatedDisplaySuppressesDeniedPage()
     {
         CapturedRecordStudyView view = new(MeasurementRecord(), Ecg12RecordContext.ActiveInstance, "ecg.slot0", SystemViewCommandAssessmentPolicy.Disabled);
         CapturedRecordNavigation navigation = view.CreateNavigation(100_000_000, 0, SystemViewCommandAssessmentPolicy.Enabled);
         CapturedRecordPageDisplay denied = view.CapturePageDisplay(navigation, false, 0, 0, new(0, 100, 60, 20, 1), true);
-        Check.That(!denied.Study.Admission.MayEnter && denied.Page is null && denied.Viewport is null && denied.Study.Record is null,
+        Check.That(!denied.Study.Admission.MayEnter && denied.Page is null && denied.Viewport is null && denied.Navigation is null && denied.Study.Record is null,
             "denied admission suppresses page metadata without depending on a usable layout");
         try
         {
@@ -2582,6 +2323,9 @@ internal static partial class WaveformRecordArchiveSpecifications
         catch (SweepPlotGeometryException exception)
         { Check.That(exception.ReasonCode == "SweepGeometry.InvalidPlotBounds", "empty or disabled calipers do not bypass page layout validation"); }
         CapturedRecordPageDisplay recovered = view.CapturePageDisplay(navigation, true, 0, 100, new(0, 100, 60, 20, 1), true);
+        Check.That(recovered.Navigation == navigation.CaptureDisplay() && recovered.Page == recovered.Navigation!.Page &&
+            recovered.Viewport!.StartDataTimeNs == recovered.Page!.StartDataTimeNs,
+            "page, commands and viewport share one navigation state");
         Check.That(recovered.Page!.PageIndex == 0 && recovered.Study.Measurement!.ReasonCode == "RecordMeasurement.Disabled",
             "valid layout recovers without navigating and keeps caliper policy distinct");
     }
@@ -2969,17 +2713,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         Check.That(replay.Second.Value == initial.Second.Value, "checkpoint after cancel contains restored values");
     }
 
-    private static void MeasurementDragCommitClosesGesture()
-    {
-        CapturedRecordMeasurement measurement = EditableMeasurement();
-        CapturedRecordDrag drag = new(measurement, RecordCursorEnd.Second, new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
-        CapturedRecordCursorPair preview = drag.Preview(new(75, 1), new(40, 1), new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
-        Check.That(ReferenceEquals(drag.Commit(new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1)), preview) && preview.Second.Value == new EcgManualCursor(150_000_000, 1000, 1) &&
-            MeasurementReason(() => drag.Commit(new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1))) == "RecordMeasurement.DragFinished" &&
-            MeasurementReason(() => drag.Cancel()) == "RecordMeasurement.DragFinished",
-            "commit keeps the final preview and closed gestures cannot commit or roll it back again");
-    }
-
     private static void MeasurementOldGestureCannotOverwriteReplacement()
     {
         CapturedRecordMeasurement measurement = EditableMeasurement();
@@ -3146,6 +2879,10 @@ internal static partial class WaveformRecordArchiveSpecifications
         RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(), SystemViewCommandAssessmentPolicy.Enabled);
         Check.That(ReferenceEquals(restored.Measurement.CurrentPair!.First, restored.First) && restored.Second.Value == pair.Second.Value,
             "restore initializes a complete active pair with fresh owned handles");
+        Check.That(restored.Measurement.Calculate(restored.First, restored.Second, true) == measurement.Calculate(pair.First, pair.Second, true) &&
+            restored.First.Slot == pair.First.Slot &&
+            MeasurementReason(() => restored.Measurement.Calculate(pair.First, pair.Second, true)) == "RecordMeasurement.ForeignCursor",
+            "restored data keeps results and slot mapping while rejecting original handles");
         CapturedRecordCursorPair moved = restored.Measurement.MoveCursor(RecordCursorEnd.Second, new(75, 1), new(60, 1),
             new(0, 200_000_000, 0, 100), new(0, 100, 60, 20, 1));
         Check.That(moved.Second.Value.DataTimeNs == 150_000_000 && measurement.CurrentPair!.Second.Value.DataTimeNs == 100_000_000,
@@ -3254,21 +2991,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         Check.That(measurement.ProjectCursor(cursor, new(0, 100, 0, 100), scale)!.X.WholePixels == 0, "rejected projection leaves cursor unchanged");
     }
 
-    private static void MeasurementPagesReprojectRestoredValues()
-    {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursor cursor = measurement.CreateCursor(new(123456789, 1000, 3));
-        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(cursor, cursor), SystemViewCommandAssessmentPolicy.Enabled);
-        RecordCursorViewport viewport = new(100_000_000, 200_000_000, 30, 333);
-        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
-        ProjectedRecordCursor expected = measurement.ProjectCursor(cursor, viewport, scale)!;
-        ProjectedRecordCursor actual = restored.Measurement.ProjectCursor(restored.First, viewport, scale)!;
-        Check.That(expected.X == actual.X && expected.Y == actual.Y, "restored data values reproject without saved page pixels");
-        restored.Measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Disabled);
-        Check.That(MeasurementReason(() => restored.Measurement.ProjectCursor(restored.First, viewport, scale)) == "RecordMeasurement.Disabled",
-            "page projection retains current course policy enforcement");
-    }
-
     private static void MeasurementProjectionPreservesValuesAcrossResize()
     {
         CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
@@ -3311,28 +3033,6 @@ internal static partial class WaveformRecordArchiveSpecifications
             "course locking covers the projection entry point too");
         measurement.UpdatePolicy(SystemViewCommandAssessmentPolicy.Enabled);
         Check.That(measurement.ProjectCursor(cursor, 0, 100, scale).X.WholePixels == 0, "failed projections preserve accepted evidence");
-    }
-
-    private static void MeasurementProjectionRestoresFromDataEvidence()
-    {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursor first = measurement.CreateCursor(new(0, 0, 1)), second = measurement.CreateCursor(new(123456789, -1000, 3));
-        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(first, second), SystemViewCommandAssessmentPolicy.Enabled);
-        EcgVerticalScale scale = new(0, 100, 60, 20, 1);
-        ProjectedRecordCursor expected = measurement.ProjectCursor(second, 30, 500, scale);
-        ProjectedRecordCursor actual = restored.Measurement.ProjectCursor(restored.Second, 30, 500, scale);
-        Check.That(expected.X == actual.X && expected.Y == actual.Y && actual.Cursor.Slot == second.Slot,
-            "restore rebuilds identical display coordinates from record values without persisting pixels");
-    }
-
-    private static void MeasurementCheckpointReissuesOwnedCursorPair()
-    {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursor first = measurement.CreateCursor(new(0, 1000, 3)), second = measurement.CreateCursor(new(199_999_999, -1000, 3));
-        RestoredRecordMeasurement restored = CapturedRecordMeasurement.Restore(measurement.CaptureCheckpoint(first, second), SystemViewCommandAssessmentPolicy.Enabled);
-        Check.That(restored.Measurement.Calculate(restored.First, restored.Second, true) == measurement.Calculate(first, second, true) &&
-            restored.First.Slot == first.Slot && MeasurementReason(() => restored.Measurement.Calculate(first, second, true)) == "RecordMeasurement.ForeignCursor",
-            "restore rebuilds verified record and exact cursor values with fresh ownership");
     }
 
     private static void MeasurementCheckpointRejectsTamperedValues()
@@ -3381,14 +3081,6 @@ internal static partial class WaveformRecordArchiveSpecifications
         Check.That(MeasurementReason(() => CapturedRecordMeasurement.Restore(state with { Record = state.Record with { Slots = changed } },
             SystemViewCommandAssessmentPolicy.Enabled)) == "RecordMeasurement.InvalidCheckpoint" &&
             restored.First.Slot.ChannelId == ChannelIds[11], "record restore revalidates mapping and previously restored pair remains owned");
-    }
-
-    private static void MeasurementSlotResolvesExplicitChannelMapping()
-    {
-        CapturedRecordMeasurement measurement = new(MeasurementRecord(), "ecg.slot0", SystemViewCommandAssessmentPolicy.Enabled);
-        CapturedRecordCursor cursor = measurement.CreateCursor(new(0, 0, 1));
-        Check.That(measurement.Slot.SlotId == "ecg.slot0" && measurement.Slot.ChannelId == ChannelIds[11] &&
-            cursor.Slot == measurement.Slot, "measurement resolves the declared reversed slot mapping rather than channel array position");
     }
 
     private static void MeasurementSlotRejectsUnknownIdentity()

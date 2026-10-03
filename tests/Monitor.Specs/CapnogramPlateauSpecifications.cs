@@ -73,16 +73,9 @@ internal static class CapnogramPlateauSpecifications
 
     private static void ExplicitPlateauSurvivesNativeRecovery()
     {
-        var expected = Group().AdvanceTo(6_000_000_000, 750, 30, 100);
-        var group = Group();
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 30; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(expected.Count == 20 && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)) && actual.Count == expected.Count,
-            "fractional plateau and active inspiratory fall survive split/restore in shared native blocks");
+        var actual = NativeRecoveryChecks.Verify(Group,
+            [1_875_000_000, 2_000_000_000, 2_190_000_000, 2_250_000_000, 3_750_000_000, 3_950_000_000, 6_000_000_000],
+            750, 30, 100, 20, nameof(ExplicitPlateauSurvivesNativeRecovery));
         short[] samples = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Co2))
             .SelectMany(plane => plane.Samples).ToArray();
         Check.That(samples.Length == 400 && samples[225] == 734 && samples[375] == 3500 && samples[395] == 0,

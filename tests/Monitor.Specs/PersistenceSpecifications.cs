@@ -20,7 +20,6 @@ internal static class PersistenceSpecifications
         new(nameof(AuthenticationAuditSurvivesRestart), AuthenticationAuditSurvivesRestart),
         new(nameof(DuplicateAuditRollsBackFailureCount), DuplicateAuditRollsBackFailureCount),
         new(nameof(AuthenticationLockSurvivesRestart), AuthenticationLockSurvivesRestart),
-        new(nameof(SqliteUsesWalJournal), SqliteUsesWalJournal),
     ];
 
     private static void ProtectedPayloadBindsPurposeAndKey()
@@ -72,6 +71,12 @@ internal static class PersistenceSpecifications
         }, "completed bootstrap state must survive process restart");
         Check.That(loadedAccount == account, "protected account must survive process restart");
         Check.That(restarted.AuditExists(audit.AuditId), "activation audit must commit with account");
+        using SqliteConnection connection = new($"Data Source={fixture.Path};Pooling=False");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "PRAGMA journal_mode;";
+        Check.That(StringComparer.OrdinalIgnoreCase.Equals(Convert.ToString(command.ExecuteScalar(), null), "wal"),
+            "identity database persists WAL journal mode after reopening");
     }
 
     private static void RevisionConflictLeavesNoFragments()
@@ -222,20 +227,6 @@ internal static class PersistenceSpecifications
         SqliteAuthenticationFailureTracker restarted = new(fixture.Path, finalProtector);
         Check.That(restarted.GetLockState(account, source, TestTime).IsLocked,
             "active account/source lock must survive another restart");
-    }
-
-    private static void SqliteUsesWalJournal()
-    {
-        using DatabaseFixture fixture = new();
-        using AesGcmIdentityPayloadProtector protector = new(fixture.MasterKey);
-        _ = new SqliteIdentityRepository(fixture.Path, protector);
-        using SqliteConnection connection = new($"Data Source={fixture.Path};Pooling=False");
-        connection.Open();
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "PRAGMA journal_mode;";
-        string? journalMode = Convert.ToString(command.ExecuteScalar(), null);
-        Check.That(StringComparer.OrdinalIgnoreCase.Equals(journalMode, "wal"),
-            "identity database must persist WAL journal mode");
     }
 
     private static PasswordVerifier Verifier(string salt, string subkey) =>

@@ -9,9 +9,8 @@ internal static class SweepFrameScaleSpecifications
 {
     public static Specification[] All =>
     [
-        new(nameof(ScaleChangesRejectOtherwiseMatchingFrames), ScaleChangesRejectOtherwiseMatchingFrames),
+        new(nameof(RestoredScaleRejectsOtherwiseMatchingFrames), RestoredScaleRejectsOtherwiseMatchingFrames),
         new(nameof(EquivalentRationalGainsRemainCompatible), EquivalentRationalGainsRemainCompatible),
-        new(nameof(ScaleEvidenceSurvivesPublicationRestore), ScaleEvidenceSurvivesPublicationRestore),
         new(nameof(InvalidScaleAdmissionPreservesCompletedFrame), InvalidScaleAdmissionPreservesCompletedFrame),
     ];
 
@@ -28,9 +27,16 @@ internal static class SweepFrameScaleSpecifications
     private static SweepFrameDisplaySelection Select(PublishedSweepFrame frame, EcgVerticalScale? scale) =>
         SweepFrameDisplayGate.Select(frame.Checkpoint.Frame.Presentation, 30, 500, 0, 100, frame, scale);
 
-    private static void ScaleChangesRejectOtherwiseMatchingFrames()
+    private static void RestoredScaleRejectsOtherwiseMatchingFrames()
     {
-        PublishedSweepFrame frame = SweepFramePublication.Restore(1, 1, Input(Scale)).CapturePublished()!;
+        PublishedSweepFrame original = SweepFramePublication.Restore(1, 1, Input(Scale)).CapturePublished()!;
+        PublishedSweepFrame frame = SweepFramePublication.Restore(1, 1, original.Checkpoint).CapturePublished()!;
+        Check.That(frame.Checkpoint.Frame.VerticalScale == Scale && Select(frame, Scale).ReasonCode == "FrameDisplay.Matched",
+            "restoration retains and revalidates the declared voltage mapping");
+        EcgCalibrationGeometrySnapshot glyph = EcgCalibrationGeometry.Compose(frame.Checkpoint.Frame.Presentation,
+            30, 500, frame.Checkpoint.Frame.VerticalScale!, 0, 5);
+        Check.That(glyph.Points[1].Y == EcgVerticalGeometry.MapMicrovolts(Scale, 1000, 1),
+            "the restored declaration supplies the exact same calibration gain");
         Check.That(Select(frame, Scale).Frame == frame.Frame &&
             Select(frame, Scale with { PixelsPerMillivoltNumerator = 40 }) is { ReasonCode: "FrameDisplay.ScaleMismatch", Frame: null } &&
             Select(frame, Scale with { ZeroBaselinePixels = 61 }).Frame is null,
@@ -55,18 +61,6 @@ internal static class SweepFrameScaleSpecifications
             Select(frame, large with { PixelsPerMillivoltNumerator = 1, PixelsPerMillivoltDenominator = 1 }).Frame == frame.Frame &&
             Select(frame, large with { PixelsPerMillivoltNumerator = uint.MaxValue - 1 }).Frame is null,
             "cross-products remain exact at uint bounds without rounded-gain collisions");
-    }
-
-    private static void ScaleEvidenceSurvivesPublicationRestore()
-    {
-        PublishedSweepFrame original = SweepFramePublication.Restore(1, 1, Input(Scale)).CapturePublished()!;
-        PublishedSweepFrame restored = SweepFramePublication.Restore(1, 1, original.Checkpoint).CapturePublished()!;
-        Check.That(restored.Checkpoint.Frame.VerticalScale == Scale && Select(restored, Scale).ReasonCode == "FrameDisplay.Matched",
-            "restoration retains and revalidates the declared voltage mapping");
-        EcgCalibrationGeometrySnapshot glyph = EcgCalibrationGeometry.Compose(restored.Checkpoint.Frame.Presentation,
-            30, 500, restored.Checkpoint.Frame.VerticalScale!, 0, 5);
-        Check.That(glyph.Points[1].Y == EcgVerticalGeometry.MapMicrovolts(Scale, 1000, 1),
-            "the restored declaration can supply the exact same calibration gain");
     }
 
     private static void InvalidScaleAdmissionPreservesCompletedFrame()

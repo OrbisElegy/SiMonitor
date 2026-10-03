@@ -21,6 +21,7 @@ public sealed class VascularPressureSource
     private readonly long _morphologyPeriodNs;
     private readonly long _referenceOnsetQ32;
     private readonly long[]? _morphologyTable;
+    private readonly bool _useLinearStrokeMorphology;
 
     private VascularPressureSource(RegularPhysiologyPlan physiology, VascularPressurePlan plan)
     {
@@ -33,6 +34,8 @@ public sealed class VascularPressureSource
         if (plan.UseConductedFlutterPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
             !ConductedFlutterPerfusion.Supports(physiology))) { throw Invalid(); }
         if (plan.IllustrateAfSystemicPulseDeficit && !plan.UseAtrialFibrillationPerfusion) { throw Invalid(); }
+        if (plan.UseCardiacFillingPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
+            plan.UseConductedFlutterPerfusion || !CardiacFillingPerfusion.Supports(physiology))) { throw Invalid(); }
         Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern) : physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
         Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
@@ -47,6 +50,17 @@ public sealed class VascularPressureSource
         { throw Invalid(); }
         _physiology = physiology;
         _plan = plan;
+        // Leave unit-gain reference schedules on their established startup
+        // contour. Schedules with altered stroke strength need linear shaping.
+        long atrialLeadNs = physiology.VentricularMechanicalOffsetNs - physiology.AtrialMechanicalOffsetNs;
+        _useLinearStrokeMorphology = plan.UseAtrialFibrillationPerfusion || plan.UseConductedFlutterPerfusion ||
+            plan.UseCardiacFillingPerfusion && (physiology.SeededRate is not null ||
+                physiology.VentricularPeriodNs < CardiacFillingPerfusion.ReferencePeriodNs ||
+                physiology.IndependentVentricularPeriodNs is { } independent && independent != (Int128)physiology.HeartPeriodNs * physiology.VentricularConductionRatio ||
+                physiology.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                WenckebachIllustration.GroupSize(physiology.ConductionPattern) > 0 ||
+                atrialLeadNs < CardiacFillingPerfusion.AtrialContractionDurationNs ||
+                atrialLeadNs > CardiacFillingPerfusion.ReferencePeriodNs - CardiacFillingPerfusion.NonFillingDurationNs);
         _decayHorizonNs = 64 * plan.TimeConstantNs;
         _supportNs = (long)support;
         _powers = new long[30]; // 64*10 seconds contains at most 640,000,000 whole mesh steps.
@@ -125,6 +139,7 @@ public sealed class VascularPressureSource
                 int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
                     _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
                     _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) :
+                    _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, item.CycleIndex) :
                         _physiology.SeededRate?.EjectionGainPermille(item.CycleIndex) ?? 1000;
                 if (gain == 0) { return; }
                 long age = sourceTime - item.SimTimeNs;
@@ -151,7 +166,23 @@ public sealed class VascularPressureSource
         // Retain all weighted contributions in Int128/Q62, then round once to
         // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.
         Int128 result = FixedPointMath.RoundDivideTiesToEven(pressure, 1L << 30);
-        if (morphologyAge is not null || pulse != 0)
+        if (_useLinearStrokeMorphology && _morphologyTable is not null)
+        {
+            // Replace this beat's reference RC excursion with its weighted
+            // contour. Multiplying an already weak reservoir by another weighted
+            // pulse would apply the stroke reduction twice and erase SVT pulses.
+            // Residual pressure from preceding beats continues to decay normally.
+            result += pulse;
+            if (morphologyAge is { } age)
+            {
+                Int128 replacement = (Int128)_referenceOnsetQ32 * (FixedPointMath.Q62One - Decay(age));
+                Int128 input = (Int128)_plan.EjectionEquilibriumCentiMmHg *
+                    EjectionCoefficient(age, morphologyEjectionDuration) * FixedPointMath.Q32One;
+                result += FixedPointMath.RoundDivideTiesToEven((replacement - input) * morphologyGain,
+                    (Int128)1000 * FixedPointMath.Q62One);
+            }
+        }
+        else if (morphologyAge is not null || pulse != 0)
         {
             long elapsed = morphologyAge ?? _morphologyPeriodNs;
             // The contour and its reference must describe the same ejection.

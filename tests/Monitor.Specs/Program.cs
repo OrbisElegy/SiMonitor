@@ -108,6 +108,8 @@ internal static class Program
             .. BidirectionalVtSpecifications.All,
             .. TwistingVtSpecifications.All,
             .. VtPerfusionSpecifications.All,
+            .. CardiacFillingSpecifications.All,
+            .. RhythmFillingAuditSpecifications.All,
             .. AcceleratedVentricularPerfusionSpecifications.All,
             .. AcceleratedJunctionalPerfusionSpecifications.All,
             .. AcceleratedAtrialPerfusionSpecifications.All,

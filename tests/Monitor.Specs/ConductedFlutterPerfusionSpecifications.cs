@@ -17,12 +17,12 @@ internal static class ConductedFlutterPerfusionSpecifications
     {
         var variable = AtrialFlutterReference.CreateVariablePlan();
         Check.That(Enumerable.Range(0, 4).Select(i => ConductedFlutterPerfusion.GainPermille(variable, (ulong)i))
-            .SequenceEqual([1000, 603, 872, 1000]), "variable gains use previous800/400/600ms, not following RR");
+            .SequenceEqual([850, 513, 742, 850]), "variable gains use previous800/400/600ms, not following RR");
         foreach (int ratio in new[] { 2, 3, 4 })
         {
             var plan = AtrialFlutterReference.CreatePlan(ratio);
             Check.That(ConductedFlutterPerfusion.GainPermille(plan, ulong.MaxValue) ==
-                FillingLimitedEjection.StrokeVolumePermille(ratio * 200_000_000L), "fixed ratios share bounded filling model");
+                CardiacFillingPerfusion.StrokeVolumePermille(ratio * 200_000_000L, 48_000_000, 240_000_000), "fixed ratios share bounded filling model");
         }
     }
     private static void ConductedFlutterPressureIsBoundedAndPeriodic()
@@ -48,7 +48,7 @@ internal static class ConductedFlutterPerfusionSpecifications
                     Check.That(Math.Abs(now - corrected.EvaluateAt(86_400_000_000_000 + phase)) <= q,
                         "late evaluation uses bounded history and same cycle ordinal phase");
                     long previous = old.EvaluateAt(360_000_000_000 + phase);
-                    if (plan.VentricularConductionRatio == 4) { Check.That(now == previous, "4:1 reference remains bit identical"); }
+                    if (plan.VentricularConductionRatio == 4) { Check.That(now < previous, "even slow flutter retains abnormal, partial atrial transport rather than a normal atrial kick"); }
                     values.Add(now / (double)q / 100); before.Add(previous / (double)q / 100);
                 }
                 Console.WriteLine($"Flutter {plan.ConductionPattern}/{plan.VentricularConductionRatio} pulmonary={pulmonary}: old {before.Min():F2}-{before.Max():F2}, new {values.Min():F2}-{values.Max():F2}");

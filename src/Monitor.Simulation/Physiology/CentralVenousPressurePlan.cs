@@ -42,6 +42,17 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
                 component.DelayNs, component.DurationNs,
                 Array.AsReadOnly(tables[index].Select(value => checked(value * signedAmplitude)).ToArray())));
         }
+        if (AtrialFlutterReference.IsPattern(physiology.ConductionPattern))
+        {
+            // The normal a-wave trigger remains absent. A separate small, short
+            // flutter component follows each atrial activation, including during
+            // ventricular systole; valve-closed pressure amplification is omitted.
+            int amplitude = (int)Determinism.FixedPointMath.RoundDivideTiesToEven(
+                (Int128)A.MagnitudeCentiMmHg * AtrialFlutterMechanics.TransportPermille, 1000);
+            bands.Add(new(PhysiologyCycleEventKind.AtrialElectrical, physiology.AtrialMechanicalOffsetNs,
+                AtrialFlutterMechanics.ContractionDurationNs,
+                Array.AsReadOnly(CvpComponentTables.A.Select(value => checked(value * amplitude)).ToArray())));
+        }
         bands.Add(new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs,
             Array.AsReadOnly(CvpComponentTables.Respiratory.Select(value => checked(value * RespiratoryDeltaCentiMmHg)).ToArray()),
             RespiratoryPhaseMap.Create(physiology, CvpComponentTables.Respiratory.Count), DepthPattern: physiology.RespiratoryPattern));

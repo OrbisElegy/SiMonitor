@@ -51,9 +51,16 @@ public sealed record SeededCardiacRate
     // Reuses the teaching filling curve; not a calibrated stroke volume.
     public int EjectionGainPermille(ulong ordinal)
     {
+        long intervalNs = PrecedingIntervalNs(ordinal);
+        long leadNs = Timing.PrIntervalNs;
+        long effectiveAtrialNs = Math.Max(0, Math.Min(leadNs, CardiacFillingPerfusion.AtrialContractionDurationNs) -
+            Math.Max(0, leadNs - (intervalNs - FillingLimitedEjection.NonFillingDurationNs)));
+        return CardiacFillingPerfusion.StrokeVolumePermille(intervalNs, effectiveAtrialNs, FillingLimitedEjection.NonFillingDurationNs);
+    }
+    internal long PrecedingIntervalNs(ulong ordinal)
+    {
         int index = (int)(ordinal % (ulong)Slots.Length);
-        long interval = index == 0 ? PeriodNs * Slots.Length - Slots[^1] : Slots[index] - Slots[index - 1];
-        return interval >= FillingLimitedEjection.ReferencePeriodNs ? 1000 : FillingLimitedEjection.StrokeVolumePermille(interval);
+        return index == 0 ? PeriodNs * Slots.Length - Slots[^1] : Slots[index] - Slots[index - 1];
     }
     // Teaching morphology support, not patient-specific QT adaptation.
     public EcgCycleTiming Timing

@@ -6,7 +6,9 @@ namespace Monitor.Simulation.Physiology;
 // Relative optical-pulse illustration, not oxygen saturation or arterial pressure.
 public sealed record PlethRunoffPlan(long TransitDelayNs, long PulseDurationNs, int AmplitudeCounts,
     long TailTimeConstantNs = 400_000_000, bool IncludeNotch = false, bool UsePrematureBeatPerfusion = false,
-    string ModelId = "PlethSmoothRunoff@1", bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false);
+    string ModelId = "PlethSmoothRunoff@1", bool UseAtrialFibrillationPerfusion = false,
+    bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false,
+    bool UseCardiacFillingPerfusion = false);
 
 // Immutable bounded reconstruction: no accumulated integration and no epoch scan.
 public sealed class PlethRunoffSource
@@ -33,6 +35,8 @@ public sealed class PlethRunoffSource
         if (plan.UseConductedFlutterPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
             !ConductedFlutterPerfusion.Supports(physiology))) { throw Invalid(); }
         if (plan.IllustrateAfSystemicPulseDeficit && !plan.UseAtrialFibrillationPerfusion) { throw Invalid(); }
+        if (plan.UseCardiacFillingPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
+            plan.UseConductedFlutterPerfusion || !CardiacFillingPerfusion.Supports(physiology))) { throw Invalid(); }
         _physiology = physiology; _plan = plan;
         _table = (plan.IncludeNotch ? PlethPulseTables.Notched : PlethPulseTables.Plain).Select(value => checked(value * plan.AmplitudeCounts)).ToArray();
         _joinIndex = plan.IncludeNotch ? 72 : 88;
@@ -73,8 +77,9 @@ public sealed class PlethRunoffSource
         {
             int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
                 _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
-                        _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
+                _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+                _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+                    _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
             if (gain == 0) { return; }
             long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
             long join = (long)((Int128)duration * _joinIndex / 128);

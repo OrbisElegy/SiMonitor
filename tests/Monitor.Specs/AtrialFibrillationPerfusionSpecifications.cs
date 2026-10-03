@@ -14,8 +14,12 @@ internal static class AtrialFibrillationPerfusionSpecifications
     ];
     private static VascularPressurePlan Pressure => new(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000, UseAtrialFibrillationPerfusion: true);
     private static PlethRunoffPlan Pleth => new(80_000_000, 512_000_000, 1250, UseAtrialFibrillationPerfusion: true);
-    private static int Gain(PhysiologyCycleEvent[] events, int i) => i == 0 ? 800 :
-        events[i].SimTimeNs - events[i - 1].SimTimeNs < 600_000_000 ? 400 : events[i].SimTimeNs - events[i - 1].SimTimeNs < 900_000_000 ? 800 : 1000;
+    private static int Gain(PhysiologyCycleEvent[] events, int i)
+    {
+        decimal rrMs = i == 0 ? 800 : (events[i].SimTimeNs - events[i - 1].SimTimeNs) / 1_000_000m;
+        decimal fillingMs = Math.Max(0, Math.Min(rrMs, 800) - 300);
+        return (int)Math.Round(750m * fillingMs / (fillingMs + 200) / (500m / 700), MidpointRounding.ToEven);
+    }
 
     private static void FibrillationPerfusionFollowsOriginalRrAndIndependentSums()
     {
@@ -23,7 +27,7 @@ internal static class AtrialFibrillationPerfusionSpecifications
         var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(60_000_000_000, 500)
             .Where(e => e.Kind == PhysiologyCycleEventKind.VentricularMechanical).ToArray();
         int[] gains = events.Select((e, i) => Gain(events, i)).ToArray();
-        Check.That(gains.Distinct().Order().SequenceEqual([400, 800, 1000]), "authored schedule exercises weak, reference and stronger input");
+        Check.That(gains.Distinct().Count() > 10 && gains.Min() < 600 && gains.Max() == 750, "actual RR produces continuous passive filling, without a normal atrial kick");
         foreach (bool fine in new[] { false, true })
         {
             var physiology = AtrialFibrillationReference.CreatePlan(fine);
@@ -98,7 +102,7 @@ internal static class AtrialFibrillationPerfusionSpecifications
         Reject(() => VascularPressureSource.Create(sinus, Pressure));
         Reject(() => PlethRunoffSource.Create(sinus, Pleth));
         Reject(() => AtrialFibrillationPerfusion.GainPermille(AvConductionPattern.FixedPr, 0));
-        Check.That(AtrialFibrillationPerfusion.GainPermille(plan.ConductionPattern, ulong.MaxValue) is 400 or 800 or 1000,
+        Check.That(AtrialFibrillationPerfusion.GainPermille(plan.ConductionPattern, ulong.MaxValue) is > 0 and <= 750,
             "original ordinal arithmetic remains bounded at ulong endpoint");
         static void Reject(Action action)
         {

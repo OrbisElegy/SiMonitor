@@ -35,7 +35,7 @@
     "One P source, one ventricular electrical event and one mechanical event at selected beat",
     "Only selected beat QRS/T replaced, no full VT retained underneath",
     "Electrode mixing retains limb projection; both demos share source",
-    "Mechanical timing and fixed ejection inputs unchanged; no doubled perfusion"
+    "Mechanical timing and per-beat filling policy unchanged by fusion morphology; no doubled perfusion"
   ],
   "limitations": [
     "Authored discrete mixture, not propagation, AV nodal conduction, refractory or anatomical model",

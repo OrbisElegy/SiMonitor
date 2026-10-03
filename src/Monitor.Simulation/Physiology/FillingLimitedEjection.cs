@@ -32,11 +32,12 @@ public static class FillingLimitedEjection
     // RQ is flow, not volume: a shorter ejection needs the inverse duration
     // conversion to preserve the requested fraction of reference stroke volume.
     internal static VascularPressurePlan LimitDuration(VascularPressurePlan pressure, long periodNs,
-        long nonFillingDurationNs, long referenceEjectionDurationNs)
+        long nonFillingDurationNs, long referenceEjectionDurationNs, int? strokeVolumePermille = null)
     {
         if (pressure.EjectionDurationNs <= 0 || referenceEjectionDurationNs <= 0)
         { throw new ArgumentOutOfRangeException(nameof(referenceEjectionDurationNs)); }
-        int gain = StrokeVolumePermille(periodNs, nonFillingDurationNs);
+        int gain = strokeVolumePermille ?? StrokeVolumePermille(periodNs, nonFillingDurationNs);
+        if (gain is < 0 or > 1000) { throw new ArgumentOutOfRangeException(nameof(strokeVolumePermille)); }
         return pressure with
         {
             EjectionEquilibriumCentiMmHg = checked((int)FixedPointMath.RoundDivideTiesToEven(

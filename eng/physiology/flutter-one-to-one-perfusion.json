@@ -1,8 +1,9 @@
 {
-  "id": "FlutterOneToOnePerfusionIllustration@2",
+  "id": "FlutterOneToOnePerfusionIllustration@3",
   "implementation_basis": [
     "AtrialFlutterOneToOneIllustration@1",
-    "Authored filling fraction and duration-aware RQ conversion; no clinical calibration"
+    "Authored filling fraction and duration-aware RQ conversion; no clinical calibration",
+    "AtrialFlutterMechanicsIllustration@1; partial abnormal transport admitted during the short filling window"
   ],
   "authored_choices": {
     "RR_ms": 200,
@@ -25,10 +26,11 @@
     ],
     "CVP_overlap": 2,
     "non_filling_ms": 160,
-    "stroke_volume_permille": 226
+    "stroke_volume_permille": 175,
+    "effective_atrial_support_ms": 24
   },
   "invariants": [
-    "Normal atrial mechanical events absent; no normal CVP a wave",
+    "Normal atrial mechanical events remain absent; separate 80ms flutter-specific CVP component follows each atrial activation",
     "Shared ECG and ejection event grid",
     "Full pulse supports and finite pressure/optical history",
     "Pressure Int16 amplitude budget validated",
@@ -37,7 +39,8 @@
   ],
   "limitations": [
     "Filling-limited teaching inputs; not measured pump function or calibrated cardiac output",
-    "No perfusion to gas-exchange feedback or AV-node mechanism"
+    "No perfusion to gas-exchange feedback or AV-node mechanism",
+    "Fixed one-to-one authored gain; no dynamic post-pause filling recovery for artificial mechanical suppression"
   ],
   "verification": [
     "FlutterFillingConservesRelativeStrokeInputAcrossDurations",

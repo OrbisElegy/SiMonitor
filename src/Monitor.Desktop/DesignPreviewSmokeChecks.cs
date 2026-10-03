@@ -1143,7 +1143,7 @@ internal static class DesignPreviewSmokeChecks
                         "all flutter product examples use filling-limited pressure input");
                     if (choice == 37)
                     {
-                        Require(window.Session.Measurements.AbpMean.MeanCentiMmHg is > 9000 and < 12000,
+                        Require(window.Session.Measurements.AbpMean.MeanCentiMmHg is > 7500 and < 9000,
                         $"one-to-one flutter reuses corrected perfusion: {window.Session.Measurements.AbpMean}");
                     }
                     var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);

@@ -31,6 +31,7 @@ public static class PhysiologyIllustrationSource
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
         bool conductedFlutter = ConductedFlutterPerfusion.Supports(plan);
+        bool cardiacFilling = configuration.UseVascularReservoir && CardiacFillingPerfusion.Supports(plan);
         bool flutter = AtrialFlutterReference.IsPattern(plan.ConductionPattern);
         var fixedPerfusion = ResolveFixedPerfusion(configuration, plan);
         bool fibrillation = AtrialFibrillationReference.IsPattern(plan.ConductionPattern);
@@ -81,15 +82,15 @@ public static class PhysiologyIllustrationSource
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(configuration.SeededRate?.Timing), 10, 0),
              new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
-                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter)),
+                Array.Empty<EventWaveformBand>(), 250, 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling)),
              fixedPerfusion?.Arterial.CreateChannel(plan, ChannelId(3), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
-                    Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter).CreateChannel(plan, ChannelId(3), 0)
+                    Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling).CreateChannel(plan, ChannelId(3), 0)
                 : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0)),
              configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
              fixedPerfusion?.Pulmonary.CreateChannel(plan, ChannelId(5), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
-                    Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, UseConductedFlutterPerfusion: conductedFlutter).CreateChannel(plan, ChannelId(5), 0)
+                    Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0)),
              ((fixedPerfusion?.Venous ?? new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
@@ -115,10 +116,12 @@ public static class PhysiologyIllustrationSource
     private static FixedPerfusionPreset? ResolveFixedPerfusion(
         PhysiologyIllustrationConfiguration configuration, RegularPhysiologyPlan plan)
     {
-        if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration || configuration.AtrialEscape || configuration.Aivr)
-        { return FixedPerfusionPresets.SinglePulse; }
-        if (plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration || configuration.Aar || configuration.Ajr)
-        { return FixedPerfusionPresets.PulmonaryOverlap; }
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration || configuration.AtrialEscape)
+        { return FixedPerfusionPresets.FillingSinglePulse; }
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration)
+        { return FixedPerfusionPresets.FillingPulmonaryOverlap; }
+        if (configuration.Aivr) { return FixedPerfusionPresets.AcceleratedVentricular; }
+        if (configuration.Aar || configuration.Ajr) { return FixedPerfusionPresets.AcceleratedSupraventricular; }
         if (AtrialFlutterReference.IsPattern(plan.ConductionPattern) && plan.VentricularConductionRatio == 1)
         { return new(FlutterOneToOnePerfusionReference.Pleth, FlutterOneToOnePerfusionReference.Arterial, FlutterOneToOnePerfusionReference.Pulmonary, FlutterOneToOnePerfusionReference.Venous); }
         if (configuration.Vt)

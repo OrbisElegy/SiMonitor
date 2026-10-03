@@ -23,10 +23,11 @@
   "unimplemented": [
     "Broad abnormal QRS morphology for ventricular escape remains unimplemented.",
     "First-escape triggering after arrest and competing pacemakers remain unimplemented.",
-    "Retrograde conduction, filling/ejection feedback and beatwise QT adaptation remain unimplemented.",
+    "Retrograde conduction, dynamic loading/contractile feedback and beatwise QT adaptation remain unimplemented.",
     "Atrial flutter, atrial fibrillation, ventricular flutter and ventricular fibrillation remain unimplemented."
   ],
   "constraints": [
     "A 1000-1500 ms cycle and a faster atrial rate are example bounds, not diagnostic thresholds. The twelve-lead example exposes only escape period/phase and rejects conflicting morphology/timing controls."
-  ]
+  ],
+  "perfusion": "CardiacFillingPerfusionIllustration@2: long accepted ventricular RR permits passive filling; independent atrial phase supplies bounded effective assistance. No fixed tachycardia penalty."
 }

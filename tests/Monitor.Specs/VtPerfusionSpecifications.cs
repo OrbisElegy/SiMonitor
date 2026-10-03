@@ -19,23 +19,18 @@ internal static class VtPerfusionSpecifications
         var plan = VentricularTachycardiaReference.CreatePlan();
         var corrected = VascularPressureSource.Create(plan, VtPerfusionReference.Arterial);
         var old = VascularPressureSource.Create(plan, VtPerfusionReference.Arterial with
-        { EjectionEquilibriumCentiMmHg = 30000, Morphology = VtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
+        { UseCardiacFillingPerfusion = false, EjectionEquilibriumCentiMmHg = 30000, Morphology = VtPerfusionReference.Arterial.Morphology! with { PulseHeightCentiMmHg = 4000 } });
         var before = new List<double>(); var after = new List<double>();
         for (long t = 300_000_000_000; t < 300_375_000_000; t += 1_000_000)
         { before.Add(old.EvaluateAt(t) / (double)Q / 100); after.Add(corrected.EvaluateAt(t) / (double)Q / 100); }
         Console.WriteLine($"VT steady ABP old {before.Min():F2}-{before.Max():F2}, filling-limited {after.Min():F2}-{after.Max():F2} mmHg");
         Check.That(before.Max() > 220 && after.Max() < 160 && after.Min() > 60 && after.Max() - after.Min() > 5,
             "fixed VT no longer pumps full reference volume at fast rate");
-        Check.That(FillingLimitedEjection.StrokeVolumePermille(375_000_000) > SvtPerfusionReference.StrokeVolumePermille(300_000_000),
-            "VT uses its own filling interval rather than SVT gain");
+        Check.That(CardiacFillingPerfusion.GainPermille(plan, 0) == 346 && CardiacFillingPerfusion.GainPermille(plan, 1) == 286 &&
+            VtPerfusionReference.Arterial.EjectionEquilibriumCentiMmHg == FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg,
+            "VT uses per-beat filling on raw reference input, without double-applying the old static reduction");
         Check.That(FixedPerfusionPresets.SinglePulse.Arterial.EjectionEquilibriumCentiMmHg == 30000,
             "unrelated preset inputs remain unchanged");
-        foreach (long invalid in new[] { -1L, 240_000_000L, 800_000_001L })
-        {
-            bool rejected = false;
-            try { FillingLimitedEjection.StrokeVolumePermille(invalid); } catch (ArgumentOutOfRangeException) { rejected = true; }
-            Check.That(rejected, "unsupported filling intervals reject rather than inventing zero-flow extrapolation");
-        }
     }
     private static void VtPerfusionPreservesSupportsAndBoundsOverlap()
     {
@@ -73,9 +68,12 @@ internal static class VtPerfusionSpecifications
             Check.That(values.Max() - values.Min() > Q, "fast pressure pulses retain modulation");
         }
         var singlePlan = plan with { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 };
-        var single = PlethRunoffSource.Create(singlePlan, VtPerfusionReference.Pleth);
+        var single = PlethRunoffSource.Create(singlePlan, VtPerfusionReference.Pleth with { UseCardiacFillingPerfusion = false });
         long time = 1_100_000_000;
-        Check.That(Math.Abs(pleth.EvaluateAt(time) - single.EvaluateAt(time) - single.EvaluateAt(time - 375_000_000) - single.EvaluateAt(time - 750_000_000)) <= 3, "overlapping optical pulses retain earlier tails");
+        long expected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(time) * 346, 1000) +
+            (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(time - 375_000_000) * 286, 1000) +
+            (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(time - 750_000_000) * 342, 1000);
+        Check.That(Math.Abs(pleth.EvaluateAt(time) - expected) <= 3, "overlapping optical pulses retain earlier tails at each beat's AV phase");
         var interrupted = VascularPressureSource.Create(singlePlan, VtPerfusionReference.Arterial);
         Check.That(interrupted.EvaluateAt(800_000_000) > VtPerfusionReference.Arterial.AsymptoticPressureCentiMmHg * Q, "missing subsequent ejection retains pressure runoff");
     }

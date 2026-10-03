@@ -1,0 +1,33 @@
+{
+  "id": "AtrialFlutterMechanicsIllustration@1",
+  "implementation": "src/Monitor.Simulation/Physiology/AtrialFlutterMechanics.cs",
+  "documentation": "docs/rhythm-filling-audit.md",
+  "supporting_research": [
+    "https://pubmed.ncbi.nlm.nih.gov/10234713/",
+    "https://pubmed.ncbi.nlm.nih.gov/10468080/"
+  ],
+  "authored_choices": {
+    "atrial_period_ms": 200,
+    "electrical_to_mechanical_ms": 80,
+    "contraction_support_ms": 80,
+    "normal_transport_fraction_permille": 400,
+    "maximum_equivalent_normal_support_ms": 48,
+    "cvp_fraction_of_reference_a_magnitude_permille": 400,
+    "transport": "Only overlap with ventricular filling contributes; repeated contractions capped at one reduced contribution"
+  },
+  "invariants": [
+    "Distinct from absent coordinated normal AF contraction",
+    "Normal a wave remains absent; separate short CVP component follows every atrial activation including nonconducted cycles",
+    "Same per-beat flutter gain across ABP/PA/Pleth, with duration-aware conversion for fixed one-to-one example"
+  ],
+  "limitations": [
+    "References support impaired flutter mechanics, not these durations, pressure amplitudes or transport fractions",
+    "Post-conversion stunning measurements are not used as ongoing flutter coefficients",
+    "No closed-valve pressure amplification, atrial pressure/volume loop, or load feedback"
+  ],
+  "verification": [
+    "FlutterRetainsAbnormalMechanicalTransportDistinctFromFibrillation",
+    "ConductedFlutterPerfusionSpecifications",
+    "AtrialFlutterSmokeChecks"
+  ]
+}

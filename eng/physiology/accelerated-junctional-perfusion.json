@@ -1,8 +1,8 @@
 {
-  "id": "AcceleratedJunctionalPerfusionIllustration@1",
+  "id": "AcceleratedJunctionalPerfusionIllustration@2",
   "implementation_basis": [
     "AcceleratedJunctionalIllustration@1",
-    "Existing authored fixed perfusion inputs, not clinical calibration"
+    "CardiacFillingPerfusionIllustration@2; authored rate and atrial-phase filling, not clinical calibration"
   ],
   "authored_choices": {
     "RR_PP_ms": [
@@ -25,7 +25,8 @@
     "CVP_component_overlap": 1,
     "CVP_atrial_trigger": "AtrialMechanical",
     "CVP_other_triggers": "VentricularMechanical",
-    "resp_cardiac_artifact_support_ms": 600
+    "resp_cardiac_artifact_support_ms": 600,
+    "stroke_volume": "Per-beat gain from actual mechanical RR and atrial contraction overlap with the filling window; shared by Pleth/ABP/PA"
   },
   "invariants": [
     "ECG and perfusion share independent600ms ventricular/800ms atrial grids",
@@ -36,14 +37,15 @@
     "Atomic configuration, stale timer fencing and wire recovery"
   ],
   "limitations": [
-    "Fixed inputs, not clinical stroke volume or pressure calibration",
-    "No valve mechanics, cannon a or phase-dependent pump feedback",
+    "Authored filling approximation, not calibrated stroke volume, pressure or ectopic focus mechanics",
+    "No dynamic valve, cannon-a, contractility, loading or autonomic feedback model",
     "Gradual onset/termination, retrograde variants and competitive capture remain open"
   ],
   "verification": [
     "AcceleratedJunctionalPerfusionPreservesSupportsAndBoundsOverlap",
     "AcceleratedJunctionalPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
     "AcceleratedJunctionalVenousAndRespiratoryComponentsRespectIndependentClocks",
-    "AcceleratedJunctionalPhysiologySmokeChecks"
+    "AcceleratedJunctionalPhysiologySmokeChecks",
+    "CardiacFillingSpecifications"
   ]
 }

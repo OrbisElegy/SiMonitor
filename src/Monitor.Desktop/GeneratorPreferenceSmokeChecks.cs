@@ -18,10 +18,12 @@ internal static class GeneratorPreferenceSmokeChecks
                 var window = new DesignPreviewWindow();
                 MonitorGeneratorPreferences expected;
                 LocalMonitorPreviewSession original;
+                string?[] appliedParameters;
                 try
                 {
                     Configure(window.Settings, selection);
                     window.ApplySettings(); original = window.Session;
+                    appliedParameters = [window.Settings.AppliedEcgParameters.Text, window.Settings.AppliedRespirationParameters.Text, window.Settings.AppliedEjectionParameters.Text];
                     expected = window.Settings.CaptureGenerator();
                     // Use the real persistence Apply path with the same complete editor snapshot.
                     var writer = new DesignPreviewWindow(path);
@@ -39,6 +41,9 @@ internal static class GeneratorPreferenceSmokeChecks
                 try
                 {
                     var actual = reopened.Settings.CaptureGenerator();
+                    Require(appliedParameters.SequenceEqual(new[] { reopened.Settings.AppliedEcgParameters.Text,
+                        reopened.Settings.AppliedRespirationParameters.Text, reopened.Settings.AppliedEjectionParameters.Text }),
+                        "startup overview describes the restored applied configuration");
                     Require(!reopened.PreferenceNotice.IsVisible && actual.Ecg == expected.Ecg && actual.EcgName == expected.EcgName &&
                         actual.Respiration == expected.Respiration && actual.Ejection == expected.Ejection && actual.Seed == expected.Seed &&
                         actual.Numbers.OrderBy(p => p.Key).SequenceEqual(expected.Numbers.OrderBy(p => p.Key)) &&

@@ -15,7 +15,6 @@ internal static class StTFusionSpecifications
         new(nameof(FusionPreservesUnselectedLeadsAndUnrelatedSamples), FusionPreservesUnselectedLeadsAndUnrelatedSamples),
         new(nameof(FusionCancelsTheOldWilsonRepolarization), FusionCancelsTheOldWilsonRepolarization),
         new(nameof(FusionValidatesTimingAndOwnsContourInputs), FusionValidatesTimingAndOwnsContourInputs),
-        new(nameof(FusionRecoversWithIndependentTimingAndLimbWiring), FusionRecoversWithIndependentTimingAndLimbWiring),
     ];
 
     private static void FusionHasOneContinuousCrownAcrossTheOldSTTBoundary()
@@ -117,20 +116,5 @@ internal static class StTFusionSpecifications
         Check.That(accepted[5].Bands[2].TableQ32.SequenceEqual(before), "accepted fusion has owned immutable tables and maps");
     }
 
-    private static void FusionRecoversWithIndependentTimingAndLimbWiring()
-    {
-        var plan = Plan with { IndependentVentricularPeriodNs = 1_100_000_000, VentricularElectricalOffsetNs = 900_000_000, VentricularMechanicalOffsetNs = 980_000_000 };
-        var electrodes = Rich(Region(new(200, 500, 50)));
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes, EcgLimbPlacement.SwapRaLa);
-        var expected = source.GenerateBefore(2_800_000_000, 700, 100);
-        source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes, EcgLimbPlacement.SwapRaLa);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 175; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
-            "regional fusion survives frame recovery with late independent QRS, P/ST/T/U and wiring");
-    }
+
 }

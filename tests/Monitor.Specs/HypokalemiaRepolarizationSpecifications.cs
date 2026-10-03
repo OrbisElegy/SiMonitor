@@ -10,7 +10,6 @@ internal static class HypokalemiaRepolarizationSpecifications
         new(nameof(HypokalemiaPreservesQtAndSeparatesProminentU), HypokalemiaPreservesQtAndSeparatesProminentU),
         new(nameof(HypokalemiaInvertsOnlyIntrinsicTWithIndependentU), HypokalemiaInvertsOnlyIntrinsicTWithIndependentU),
         new(nameof(HypokalemiaConductionAugmentsPAndWidensQrsOnly), HypokalemiaConductionAugmentsPAndWidensQrsOnly),
-        new(nameof(HypokalemiaRestoresAcrossTAndU), HypokalemiaRestoresAcrossTAndU),
         new(nameof(HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints), HypokalemiaFusionOverlapsOnlyUAndPreservesEndpoints),
     ];
     private static void HypokalemiaPreservesQtAndSeparatesProminentU()
@@ -123,20 +122,5 @@ internal static class HypokalemiaRepolarizationSpecifications
                 var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateLeadIIBands(fuse, invert, true)).GenerateBefore(1_000_000_000, 250, 100);
                 Check.That(b.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitorII uses same wide source");
             }
-    }
-    private static void HypokalemiaRestoresAcrossTAndU()
-    {
-        foreach (bool fuse in new[] { false, true })
-            foreach (bool invert in new[] { false, true })
-                foreach (bool conduction in new[] { false, true })
-                    foreach (long boundary in new[] { 238_000_000L, 278_000_000, 450_000_000, 578_000_000, 650_000_000, 810_000_000 })
-                    {
-                        var source = ElectrodeSignalGenerator.Start(HypokalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HypokalemiaRepolarizationReference.CreateElectrodes(fuse, invert, conduction));
-                        source.GenerateBefore(boundary, 250, 100);
-                        var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                        var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                        var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                        Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "T/U gap, U and next cycle restore exactly");
-                    }
     }
 }

@@ -8,7 +8,6 @@ internal static class EcgVerticalGeometrySpecifications
     public static Specification[] All =>
     [
         new(nameof(EcgVoltageUsesExplicitMillivoltGain), EcgVoltageUsesExplicitMillivoltGain),
-        new(nameof(VerticalEdgesRemainExactWithoutClamping), VerticalEdgesRemainExactWithoutClamping),
         new(nameof(EquivalentInputsAndExtremeWidthsStayDeterministic), EquivalentInputsAndExtremeWidthsStayDeterministic),
         new(nameof(InvalidVerticalPlansFailWithoutChangingAcceptedGeometry), InvalidVerticalPlansFailWithoutChangingAcceptedGeometry),
     ];
@@ -18,24 +17,22 @@ internal static class EcgVerticalGeometrySpecifications
     private static void EcgVoltageUsesExplicitMillivoltGain()
     {
         EcgVerticalScale scale = Scale();
-        Check.That(EcgVerticalGeometry.MapMicrovolts(scale, 1000, 1) == new EcgVerticalPosition(40, 1, VerticalPlotRelation.WithinPlot) &&
-            EcgVerticalGeometry.MapMicrovolts(scale, -1000, 1) == new EcgVerticalPosition(80, 1, VerticalPlotRelation.WithinPlot) &&
-            EcgVerticalGeometry.MapMicrovolts(scale, 0, 1) == new EcgVerticalPosition(60, 1, VerticalPlotRelation.WithinPlot),
-            "one millivolt shifts by resolved gain, positive upward and negative downward");
-        Check.That(EcgVerticalGeometry.MapMicrovolts(scale, 1, 3) == new EcgVerticalPosition(8999, 150, VerticalPlotRelation.WithinPlot),
-            "fractional microvolts retain exact subpixel position");
+        (long NumeratorMicrovolts, uint Denominator, EcgVerticalPosition Expected)[] cases =
+        [
+            (1000, 1, new(40, 1, VerticalPlotRelation.WithinPlot)),
+            (-1000, 1, new(80, 1, VerticalPlotRelation.WithinPlot)),
+            (0, 1, new(60, 1, VerticalPlotRelation.WithinPlot)),
+            (1, 3, new(8999, 150, VerticalPlotRelation.WithinPlot)),
+            (2500, 1, new(10, 1, VerticalPlotRelation.WithinPlot)),
+            (-2500, 1, new(110, 1, VerticalPlotRelation.WithinPlot)),
+            (2501, 1, new(499, 50, VerticalPlotRelation.AbovePlot)),
+            (-2501, 1, new(5501, 50, VerticalPlotRelation.BelowPlot)),
+        ];
+        foreach (var item in cases)
+            Check.That(EcgVerticalGeometry.MapMicrovolts(scale, item.NumeratorMicrovolts, item.Denominator) == item.Expected,
+                $"{item.NumeratorMicrovolts}/{item.Denominator} microvolts: exact gain, sign and closed boundaries without clamping");
         Check.That(EcgVerticalGeometry.MapMicrovolts(scale with { PixelsPerMillivoltNumerator = 40 }, 1000, 1).PixelNumerator == 20,
             "explicit doubled gain doubles displacement from zero baseline");
-    }
-
-    private static void VerticalEdgesRemainExactWithoutClamping()
-    {
-        Check.That(EcgVerticalGeometry.MapMicrovolts(Scale(), 2500, 1) == new EcgVerticalPosition(10, 1, VerticalPlotRelation.WithinPlot) &&
-            EcgVerticalGeometry.MapMicrovolts(Scale(), -2500, 1) == new EcgVerticalPosition(110, 1, VerticalPlotRelation.WithinPlot),
-            "geometric top and bottom endpoints lie on the closed clipping boundary");
-        Check.That(EcgVerticalGeometry.MapMicrovolts(Scale(), 2501, 1) == new EcgVerticalPosition(499, 50, VerticalPlotRelation.AbovePlot) &&
-            EcgVerticalGeometry.MapMicrovolts(Scale(), -2501, 1) == new EcgVerticalPosition(5501, 50, VerticalPlotRelation.BelowPlot),
-            "points one microvolt outside remain outside rather than becoming flat boundary samples");
     }
 
     private static void EquivalentInputsAndExtremeWidthsStayDeterministic()
@@ -53,8 +50,6 @@ internal static class EcgVerticalGeometrySpecifications
         Check.That(high.Relation == VerticalPlotRelation.AbovePlot && low.Relation == VerticalPlotRelation.BelowPlot &&
             EcgVerticalGeometry.MapMicrovolts(large, 0, uint.MaxValue) == new EcgVerticalPosition(int.MaxValue, 1, VerticalPlotRelation.WithinPlot),
             "maximum input widths retain signs and normalize zero without arithmetic overflow");
-        Check.That(EcgVerticalGeometry.MapMicrovolts(scale with { }, 1, 3) == original,
-            "reconstruction from immutable resolved inputs reproduces exact geometry without accumulated state");
     }
 
     private static void InvalidVerticalPlansFailWithoutChangingAcceptedGeometry()

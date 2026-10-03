@@ -11,7 +11,6 @@ internal static class MechanicalStrideSpecifications
     [
         new(nameof(MechanicalStridePreservesElectricalAndOriginalCycleIndices), MechanicalStridePreservesElectricalAndOriginalCycleIndices),
         new(nameof(MechanicalStrideKeepsPulseTransitAndEcgSamples), MechanicalStrideKeepsPulseTransitAndEcgSamples),
-        new(nameof(MechanicalStrideRecoversNativeStreams), MechanicalStrideRecoversNativeStreams),
         new(nameof(MechanicalStrideBoundsDefaultsAndEventBudget), MechanicalStrideBoundsDefaultsAndEventBudget),
     ];
 
@@ -45,21 +44,6 @@ internal static class MechanicalStrideSpecifications
         Check.That(pulse.Take(229).SequenceEqual(Samples(normal, Pleth).Take(229)) &&
             pulse.Skip(229).Take(136).All(value => value == 0) && pulse.Skip(365).Take(64).Any(value => value > 0),
             "retained delayed pulses finish; skipped cycle has no pulse; next accepted pulse retains transit");
-    }
-
-    private static void MechanicalStrideRecoversNativeStreams()
-    {
-        var plan = Plan() with { MechanicalDurationCycles = 2, MechanicalEveryCycles = 2 };
-        var expected = Group(plan).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var group = Group(plan);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "original mechanical stride and suppression interval recover as exact native wire bytes");
     }
 
     private static void MechanicalStrideBoundsDefaultsAndEventBudget()

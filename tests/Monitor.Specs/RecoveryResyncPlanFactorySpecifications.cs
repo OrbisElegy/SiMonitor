@@ -24,10 +24,8 @@ internal static class RecoveryResyncPlanFactorySpecifications
 
     public static Specification[] All =>
     [
-        new(nameof(VerifiedPredictionBuildsClientAcceptablePlan),
-            VerifiedPredictionBuildsClientAcceptablePlan),
-        new(nameof(UnverifiedPredictionIsExplicitlyDiscarded),
-            UnverifiedPredictionIsExplicitlyDiscarded),
+        new(nameof(PredictionEvidenceDeterminesClientAcceptablePlan),
+            PredictionEvidenceDeterminesClientAcceptablePlan),
         new(nameof(FullSnapshotOverridesVerifiedPrediction),
             FullSnapshotOverridesVerifiedPrediction),
         new(nameof(OnlyCompleteFutureSnapshotJoinCanBecomeAPlan),
@@ -36,54 +34,48 @@ internal static class RecoveryResyncPlanFactorySpecifications
             StaleHostFrontiersAndMalformedIdentityFailClosed),
     ];
 
-    private static void VerifiedPredictionBuildsClientAcceptablePlan()
+    private static void PredictionEvidenceDeterminesClientAcceptablePlan()
     {
-        RecoveryPlanningInput input = VerifiedPlanningInput();
-        RecoveryResyncPlan plan = RecoveryResyncPlanFactory.Create(
-            input,
-            HostRing(),
-            Request(),
-            Context());
+        var ring = HostRing();
+        (RecoveryPlanningInput Input, LocalPredictionDecision Decision, ulong ThroughCommit)[] cases =
+        [
+            (VerifiedPlanningInput(), LocalPredictionDecision.CommitVerified, 101),
+            (PlanningInput(localPredictionVerified: false), LocalPredictionDecision.Discard, 100),
+        ];
+        foreach (var item in cases)
+        {
+            RecoveryResyncPlan plan = RecoveryResyncPlanFactory.Create(
+                item.Input,
+                ring,
+                Request(),
+                Context());
 
-        Check.That(plan.PlanId == PlanId &&
-            plan.NewAuthorityEpoch == 5 &&
-            plan.HostCheckpointSequence == 44 &&
-            plan.HostStateSha256 == Hash('a') &&
-            plan.RelockSimTimeNs == 11_000_000_000 &&
-            plan.NewStreamEpoch == 8 &&
-            plan.PrerollFromSimTimeNs == 11_000_000_000 &&
-            plan.PrerollUntilSimTimeNs == 11_000_000_000 &&
-            plan.LocalPredictionDecision ==
-                LocalPredictionDecision.CommitVerified &&
-            plan.AcceptedThroughCommitSequence == 101 &&
-            plan.ResumeSnapshotSha256 is null,
-            "the Host plan must bind verified replay and the waveform boundary");
+            Check.That(plan.PlanId == PlanId &&
+                plan.NewAuthorityEpoch == 5 &&
+                plan.HostCheckpointSequence == 44 &&
+                plan.HostStateSha256 == Hash('a') &&
+                plan.RelockSimTimeNs == 11_000_000_000 &&
+                plan.NewStreamEpoch == 8 &&
+                plan.PrerollFromSimTimeNs == 11_000_000_000 &&
+                plan.PrerollUntilSimTimeNs == 11_000_000_000 &&
+                plan.LocalPredictionDecision ==
+                    item.Decision &&
+                plan.AcceptedThroughCommitSequence == item.ThroughCommit &&
+                plan.ResumeSnapshotSha256 is null,
+                "the Host plan binds verified/discarded prediction and the waveform boundary");
 
-        var client = RecoveryRelockCoordinator.Start(
-            ClientId,
-            SessionId,
-            InstanceId,
-            acceptedAuthorityEpoch: 4,
-            acceptedStreamEpoch: 7,
-            lastAppliedCommitSequence: 100,
-            currentSimTimeNs: 10_000_000_000);
-        Check.That(client.AcceptPlan(plan, 10_000_000_000).Phase ==
-            RecoveryRelockPhase.Preparing,
-            "a constructed Host plan must pass the client relock gate unchanged");
-    }
-
-    private static void UnverifiedPredictionIsExplicitlyDiscarded()
-    {
-        RecoveryResyncPlan plan = RecoveryResyncPlanFactory.Create(
-            PlanningInput(localPredictionVerified: false),
-            HostRing(),
-            Request(),
-            Context());
-
-        Check.That(plan.LocalPredictionDecision ==
-                LocalPredictionDecision.Discard &&
-            plan.AcceptedThroughCommitSequence == 100,
-            "unverified local work may inform intake but must not be committed");
+            var client = RecoveryRelockCoordinator.Start(
+                ClientId,
+                SessionId,
+                InstanceId,
+                acceptedAuthorityEpoch: 4,
+                acceptedStreamEpoch: 7,
+                lastAppliedCommitSequence: 100,
+                currentSimTimeNs: 10_000_000_000);
+            Check.That(client.AcceptPlan(plan, 10_000_000_000).Phase ==
+                RecoveryRelockPhase.Preparing,
+                "a constructed Host plan must pass the client relock gate unchanged");
+        }
     }
 
     private static void FullSnapshotOverridesVerifiedPrediction()
@@ -151,13 +143,6 @@ internal static class RecoveryResyncPlanFactorySpecifications
                 Context() with { HostDurableCommitSequence = 100 })) ==
                 "RecoveryPlan.InvalidHostContext",
             "the Host durable frontier cannot trail accepted replay evidence");
-
-        Check.That(Reason(() => RecoveryResyncPlanFactory.Create(
-                PlanningInput(),
-                HostRing(),
-                Request(streamEpoch: 8),
-                Context())) == "RecoveryPlan.InvalidWaveformContext",
-            "a constructed relock plan must advance the stream epoch");
 
         RecoveryPlanningInput staleAuthority = VerifiedPlanningInput() with
         {

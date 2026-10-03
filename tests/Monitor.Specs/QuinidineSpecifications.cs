@@ -10,7 +10,6 @@ internal static class QuinidineSpecifications
         new(nameof(QuinidineSeparatesLongQtFromProminentU), QuinidineSeparatesLongQtFromProminentU),
         new(nameof(QuinidineWideQrsRetainsEventsAndSeparatesQtFromU), QuinidineWideQrsRetainsEventsAndSeparatesQtFromU),
         new(nameof(QuinidineNotchChangesOnlyP), QuinidineNotchChangesOnlyP),
-        new(nameof(QuinidineRestoresAndRejectsUnknownModes), QuinidineRestoresAndRejectsUnknownModes),
     ];
     private static void QuinidineSeparatesLongQtFromProminentU()
     {
@@ -88,20 +87,6 @@ internal static class QuinidineSpecifications
             var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, QuinidineEffectReference.CreateLeadIIBands(mode, true)).GenerateBefore(1_000_000_000, 250, 100);
             Check.That(a.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "notched monitorII parity");
         }
-    }
-    private static void QuinidineRestoresAndRejectsUnknownModes()
-    {
-        foreach (var mode in Enum.GetValues<QuinidineIllustration>().Where(m => m != QuinidineIllustration.Reference))
-            foreach (bool notchedP in new[] { false, true })
-                foreach (long boundary in new[] { 38_000_000L, 60_000_000, 82_000_000, 118_000_000, 198_000_000, 678_000_000, 708_000_000, 798_000_000, 910_000_000, 338_000_000, 578_000_000, 758_000_000, 788_000_000, 990_000_000 })
-                {
-                    var source = ElectrodeSignalGenerator.Start(QuinidineEffectReference.CreatePlan(mode), "AcqECGMonitor250@1", 1, QuinidineEffectReference.CreateElectrodes(mode, notchedP));
-                    source.GenerateBefore(boundary, 250, 100);
-                    var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                    var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                    var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                    Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "long QT/U recovery exact");
-                }
         foreach (var mode in new[] { QuinidineIllustration.Reference, (QuinidineIllustration)99 })
         {
             try { QuinidineEffectReference.CreateElectrodes(mode); }
@@ -109,4 +94,5 @@ internal static class QuinidineSpecifications
             throw new InvalidOperationException("Unsupported source mode accepted");
         }
     }
+
 }

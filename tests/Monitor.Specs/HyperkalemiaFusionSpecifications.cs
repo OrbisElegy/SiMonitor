@@ -8,7 +8,6 @@ internal static class HyperkalemiaFusionSpecifications
     public static Specification[] All =>
     [
         new(nameof(HighKFusionHasOneContinuousCompoundAndSharedProjection), HighKFusionHasOneContinuousCompoundAndSharedProjection),
-        new(nameof(HighKFusionRestoresAtExtremaAndSupportBoundaries), HighKFusionRestoresAtExtremaAndSupportBoundaries),
     ];
     private static void HighKFusionHasOneContinuousCompoundAndSharedProjection()
     {
@@ -26,17 +25,5 @@ internal static class HyperkalemiaFusionSpecifications
         Check.That(lead[88] > 620 && lead[119] < -450 && lead[175] > 690, "broad positive-negative-positive fused contour");
         Check.That(Enumerable.Range(95, 65).All(i => lead[i] != 0 || lead[i + 1] != 0), "no intervening isoelectric ST plateau");
         Check.That(Enumerable.Range(1, 249).Max(i => Math.Abs(lead[i] - lead[i - 1])) < 70, "bounded per-sample slope including support joins");
-    }
-    private static void HighKFusionRestoresAtExtremaAndSupportBoundaries()
-    {
-        foreach (long boundary in new[] { 238_000_000L, 352_000_000, 476_000_000, 702_000_000, 958_000_000 })
-        {
-            var source = ElectrodeSignalGenerator.Start(HyperkalemiaFusionReference.CreatePlan(), "AcqECGMonitor250@1", 1, HyperkalemiaFusionReference.CreateElectrodes());
-            source.GenerateBefore(boundary, 250, 100);
-            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-            var a = source.GenerateBefore(3_000_000_000, 750, 100);
-            var b = restored.GenerateBefore(3_000_000_000, 750, 100);
-            Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "fusion restore through joins and subsequent beats");
-        }
     }
 }

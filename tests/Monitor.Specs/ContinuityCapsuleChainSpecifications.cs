@@ -34,8 +34,6 @@ internal static class ContinuityCapsuleChainSpecifications
             ChainCheckpointRestoresOnlyWithReplayEvidence),
         new(nameof(TwoPhaseAdmissionsCannotCommitOutOfOrder),
             TwoPhaseAdmissionsCannotCommitOutOfOrder),
-        new(nameof(DecodedCapsulesAreDefensivelyCopied),
-            DecodedCapsulesAreDefensivelyCopied),
         new(nameof(BaseBuildsCompleteCompatibleRecoveryState),
             BaseBuildsCompleteCompatibleRecoveryState),
         new(nameof(IncompatibleBasePreservesThePreviousState),
@@ -304,25 +302,16 @@ internal static class ContinuityCapsuleChainSpecifications
             "committing one admission must invalidate every sibling trial");
     }
 
-    private static void DecodedCapsulesAreDefensivelyCopied()
+    private static void BaseBuildsCompleteCompatibleRecoveryState()
     {
         FakeDecoder decoder = new();
         ContinuityCapsuleChain chain = Start(decoder);
         byte[] payload = Payload("base");
         AcceptedContinuityCapsuleBase accepted = chain.AcceptBase(
-            SignedBody(Base(), payload),
-            payload,
-            currentSimTimeNs: 100,
-            authorityMonotonicNs: 11);
+            SignedBody(Base(), payload), payload, currentSimTimeNs: 100, authorityMonotonicNs: 11);
         decoder.LastDecodedBase!.StateComponents[0].StateBytes[0] = 0xff;
-
         Check.That(accepted.Capsule.StateComponents[0].StateBytes[0] == (byte)'f',
-            "an adapter cannot mutate the accepted state after decoding returns");
-    }
-
-    private static void BaseBuildsCompleteCompatibleRecoveryState()
-    {
-        ContinuityCapsuleChain chain = WithBase();
+            "decoder mutation cannot alter the accepted capsule");
         ContinuityRecoveryStateImage image = chain.RecoveryStateImage!;
 
         Check.That(image.BaseCapsuleId == BaseId &&

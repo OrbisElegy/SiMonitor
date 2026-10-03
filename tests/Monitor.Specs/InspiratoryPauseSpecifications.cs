@@ -99,41 +99,61 @@ internal static class InspiratoryPauseSpecifications
 
     private static void PausedBreathNativeRecoveryIsDeterministic()
     {
-        var expected = Group().AdvanceTo(8_000_000_000, 1000, 40, 100);
-        var group = Group();
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
+        foreach (var (name, createGroup, bothPauses) in new (string, Func<long, PhysiologyWaveformGroup>, bool)[]
         {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
+            ("inspiratory pause", Group, false),
+            ("inspiratory and expiratory pauses", ExpiratoryPauseSpecifications.Group, true)
+        })
+        {
+            var actual = NativeRecoveryChecks.Verify(() => createGroup(800_000_000),
+                [1_199_999_999, 1_200_000_000, 1_600_000_000, 2_000_000_000, 2_190_000_000,
+                 3_200_000_000, 3_600_000_000, 4_000_000_000, 4_800_000_000, 8_000_000_000],
+                1000, 40, 100, 30, name);
+            var previous = createGroup(0).AdvanceTo(8_000_000_000, 1000, 40, 100);
+            short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
+                .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
+            Check.That(Samples(actual, Co2).SequenceEqual(Samples(previous, Co2)) &&
+                !Samples(actual, Resp).SequenceEqual(Samples(previous, Resp)),
+                $"{name}: excursion changes without changing CO2 phases or transport");
+            if (bothPauses)
+            {
+                Check.That(Samples(actual, Resp).Skip(400).Take(100).All(value => value == 0),
+                    "native125Hz Resp is exactly baseline throughout3.2..4s");
+                Check.That(Samples(actual, Cvp).Skip(400).Take(100).Distinct().Count() > 1,
+                    "cardiac CVP components continue during the respiratory baseline hold");
+            }
+            else
+            {
+                Check.That(!Samples(actual, Cvp).SequenceEqual(Samples(previous, Cvp)) &&
+                    Samples(actual, Resp).Skip(150).Take(101).All(value => value == -800),
+                    "native Resp holds throughout1.2..2s and the respiratory pressure changes with it");
+            }
         }
-        Check.That(actual.Count == 30 && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "Resp/CVP pause and delayed dispersed CO2 recover byte-for-byte across held phases");
-        short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
-            .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
-        var previous = Group(0).AdvanceTo(8_000_000_000, 1000, 40, 100);
-        Check.That(Samples(actual, Co2).SequenceEqual(Samples(previous, Co2)) &&
-            !Samples(actual, Resp).SequenceEqual(Samples(previous, Resp)) && !Samples(actual, Cvp).SequenceEqual(Samples(previous, Cvp)),
-            "only thoracic excursion and respiratory pressure change, not CO2 phases or transport");
-        Check.That(Samples(actual, Resp).Skip(150).Take(101).All(value => value == -800),
-            "native125Hz samples hold throughout1.2..2s rather than a UI-only plateau");
     }
 
     private static void InvalidPauseAndLateFailureAreAtomic()
     {
-        foreach (long pause in new[] { -1L, 2_000_000_000, long.MaxValue })
+        foreach (var (name, createPlan, createGroup) in new
+            (string, Func<long, RegularPhysiologyPlan>, Func<long, PhysiologyWaveformGroup>)[]
         {
-            bool rejected = false;
-            try { RegularPhysiologyTimeline.Restore(new(Plan(pause), 0)); }
-            catch (PhysiologyTimelineException exception) { rejected = exception.ReasonCode == "PhysiologyTimeline.InvalidState"; }
-            Check.That(rejected, "negative or nonpositive active inspiration rejects at shared plan restore");
+            ("inspiration", Plan, Group),
+            ("expiration", ExpiratoryPauseSpecifications.Plan, ExpiratoryPauseSpecifications.Group)
+        })
+        {
+            foreach (long pause in new[] { -1L, 2_000_000_000, long.MaxValue })
+            {
+                bool rejected = false;
+                try { RegularPhysiologyTimeline.Restore(new(createPlan(pause), 0)); }
+                catch (PhysiologyTimelineException exception) { rejected = exception.ReasonCode == "PhysiologyTimeline.InvalidState"; }
+                Check.That(rejected, $"{name}: negative or nonpositive active phase rejects before construction");
+            }
+            var group = createGroup(800_000_000);
+            string before = JsonSerializer.Serialize(group.CaptureState());
+            bool limited = false;
+            try { group.AdvanceTo(8_000_000_000, 1000, 1, 100); }
+            catch (PhysiologyWaveformGroupException exception) { limited = exception.ReasonCode == "PhysiologyGroup.BlockLimitExceeded"; }
+            Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before,
+                $"{name}: late publication failure preserves all paused-breath channel states atomically");
         }
-        var group = Group();
-        string before = JsonSerializer.Serialize(group.CaptureState());
-        bool limited = false;
-        try { group.AdvanceTo(8_000_000_000, 1000, 1, 100); }
-        catch (PhysiologyWaveformGroupException exception) { limited = exception.ReasonCode == "PhysiologyGroup.BlockLimitExceeded"; }
-        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before,
-            "late publication failure cannot partially advance channels through a pause");
     }
 }

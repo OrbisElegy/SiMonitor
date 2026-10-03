@@ -11,7 +11,6 @@ internal static class MechanicalResumptionSpecifications
     [
         new(nameof(MechanicalResumptionPreservesOriginalIndices), MechanicalResumptionPreservesOriginalIndices),
         new(nameof(ResumedPulsesKeepTransitAndPriorTails), ResumedPulsesKeepTransitAndPriorTails),
-        new(nameof(MechanicalResumptionRecoversNativeStreams), MechanicalResumptionRecoversNativeStreams),
         new(nameof(MechanicalDurationBoundsDefaultsAndAtomicFailure), MechanicalDurationBoundsDefaultsAndAtomicFailure),
     ];
 
@@ -41,21 +40,6 @@ internal static class MechanicalResumptionSpecifications
             "old transit-delayed tail survives even beyond the1600ms resumption boundary");
         Check.That(pulse.Skip(229).Take(136).All(value => value == 0) && pulse.Skip(365).SequenceEqual(reference.Skip(365)) &&
             pulse.Skip(365).Take(64).Any(value => value > 0), "resumed event1840ms reaches Pleth2920ms, retaining1080ms transit and future original cycles");
-    }
-
-    private static void MechanicalResumptionRecoversNativeStreams()
-    {
-        var plan = Plan() with { MechanicalDurationCycles = 1 };
-        var expected = Group(plan).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var group = Group(plan);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "cutoff, recovery and delayed tails retain exact native wire bytes across checkpoints");
     }
 
     private static void MechanicalDurationBoundsDefaultsAndAtomicFailure()

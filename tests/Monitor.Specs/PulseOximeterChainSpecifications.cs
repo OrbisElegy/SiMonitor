@@ -98,29 +98,34 @@ internal static class PulseOximeterChainSpecifications
 
     private static void AcquiredPeripheralSourceProducesPulseAndSaturation()
     {
-        foreach (int target in new[] { 75000, 90000, 98000, 99000, 100000 })
-            foreach (int modulation in (target == 100000 ? new[] { 1000, 2000 } : new[] { 1000 }))
-                foreach (int conduction in new[] { 1, 2 })
+        foreach (int conduction in new[] { 1, 2 })
+        {
+            // The physical source depends on conduction, not the optical target or modulation.
+            var physical = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { VentricularConductionRatio = conduction });
+            List<byte[]> acquired = [];
+            for (int step = 1; step <= 65; step++)
+                acquired.AddRange(physical.AdvanceTo(step * 200_000_000L, 50, 1, 100));
+            foreach (int target in new[] { 75000, 90000, 98000, 99000, 100000 })
+                foreach (int modulation in target == 100000 ? new[] { 1000, 2000 } : new[] { 1000 })
                 {
-                    var physical = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with { VentricularConductionRatio = conduction });
                     var optical = new PulseOximeterIllustrationSource(Pleth, Pleth, Sensor, target, modulation); var measurement = Measurement(); PulseOximeterReading? reading = null;
-                    for (int step = 1; step <= 65; step++)
-                        foreach (byte[] original in physical.AdvanceTo(step * 200_000_000L, 50, 1, 100))
-                        {
-                            byte[] wire = optical.ConvertAcquiredPulse(original);
-                            var packet = WaveformEnvelopeCodec.Decode(wire);
-                            var old = WaveformEnvelopeCodec.Decode(original);
-                            Check.That(packet.InstanceId == Sensor && packet.StartSimTimeNs == old.StartSimTimeNs &&
-                                packet.Planes.Single(p => p.ChannelId == Pleth).Samples.SequenceEqual(old.Planes.Single(p => p.ChannelId == Pleth).Samples),
-                                "same sensor bundle preserves acquired Pleth shape/time, not screen pixels");
-                            reading = measurement.Consume(wire);
-                            if (packet.StartSimTimeNs < 3_800_000_000)
-                            { Check.That(reading.SpO2.SaturationMilliPercent is null, "no saturation before full window"); }
-                        }
+                    foreach (byte[] original in acquired)
+                    {
+                        byte[] wire = optical.ConvertAcquiredPulse(original);
+                        var packet = WaveformEnvelopeCodec.Decode(wire);
+                        var old = WaveformEnvelopeCodec.Decode(original);
+                        Check.That(packet.InstanceId == Sensor && packet.StartSimTimeNs == old.StartSimTimeNs &&
+                            packet.Planes.Single(p => p.ChannelId == Pleth).Samples.SequenceEqual(old.Planes.Single(p => p.ChannelId == Pleth).Samples),
+                            "same sensor bundle preserves acquired Pleth shape/time, not screen pixels");
+                        reading = measurement.Consume(wire);
+                        if (packet.StartSimTimeNs < 3_800_000_000)
+                        { Check.That(reading.SpO2.SaturationMilliPercent is null, "no saturation before full window"); }
+                    }
                     Check.That(reading!.PulseRate.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.PulseRate.MilliBeatsPerMinute!.Value - 75000 / conduction) <= 100, "sensor PR follows actual peripheral ejection: " + conduction + "/" + reading);
                     Check.That(reading.SpO2.Status == WaveformMeasurementStatus.Valid && Math.Abs(reading.SpO2.SaturationMilliPercent!.Value - target) <= 500,
                         $"authored target recovered from two quantized wavelengths within0.5 percentage point: {target}/{conduction}: {reading.SpO2}");
                 }
+        }
         var sensor = Source(); var m = Measurement();
         for (int block = 0; block < 40; block++) { m.Consume(sensor.ConvertAcquiredPulse(Input(block, flat: true))); }
         Check.That(m.Read(7_992_000_000).SpO2.Status == WaveformMeasurementStatus.PoorSignal,

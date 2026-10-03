@@ -91,16 +91,9 @@ internal static class RespCardiacArtifactSpecifications
 
     private static void ArtifactNativeRecoveryAndAtomicFailure()
     {
-        var expected = Group(160).AdvanceTo(8_000_000_000, 1000, 40, 100);
-        var group = Group(160);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "artifact and breathing samples retain native clocks and byte-for-byte split recovery");
+        var actual = NativeRecoveryChecks.Verify(() => Group(160),
+            [240_000_000, 440_000_000, 840_000_000, 1_200_000_000, 2_190_000_000, 3_200_000_000, 3_640_000_000, 4_000_000_000, 8_000_000_000],
+            1000, 40, 100, 30, nameof(ArtifactNativeRecoveryAndAtomicFailure));
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
         var without = Group(0).AdvanceTo(8_000_000_000, 1000, 40, 100);

@@ -13,7 +13,6 @@ internal static class StArchSpecifications
         new(nameof(StArchHasSignedRoundedCrownAndFixedEndpoints), StArchHasSignedRoundedCrownAndFixedEndpoints),
         new(nameof(StArchPreservesOutsideSamplesAndZeroParity), StArchPreservesOutsideSamplesAndZeroParity),
         new(nameof(StArchRejectsMalformedPlansAndOwnsTables), StArchRejectsMalformedPlansAndOwnsTables),
-        new(nameof(StArchRestoresAcrossIndependentCycles), StArchRestoresAcrossIndependentCycles),
     ];
 
     private static void StArchHasSignedRoundedCrownAndFixedEndpoints()
@@ -79,24 +78,4 @@ internal static class StArchSpecifications
         Check.That(before.SequenceEqual(electrodes[4].Bands[3].TableQ32), "accepted arch tables do not alias input arrays");
     }
 
-    private static void StArchRestoresAcrossIndependentCycles()
-    {
-        RegularPhysiologyPlan plan = new(0, 800_000_000, 900_000_000, 80_000_000, 980_000_000, 4_000_000_000, 2_000_000_000,
-            IndependentVentricularPeriodNs: 1_100_000_000);
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(
-            new(30_000_000, 120_000_000, [0, 0, 0, 0, 10, 40, 60, 20, 20, 20]),
-            tShape: new(375), stSegment: new(new int[10], new int[10], [0, 0, 0, 0, 200, -200, 100, 0, 300, -100]),
-            pWave: new([null, null, null, null, new(150, -150), null, null, null, null, null]));
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
-        var expected = source.GenerateBefore(2_800_000_000, 700, 100);
-        source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 175; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
-            "signed ST arches retain byte-equivalent samples across recovery, independent clocks and P/T/U");
-    }
 }

@@ -10,14 +10,10 @@ internal static class NoDataSweepSpecifications
 
     public static Specification[] All =>
     [
-        new(nameof(SweepStartsAtTheSharedCurrentPhaseWithoutClearing),
-            SweepStartsAtTheSharedCurrentPhaseWithoutClearing),
-        new(nameof(CoverageAdvancesLeftToRightWithoutMovingOldTrace),
-            CoverageAdvancesLeftToRightWithoutMovingOldTrace),
-        new(nameof(CoverageSplitsAtWrapWithoutJoiningTheBoundary),
-            CoverageSplitsAtWrapWithoutJoiningTheBoundary),
-        new(nameof(OneVisibleDurationRemovesTheLastOldTraceExactly),
-            OneVisibleDurationRemovesTheLastOldTraceExactly),
+        new(nameof(SweepOnsetAndProgressPreserveUnpassedTrace),
+            SweepOnsetAndProgressPreserveUnpassedTrace),
+        new(nameof(WrappedCoverageReplacesTraceAtExactDuration),
+            WrappedCoverageReplacesTraceAtExactDuration),
         new(nameof(FrameChunkingAndLateJoinProduceTheSameProjection),
             FrameChunkingAndLateJoinProduceTheSameProjection),
         new(nameof(CheckpointRestorePreservesFutureSweepCoverage),
@@ -26,7 +22,7 @@ internal static class NoDataSweepSpecifications
             InvalidPlanEpisodeAndTimeFailWithoutMutation),
     ];
 
-    private static void SweepStartsAtTheSharedCurrentPhaseWithoutClearing()
+    private static void SweepOnsetAndProgressPreserveUnpassedTrace()
     {
         NoDataSweepStateMachine sweep = Start(startedAtPresentationNs: 3 * (long)Second);
 
@@ -44,13 +40,8 @@ internal static class NoDataSweepSpecifications
             !coverage.FullyCovered &&
             coverage.CoveredIntervals.Count == 0,
             "NoData must begin at the shared phase without clearing old trace");
-    }
 
-    private static void CoverageAdvancesLeftToRightWithoutMovingOldTrace()
-    {
-        NoDataSweepStateMachine sweep = Start(startedAtPresentationNs: 3 * (long)Second);
-
-        NoDataSweepCoverage coverage = sweep.Advance(5 * (long)Second);
+        coverage = sweep.Advance(5 * (long)Second);
 
         Check.That(
             coverage.WriteHeadOffsetNs == 5 * Second &&
@@ -62,7 +53,7 @@ internal static class NoDataSweepSpecifications
             "only the interval passed by the write head may become NoData");
     }
 
-    private static void CoverageSplitsAtWrapWithoutJoiningTheBoundary()
+    private static void WrappedCoverageReplacesTraceAtExactDuration()
     {
         NoDataSweepStateMachine sweep = Start(startedAtPresentationNs: 7 * (long)Second);
 
@@ -77,11 +68,6 @@ internal static class NoDataSweepSpecifications
                 new SweepCoverageInterval(0, Second),
                 new SweepCoverageInterval(7 * Second, 8 * Second)),
             "wrapped coverage must be two canonical intervals, never one cross-edge line");
-    }
-
-    private static void OneVisibleDurationRemovesTheLastOldTraceExactly()
-    {
-        NoDataSweepStateMachine sweep = Start(startedAtPresentationNs: 7 * (long)Second);
 
         NoDataSweepCoverage before = sweep.Advance(14_999_999_999);
         NoDataSweepCoverage complete = sweep.Advance(15 * (long)Second);

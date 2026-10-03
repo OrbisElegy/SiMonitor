@@ -56,16 +56,9 @@ internal static class CapnogramTransportSpecifications
 
     private static void LongTransportSurvivesNativeRecovery()
     {
-        var expected = Group(5_000_000_000).AdvanceTo(12_000_000_000, 1500, 60, 100);
-        var group = Group(5_000_000_000);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 60; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 50 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "transport longer than one breath preserves original events across block splitting and recovery");
+        var actual = NativeRecoveryChecks.Verify(() => Group(5_000_000_000),
+            [1_875_000_000, 2_189_999_999, 2_190_000_000, 3_750_000_000, 5_000_000_000, 6_875_000_000, 7_000_000_000, 8_750_000_000, 8_950_000_000, 12_000_000_000],
+            1500, 60, 100, 50, nameof(LongTransportSurvivesNativeRecovery));
         var original = Group(0).AdvanceTo(12_000_000_000, 1500, 60, 100);
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();

@@ -8,14 +8,9 @@ internal static class Ecg12ScreenTransformSpecifications
     public static Specification[] All =>
     [
         new(nameof(ViewportMappingValidatesAndUsesUniformLimitingAxis), ViewportMappingValidatesAndUsesUniformLimitingAxis),
-        new(nameof(WindowCoordinatesTranslateBeforeInverseZoom), WindowCoordinatesTranslateBeforeInverseZoom),
-        new(nameof(WindowCoordinatesKeepNegativeScrolledOriginsExact), WindowCoordinatesKeepNegativeScrolledOriginsExact),
-        new(nameof(WindowCoordinateFailurePreservesTransform), WindowCoordinateFailurePreservesTransform),
-
-        new(nameof(FitTransformUsesLimitingAxis), FitTransformUsesLimitingAxis),
         new(nameof(ExplicitTransformRoundTripsExactCoordinates), ExplicitTransformRoundTripsExactCoordinates),
         new(nameof(TransformRejectsMalformedInputs), TransformRejectsMalformedInputs),
-        new(nameof(RestoredZoomRecomputesForCurrentArea), RestoredZoomRecomputesForCurrentArea),
+        new(nameof(RestoredFitTransformUsesCurrentLimitingAxis), RestoredFitTransformUsesCurrentLimitingAxis),
     ];
 
     private static void ViewportMappingValidatesAndUsesUniformLimitingAxis()
@@ -29,61 +24,39 @@ internal static class Ecg12ScreenTransformSpecifications
             "invalid page or serialized viewport cannot create mapping");
     }
 
-    private static void WindowCoordinatesTranslateBeforeInverseZoom()
-    {
-        var transform = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ExplicitScale, 3, 2), 100, 100, 200, 200);
-        Check.That(transform.ForwardAt(new(50, 1), new(10, 1)) == new ExactPlotCoordinate(85, 1) &&
-            transform.InverseAt(new(85, 1), new(10, 1)) == new ExactPlotCoordinate(50, 1),
-            "window origin is translated after forward scale and before inverse scale");
-        Check.That(transform.InverseAt(new(10, 1), new(10, 1)) == new ExactPlotCoordinate(0, 1), "page origin maps to exact logical zero");
-    }
-
-    private static void WindowCoordinatesKeepNegativeScrolledOriginsExact()
-    {
-        Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, 5, 3), SystemViewCommandAssessmentPolicy.Enabled);
-        var restored = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
-        var transform = Ecg12ScreenTransform.Resolve(restored.Selection, 100, 100, 50, 50);
-        ExactPlotCoordinate origin = new(-17, 7);
-        ExactPlotCoordinate logical = new(123, 11);
-        Check.That(transform.InverseAt(transform.ForwardAt(logical, origin), origin) == logical,
-            "fractional negative scrolled origin preserves exact recovered coordinates");
-        Check.That(transform.InverseAt(new(-24, 7), origin) == new ExactPlotCoordinate(-3, 5),
-            "outside-page coordinates remain outside for downstream hit bounds checks");
-        Check.That(transform.InverseAt(transform.ForwardAt(logical, new(19, 7)), new(19, 7)) == logical && !restored.CaptureDisplay().CanSelect,
-            "current window origin is independent of saved zoom and selection permission");
-    }
-
-    private static void WindowCoordinateFailurePreservesTransform()
-    {
-        var transform = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ActualSize, 1, 1), 100, 100, 50, 50);
-        Check.That(Reason(() => transform.ForwardAt(new(1, 1), new(1, 0))) == "Ecg12Zoom.InvalidCoordinate" &&
-            Reason(() => transform.InverseAt(null!, new(1, 1))) == "Ecg12Zoom.InvalidCoordinate" &&
-            Reason(() => transform.InverseAt(new(1, 1), null!)) == "Ecg12Zoom.InvalidCoordinate",
-            "malformed window points and origins reject consistently");
-        Check.That(transform.ForwardAt(new(int.MaxValue, 1), new(int.MaxValue, 1)) == new ExactPlotCoordinate(2L * int.MaxValue, 1) &&
-            transform.Width == new ExactPlotCoordinate(100, 1), "wide translated coordinates do not overflow or mutate the transform");
-    }
-
-    private static void FitTransformUsesLimitingAxis()
-    {
-        Ecg12ZoomState fit = new(Ecg12ZoomMode.FitPage, 1, 1);
-        var width = Ecg12ScreenTransform.Resolve(fit, 300, 200, 100, 100);
-        Check.That(width.Factor == new ExactPlotCoordinate(1, 3) && width.Width == new ExactPlotCoordinate(100, 1) &&
-            width.Height == new ExactPlotCoordinate(200, 3), "width-limited fit retains fractional height without distortion");
-        var height = Ecg12ScreenTransform.Resolve(fit, 300, 200, 600, 100);
-        Check.That(height.Factor == new ExactPlotCoordinate(1, 2) && height.Width == new ExactPlotCoordinate(150, 1), "height-limited fit uses one factor for both axes");
-        var large = Ecg12ScreenTransform.Resolve(fit, int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue);
-        Check.That(large.Factor == new ExactPlotCoordinate(1, 1), "equal extreme bounds compare without overflow");
-    }
-
     private static void ExplicitTransformRoundTripsExactCoordinates()
     {
-        var transform = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ExplicitScale, 3, 2), 300, 200, 100, 100);
-        Check.That(transform.Width == new ExactPlotCoordinate(450, 1) && transform.Height == new ExactPlotCoordinate(300, 1), "explicit zoom may exceed available area without implicit fit");
-        foreach (ExactPlotCoordinate original in new ExactPlotCoordinate[] { new(0, 1), new(-7, 3), new(17, 11), new(int.MaxValue, 1) })
-        { Check.That(transform.Inverse(transform.Forward(original)) == original, "pointer inverse preserves exact coordinates including outside-page values"); }
+        (uint Numerator, uint Denominator, ExactPlotCoordinate WidthPixels, ExactPlotCoordinate HeightPixels,
+            ExactPlotCoordinate Translated, ExactPlotCoordinate Outside)[] cases =
+        [
+            (3, 2, new(450, 1), new(300, 1), new(85, 1), new(-2, 3)),
+            (5, 3, new(500, 1), new(1000, 3), new(280, 3), new(-3, 5)),
+        ];
+        foreach (var item in cases)
+        {
+            Ecg12ZoomSelection zoom = new(new(Ecg12ZoomMode.ExplicitScale, item.Numerator, item.Denominator), SystemViewCommandAssessmentPolicy.Enabled);
+            var restored = Ecg12ZoomSelection.Restore(zoom.CaptureState(), SystemViewCommandAssessmentPolicy.Disabled);
+            var transform = Ecg12ScreenTransform.Resolve(restored.Selection, 300, 200, 100, 100);
+            Check.That(transform.Width == item.WidthPixels && transform.Height == item.HeightPixels && !restored.CaptureDisplay().CanSelect,
+                "saved explicit zoom retains exact dimensions beyond the viewport while selection stays disabled");
+            foreach (ExactPlotCoordinate logical in new ExactPlotCoordinate[] { new(0, 1), new(-7, 3), new(17, 11), new(123, 11), new(int.MaxValue, 1) })
+            {
+                Check.That(transform.Inverse(transform.Forward(logical)) == logical, "local coordinate round trip stays exact");
+                foreach (ExactPlotCoordinate origin in new ExactPlotCoordinate[] { new(10, 1), new(-17, 7), new(19, 7) })
+                    Check.That(transform.InverseAt(transform.ForwardAt(logical, origin), origin) == logical,
+                        "window coordinate round trip retains fractional positive and negative scrolled origins");
+            }
+            Check.That(transform.InverseAt(new(10, 1), new(10, 1)) == new ExactPlotCoordinate(0, 1), "page origin maps to logical zero");
+            Check.That(transform.ForwardAt(new(50, 1), new(10, 1)) == item.Translated &&
+                transform.InverseAt(item.Translated, new(10, 1)) == new ExactPlotCoordinate(50, 1),
+                "translation occurs after forward scale and before inverse scale");
+            Check.That(transform.InverseAt(new(-24, 7), new(-17, 7)) == item.Outside,
+                "outside-page points remain outside for downstream hit bounds checks");
+        }
         var actual = Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ActualSize, 1, 1), 300, 200, 1, 1);
-        Check.That(actual.Width == new ExactPlotCoordinate(300, 1), "100 percent does not shrink to available area");
+        Check.That(actual.Width == new ExactPlotCoordinate(300, 1) &&
+            actual.ForwardAt(new(int.MaxValue, 1), new(int.MaxValue, 1)) == new ExactPlotCoordinate(2L * int.MaxValue, 1),
+            "actual size ignores available area and wide translated coordinates do not overflow");
     }
 
     private static void TransformRejectsMalformedInputs()
@@ -93,20 +66,38 @@ internal static class Ecg12ScreenTransformSpecifications
         { Check.That(Reason(() => Ecg12ScreenTransform.Resolve(fit, bounds[0], bounds[1], bounds[2], bounds[3])) == "Ecg12Zoom.InvalidGeometry", "all geometry dimensions must be positive"); }
         var accepted = Ecg12ScreenTransform.Resolve(fit, 10, 10, 5, 5);
         Check.That(Reason(() => accepted.Forward(new(1, 0))) == "Ecg12Zoom.InvalidCoordinate" &&
-            Reason(() => accepted.Inverse(null!)) == "Ecg12Zoom.InvalidCoordinate" && accepted.Factor == new ExactPlotCoordinate(1, 2),
+            Reason(() => accepted.Inverse(null!)) == "Ecg12Zoom.InvalidCoordinate" &&
+            Reason(() => accepted.ForwardAt(new(1, 1), new(1, 0))) == "Ecg12Zoom.InvalidCoordinate" &&
+            Reason(() => accepted.InverseAt(null!, new(1, 1))) == "Ecg12Zoom.InvalidCoordinate" &&
+            Reason(() => accepted.InverseAt(new(1, 1), null!)) == "Ecg12Zoom.InvalidCoordinate" &&
+            accepted.Factor == new ExactPlotCoordinate(1, 2) && accepted.Width == new ExactPlotCoordinate(5, 1),
             "invalid point conversion leaves immutable transform usable");
         Check.That(Reason(() => Ecg12ScreenTransform.Resolve(new(Ecg12ZoomMode.ExplicitScale, 0, 1), 1, 1, 1, 1)) == "Ecg12Zoom.InvalidSelection", "invalid zoom state cannot enter geometry");
     }
 
-    private static void RestoredZoomRecomputesForCurrentArea()
+    private static void RestoredFitTransformUsesCurrentLimitingAxis()
     {
         Ecg12ZoomSelection original = new(new(Ecg12ZoomMode.FitPage, 1, 1), SystemViewCommandAssessmentPolicy.Enabled);
         var restored = Ecg12ZoomSelection.Restore(original.CaptureState(), SystemViewCommandAssessmentPolicy.CourseLocked);
         var before = Ecg12ScreenTransform.Resolve(original.Selection, 300, 200, 300, 200);
-        var after = Ecg12ScreenTransform.Resolve(restored.Selection, 300, 200, 150, 100);
-        Check.That(before.Factor == new ExactPlotCoordinate(1, 1) && after.Factor == new ExactPlotCoordinate(1, 2) && !restored.CaptureDisplay().CanSelect,
-            "current geometry can resolve saved intent while selection stays locked");
-        Check.That(after.Inverse(after.Forward(new(123, 7))) == new ExactPlotCoordinate(123, 7), "resized recovered view retains logical cursor coordinate");
+        Check.That(before.Factor == new ExactPlotCoordinate(1, 1) && !restored.CaptureDisplay().CanSelect,
+            "saved fit intent remains usable while current selection permission is locked");
+        (int AreaWidthPixels, int AreaHeightPixels, ExactPlotCoordinate Factor, ExactPlotCoordinate WidthPixels, ExactPlotCoordinate HeightPixels)[] cases =
+        [
+            (100, 100, new(1, 3), new(100, 1), new(200, 3)),
+            (600, 100, new(1, 2), new(150, 1), new(100, 1)),
+            (150, 100, new(1, 2), new(150, 1), new(100, 1)),
+        ];
+        foreach (var item in cases)
+        {
+            var after = Ecg12ScreenTransform.Resolve(restored.Selection, 300, 200, item.AreaWidthPixels, item.AreaHeightPixels);
+            Check.That(after.Factor == item.Factor && after.Width == item.WidthPixels && after.Height == item.HeightPixels,
+                "current width, height or tied limiting axes retain one exact aspect ratio");
+            Check.That(after.Inverse(after.Forward(new(123, 7))) == new ExactPlotCoordinate(123, 7),
+                "resized recovered view retains logical cursor coordinates");
+        }
+        var large = Ecg12ScreenTransform.Resolve(restored.Selection, int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue);
+        Check.That(large.Factor == new ExactPlotCoordinate(1, 1), "equal extreme bounds compare without overflow");
     }
 
     private static string Reason(Action action)

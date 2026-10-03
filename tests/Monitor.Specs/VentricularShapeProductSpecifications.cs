@@ -15,18 +15,21 @@ internal static class VentricularShapeProductSpecifications
     ];
     private static void VentricularShapesPreserveQrsDetectionAndNonEcgChannels()
     {
+        var reference = PhysiologyIllustrationSource.Create();
+        var referenceBlocks = Enumerable.Range(1, 110)
+            .Select(step => reference.AdvanceTo(step * 200_000_000L, 50, 1, 100)).ToArray();
         foreach (var shape in Enum.GetValues<EcgVentricularIllustration>().Where(s => s != EcgVentricularIllustration.Reference))
         {
             var config = PhysiologyIllustrationConfiguration.Default with { VentricularShape = shape };
             Check.That(config.ResolvePlan() == PhysiologyIllustrationConfiguration.Default.ResolvePlan(), "QRS shape does not shift atrial/ventricular event clocks");
-            var source = PhysiologyIllustrationSource.Create(config); var reference = PhysiologyIllustrationSource.Create();
+            var source = PhysiologyIllustrationSource.Create(config);
             var detector = new EcgHeartRateMeasurement(PhysiologyIllustrationSource.ChannelId(0));
             EcgHeartRateMeasurement? restored = null;
             int count = 0; bool changed = false;
             for (int step = 1; step <= 110; step++)
             {
                 var actual = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
-                var expected = reference.AdvanceTo(step * 200_000_000L, 50, 1, 100);
+                var expected = referenceBlocks[step - 1];
                 Check.That(actual.Count == expected.Count, "ventricular morphology retains sample frontiers");
                 foreach (var pair in actual.Zip(expected))
                 {

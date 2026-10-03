@@ -69,16 +69,9 @@ internal static class CapnogramDispersionSpecifications
 
     private static void DispersedNativeSamplesSurviveRecovery()
     {
-        var expected = Group(100_000_000).AdvanceTo(8_000_000_000, 1000, 40, 100);
-        var group = Group(100_000_000);
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(actual.Count == 30 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "dispersed CO2 paths and active tails survive native split/restore with original sample clocks");
+        var actual = NativeRecoveryChecks.Verify(() => Group(100_000_000),
+            [1_875_000_000, 2_190_000_000, 2_475_000_000, 2_575_000_000, 2_675_000_000, 4_350_000_000, 4_650_000_000, 4_750_000_000, 8_000_000_000],
+            1000, 40, 100, 30, nameof(DispersedNativeSamplesSurviveRecovery));
         var undispersed = Group(0).AdvanceTo(8_000_000_000, 1000, 40, 100);
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();

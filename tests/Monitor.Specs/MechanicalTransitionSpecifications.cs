@@ -16,7 +16,7 @@ internal static class MechanicalTransitionSpecifications
     [
         new(nameof(MechanicalCutoffUsesVentricularCycleIndices), MechanicalCutoffUsesVentricularCycleIndices),
         new(nameof(MechanicalCutoffPreservesDelayedPulseTails), MechanicalCutoffPreservesDelayedPulseTails),
-        new(nameof(MechanicalTransitionRecoversAcrossCutoff), MechanicalTransitionRecoversAcrossCutoff),
+        new(nameof(MechanicalSchedulesRecoverNativeStreams), MechanicalSchedulesRecoverNativeStreams),
         new(nameof(MechanicalScheduleBoundsDefaultsAndAtomicFailure), MechanicalScheduleBoundsDefaultsAndAtomicFailure),
     ];
 
@@ -51,18 +51,32 @@ internal static class MechanicalTransitionSpecifications
         Check.That(Samples(normal, Pleth).Skip(265).Take(64).Any(value => value > 0), "normal control retains the next mechanical pulse");
     }
 
-    private static void MechanicalTransitionRecoversAcrossCutoff()
+    private static void MechanicalSchedulesRecoverNativeStreams()
     {
-        var expected = Group(Plan()).AdvanceTo(8_000_000_000, 2000, 40, 100);
-        var group = Group(Plan());
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 40; step++)
+        (string Name, RegularPhysiologyPlan Plan)[] cases =
+        [
+            ("permanent cutoff", Plan()),
+            ("resumption", Plan() with { MechanicalDurationCycles = 1 }),
+            ("resumption with stride", Plan() with { MechanicalDurationCycles = 2, MechanicalEveryCycles = 2 }),
+        ];
+        // Cover empty state, either side of cutoff, delayed pulse arrival, resumption,
+        // the old tail endpoint, and the first stride-eligible ejection and transit.
+        long[] boundariesNs = [0, 799_999_999, 800_000_001, 1_320_000_000, 1_600_000_001,
+            1_832_000_000, 2_400_000_001, 3_440_000_001, 4_520_000_000, 4_600_000_000, 8_000_000_000];
+        foreach (var (name, plan) in cases)
         {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
+            var expected = Group(plan).AdvanceTo(8_000_000_000, 2000, 40, 100);
+            var group = Group(plan);
+            List<byte[]> actual = [];
+            foreach (long boundaryNs in boundariesNs)
+            {
+                actual.AddRange(group.AdvanceTo(boundaryNs, 2000, 40, 100));
+                if (boundaryNs != boundariesNs[^1])
+                    group = PhysiologyWaveformGroup.Restore(group.CaptureState());
+            }
+            Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+                $"{name}: original clocks, partial blocks and delayed tails recover as exact native wire bytes");
         }
-        Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "cutoff and post-cutoff delayed tails survive native split recovery");
     }
 
     private static void MechanicalScheduleBoundsDefaultsAndAtomicFailure()

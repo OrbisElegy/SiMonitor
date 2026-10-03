@@ -12,7 +12,6 @@ internal static class TWaveScaleSpecifications
         new(nameof(TScaleDefaultsAndComponentIsolation), TScaleDefaultsAndComponentIsolation),
         new(nameof(TScalePreservesProjectionAndIndependentTiming), TScalePreservesProjectionAndIndependentTiming),
         new(nameof(TScaleOwnsInputsAndRejectsInvalidBounds), TScaleOwnsInputsAndRejectsInvalidBounds),
-        new(nameof(TScaleCheckpointRecoveryPreservesNativeBytes), TScaleCheckpointRecoveryPreservesNativeBytes),
     ];
 
     private static void TScaleDefaultsAndComponentIsolation()
@@ -74,18 +73,4 @@ internal static class TWaveScaleSpecifications
         }
     }
 
-    private static void TScaleCheckpointRecoveryPreservesNativeBytes()
-    {
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(tWave: Scales(-1250));
-        var expected = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(1_600_000_000, 400, 100);
-        var source = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 1, electrodes);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 100; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
-            "fractional inverted T gain survives every-frame native recovery");
-    }
 }

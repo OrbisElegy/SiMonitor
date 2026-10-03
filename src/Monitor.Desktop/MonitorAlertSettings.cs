@@ -87,6 +87,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal void RestorePreferences(MonitorAlarmPreferences preferences)
     {
         preferences.Validate();
+        AdditionalLimits.Reset();
         HeartRateEnabled.IsChecked = preferences.HeartRate.Enabled;
         CriticalLowHeartRate.Value = preferences.HeartRate.CriticalLow / 1000m;
         WarningLowHeartRate.Value = preferences.HeartRate.WarningLow / 1000m;

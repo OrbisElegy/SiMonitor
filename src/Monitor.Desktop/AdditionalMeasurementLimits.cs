@@ -11,13 +11,36 @@ namespace Monitor.Desktop;
 // Persistent independent editors; each is hosted in its own alarm category.
 internal sealed class AdditionalMeasurementLimits
 {
+    private readonly IReadOnlyDictionary<MonitorNumeric, PressureLimitNotice> _pressureNotices =
+        new[] { MonitorNumeric.AbpMean, MonitorNumeric.PaMean, MonitorNumeric.CvpMean }
+            .ToDictionary(numeric => numeric, numeric => new PressureLimitNotice(numeric));
     internal IReadOnlyDictionary<MonitorNumeric, LimitEditor> Editors { get; } =
         MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new LimitEditor(d));
+    internal AdditionalMeasurementLimits()
+    {
+        foreach (var (numeric, pressure) in _pressureNotices)
+        {
+            var editor = Editors[numeric];
+            editor.Enabled.IsCheckedChanged += (_, _) => pressure.Reset();
+            foreach (var field in new[] { editor.CriticalLow, editor.WarningLow, editor.WarningHigh, editor.CriticalHigh })
+            { field.ValueChanged += (_, _) => pressure.Reset(); }
+        }
+    }
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
     {
         foreach (var descriptor in MeasuredLimitNotice.Descriptors)
-            if (MeasuredLimitNotice.Evaluate(descriptor.Numeric, Editors[descriptor.Numeric].Limits, snapshot) is { } notice)
+        {
+            var limits = Editors[descriptor.Numeric].Limits;
+            var notice = _pressureNotices.TryGetValue(descriptor.Numeric, out var pressure)
+                ? pressure.Evaluate(limits, snapshot)
+                : MeasuredLimitNotice.Evaluate(descriptor.Numeric, limits, snapshot);
+            if (notice is not null)
             { yield return notice; }
+        }
+    }
+    internal void Reset()
+    {
+        foreach (var pressure in _pressureNotices.Values) { pressure.Reset(); }
     }
 
     internal sealed class LimitEditor : StackPanel
@@ -37,6 +60,8 @@ internal sealed class AdditionalMeasurementLimits
             WarningLow = Add("Warning 下限", descriptor.TeachingDefaults.WarningLow!.Value);
             WarningHigh = Add("Warning 上限", descriptor.TeachingDefaults.WarningHigh!.Value);
             CriticalHigh = Add("Critical 上限", descriptor.TeachingDefaults.CriticalHigh!.Value);
+            if (descriptor.Numeric is MonitorNumeric.AbpMean or MonitorNumeric.PaMean or MonitorNumeric.CvpMean)
+            { Children.Add(DesktopInformationPages.Help("pressure-alarm-validation")); }
             NumericUpDown Add(string label, int value)
             {
                 string text = descriptor.Label + " " + label + "（" + descriptor.Unit + "）";

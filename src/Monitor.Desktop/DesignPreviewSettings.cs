@@ -25,12 +25,28 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private EcgInfarctionZones? _appliedZones;
     internal TextBlock ShapeEditStatus { get; } = Text("");
     internal TextBlock ShapeEditSummary { get; } = Text("");
-    internal void MarkShapeApplied(ProjectedEcgDemoConfiguration configuration)
+    internal TextBlock AppliedEcgParameters { get; } = Text("");
+    internal TextBlock AppliedRespirationParameters { get; } = Text("");
+    internal TextBlock AppliedEjectionParameters { get; } = Text("");
+    internal void MarkParametersApplied(ProjectedEcgDemoConfiguration configuration, PhysiologyDemoConfiguration physiology)
     {
         _appliedShapeSelection = EcgSelection;
         _appliedTContour = configuration.TContour;
         _appliedInfarction = configuration.Infarction;
         _appliedZones = configuration.Zones;
+        AppliedEcgParameters.Text = "心电图 · " + EcgChoices[EcgSelection] + "\n" + EcgTemplateSummary.Describe(configuration);
+        string plateau = physiology.Co2PlateauStartCentiMmHg is { } value
+            ? (value / 100m).ToString("0.##", CultureInfo.InvariantCulture) + " mmHg" : "随模板";
+        AppliedRespirationParameters.Text = $"呼吸 · {RespirationChoices[RespirationSelection]}\n" +
+            $"周期 {physiology.BreathPeriodMilliseconds} ms · 吸气 {physiology.InspirationMilliseconds} ms\n" +
+            $"RESP 相对信号幅度 {physiology.RespAmplitudeCounts} · 心源性干扰幅度 {physiology.RespCardiacArtifactCounts}\n" +
+            $"CO₂ 基线 {physiology.Co2BaselineMmHg} mmHg · 呼气末目标 {physiology.Co2EndExpiratoryMmHg} mmHg · 平台起始高度 {plateau}\n" +
+            $"死腔 {physiology.Co2DeadSpaceMilliseconds} ms · 上升 {physiology.Co2RiseMilliseconds} ms · 下降 {physiology.Co2FallMilliseconds} ms\n" +
+            $"管路延迟 {physiology.Co2TransportDelayMilliseconds} ms · 展宽步长 {physiology.Co2DispersionStepMilliseconds} ms";
+        bool noEjection = !physiology.VentricularMechanicalEnabled || physiology.CardiacActivity is
+            CardiacActivity.Absent or CardiacActivity.AtrialOnly || VentricularDisorganizationReference.IsPattern(physiology.ConductionPattern);
+        AppliedEjectionParameters.Text = "射血 · " + EjectionChoices[EjectionSelection] + "\n" +
+            (noEjection ? "无有效射血" : "按已应用节律与机械事件生成射血");
         RefreshShapeSummary();
     }
     private void RefreshShapeSummary()
@@ -55,6 +71,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ShapeEditStatus.Text = "形态参数 · 输入不完整或无效，尚未应用";
             ShapeEditSummary.Text = "请检查导联选择、幅度及时间参数；正在运行的波形保持不变。";
         }
+        ShapeEditStatus.IsVisible = ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal) ||
+            ShapeEditStatus.Text.Contains("无效", StringComparison.Ordinal);
     }
     internal TContourParameterEditor TContourParameters { get; } = new();
     internal InfarctionParameterEditor InfarctionParameters { get; } = new();
@@ -263,6 +281,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ("压力", Before(vitals, AbpPulseGain)));
         var advancedGroups = new List<(string Title, Control Content)>
         { ("心电图", _advancedEcg), ("呼吸", _advancedRespiration), ("射血", _advancedEjection) };
+        var appliedParameters = new StackPanel { Spacing = 20 };
+        appliedParameters.Children.Add(Text("当前运行采用的参数（非测量值）；成功应用后更新。"));
+        appliedParameters.Children.Add(AppliedEcgParameters);
+        appliedParameters.Children.Add(AppliedRespirationParameters);
+        appliedParameters.Children.Add(AppliedEjectionParameters);
+        advancedGroups.Add(("当前已应用参数", appliedParameters));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
         SectionPages[5] = new SettingsSections("高级参数", advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[]
@@ -556,13 +580,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _advancedEjection.Children.Clear(); _advancedTools.Children.Clear();
         _respSignal.Children.Clear(); _co2Shape.Children.Clear(); _co2Response.Children.Clear();
         _advancedEcg.Children.Add(DesktopInformationPages.Help("topic-8"));
-        _advancedEcg.Children.Add(Text("心电图 · " + EcgChoices[EcgSelection]));
         var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         RefreshShapeSummary();
-        _advancedEcg.Children.Add(ShapeEditStatus);
-        _advancedEcg.Children.Add(ShapeEditSummary);
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
+        if (config.Ecg.TContour is null && config.Ecg.Infarction is null)
+        { _advancedEcg.Children.Add(Text("此模板暂无可编辑的心电图高级参数。")); }
+        _advancedEcg.Children.Add(ShapeEditStatus);
         ToolTip.SetTip(RespirationGroups, "当前呼吸模板：" + RespirationChoices[RespirationSelection]);
         _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
         _respSignal.Children.Add(RespSignalAmplitude);
@@ -597,7 +621,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _co2Response.Children.Add(DesktopInformationPages.Help("settings-detail-6"));
         _advancedRespiration.Children.Add(RespirationGroups);
         _advancedRespiration.Children.Add(ResetRespirationPage);
-        _advancedEjection.Children.Add(Text("射血 · " + EjectionChoices[EjectionSelection]));
         try
         {
             var selected = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, EjectionSelection).Physiology;

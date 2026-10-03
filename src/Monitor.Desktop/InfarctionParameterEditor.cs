@@ -24,7 +24,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal ComboBox InjuryRegion { get; } = Region();
     internal ComboBox NecrosisRegion { get; } = Region();
     private readonly StackPanel _zones = new() { Spacing = 8, IsVisible = false };
-    internal TabControl Groups { get; } = new();
+    internal TabControl Groups { get; } = new() { Padding = new Avalonia.Thickness(0) };
     private readonly StackPanel _tOverride = new() { Spacing = 8 };
     private readonly TextBlock _componentNote = new() { Text = "本模式不保留阶段模板的 ST–T 融合；QRS 混合比例仅为形态参数。", TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private readonly StackPanel _chest = new() { Spacing = 8 };
@@ -36,11 +36,12 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Spacing = 8;
         Delay.ValueChanged += (_, _) => Changed?.Invoke();
 
-        Children.Add(ComponentsEnabled); Children.Add(_componentNote);
         var regionPage = new StackPanel { Spacing = 8 };
         var repolarizationPage = new StackPanel { Spacing = 8 };
         var injuryPage = new StackPanel { Spacing = 8 };
         var necrosisPage = new StackPanel { Spacing = 8 };
+        regionPage.Children.Add(ComponentsEnabled);
+        regionPage.Children.Add(_componentNote);
         regionPage.Children.Add(_region);
         _chest.Children.Add(new TextBlock { Text = "胸导联区域（至少选择一个）" });
         var row = new WrapPanel();
@@ -78,7 +79,15 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Necrosis.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         foreach (var field in new[] { QrsWeight, TPeak, JPoint, StEnd, StArch }) { field.ValueChanged += (_, _) => Changed?.Invoke(); }
         RefreshComponents();
-        static TabItem Page(string title, Control content) => new() { Header = title, Content = content, MinHeight = 44 };
+        static TabItem Page(string title, Control content) => new()
+        {
+            Header = title,
+            Content = content,
+            Padding = new Avalonia.Thickness(0),
+            Margin = new Avalonia.Thickness(0, 0, 20, 0),
+            FontSize = 14,
+            MinHeight = 44
+        };
         static void Add(StackPanel host, string label, Control control)
         {
             host.Children.Add(new TextBlock { Text = label }); host.Children.Add(control);

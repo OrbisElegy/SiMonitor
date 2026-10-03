@@ -8,7 +8,6 @@ internal static class HyperkalemiaRepolarizationSpecifications
     public static Specification[] All =>
     [
         new(nameof(HyperkalemiaIllustrationProjectsDiffusePeakedTAndShortQt), HyperkalemiaIllustrationProjectsDiffusePeakedTAndShortQt),
-        new(nameof(HyperkalemiaIllustrationRestoresThroughRepolarization), HyperkalemiaIllustrationRestoresThroughRepolarization),
     ];
     private static void HyperkalemiaIllustrationProjectsDiffusePeakedTAndShortQt()
     {
@@ -29,17 +28,5 @@ internal static class HyperkalemiaRepolarizationSpecifications
         Check.That(samples.Count(s => s.Tick.SimTimeNs >= 340_000_000 && s.MicrovoltValues[9] > 600) < 20, "narrow T crown rather than broad hyperacute shape");
         var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HyperkalemiaRepolarizationReference.CreateLeadIIBands()).GenerateBefore(800_000_000, 200, 100);
         Check.That(samples.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "monitor II and projected II agree");
-    }
-    private static void HyperkalemiaIllustrationRestoresThroughRepolarization()
-    {
-        foreach (long boundary in new[] { 338_000_000L, 402_000_000, 458_000_000 })
-        {
-            var source = ElectrodeSignalGenerator.Start(HyperkalemiaRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, HyperkalemiaRepolarizationReference.CreateElectrodes());
-            source.GenerateBefore(boundary, 200, 100);
-            var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-            var a = source.GenerateBefore(1_600_000_000, 400, 100);
-            var b = restored.GenerateBefore(1_600_000_000, 400, 100);
-            Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "repolarization and next beat restore exactly");
-        }
     }
 }

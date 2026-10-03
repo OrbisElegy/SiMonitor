@@ -102,16 +102,9 @@ internal static class RespirationSpecifications
         var boundary = Group();
         Check.That(boundary.AdvanceTo(2_189_999_999, 548, 1, 100).Count == 0 &&
             boundary.AdvanceTo(2_190_000_000, 1, 1, 100).Count == 1, "shared CO2 processing delay still gates Resp publication");
-        var expected = Group().AdvanceTo(6_000_000_000, 750, 30, 100);
-        var group = Group();
-        List<byte[]> actual = [];
-        for (int step = 1; step <= 30; step++)
-        {
-            actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-            group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "mixed unequal-phase Resp/CO2 samples, clocks and active bands survive split recovery byte-for-byte");
+        var actual = NativeRecoveryChecks.Verify(Group,
+            [1_250_000_000, 1_375_000_000, 2_190_000_000, 3_750_000_000, 3_850_000_000, 3_950_000_000, 6_000_000_000],
+            750, 30, 100, 20, nameof(RespCo2NativeRecoveryPreservesUnequalPhases));
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Resp)).ToArray();
         var plan = Timeline(1_250_000_000);
         var source = PhysiologySignalGenerator.Start(plan, "AcqResp125@1", 1, new RespirationPlan(-1000).CreateChannel(plan, Resp, 7).Bands);

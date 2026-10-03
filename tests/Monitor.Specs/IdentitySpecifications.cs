@@ -14,7 +14,6 @@ internal static class IdentitySpecifications
         new(nameof(LocalRootRequiresBothChanges), LocalRootRequiresBothChanges),
         new(nameof(RemoteBootstrapIsRejected), RemoteBootstrapIsRejected),
         new(nameof(AtomicBootstrapActivatesAdmin), AtomicBootstrapActivatesAdmin),
-        new(nameof(PasswordOnlyBootstrapIsRejected), PasswordOnlyBootstrapIsRejected),
         new(nameof(NfkcRootReuseIsRejected), NfkcRootReuseIsRejected),
         new(nameof(CompromisedPasswordIsRejected), CompromisedPasswordIsRejected),
         new(nameof(FailedCommitRemainsBootstrapOnly), FailedCommitRemainsBootstrapOnly),
@@ -34,6 +33,10 @@ internal static class IdentitySpecifications
             "valid local root must be forced to change both fields");
         Check.That(!fixture.Service.MayStartNetworkListener(),
             "bootstrap-only state must keep listeners closed");
+        BootstrapOutcome passwordOnly = fixture.Service.Complete(
+            Request(true, null), fixture.BootstrapPassword, fixture.NewPassword);
+        Check.That(passwordOnly.Kind == BootstrapOutcomeKind.Rejected && fixture.Repository.Account is null &&
+            !fixture.Service.MayStartNetworkListener(), "changing only the password cannot activate root or open listeners");
     }
 
     private static void RemoteBootstrapIsRejected()
@@ -69,15 +72,6 @@ internal static class IdentitySpecifications
             Request(true, "anotheradmin"), fixture.BootstrapPassword, fixture.NewPassword);
         Check.That(reused.ReasonCode == "identity.bootstrap.completed",
             "retired root credential must remain permanently rejected");
-    }
-
-    private static void PasswordOnlyBootstrapIsRejected()
-    {
-        IdentityFixture fixture = new();
-        BootstrapOutcome outcome = fixture.Service.Complete(
-            Request(true, null), fixture.BootstrapPassword, fixture.NewPassword);
-        Check.That(outcome.Kind == BootstrapOutcomeKind.Rejected,
-            "changing only the password must reject");
     }
 
     private static void NfkcRootReuseIsRejected()

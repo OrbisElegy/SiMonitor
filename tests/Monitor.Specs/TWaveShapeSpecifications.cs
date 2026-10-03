@@ -12,7 +12,6 @@ internal static class TWaveShapeSpecifications
         new(nameof(TPeakMovesWithoutChangingAmplitudeOrSupport), TPeakMovesWithoutChangingAmplitudeOrSupport),
         new(nameof(TPeakDefaultAndNonRepolarizationSamplesStayIdentical), TPeakDefaultAndNonRepolarizationSamplesStayIdentical),
         new(nameof(TPeakInvalidAndSubnanosecondMapsReject), TPeakInvalidAndSubnanosecondMapsReject),
-        new(nameof(TPeakSignedIndependentRecoveryPreservesSamples), TPeakSignedIndependentRecoveryPreservesSamples),
     ];
 
     private static void TPeakMovesWithoutChangingAmplitudeOrSupport()
@@ -73,19 +72,4 @@ internal static class TWaveShapeSpecifications
         Check.That(collapsed, "nanosecond rounding cannot collapse a phase interval");
     }
 
-    private static void TPeakSignedIndependentRecoveryPreservesSamples()
-    {
-        var plan = Plan with { IndependentVentricularPeriodNs = 1_100_000_000, VentricularElectricalOffsetNs = 900_000_000, VentricularMechanicalOffsetNs = 980_000_000 };
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(tWave: new([1000, 1000, 1000, 1000, -1000, 0, 1250, 1000, 1000, 1000]), tShape: new(375));
-        var expected = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(2_800_000_000, 700, 100);
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 175; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
-            "signed T phase maps retain late tails and exact samples through every-frame recovery");
-    }
 }

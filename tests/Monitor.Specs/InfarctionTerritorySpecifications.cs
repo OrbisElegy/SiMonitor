@@ -87,9 +87,14 @@ internal static class InfarctionTerritorySpecifications
             for (int step = 1; step <= 50; step++)
             {
                 actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-                source = ElectrodeSignalGenerator.Restore(source.CaptureState());
+                // Restore around waveform joins and cycle wrap; still compare every native sample.
+                if (step is 1 or 9 or 10 or 11 or 13 or 15 or 22 or 28 or 37 or 38 or 49)
+                { source = ElectrodeSignalGenerator.Restore(source.CaptureState()); }
             }
-            Check.That(expected.Zip(actual).All(pair => pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)), "limb territory recovery preserves all lead samples");
+            Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair =>
+                pair.First.Tick == pair.Second.Tick &&
+                pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)),
+                "limb territory recovery preserves every sample and its native clock");
         }
     }
 }

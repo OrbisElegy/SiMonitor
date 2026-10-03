@@ -16,14 +16,10 @@ internal static class NoDataPresentationSpecifications
             AvailableDataPassesThroughWithoutSafetySubstitution),
         new(nameof(NoDataProjectsOneAtomicSilentSafetyState),
             NoDataProjectsOneAtomicSilentSafetyState),
-        new(nameof(DeviceResolvedStaleRetentionExpiresAtExactBoundary),
-            DeviceResolvedStaleRetentionExpiresAtExactBoundary),
-        new(nameof(NoDataNeverClearsHistoryOrCalibrationImmediately),
-            NoDataNeverClearsHistoryOrCalibrationImmediately),
+        new(nameof(StaleRetentionAndRecoveryExpireAtExactBoundary),
+            StaleRetentionAndRecoveryExpireAtExactBoundary),
         new(nameof(VerifiedContinuationRestoresSourceDrivenPresentation),
             VerifiedContinuationRestoresSourceDrivenPresentation),
-        new(nameof(CheckpointRestorePreservesTheNoDataBoundary),
-            CheckpointRestorePreservesTheNoDataBoundary),
         new(nameof(InvalidPolicyCheckpointAndTimeFailClosed),
             InvalidPolicyCheckpointAndTimeFailClosed),
     ];
@@ -80,11 +76,14 @@ internal static class NoDataPresentationSpecifications
                 PatientAlarmSuspension.SuspendedUnknown &&
             projection.PhysiologyEvents == PhysiologyEventPresentation.Suppress &&
             projection.PhysiologyAudio == PhysiologyAudioPresentation.Silent &&
+            !projection.ClearLiveTraceImmediately &&
+            projection.PreservePinnedHistory &&
+            projection.PreserveCalibrationGutter &&
             projection.ShowConnectivityExplanation,
             "NoData must suppress patient semantics while preserving or hiding numerics by policy");
     }
 
-    private static void DeviceResolvedStaleRetentionExpiresAtExactBoundary()
+    private static void StaleRetentionAndRecoveryExpireAtExactBoundary()
     {
         DataContinuityStateMachine continuity = StartContinuity();
         DataContinuityState noData = continuity.Disconnect(false, 100);
@@ -94,11 +93,18 @@ internal static class NoDataPresentationSpecifications
         NumericNoDataProjection before = Numeric(
             presentation.Advance(2_000_000_099),
             "HR-ECG");
+        NoDataPresentationState checkpoint = presentation.CaptureState();
+        var restored = NoDataPresentationStateMachine.Restore(Policies(), checkpoint);
+        Check.That(restored.CaptureState() == checkpoint &&
+            Numeric(restored.CaptureProjection(), "HR-ECG") == before,
+            "restoration preserves the exact stale projection and authority clock");
         NumericNoDataProjection atBoundary = Numeric(
             presentation.Advance(2_000_000_100),
             "HR-ECG");
 
         Check.That(
+            Numeric(restored.Advance(2_000_000_100), "HR-ECG") == atBoundary &&
+            restored.CaptureState() == presentation.CaptureState() &&
             before.Quality == NumericNoDataQuality.Stale &&
             before.ValuePresentation ==
                 NumericValuePresentation.PreserveLastValue &&
@@ -106,23 +112,6 @@ internal static class NoDataPresentationSpecifications
             atBoundary.ValuePresentation ==
                 NumericValuePresentation.UnavailableMarker,
             "resolved stale retention must expire exactly without synthesizing a zero value");
-    }
-
-    private static void NoDataNeverClearsHistoryOrCalibrationImmediately()
-    {
-        DataContinuityStateMachine continuity = StartContinuity();
-        DataContinuityState noData = continuity.Disconnect(false, 1);
-        NoDataSafetyProjection projection =
-            NoDataPresentationStateMachine.Start(Policies(), noData)
-                .CaptureProjection();
-
-        Check.That(
-            !projection.ClearLiveTraceImmediately &&
-            projection.PreservePinnedHistory &&
-            projection.PreserveCalibrationGutter &&
-            projection.LiveTrace == LiveTracePresentation.NoDataSweep &&
-            projection.LiveTraceClock == LiveTraceClock.PresentationClock,
-            "the presentation clock must sweep NoData over Live while pinned history and scale remain");
     }
 
     private static void VerifiedContinuationRestoresSourceDrivenPresentation()
@@ -149,27 +138,6 @@ internal static class NoDataPresentationSpecifications
                 PhysiologyAudioPresentation.FollowAlarmPolicy &&
             !projection.ShowConnectivityExplanation,
             "verified provisional continuation may restore source-driven patient projections");
-    }
-
-    private static void CheckpointRestorePreservesTheNoDataBoundary()
-    {
-        DataContinuityStateMachine continuity = StartContinuity();
-        DataContinuityState noData = continuity.Disconnect(false, 100);
-        var original =
-            NoDataPresentationStateMachine.Start(Policies(), noData);
-        _ = original.Advance(2_000_000_099);
-
-        NoDataPresentationState checkpoint = original.CaptureState();
-        var restored =
-            NoDataPresentationStateMachine.Restore(Policies(), checkpoint);
-
-        Check.That(
-            restored.CaptureState() == checkpoint &&
-            Numeric(restored.CaptureProjection(), "HR-ECG").Quality ==
-                NumericNoDataQuality.Stale &&
-            Numeric(restored.Advance(2_000_000_100), "HR-ECG").Quality ==
-                NumericNoDataQuality.Disconnected,
-            "restore must preserve the presentation clock and exact stale boundary");
     }
 
     private static void InvalidPolicyCheckpointAndTimeFailClosed()

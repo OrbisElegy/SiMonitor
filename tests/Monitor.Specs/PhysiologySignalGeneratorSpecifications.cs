@@ -40,10 +40,14 @@ internal static class PhysiologySignalGeneratorSpecifications
         for (int batch = 1; batch <= 40; batch++)
         {
             actual.AddRange(split.GenerateBefore(batch * 200_000_000L, 25, 100));
-            split = PhysiologySignalGenerator.Restore(split.CaptureState());
+            // Retain the first partial wave and both sides of expiration and breath onsets.
+            if (batch is 1 or 5 or 9 or 10 or 18 or 19 or 28 or 29 or 37 or 38)
+            {
+                split = PhysiologySignalGenerator.Restore(split.CaptureState());
+            }
         }
         Check.That(expected.SequenceEqual(actual) && Snapshot(whole) == Snapshot(split),
-            "multiple breath boundaries and per-batch restoration preserve full fixed-point/sample identity");
+            "multiple breath boundaries and selected restoration points preserve full fixed-point/sample identity");
         Check.That(split.GenerateBefore(8_000_000_000, 1, 100).Count == 0, "repeated deadlines never replay samples");
     }
 

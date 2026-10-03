@@ -44,9 +44,13 @@ internal static class SinusArrhythmiaPerfusionSpecifications
                 long b = source.EvaluateAt(86_400_000_000_000 + phase);
                 Check.That(Math.Abs(a - b) <= Q && a > pressure.AsymptoticPressureCentiMmHg * Q && a < short.MaxValue * Q, "pressure remains periodic and unsaturated after one day");
                 values.Add(a);
-                Check.That(Math.Abs(pleth.EvaluateAt(320_000_000_000 + phase) - pleth.EvaluateAt(86_400_000_000_000 + phase)) <= Q, "pleth evaluation at late ordinal is phase-equivalent");
             }
             Check.That(values.Max() - values.Min() > Q, "pressure pulses retain modulation");
+        }
+        for (long phase = 0; phase < 3_200_000_000; phase += 10_000_000)
+        {
+            Check.That(Math.Abs(pleth.EvaluateAt(320_000_000_000 + phase) - pleth.EvaluateAt(86_400_000_000_000 + phase)) <= Q,
+                "pleth evaluation at late ordinal is phase-equivalent");
         }
         // The first two ejections are800ms apart, followed by1000ms.
         // At1.9s only those two optical pulses have begun. Evaluate each

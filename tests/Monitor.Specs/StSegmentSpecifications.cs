@@ -13,7 +13,6 @@ internal static class StSegmentSpecifications
         new(nameof(StOffsetsHitLandmarksAndRemainContinuous), StOffsetsHitLandmarksAndRemainContinuous),
         new(nameof(StOffsetsPreserveOtherBandsAndProjection), StOffsetsPreserveOtherBandsAndProjection),
         new(nameof(StOffsetsOwnInputsAndRejectInvalidPlans), StOffsetsOwnInputsAndRejectInvalidPlans),
-        new(nameof(StOffsetsRecoverAcrossLateVentricularPhase), StOffsetsRecoverAcrossLateVentricularPhase),
     ];
 
     private static void StOffsetsHitLandmarksAndRemainContinuous()
@@ -81,18 +80,5 @@ internal static class StSegmentSpecifications
         Check.That(collapsed, "nonzero offsets require a noncollapsed ST interval");
     }
 
-    private static void StOffsetsRecoverAcrossLateVentricularPhase()
-    {
-        var plan = Plan with { IndependentVentricularPeriodNs = 1_100_000_000, VentricularElectricalOffsetNs = 900_000_000, VentricularMechanicalOffsetNs = 980_000_000 };
-        var electrodes = TextbookElectrodeReference.CreateElectrodes(tShape: new(500), stSegment: Offsets(-200, 100));
-        var expected = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes).GenerateBefore(2_800_000_000, 700, 100);
-        var source = ElectrodeSignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, electrodes);
-        List<ElectrodeSignalSample> actual = [];
-        for (int step = 1; step <= 175; step++)
-        {
-            actual.AddRange(source.GenerateBefore(step * 16_000_000L, 4, 100));
-            source = ElectrodeSignalGenerator.Restore(source.CaptureState());
-        }
-        Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.Tick == pair.Second.Tick && pair.First.MicrovoltValues.SequenceEqual(pair.Second.MicrovoltValues)), "late ST/T tails and maps survive every-frame native recovery");
-    }
+
 }

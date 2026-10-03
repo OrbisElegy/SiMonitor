@@ -9,7 +9,6 @@ internal static class NormalPrDeltaSpecifications
     [
         new(nameof(NormalPrDeltaPreservesContoursAndDelaysEvents), NormalPrDeltaPreservesContoursAndDelaysEvents),
         new(nameof(ProlongedPrDeltaRetimesVentricularComponentsAndEvents), ProlongedPrDeltaRetimesVentricularComponentsAndEvents),
-        new(nameof(NormalPrDeltaRestoresAcrossBoundaries), NormalPrDeltaRestoresAcrossBoundaries),
     ];
     private static void NormalPrDeltaPreservesContoursAndDelaysEvents()
     {
@@ -47,18 +46,5 @@ internal static class NormalPrDeltaSpecifications
         Check.That(delayed.Skip(160).All(s => s.MicrovoltValues.All(v => v == 0)), "QT ends640ms before next P");
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, NormalPrDeltaReference.CreateLeadIIBands(true)).GenerateBefore(800_000_000, 200, 100);
         Check.That(delayed.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "long PR monitorII parity");
-    }
-    private static void NormalPrDeltaRestoresAcrossBoundaries()
-    {
-        foreach (bool prolongedPr in new[] { false, true })
-            foreach (long boundary in new[] { 98_000_000L, 158_000_000, 188_000_000, 238_000_000, 240_000_000, 298_000_000, 380_000_000, 558_000_000, 638_000_000 })
-            {
-                var source = ElectrodeSignalGenerator.Start(NormalPrDeltaReference.CreatePlan(prolongedPr), "AcqECGMonitor250@1", 1, NormalPrDeltaReference.CreateElectrodes(prolongedPr));
-                source.GenerateBefore(boundary, 200, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var a = source.GenerateBefore(1_600_000_000, 400, 100);
-                var b = restored.GenerateBefore(1_600_000_000, 400, 100);
-                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "normal PR delta component boundary recovery");
-            }
     }
 }

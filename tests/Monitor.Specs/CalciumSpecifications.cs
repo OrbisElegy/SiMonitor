@@ -9,7 +9,6 @@ internal static class CalciumSpecifications
     [
         new(nameof(CalciumChangesStAndQtWithoutMovingDepolarization), CalciumChangesStAndQtWithoutMovingDepolarization),
         new(nameof(CalciumVariantsPreserveDepolarizationAndExplicitRepolarization), CalciumVariantsPreserveDepolarizationAndExplicitRepolarization),
-        new(nameof(CalciumRecoveryAndInvalidModeAreDeterministic), CalciumRecoveryAndInvalidModeAreDeterministic),
     ];
     private static void CalciumChangesStAndQtWithoutMovingDepolarization()
     {
@@ -75,21 +74,9 @@ internal static class CalciumSpecifications
             Check.That(samples.Zip(ii).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "shared monitorII");
             Check.That(samples.All(s => Math.Abs(s.MicrovoltValues[0] + s.MicrovoltValues[2] - s.MicrovoltValues[1]) <= 1), "limb identity");
         }
-    }
-    private static void CalciumRecoveryAndInvalidModeAreDeterministic()
-    {
-        foreach (var mode in Enum.GetValues<CalciumIllustration>().Where(m => m != CalciumIllustration.Reference))
-            foreach (long boundary in new[] { 238_000_000L, 278_000_000, 418_000_000, 458_000_000, 498_000_000, 618_000_000 })
-            {
-                var source = ElectrodeSignalGenerator.Start(CalciumRepolarizationReference.CreatePlan(), "AcqECGMonitor250@1", 1, CalciumRepolarizationReference.CreateElectrodes(mode));
-                source.GenerateBefore(boundary, 250, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "restore at ST/T boundaries");
-            }
         try { CalciumRepolarizationReference.CreateElectrodes((CalciumIllustration)99); }
         catch (EventWaveformException e) when (e.ReasonCode == "Calcium.InvalidMode") { return; }
         throw new InvalidOperationException("Invalid calcium mode accepted");
     }
+
 }

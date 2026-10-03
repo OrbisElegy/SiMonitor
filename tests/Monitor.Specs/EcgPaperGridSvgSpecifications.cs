@@ -13,8 +13,7 @@ internal static class EcgPaperGridSvgSpecifications
     [
         new(nameof(GridSvgBatchesAndClipsExplicitStyles), GridSvgBatchesAndClipsExplicitStyles),
         new(nameof(GridSvgSerializesFractionsWithoutCultureDependence), GridSvgSerializesFractionsWithoutCultureDependence),
-        new(nameof(GridSvgRejectsInvalidStyleAndLimits), GridSvgRejectsInvalidStyleAndLimits),
-        new(nameof(GridSvgCancellationAllowsFreshRendering), GridSvgCancellationAllowsFreshRendering),
+        new(nameof(GridSvgFailuresPreserveFreshRendering), GridSvgFailuresPreserveFreshRendering),
     ];
 
     private static void GridSvgBatchesAndClipsExplicitStyles()
@@ -44,28 +43,22 @@ internal static class EcgPaperGridSvgSpecifications
         finally { CultureInfo.CurrentCulture = prior; }
     }
 
-    private static void GridSvgRejectsInvalidStyleAndLimits()
+    private static void GridSvgFailuresPreserveFreshRendering()
     {
         EcgPaperGridPlan plan = new(0, 0, 10, 10, 0, 0, 2, 1);
+        string before = EcgPaperGridSvg.Render(plan, 10, Style);
         foreach (EcgPaperGridSvgStyle invalid in new[] { Style with { MinorColor = "url(https://example.invalid/grid)" }, Style with { MajorStrokeMilliPixels = 0 } })
         {
             ExpectReason(() => EcgPaperGridSvg.Render(plan, 10, invalid), "PaperGrid.InvalidSvgStyle");
         }
         ExpectReason(() => EcgPaperGridSvg.Render(plan, 9, Style), "PaperGrid.LineLimitExceeded");
-        Check.That(XElement.Parse(EcgPaperGridSvg.Render(plan, 10, Style)).Elements().Count() == 2,
-            "valid retry renders after rejection without persistent partial output");
-    }
-
-    private static void GridSvgCancellationAllowsFreshRendering()
-    {
-        EcgPaperGridPlan plan = new(0, 0, 10, 10, 0, 0, 2, 1);
-        string before = EcgPaperGridSvg.Render(plan, 10, Style);
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
         try { EcgPaperGridSvg.Render(plan, 10, Style, cancellation.Token); throw new InvalidOperationException("cancelled SVG accepted"); }
         catch (OperationCanceledException exception)
         { Check.That(exception.CancellationToken == cancellation.Token, "render cancellation retains caller token"); }
-        Check.That(EcgPaperGridSvg.Render(plan, 10, Style) == before, "fresh rendering remains deterministic after cancelled request");
+        Check.That(XElement.Parse(before).Elements().Count() == 2 && EcgPaperGridSvg.Render(plan, 10, Style) == before,
+            "fresh rendering remains deterministic after invalid style, capacity failure and cancellation");
     }
 
     private static void ExpectReason(Action action, string expected)

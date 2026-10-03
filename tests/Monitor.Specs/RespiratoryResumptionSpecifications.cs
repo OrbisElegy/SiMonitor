@@ -80,16 +80,11 @@ internal static class RespiratoryResumptionSpecifications
         foreach (var activity in new[] { RespiratoryActivity.Absent, RespiratoryActivity.EffortOnly })
         {
             var plan = Plan(activity);
-            var whole = Group(plan).AdvanceTo(14_000_000_000, 1750, 60, 150);
-            var group = Group(plan);
-            List<byte[]> split = [];
-            for (int step = 1; step <= 70; step++)
-            {
-                split.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
-                group = PhysiologyWaveformGroup.Restore(group.CaptureState());
-            }
-            Check.That(whole.Count == 60 && split.Count == whole.Count && whole.Zip(split).All(pair => pair.First.SequenceEqual(pair.Second)),
-                "normal, excluded and recovered segments retain every native block across checkpoint restore");
+            var whole = NativeRecoveryChecks.Verify(() => Group(plan),
+                [2_190_000_000, 3_999_999_999, 4_000_000_000, 4_000_000_001,
+                 4_800_000_000, 7_999_999_999, 8_000_000_000, 8_000_000_001,
+                 10_600_000_000, 10_725_000_000, 10_800_000_000, 12_800_000_000, 14_000_000_000],
+                1750, 60, 150, 60, $"resumed {activity}");
             short[] resp = Samples(whole, Resp);
             Check.That(resp.Skip(1000).SequenceEqual(Samples(normal, Resp).Skip(1000)) &&
                 (activity == RespiratoryActivity.EffortOnly || resp.Skip(500).Take(500).All(value => value == 0)),

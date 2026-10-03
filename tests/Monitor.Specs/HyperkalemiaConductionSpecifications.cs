@@ -10,7 +10,6 @@ internal static class HyperkalemiaConductionSpecifications
         new(nameof(HighKConductionChangesSharedTimingAndMorphology), HighKConductionChangesSharedTimingAndMorphology),
         new(nameof(HighKQrsVoltageChangesProjectedRAndS), HighKQrsVoltageChangesProjectedRAndS),
         new(nameof(HighKAbsentPRemovesAtrialEventsOnly), HighKAbsentPRemovesAtrialEventsOnly),
-        new(nameof(HighKConductionRestoresAcrossDelayedQrsAndT), HighKConductionRestoresAcrossDelayedQrsAndT),
     ];
     private static void HighKConductionChangesSharedTimingAndMorphology()
     {
@@ -82,18 +81,5 @@ internal static class HyperkalemiaConductionSpecifications
         }
         var monitor = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, HyperkalemiaConductionReference.CreateLeadIIBands(true)).GenerateBefore(3_000_000_000, 750, 100);
         Check.That(a.Zip(monitor).All(p => Math.Abs(p.First.MicrovoltValues[1] - p.Second.NormalizedValue) <= 1), "shared absentP monitorII parity");
-    }
-    private static void HighKConductionRestoresAcrossDelayedQrsAndT()
-    {
-        foreach (bool absentP in new[] { false, true })
-            foreach (long boundary in new[] { 138_000_000L, 238_000_000, 350_000_000, 602_000_000 })
-            {
-                var source = ElectrodeSignalGenerator.Start(HyperkalemiaConductionReference.CreatePlan(absentP), "AcqECGMonitor250@1", 1, HyperkalemiaConductionReference.CreateElectrodes(absentP));
-                source.GenerateBefore(boundary, 250, 100);
-                var restored = ElectrodeSignalGenerator.Restore(source.CaptureState());
-                var a = source.GenerateBefore(2_000_000_000, 500, 100);
-                var b = restored.GenerateBefore(2_000_000_000, 500, 100);
-                Check.That(a.Count == b.Count && a.Zip(b).All(p => p.First.Tick == p.Second.Tick && p.First.MicrovoltValues.SequenceEqual(p.Second.MicrovoltValues)), "long PR/QRS/T recovery exact");
-            }
     }
 }

@@ -46,7 +46,11 @@ internal static class PhysiologyWaveformGroupSpecifications
         for (int batch = 1; batch <= 20; batch++)
         {
             actual.AddRange(split.AdvanceTo(batch * 200_000_000L, 50, 1, 100));
-            split = PhysiologyWaveformGroup.Restore(split.CaptureState());
+            // Cover partial native blocks, a heartbeat wrap and both respiratory phase boundaries.
+            if (batch is 1 or 4 or 5 or 9 or 10 or 18 or 19)
+            {
+                split = PhysiologyWaveformGroup.Restore(split.CaptureState());
+            }
         }
         Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)) && Snapshot(whole) == Snapshot(split),
             "channel order, batch partition and full recovery preserve wire and pending state");

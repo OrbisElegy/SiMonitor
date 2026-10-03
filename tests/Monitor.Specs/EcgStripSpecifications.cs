@@ -31,7 +31,6 @@ internal static class EcgStripSpecifications
         new(nameof(StripDisplayRestoredReductionDoesNotBypassStateChecks), StripDisplayRestoredReductionDoesNotBypassStateChecks),
         new(nameof(ValidatedStripReductionMatchesIndependentReconstruction), ValidatedStripReductionMatchesIndependentReconstruction),
         new(nameof(ValidatedResizeReductionPreservesCapacityAndCheckpointRules), ValidatedResizeReductionPreservesCapacityAndCheckpointRules),
-        new(nameof(StripReductionPublishesMatchingGeometryTogether), StripReductionPublishesMatchingGeometryTogether),
         new(nameof(StripReductionFailurePreservesCompletedResult), StripReductionFailurePreservesCompletedResult),
         new(nameof(StripReductionRestoresUnderExplicitLimits), StripReductionRestoresUnderExplicitLimits),
         new(nameof(StripReductionWorkerRecoversFromOutputOverflow), StripReductionWorkerRecoversFromOutputOverflow),
@@ -42,7 +41,6 @@ internal static class EcgStripSpecifications
         new(nameof(StripWorkerPublishesLatestAndWakesAgain), StripWorkerPublishesLatestAndWakesAgain),
         new(nameof(StripWorkerRecoversFromInvalidSampleEvidence), StripWorkerRecoversFromInvalidSampleEvidence),
         new(nameof(StripWorkerShutdownJoinsAndRejectsAdmission), StripWorkerShutdownJoinsAndRejectsAdmission),
-        new(nameof(StripWorkerRebuildsOwnedCheckpointInNewLifecycle), StripWorkerRebuildsOwnedCheckpointInNewLifecycle),
         new(nameof(StripPumpCoalescesAndRejectsInvalidAdmission), StripPumpCoalescesAndRejectsInvalidAdmission),
         new(nameof(StripPumpFailureReleasesSlotWithoutPartialPublication), StripPumpFailureReleasesSlotWithoutPartialPublication),
         new(nameof(StripPumpConcurrentConsumersAndCancellationKeepOneRequest), StripPumpConcurrentConsumersAndCancellationKeepOneRequest),
@@ -54,7 +52,6 @@ internal static class EcgStripSpecifications
         new(nameof(StripDisplaySelectsOnlyWholeMatchingResults), StripDisplaySelectsOnlyWholeMatchingResults),
         new(nameof(StripDisplayRejectsPhaseScaleAndGutterChanges), StripDisplayRejectsPhaseScaleAndGutterChanges),
         new(nameof(StripDisplayPreservesPinnedReuseAcrossBackgroundProgress), StripDisplayPreservesPinnedReuseAcrossBackgroundProgress),
-        new(nameof(StripDisplayRestoreAndInvalidLayoutPreserveResults), StripDisplayRestoreAndInvalidLayoutPreserveResults),
         new(nameof(StripResizeCommitsPatientAndCalibrationTogether), StripResizeCommitsPatientAndCalibrationTogether),
         new(nameof(StripRejectsCalibrationFailureWithoutPartialReplacement), StripRejectsCalibrationFailureWithoutPartialReplacement),
         new(nameof(StripRestoreOwnsEvidenceAndRebuildsBothLayers), StripRestoreOwnsEvidenceAndRebuildsBothLayers),
@@ -403,6 +400,11 @@ internal static class EcgStripSpecifications
         };
         Check.That(Reason(() => EcgStripReconstructor.Restore(2, 2, corrupt, new(20, 20))) == "EcgStrip.InvalidCheckpoint",
             "external restore still revalidates voltage evidence rather than using the internal reuse path directly");
+        Check.That(strip.ColumnReduction!.Envelopes.Count == 10 &&
+            strip.ColumnReduction.Envelopes.All(envelope => envelope.MinimumY.Y == new ExactPlotCoordinate(40, 1)) &&
+            strip.Calibration.Points[1].Y.PixelNumerator == 40 &&
+            new EcgStripReconstructor(2, 2).Replace(input).ColumnReduction is null,
+            "reduced patient geometry shares calibration while reduction remains an explicit capacity choice");
     }
 
     private static void ValidatedResizeReductionPreservesCapacityAndCheckpointRules()
@@ -438,19 +440,6 @@ internal static class EcgStripSpecifications
         } }
             }
         };
-    }
-
-    private static void StripReductionPublishesMatchingGeometryTogether()
-    {
-        ReconstructedEcgStrip strip = new EcgStripReconstructor(2, 2, new(20, 20)).Replace(Input());
-        Check.That(strip.ColumnReduction is not null && strip.ColumnReduction.Envelopes.Count == 10 &&
-            ReferenceEquals(strip.PatientFrame, strip.ColumnReduction.Frame.SourceFrame) &&
-            ReferenceEquals(strip.Checkpoint.Source, strip.ColumnReduction.Frame.Checkpoint) &&
-            strip.ColumnReduction.Envelopes.All(envelope => envelope.MinimumY.Y == new ExactPlotCoordinate(40, 1)) &&
-            strip.Calibration.Points[1].Y.PixelNumerator == 40,
-            "patient, column summaries and calibration share one validated scale and source checkpoint");
-        Check.That(new EcgStripReconstructor(2, 2).Replace(Input()).ColumnReduction is null,
-            "column processing requires explicit local capacity configuration");
     }
 
     private static void StripReductionFailurePreservesCompletedResult()
@@ -636,33 +625,6 @@ internal static class EcgStripSpecifications
             throw new InvalidOperationException("disposed worker admitted work");
         }
         catch (ObjectDisposedException) { }
-    }
-
-    private static void StripWorkerRebuildsOwnedCheckpointInNewLifecycle()
-    {
-        EcgStripWorker first = new(2, 2);
-        PublishedEcgStrip original;
-        try
-        {
-            EcgStripCheckpoint input = Input();
-            SweepPathSample[] samples = input.Source.Samples.ToArray();
-            first.Enqueue(input with { Source = input.Source with { Samples = samples } });
-            samples[1] = samples[1] with { Voltage = new(1, 0) };
-            Wait(first.WaitForIdleAsync());
-            original = first.CapturePublished()!;
-        }
-        finally { Wait(first.DisposeAsync().AsTask()); }
-        EcgStripWorker restored = new(2, 2);
-        try
-        {
-            restored.Enqueue(original.Strip.Checkpoint);
-            Wait(restored.WaitForIdleAsync());
-            ReconstructedEcgStrip result = restored.CapturePublished()!.Strip;
-            Check.That(result.PatientFrame.Segments.SequenceEqual(original.Strip.PatientFrame.Segments) &&
-                result.Calibration.Points.SequenceEqual(original.Strip.Calibration.Points),
-                "a new worker revalidates owned completed evidence rather than reviving old pending work");
-        }
-        finally { Wait(restored.DisposeAsync().AsTask()); }
     }
 
     private static void StripPumpCoalescesAndRejectsInvalidAdmission()
@@ -871,18 +833,6 @@ internal static class EcgStripSpecifications
                 Check.That(Select(strip, machine.CaptureState()).Strip is null, "review seek rejects the old whole strip");
             }
         }
-    }
-
-    private static void StripDisplayRestoreAndInvalidLayoutPreserveResults()
-    {
-        EcgStripReconstructor reconstructor = new(2, 2);
-        ReconstructedEcgStrip before = reconstructor.Replace(Input());
-        ReconstructedEcgStrip restored = EcgStripReconstructor.Restore(2, 2, before.Checkpoint).Current!;
-        Check.That(Select(restored).ReasonCode == "EcgStripDisplay.Matched" &&
-            restored.Calibration.Points.SequenceEqual(before.Calibration.Points), "restored evidence yields matching complete geometry");
-        Check.That(Reason(() => Select(before, pulseLeft: 29)) == "EcgCalibration.InsufficientSpace" &&
-            ReferenceEquals(reconstructor.Current, before) && ReferenceEquals(reconstructor.CaptureCheckpoint(), before.Checkpoint),
-            "invalid target layout rejects without retiring or changing the retained reconstruction");
     }
 
     private static EcgStripCheckpoint Input()

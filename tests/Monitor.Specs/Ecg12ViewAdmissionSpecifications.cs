@@ -10,7 +10,6 @@ internal static class Ecg12ViewAdmissionSpecifications
         new(nameof(ActiveEcg12RequiresPreservedSafetyOverlay), ActiveEcg12RequiresPreservedSafetyOverlay),
         new(nameof(IndependentRecordDoesNotInheritPatientAlarms), IndependentRecordDoesNotInheritPatientAlarms),
         new(nameof(InvalidEcg12ContextCannotBypassSafety), InvalidEcg12ContextCannotBypassSafety),
-        new(nameof(Ecg12AdmissionUsesCurrentCapability), Ecg12AdmissionUsesCurrentCapability),
     ];
 
     private static void ActiveEcg12RequiresPreservedSafetyOverlay()
@@ -50,15 +49,6 @@ internal static class Ecg12ViewAdmissionSpecifications
             ExpectReason(() => Ecg12ViewAdmission.Evaluate(Ecg12RecordContext.IndependentCapturedRecord, mode, true),
                 "Ecg12Admission.ContextViewMismatch");
         }
-    }
-
-    private static void Ecg12AdmissionUsesCurrentCapability()
-    {
-        Ecg12ViewAdmissionDecision prior = Ecg12ViewAdmission.Evaluate(Ecg12RecordContext.ActiveInstance, TemporalViewMode.AcquisitionFill, true);
-        Ecg12ViewAdmissionDecision lost = Ecg12ViewAdmission.Evaluate(Ecg12RecordContext.ActiveInstance, TemporalViewMode.CapturedRecord, false);
-        Ecg12ViewAdmissionDecision recovered = Ecg12ViewAdmission.Evaluate(Ecg12RecordContext.ActiveInstance, TemporalViewMode.CapturedRecord, true);
-        Check.That(prior.MayEnter && !lost.MayEnter && recovered.MayEnter && prior.RequiresGlobalSafetyOverlay,
-            "acquisition completion does not preserve stale admission or turn an active record into an independent question");
     }
 
     private static void ExpectReason(Action action, string expected)

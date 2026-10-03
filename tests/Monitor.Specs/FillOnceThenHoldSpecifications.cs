@@ -18,8 +18,6 @@ internal static class FillOnceThenHoldSpecifications
             FrameChunkingCannotChangeFillProgress),
         new(nameof(PauseAndNoDataHoldThePartialRecord),
             PauseAndNoDataHoldThePartialRecord),
-        new(nameof(CapturedRecordSuppressesTransientReplay),
-            CapturedRecordSuppressesTransientReplay),
         new(nameof(CheckpointAndFailedCompletionAreAtomic),
             CheckpointAndFailedCompletionAreAtomic),
         new(nameof(PlanRequiresTwelveUniqueSlotsAndFullHistory),
@@ -59,6 +57,8 @@ internal static class FillOnceThenHoldSpecifications
     {
         FillOnceThenHoldStateMachine machine = Start();
         FillOnceThenHoldStateMachine skippedBoundary = Start();
+        Check.That(Reason(() => machine.CapturePinnedRecordRange()) == "FillOnce.RecordNotCaptured",
+            "an incomplete acquisition must not expose a captured range");
 
         SweepStateProjectionSnapshot complete = machine.Advance(
             10 * (long)Second,
@@ -74,6 +74,10 @@ internal static class FillOnceThenHoldSpecifications
 
         Check.That(
             complete.TemporalViewMode == TemporalViewMode.CapturedRecord &&
+            complete.TraceHistory == TraceHistoryPresentation.PinnedOriginalRange &&
+            complete.TransientReplayPolicy == TransientReplayPolicy.Suppress &&
+            complete.ReviewSegmentRef == "record.ecg12-7" &&
+            complete.FreezeAnchorSimTimeNs is null &&
             complete.SweepRevision == 18 &&
             complete.CycleIndex == 0 &&
             complete.WriteHeadPhasePpm == 999_999 &&
@@ -163,26 +167,6 @@ internal static class FillOnceThenHoldSpecifications
                 "FillOnce.PlayheadAdvancedWithoutData" &&
             StateEqual(noDataBeforeFailure, noDataMachine.CaptureState()),
             "NoData must hold partial acquisition instead of inventing samples");
-    }
-
-    private static void CapturedRecordSuppressesTransientReplay()
-    {
-        FillOnceThenHoldStateMachine machine = Start();
-        Check.That(
-            Reason(() => machine.CapturePinnedRecordRange()) ==
-                "FillOnce.RecordNotCaptured",
-            "an incomplete acquisition must not expose a captured range");
-
-        SweepStateProjectionSnapshot captured = machine.Advance(
-            10 * (long)Second,
-            10 * (long)Second);
-        Check.That(
-            captured.TraceHistory ==
-                TraceHistoryPresentation.PinnedOriginalRange &&
-            captured.TransientReplayPolicy == TransientReplayPolicy.Suppress &&
-            captured.ReviewSegmentRef == "record.ecg12-7" &&
-            captured.FreezeAnchorSimTimeNs is null,
-            "CapturedRecord must use raw pinned history without replay transients");
     }
 
     private static void CheckpointAndFailedCompletionAreAtomic()

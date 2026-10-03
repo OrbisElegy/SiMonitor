@@ -9,13 +9,15 @@ internal static class VtCaptureSchedule
     private const long PeriodNs = 375_000_000;
     private const long AdvanceNs = 45_000_000;
 
+    internal static long AdvanceForCycleNs(ulong index) => index % 32 == CaptureSlot ? AdvanceNs : 0;
+
     internal static void Visit(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, ulong? cycleLimit, ulong? cycleResume,
         int cycleStride, CancellationToken cancellationToken)
     {
         Int128 start = (Int128)plan.EpochAnchorSimTimeNs + offset;
-        Int128 Time(Int128 index) => start + index * PeriodNs - (index % 32 == CaptureSlot ? AdvanceNs : 0);
+        Int128 Time(Int128 index) => start + index * PeriodNs - AdvanceForCycleNs(checked((ulong)index));
         // Invert the nominal grid with one bounded correction at either end.
         Int128 first = inclusive <= start ? 0 : ((Int128)inclusive - start + PeriodNs - 1) / PeriodNs;
         if (Time(first) < inclusive) { first++; }

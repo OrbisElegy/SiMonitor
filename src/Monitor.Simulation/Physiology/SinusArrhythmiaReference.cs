@@ -19,13 +19,14 @@ public static class SinusArrhythmiaReference
             .Select(pair => pair.First with { TableQ32 = Array.AsReadOnly(pair.First.TableQ32.Zip(pair.Second.TableQ32).Select(v => checked(v.First - v.Second)).ToArray()) }).ToArray());
     }
 
+    internal const long GroupDurationNs = 3_200_000_000;
+    internal static ReadOnlySpan<long> CycleOffsetsNs => [0, 800_000_000, 1_800_000_000, 2_400_000_000];
+
     internal static void Visit(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
-        const long groupDuration = 3_200_000_000;
-        ReadOnlySpan<long> slots = [0, 800_000_000, 1_800_000_000, 2_400_000_000];
         IndexedCardiacSchedule.Visit(plan, kind, offset, inclusive, exclusive,
-            maximumEvents, visitor, groupDuration, slots, cancellationToken);
+            maximumEvents, visitor, GroupDurationNs, CycleOffsetsNs, cancellationToken);
     }
 }

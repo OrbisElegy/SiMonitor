@@ -287,7 +287,8 @@
   "limitations": [
     "Established escape only, without first triggering after arrest or pacemaker competition.",
     "A single morphology, not all ventricular escape origins.",
-    "Mechanical lag and pressure use existing illustrations, without stroke-volume or filling feedback.",
+    "Mechanical lag is authored; bounded RR/AV-phase filling does not model dynamic loading or contractile feedback.",
     "Fixed QT duration, without beatwise adaptation or clinical calibration."
-  ]
+  ],
+  "perfusion": "CardiacFillingPerfusionIllustration@2: long accepted ventricular RR permits passive filling; independent atrial phase supplies bounded effective assistance. No fixed tachycardia penalty."
 }

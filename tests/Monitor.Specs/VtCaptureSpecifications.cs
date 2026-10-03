@@ -99,10 +99,18 @@ internal static class VtCaptureSpecifications
         var ordinaryPlan = VentricularTachycardiaReference.CreatePlan();
         var ordinary = PlethRunoffSource.Create(ordinaryPlan, VtPerfusionReference.Pleth);
         PlethRunoffSource Single(long anchor) => PlethRunoffSource.Create(ordinaryPlan with
-        { EpochAnchorSimTimeNs = anchor, VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 }, VtPerfusionReference.Pleth);
+        { EpochAnchorSimTimeNs = anchor, VentricularMechanicalEnabled = false, MechanicalAfterCycles = 1 },
+            VtPerfusionReference.Pleth with { UseCardiacFillingPerfusion = false });
         var early = Single(4_080_000_000); var old = Single(4_125_000_000);
+        var next = Single(4_500_000_000);
         for (long t = 4_160_000_000; t < 5_600_000_000; t += 8_000_000)
-            Check.That(Math.Abs(pleth.EvaluateAt(t) - ordinary.EvaluateAt(t) - early.EvaluateAt(t) + old.EvaluateAt(t)) <= 3, "optical output replaces one delayed pulse rather than adding a second ejection");
+        {
+            long Weighted(PlethRunoffSource source, int gain) => (long)FixedPointMath.RoundDivideTiesToEven((Int128)source.EvaluateAt(t) * gain, 1000);
+            long replacement = Weighted(early, 137) - Weighted(old, 286) +
+                (t >= 4_500_000_000 ? Weighted(next, 394) - Weighted(next, 286) : 0);
+            Check.That(Math.Abs(pleth.EvaluateAt(t) - ordinary.EvaluateAt(t) - replacement) <= 4,
+                "capture replaces one pulse and changes the next beat's filling without adding an ejection");
+        }
         Check.That(pleth.MaximumHistoryEvents < 100, "finite optical history at330ms minimum RR");
         foreach (var pressure in new[] { VtPerfusionReference.Arterial, VtPerfusionReference.Pulmonary })
         {

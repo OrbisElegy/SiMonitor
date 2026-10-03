@@ -12,7 +12,7 @@ internal static class AcceleratedAtrialPhysiologySmokeChecks
     {
         var config = PhysiologyDemoConfiguration.AarPreset;
         var blocks = PhysiologyChannelSmokeChecks.Verify("AAR", config, AcceleratedAtrialReference.CreatePlan(),
-            AcceleratedAtrialReference.CreateLeadIIBands(), FixedPerfusionPresets.PulmonaryOverlap);
+            AcceleratedAtrialReference.CreateLeadIIBands(), FixedPerfusionPresets.AcceleratedSupraventricular);
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

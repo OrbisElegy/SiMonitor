@@ -239,8 +239,19 @@ internal static class PressureLimitSpecifications
                 lastFiltered = filtered;
             }
             Console.WriteLine($"{name} ABP {minimum / 100m:F2}–{maximum / 100m:F2} mmHg, {(critical ? "Critical" : "Warning")} boundary: {rawChanges} instantaneous changes, {filteredChanges} confirmed changes");
+            // AIVR filling introduces a 12-second AV-phase cycle: this roughly
+            // one-minute acquired interval now has ten real boundary crossings.
             Check.That(rawChanges >= 10 && filteredChanges <= 1, "pressure oscillation no longer creates repeated alarm transitions: " + name);
             Check.That(lastFiltered?.Level == (critical ? MonitorNoticeLevel.Warning : null), "continuous warning survives Critical chatter: " + name);
+        }
+        var lowLimits = new MeasurementLimits(true, minimum - 1000, maximum + 1, maximum + 2000, maximum + 3000);
+        var lowFilter = new PressureLimitNotice(MonitorNumeric.AbpMean);
+        long firstNs = snapshots[0].SampleTimeNs;
+        foreach (var snapshot in snapshots)
+        {
+            var notice = lowFilter.Evaluate(lowLimits, snapshot);
+            Check.That(notice?.Level == (snapshot.SampleTimeNs - firstNs >= 4 * SecondNs ? MonitorNoticeLevel.Warning : null),
+                "sustained low pressure from the filling model still confirms at four seconds: " + name);
         }
     }
 }

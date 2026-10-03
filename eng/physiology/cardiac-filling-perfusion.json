@@ -1,0 +1,53 @@
+{
+  "id": "CardiacFillingPerfusionIllustration@2",
+  "implementation": "src/Monitor.Simulation/Physiology/CardiacFillingPerfusion.cs",
+  "documentation": "docs/cardiac-filling-perfusion.md",
+  "supporting_research": [
+    "https://pubmed.ncbi.nlm.nih.gov/1595536/",
+    "https://pubmed.ncbi.nlm.nih.gov/4032740/",
+    "https://pubmed.ncbi.nlm.nih.gov/2702964/",
+    "https://pubmed.ncbi.nlm.nih.gov/9316536/",
+    "https://pubmed.ncbi.nlm.nih.gov/10234713/"
+  ],
+  "authored_choices": {
+    "reference_RR_ms": 800,
+    "effective_non_filling_ms": {
+      "regular": 300,
+      "svt_seeded_conducted_flutter": 240,
+      "fixed_flutter_one_to_one": 160
+    },
+    "filling_time_constant_ms": 200,
+    "atrial_contraction_support_ms": 120,
+    "atrial_contribution_permille": 250,
+    "initial_beat": "Nominal RR or declared cyclic predecessor, with independent initial vascular pressure; no pre-epoch atrial events",
+    "long_pause": "Cap effective RR at800ms; stroke volume cannot exceed reference",
+    "rounding": "Single ties-to-even rounding to integer permille",
+    "pressure_contour": "Add weighted pulse and replace current reference RC excursion linearly; preserve preceding reservoir runoff, avoiding a second gain multiplication"
+  },
+  "invariants": [
+    "Actual accepted mechanical RR, including capture, stride and temporary suppression",
+    "Atrial contribution comes only from contraction overlap with the filling window",
+    "Same per-beat gain applied once to raw Pleth, ABP and PA reference inputs",
+    "No pressure target, alarm-threshold feedback or output clipping",
+    "Bounded indexed reconstruction independent of epoch magnitude and call order",
+    "Unsupported or conflicting perfusion strategies rejected before source publication"
+  ],
+  "limitations": [
+    "Research supports the mechanism, not numerical constants or patient-specific pressure",
+    "No dynamic valve, loading, contractility, autonomic or oxygen-transport model",
+    "Shared right/left filling gain is an authored simplification",
+    "Ordinary regular/seeded, accelerated, SVT/VT, conduction-block and escape schedules use the core; AF/flutter reuse its curve with distinct atrial assumptions. Premature strategies remain separate."
+  ],
+  "verification": [
+    "CardiacFillingSpecifications",
+    "VtCapturePerfusionTracksEarlierEjectionWithBoundedHistory",
+    "PressureLimitSpecifications",
+    "PerfusionAuditSmokeChecks",
+    "AcceleratedAtrialPhysiologySmokeChecks",
+    "AcceleratedJunctionalPhysiologySmokeChecks",
+    "AcceleratedVentricularPhysiologySmokeChecks",
+    "VtPhysiologySmokeChecks",
+    "RhythmFillingAuditSpecifications",
+    "FillingScalesPressureExcursionOnce"
+  ]
+}

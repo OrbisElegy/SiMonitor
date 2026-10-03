@@ -14,7 +14,7 @@ internal static class AcceleratedVentricularPhysiologySmokeChecks
     {
         var config = PhysiologyDemoConfiguration.AivrPreset with { AivrFusion = fusion, AivrCapture = capture };
         var blocks = PhysiologyChannelSmokeChecks.Verify("AIVR", config, AcceleratedVentricularReference.CreatePlan(),
-            AcceleratedVentricularReference.CreateLeadIIBands(fusion, capture), FixedPerfusionPresets.SinglePulse);
+            AcceleratedVentricularReference.CreateLeadIIBands(fusion, capture), FixedPerfusionPresets.AcceleratedVentricular);
         var plain = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.AivrPreset, 6_000_000_000);
         foreach (int row in new[] { 1, 2, 3, 4, 5, 6 })
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(plain, row)))

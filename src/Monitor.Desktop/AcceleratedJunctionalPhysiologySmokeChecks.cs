@@ -12,7 +12,7 @@ internal static class AcceleratedJunctionalPhysiologySmokeChecks
     {
         var config = PhysiologyDemoConfiguration.AjrPreset;
         var blocks = PhysiologyChannelSmokeChecks.Verify("AJR", config, AcceleratedJunctionalReference.CreatePlan(),
-            AcceleratedJunctionalReference.CreateLeadIIBands(), FixedPerfusionPresets.PulmonaryOverlap);
+            AcceleratedJunctionalReference.CreateLeadIIBands(), FixedPerfusionPresets.AcceleratedSupraventricular);
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
         void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

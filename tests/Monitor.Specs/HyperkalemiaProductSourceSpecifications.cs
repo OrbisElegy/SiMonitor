@@ -65,6 +65,8 @@ internal static class HyperkalemiaProductSourceSpecifications
             withoutP.ResolvePlan() == HyperkalemiaConductionReference.CreatePlan(true), "conduction clocks use RR1000, PR240 and ejection320ms");
         var source = PhysiologyIllustrationSource.Create(config); var absent = PhysiologyIllustrationSource.Create(withoutP);
         bool ecgChanged = false, cvpChanged = false;
+        var perfusionChanged = new HashSet<int>();
+        var pulsatileChannels = new HashSet<int>();
         for (int step = 1; step <= 40; step++)
         {
             var a = source.AdvanceTo(step * 200_000_000L, 50, 1, 100);
@@ -79,7 +81,13 @@ internal static class HyperkalemiaProductSourceSpecifications
                     bool equal = left.Planes.Single(p => p.ChannelId == id).Samples.SequenceEqual(right.Planes.Single(p => p.ChannelId == id).Samples);
                     if (channel == 0) { ecgChanged |= !equal; }
                     else if (channel == 6) { cvpChanged |= !equal; }
-                    else { Check.That(equal, "absent P does not suppress ventricular perfusion or independent respiration"); }
+                    else if (channel is 1 or 4) { Check.That(equal, "absent atrial activity preserves independent respiration"); }
+                    else
+                    {
+                        var samples = right.Planes.Single(p => p.ChannelId == id).Samples;
+                        if (!equal) { perfusionChanged.Add(channel); }
+                        if (samples.Distinct().Count() > 1) { pulsatileChannels.Add(channel); }
+                    }
                 }
             }
             if (step == 17)
@@ -88,6 +96,8 @@ internal static class HyperkalemiaProductSourceSpecifications
                 absent = PhysiologyWaveformGroup.Restore(absent.CaptureState());
             }
         }
+        Check.That(perfusionChanged.SetEquals([2, 3, 5]) && pulsatileChannels.SetEquals([2, 3, 5]),
+            "absent atrial activity reduces all perfusion channels while preserving ventricular pulsatility");
         Check.That(ecgChanged && cvpChanged, "absent P removes both electrical P and CVP atrial contribution");
         foreach (var invalid in new[] { config with { HyperkalemiaRepolarization = false },
             withoutP with { HyperkalemiaConduction = false }, withoutP with { CardiacActivity = CardiacActivity.AtrialAndVentricular },

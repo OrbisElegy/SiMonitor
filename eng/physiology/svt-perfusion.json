@@ -1,5 +1,5 @@
 {
-  "id": "SvtPerfusionIllustration@2",
+  "id": "SvtPerfusionIllustration@3",
   "source": "Filling-limited authored input with unchanged finite RC reservoir; docs/svt-perfusion.md",
   "authored_choices": {
     "electrical_mechanical_ms": [
@@ -23,7 +23,8 @@
       240,
       200
     ],
-    "svt_stroke_volume_permille": 313
+    "svt_stroke_volume_permille": 235,
+    "atrial_timing": "Coincident atrial/ventricular mechanical onset has no effective normal atrial contribution; actual RR permits transient recovery after an omitted interval"
   },
   "limitations": [
     "Filling parameters are teaching assumptions, not patient-calibrated SVT stroke volume or compensation",
@@ -34,6 +35,7 @@
     "SvtFillingLimitsInputRatherThanClippingPressure",
     "SvtPerfusionPreservesSupportsAndBoundsOverlap",
     "SvtPerfusionIsPeriodicAtLateTimesAndRetainsRunoff",
-    "SvtPhysiologySmokeChecks"
+    "SvtPhysiologySmokeChecks",
+    "SvtConcurrentAtrialContractionDoesNotReceiveNormalKick"
   ]
 }

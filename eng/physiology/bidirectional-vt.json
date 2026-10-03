@@ -32,7 +32,7 @@
   "invariants": [
     "Two-beat selector retains original ventricular ordinals across recovery",
     "All ventricular electrodes transformed together to retain limb identities",
-    "Electrical sign does not change event timing, fixed ejection input, CVP or respiration",
+    "Electrical sign does not change event timing, per-beat filling policy, CVP or respiration",
     "Both demos share source and reject capture/fusion combinations or orphan flags"
   ],
   "limitations": [

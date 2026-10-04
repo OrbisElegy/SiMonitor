@@ -20,6 +20,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     private readonly MonitorAlarmPlayback _alarms = new(() => new NativeAudioOutputFactory(Path.Combine(AppContext.BaseDirectory, "sim_audio_native.dll")));
     private CancellationTokenSource? _alarmCancellation;
     private MonitorNoticeLevel? _alarmLevel;
+    private readonly AlarmNotificationSoundRouter _notificationRouter = new();
+    private IReadOnlyList<AlarmLifecycleJournal>? _notificationSources;
+    private IReadOnlyList<MonitorNotice> _activeNotices = [];
     private MonitorSoundTiming _timing = new();
     private bool _monitorRunning;
     private readonly MonitorBeatSource _source = new();
@@ -70,7 +73,11 @@ internal sealed class SoundSettingsPanel : StackPanel
         AutomationProperties.SetName(Volume, "声音音量，百分比");
         Volume.PropertyChanged += (_, args) =>
         {
-            if (args.Property == Slider.ValueProperty) { volumeLabel.Text = $"声音音量：{Volume.Value:0}%"; }
+            if (args.Property == Slider.ValueProperty)
+            {
+                volumeLabel.Text = $"声音音量：{Volume.Value:0}%";
+                if (_notificationSources is not null) { Publish(); }
+            }
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         buttons.Children.Add(Audition); buttons.Children.Add(Stop); Children.Add(buttons);
@@ -178,13 +185,26 @@ internal sealed class SoundSettingsPanel : StackPanel
         _cancellation?.Cancel(); Stop.IsEnabled = false;
         if (_cancellation is not null) { Status.Text = "正在停止…"; }
     }
-    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null, IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null)
+    internal void UseNotificationPlayback(IReadOnlyList<AlarmLifecycleJournal>? journals)
+    {
+        if (journals is not null && _notificationSources is not null && journals.SequenceEqual(_notificationSources)) { return; }
+        if (journals is not null)
+        { _notificationRouter.Update(journals, (int)Volume.Value, _timing, enabled: false); }
+        else if (_notificationSources is not null)
+        { _notificationRouter.Update(_notificationSources, (int)Volume.Value, _timing, enabled: false); }
+        _notificationSources = journals is null ? null : Array.AsReadOnly(journals.ToArray());
+        Publish();
+    }
+
+    internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null,
+        IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null, IReadOnlyList<MonitorNotice>? notices = null)
     {
         if (measurement is not null) { _sourceMeasurement = measurement; }
         UpdateBeatSource();
         if (PitchSource.SelectedIndex == 1) { _pitch.Update(measurement?.SpO2, measurement?.SampleTimeNs ?? 0); }
         if (_alarms.OutputActive) { SetOutputNotice(null); }
         _monitorRunning = true; _alarmLevel = level; _timing = timing;
+        _activeNotices = notices is null ? [] : Array.AsReadOnly(notices.ToArray());
         Publish();
         // Transfer only fresh events from the one selected source.
         long? confirmed = _source.Current switch
@@ -227,7 +247,10 @@ internal sealed class SoundSettingsPanel : StackPanel
         PauseStatus.Text = remaining == 0 ? "报警声音未定时暂停" : text;
         ResumeAlarmAudio.IsEnabled = remaining > 0;
         if (text != AudioPauseText) { AudioPauseText = text; AudioPauseChanged?.Invoke(); }
-        PublishedAlarm = _monitorRunning && remaining == 0 && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null;
+        bool enabled = _monitorRunning && remaining == 0;
+        PublishedAlarm = _notificationSources is null
+            ? enabled && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null
+            : _notificationRouter.Update(_notificationSources, (int)Volume.Value, _timing, enabled, _activeNotices);
         _alarms.SetRequest(PublishedAlarm);
         _alarms.SetHeartbeatEnabled(_monitorRunning && AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true);
     }

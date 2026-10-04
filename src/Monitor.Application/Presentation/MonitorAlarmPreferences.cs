@@ -10,6 +10,20 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
         new Dictionary<MonitorNumeric, MeasurementConfirmationTiming>();
 
     public BoundaryConfirmationTiming NoExpirationConfirmation { get; init; } = new(0, 0);
+    public AlarmPlaybackMode PlaybackMode { get; init; }
+    public IReadOnlyDictionary<string, AlarmNotificationSettings> Notifications { get; init; } =
+        new Dictionary<string, AlarmNotificationSettings>();
+    public static IReadOnlyList<string> NotificationConditionIds { get; } = Array.AsReadOnly(
+        MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.HeartRateDescriptor)
+            .SelectMany(d => new[] { d.Id + "-low", d.Id + "-high" })
+            .Concat(new[] { "spo2-low", "co2-no-expiration" }).Order(StringComparer.Ordinal).ToArray());
+
+    public AlarmNotificationSettings NotificationFor(string conditionId)
+    {
+        if (!NotificationConditionIds.Contains(conditionId, StringComparer.Ordinal))
+        { throw new ArgumentException("AlarmNotification.UnknownCondition", nameof(conditionId)); }
+        return Notifications.TryGetValue(conditionId, out var settings) ? settings : AlarmNotificationSettings.Default;
+    }
 
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric) =>
         ConfirmationTimings.TryGetValue(numeric, out var timing) ? timing : MeasurementConfirmationTiming.DefaultFor(numeric);
@@ -20,6 +34,14 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
 
     public void Validate()
     {
+        if (!Enum.IsDefined(PlaybackMode) || Notifications is null)
+        { throw new ArgumentException("AlarmNotification.InvalidConfiguration"); }
+        foreach (var (id, settings) in Notifications)
+        {
+            if (!NotificationConditionIds.Contains(id, StringComparer.Ordinal) || settings is null)
+            { throw new ArgumentException("AlarmNotification.InvalidCondition"); }
+            settings.Validate();
+        }
         static bool InRange(int? value, int minimum, int maximum) => value is null || value >= minimum && value <= maximum;
         static bool Ordered(MeasurementLimits limits) => !limits.Enabled ||
             limits.CriticalLow is { } cl && limits.WarningLow is { } wl && limits.WarningHigh is { } wh && limits.CriticalHigh is { } ch && cl < wl && wl < wh && wh < ch;

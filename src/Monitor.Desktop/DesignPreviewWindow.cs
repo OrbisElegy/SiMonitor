@@ -432,7 +432,8 @@ internal sealed class DesignPreviewWindow : Window
             }
             _monitor.InvalidateVisual();
             MonitorView.Refresh();
-            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats, _session.DetectedPulses, _session.Measurements);
+            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
+                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

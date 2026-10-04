@@ -59,17 +59,24 @@ internal static class NotificationSettingsSpecifications
         {
             var store = new DisplayPreferenceStore(path);
             var settings = MonitorAlarmPreferences.NotificationConditionIds.Select((id, index) =>
-                (Id: id, Value: new AlarmNotificationSettings(index * 123, index % 2 == 0, index + 1) { SoundMode = (AlarmSoundMode)(index % 3) }))
+                (Id: id, Value: new AlarmNotificationSettings(index * 123, index % 2 == 0, index + 1) { SoundMode = (AlarmSoundMode)(index % 3), LatchingMode = (AlarmLatchingMode)(index % 2) }))
                 .ToDictionary(e => e.Id, e => e.Value);
             var alarms = MonitorAlarmPreferences.Default with { PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings };
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms)), "save notification configuration");
             string valid = File.ReadAllText(path);
             var loaded = store.Load(out bool rejected);
-            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 9 &&
+            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 10 &&
                 loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications &&
                 settings.All(e => loaded.Alarms.NotificationFor(e.Key) == e.Value) &&
                 !valid.Contains("Occurrence", StringComparison.Ordinal) && !valid.Contains("NotificationSequence", StringComparison.Ordinal),
                 "all notification settings round trip without episodes, cursors or requests");
+            var versionNine = JsonNode.Parse(valid)!.AsObject();
+            versionNine["Version"] = 9;
+            foreach (var item in versionNine["Alarms"]!["Notifications"]!.AsObject()) { item.Value!.AsObject().Remove("LatchingMode"); }
+            File.WriteAllText(path, versionNine.ToJsonString());
+            var migratedNine = store.Load(out rejected);
+            Check.That(!rejected && migratedNine.Alarms!.Notifications.All(e => e.Value.LatchingMode == AlarmLatchingMode.NonLatching),
+                "version nine retains non-latching defaults without restoring acknowledgement state");
             foreach (var mode in Enum.GetValues<AlarmPlaybackMode>())
             {
                 var old = JsonNode.Parse(valid)!.AsObject();
@@ -99,6 +106,7 @@ internal static class NotificationSettingsSpecifications
             foreach (var edit in new Action<JsonObject>[]
             {
                 a => a["PlaybackMode"] = 2,
+                a => a["Notifications"]!["hr-high"]!["LatchingMode"] = 99,
                 a => a["Notifications"]!["hr-high"]!["SoundMode"] = 3,
                 a => a["Notifications"] = null,
                 a => a["Notifications"]!["unknown"] = JsonNode.Parse("{\"RepeatSuppressionMilliseconds\":0,\"ReminderEnabled\":false,\"ReminderMilliseconds\":30000}"),

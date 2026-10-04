@@ -660,6 +660,7 @@ public enum AlarmAttentionState { None, ActiveUnacknowledged, ActiveAcknowledged
 public enum AlarmAttentionKind { Started, Replaced, SeverityChanged, Acknowledged, Recovered, Interrupted, PolicyChanged }
 public sealed record AlarmAttentionSnapshot(string ConditionId, ulong Revision, AlarmEpisodeId? Episode, MonitorNoticeLevel? Level, AlarmAttentionState State, AlarmLatchingMode LatchingMode)
 {
+    public long? AcknowledgedAtNs { get; init; }
     public bool NeedsAcknowledgement { get; }
 }
 public sealed record AlarmAttentionRecord(ulong Sequence, long SampleTimeNs, AlarmAttentionKind Kind, AlarmAttentionSnapshot Previous, AlarmAttentionSnapshot Current, AlarmTransitionReason Reason);
@@ -1310,6 +1311,7 @@ public enum AlarmSoundDuration { SingleGroup, Continuous }
 public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds, bool ReminderEnabled, int ReminderMilliseconds)
 {
     public AlarmSoundMode SoundMode { get; init; }
+    public AlarmLatchingMode LatchingMode { get; init; }
     public static AlarmNotificationSettings Default { get; }
     public void Validate();
     public AlarmNotificationPolicy ToPolicy(AlarmPlaybackMode defaultMode = AlarmPlaybackMode.Notifications);

@@ -29,6 +29,7 @@ public enum AlarmAttentionKind
 public sealed record AlarmAttentionSnapshot(string ConditionId, ulong Revision, AlarmEpisodeId? Episode,
     MonitorNoticeLevel? Level, AlarmAttentionState State, AlarmLatchingMode LatchingMode)
 {
+    public long? AcknowledgedAtNs { get; init; }
     public bool NeedsAcknowledgement => State is AlarmAttentionState.ActiveUnacknowledged or AlarmAttentionState.RecoveredUnacknowledged;
 }
 
@@ -72,7 +73,7 @@ public sealed class AlarmAttentionJournal
         var previous = Find(episode.ConditionId);
         if (previous.Episode != episode || previous.Revision != expectedRevision || !previous.NeedsAcknowledgement) { return false; }
         var next = previous.State == AlarmAttentionState.RecoveredUnacknowledged
-            ? Clear(previous) : previous with { State = AlarmAttentionState.ActiveAcknowledged };
+            ? Clear(previous) : previous with { State = AlarmAttentionState.ActiveAcknowledged, AcknowledgedAtNs = _lastObservationNs };
         Publish(next, AlarmAttentionKind.Acknowledged, AlarmTransitionReason.None);
         return true;
     }
@@ -94,7 +95,13 @@ public sealed class AlarmAttentionJournal
                 ? AlarmAttentionState.ActiveAcknowledged : AlarmAttentionState.ActiveUnacknowledged;
             var kind = newEpisode ? previous.Episode is null ? AlarmAttentionKind.Started : AlarmAttentionKind.Replaced
                 : AlarmAttentionKind.SeverityChanged;
-            Publish(previous with { Episode = episode, Level = level, State = state }, kind, condition.Reason);
+            Publish(previous with
+            {
+                Episode = episode,
+                Level = level,
+                State = state,
+                AcknowledgedAtNs = state == AlarmAttentionState.ActiveAcknowledged ? previous.AcknowledgedAtNs : null
+            }, kind, condition.Reason);
         }
         else if (previous.State is AlarmAttentionState.ActiveUnacknowledged or AlarmAttentionState.ActiveAcknowledged)
         {
@@ -115,7 +122,8 @@ public sealed class AlarmAttentionJournal
     {
         Episode = null,
         Level = null,
-        State = AlarmAttentionState.None
+        State = AlarmAttentionState.None,
+        AcknowledgedAtNs = null
     };
 
     private void Publish(AlarmAttentionSnapshot next, AlarmAttentionKind kind, AlarmTransitionReason reason)

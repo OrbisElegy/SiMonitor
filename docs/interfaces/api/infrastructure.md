@@ -117,7 +117,7 @@ public sealed class AlarmNotificationSoundRouter
     public ulong DroppedRouteCount { get; private set; }
     public IReadOnlyList<AlarmSoundRoutingRecord> Routes { get; }
     public ulong MissedRecordCount { get; private set; }
-    public MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals, int volumePercent, MonitorSoundTiming timing, bool enabled, IReadOnlyList<MonitorNotice>? notices = null);
+    public MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals, int volumePercent, MonitorSoundTiming timing, bool enabled, IReadOnlyList<MonitorNotice>? notices = null, ulong retiredNotificationSequence = 0);
 }
 ```
 
@@ -143,6 +143,7 @@ public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmS
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
     public bool OutputActive { get; }
+    public ulong RetiredNotificationSequence { get; }
     public void SetHeartbeatEnabled(bool enabled);
     public void SubmitHeartbeat(int volumePercent, int pitchPercent = 97);
     public void SetRequest(MonitorAlarmSoundRequest? request);
@@ -150,6 +151,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 }
 public sealed class MonitorAlarmSequencer(AudioRenderSession session)
 {
+    public ulong RetiredNotificationSequence { get; private set; }
     public ulong MissedNotificationCount { get; private set; }
     public ulong DroppedDispatchCount { get; private set; }
     public IReadOnlyList<AlarmSoundDispatchRecord> Dispatches { get; }

@@ -2,7 +2,7 @@
 namespace Monitor.Simulation.Physiology;
 
 // Filling-limited teaching input at fixed300ms RR, followed by the unchanged RC
-// reservoir. Parameters are authored, not patient-calibrated; see docs/svt-perfusion.md.
+// reservoir. Parameters are authored, not patient-calibrated; see docs/research/physiology/svt-perfusion.md.
 public static class SvtPerfusionReference
 {
     public const string EvidenceId = "SvtPerfusionIllustration@3";

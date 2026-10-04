@@ -1,35 +1,35 @@
 # Seele's SiMonitor
 
-[简体中文](../README.md) | **English**
+[简体中文](../../README.md) | **English**
 
 Seele's SiMonitor is a teaching simulator for ECG and other patient-monitor waveforms. **It is not a medical device and must not be used for clinical monitoring, diagnosis, or treatment.**
 
 The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records. 
 
-For a shorter overview, see the [English summary](english-summary.md). Read the [contribution guide](../CONTRIBUTING.md) before contributing.
+For a shorter overview, see the [English summary](summary.md). Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
 
 ## Screenshots
 
 **Main monitor view**
 
-![Main monitor view showing ECG and other vital-sign waveforms](screenshot/screenshot%20%281%29.png)
+![Main monitor view showing ECG and other vital-sign waveforms](../assets/screenshots/main-monitor.png)
 
 **Low pulse-rate alarm**
 
-![Monitor view showing a low pulse-rate alarm](screenshot/screenshot%20%282%29.png)
+![Monitor view showing a low pulse-rate alarm](../assets/screenshots/low-pulse-rate.png)
 
 **12-lead ECG**
 
-![12-lead ECG snapshot](screenshot/screenshot%20%283%29.png)
+![12-lead ECG snapshot](../assets/screenshots/ecg-12-lead.png)
 
 **Waveform presets**
 
-![Settings view showing waveform presets and preview cards](screenshot/screenshot%20%284%29.png)
+![Settings view showing waveform presets and preview cards](../assets/screenshots/waveform-presets.png)
 
 ## Requirements
 
 - Python 3.11 or newer.
-- A stable .NET 10 SDK; see [`global.json`](../global.json) for the exact version and roll-forward rules.
+- A stable .NET 10 SDK; see [`global.json`](../../global.json) for the exact version and roll-forward rules.
 - CMake 3.20 or newer and a C compiler for the native audio module.
 - On Windows, Visual Studio C++ Build Tools and the Windows SDK.
 
@@ -64,7 +64,7 @@ python3 tools/build_release.py --jobs 32
 
 Product output is in `artifacts/release/`. The current native audio backend targets Windows WASAPI; builds or checks on other platforms do not replace validation on a Windows device.
 
-Build scripts create the generated files under `artifacts/`, which Git ignores. The project's native audio wrapper source is in `native/sim_audio_native/`. The dependency script downloads a pinned `vendor/miniaudio.h` into that directory and verifies its SHA-256 hash before the build uses it. Run dependency preparation before reviewing that upstream header. See the [native audio guide](../native/sim_audio_native/README.md) for source locations, output layout, and native diagnostics.
+Build scripts create the generated files under `artifacts/`, which Git ignores. The project's native audio wrapper source is in `native/sim_audio_native/`. The dependency script downloads a pinned `vendor/miniaudio.h` into that directory and verifies its SHA-256 hash before the build uses it. Run dependency preparation before reviewing that upstream header. See the [native audio guide](../../native/sim_audio_native/README.md) for source locations, output layout, and native diagnostics.
 
 ## Verification
 
@@ -98,7 +98,7 @@ The script handles only generated files inside this repository. It does not unin
 
 ## License and attribution
 
-Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../LICENSE) and the [license scope](license-scope.md). Third-party code and resources retain their own licenses. Dependency sources and hashes are recorded in [`eng/dependencies.json`](../eng/dependencies.json); see [`eng/licenses/`](../eng/licenses/) and the [Infirmary source notice](infirmary-source-notice.md) for related notices.
+Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../../LICENSE) and the [license scope](../legal/license-scope.md). Third-party code and resources retain their own licenses. Dependency sources and hashes are recorded in [`eng/dependencies.json`](../../eng/dependencies.json); see [`eng/licenses/`](../../eng/licenses) and the [Infirmary source notice](../legal/infirmary-source-notice.md) for related notices.
 
 ## To-Do
 - i18n

@@ -26,8 +26,8 @@ class DistributionTests(unittest.TestCase):
         assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}), encoding="utf-8")
         self.project = self.source / "src/Monitor.Desktop/Monitor.Desktop.csproj"
         self.project.write_text('<Project><PropertyGroup><Version>0.5.0</Version></PropertyGroup></Project>', encoding="utf-8")
-        for name in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md",
-                     "docs/infirmary-source-notice.md", "eng/licenses/vendor.txt",
+        for name in ["LICENSE", "eng/dependencies.json", "docs/legal/license-scope.md",
+                     "docs/legal/infirmary-source-notice.md", "eng/licenses/vendor.txt",
                      "native/sim_audio_native/vendor/LICENSE.miniaudio"]:
             path = self.source / name
             path.parent.mkdir(parents=True, exist_ok=True)

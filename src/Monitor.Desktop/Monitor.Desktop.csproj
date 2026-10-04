@@ -41,7 +41,7 @@
     <EmbeddedResource Include="../../eng/dependencies.json" LogicalName="Monitor.Legal.dependencies.json" />
     <EmbeddedResource Include="../../eng/licenses/*" LogicalName="Monitor.Legal.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../native/sim_audio_native/vendor/LICENSE.miniaudio" LogicalName="Monitor.Legal.LICENSE.miniaudio" />
-    <EmbeddedResource Include="../../docs/license-scope.md" LogicalName="Monitor.Legal.license-scope.md" />
+    <EmbeddedResource Include="../../docs/legal/license-scope.md" LogicalName="Monitor.Legal.license-scope.md" />
   </ItemGroup>
   <Target Name="GenerateStylePreviews" AfterTargets="Build"
           Inputs="$(TargetPath);@(ReferenceCopyLocalPaths)"

@@ -1,30 +1,30 @@
 # Seele's SiMonitor
 
-**简体中文** | [English](docs/README.en.md)
+**简体中文** | [English](docs/en/README.md)
 
 Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**本项目不是医疗器械，不用于临床监护、诊断或治疗。**
 
 仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。
 
-技术资料的英文概览见 [英文摘要](docs/english-summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
+技术资料的英文概览见 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
 ## 运行截图
 
 **主监护界面**
 
-![显示心电图及其他生命体征波形的主监护界面](docs/screenshot/screenshot%20%281%29.png)
+![显示心电图及其他生命体征波形的主监护界面](docs/assets/screenshots/main-monitor.png)
 
 **低脉率报警**
 
-![显示低脉率报警的监护界面](docs/screenshot/screenshot%20%282%29.png)
+![显示低脉率报警的监护界面](docs/assets/screenshots/low-pulse-rate.png)
 
 **十二导联心电图**
 
-![十二导联心电图快照](docs/screenshot/screenshot%20%283%29.png)
+![十二导联心电图快照](docs/assets/screenshots/ecg-12-lead.png)
 
 **波形预设设置**
 
-![显示波形预设及预览卡片的设置界面](docs/screenshot/screenshot%20%284%29.png)
+![显示波形预设及预览卡片的设置界面](docs/assets/screenshots/waveform-presets.png)
 
 ## 环境要求
 
@@ -98,7 +98,7 @@ python3 tools/clean.py dirclean
 
 ## 许可证与归属
 
-项目原创代码采用 AGPL-3.0-or-later，详见 [`LICENSE`](LICENSE) 和 [许可证范围说明](docs/license-scope.md)。第三方代码及资源保留各自的许可证。依赖来源和哈希记录在 [`eng/dependencies.json`](eng/dependencies.json)，相关声明见 [`eng/licenses/`](eng/licenses/) 和 [Infirmary 来源声明](docs/infirmary-source-notice.md)。
+项目原创代码采用 AGPL-3.0-or-later，详见 [`LICENSE`](LICENSE) 和 [许可证范围说明](docs/legal/license-scope.md)。第三方代码及资源保留各自的许可证。依赖来源和哈希记录在 [`eng/dependencies.json`](eng/dependencies.json)，相关声明见 [`eng/licenses/`](eng/licenses/) 和 [Infirmary 来源声明](docs/legal/infirmary-source-notice.md)。
 
 ## Todo
 - i18n

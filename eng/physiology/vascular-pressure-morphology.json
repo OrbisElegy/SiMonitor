@@ -1,7 +1,7 @@
 {
   "id": "VascularPressureMorphologyRatio@2",
   "source": "Project-authored empirical combination of the existing RC reservoir and independent pressure contours",
-  "research": "docs/vascular-pressure-runoff-research.md",
+  "research": "docs/research/physiology/vascular-pressure-runoff-research.md",
   "qualification": "Unqualified teaching source preserving legacy contour appearance; no valve/reflection dynamics, independent right-heart source, wedge-pressure model, CVP mean response or pressure numerics",
   "contours": {
     "Arterial": "eng/physiology/infirmary-arterial-pulse.json",

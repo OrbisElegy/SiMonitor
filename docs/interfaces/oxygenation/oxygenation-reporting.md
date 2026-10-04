@@ -12,7 +12,7 @@
 
 ## 实现与边界
 
-[PulseOximeterIllustrationSource](../src/Monitor.Simulation/Authoring/PulseOximeterIllustrationSource.cs)
+[PulseOximeterIllustrationSource](../../../src/Monitor.Simulation/Authoring/PulseOximeterIllustrationSource.cs)
 现在接受 0–100% 的固定目标或模型 SaO₂。模型源仍按每个光学样本的原始时间读取，
 越过物理范围、缺失历史或时间不符继续拒绝，不使用旧值代替。
 
@@ -31,7 +31,7 @@ I_red = 16000 × exp(−R × x)
 ADC 计数加测试容差。原来 100% 附近的 0.2 个百分点源侧保护余量继续保留。
 这仍是项目编写的教学光学模型，不含人体组织光谱标定。
 
-[OpticalSaturationMeasurement.CreateIllustration](../src/Monitor.Application/Measurements/OpticalSaturationMeasurement.cs)
+[OpticalSaturationMeasurement.CreateIllustration](../../../src/Monitor.Application/Measurements/OpticalSaturationMeasurement.cs)
 统一提供两处实时测量所有者使用的示意标定，范围为 R=0.4–4.4，对应 100–0%。
 原来的四秒估计窗口、双波长相关性、往返脉动、质量标志、最低调制和 PI 门限保留。
 内部模型 SaO₂ 不直接进入读数、报警或音高判断。
@@ -103,10 +103,10 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 
 ## 回归覆盖
 
-- [全范围与恢复规格](../tests/Monitor.Specs/DeepOxygenationSpecifications.cs)：
+- [全范围与恢复规格](../../../tests/Monitor.Specs/DeepOxygenationSpecifications.cs)：
   多个深低目标与调制幅度、端点、独立指数参照、自有标定边界、质量失败、缺失样本、
   窗口中途恢复、25 ms／250 ms 推进一致性、机械停搏时不可测，以及报警 PCM 的产生和清除。
-- [桌面验证](../src/Monitor.Desktop/DeepOxygenationSmokeChecks.cs)：
+- [桌面验证](../../../src/Monitor.Desktop/DeepOxygenationSmokeChecks.cs)：
   实际设置 Apply 接受零值；通过模型时间序列和机械事件获得的测量驱动数值、红色底色、
   技术信息、Critical 声音请求及恢复，不注入伪造的 SpO₂ 读数。
 - 完整规格与桌面分片入口沿用 `tools/run_parallel_checks.py`；Linux 通过 Xvfb 执行。

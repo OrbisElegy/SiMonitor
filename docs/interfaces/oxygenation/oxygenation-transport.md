@@ -20,7 +20,7 @@ flowchart LR
 
 ## 物理输入契约
 
-[PhysiologyTransportSource](../src/Monitor.Simulation/Physiology/PhysiologyTransportSource.cs)
+[PhysiologyTransportSource](../../../src/Monitor.Simulation/Physiology/PhysiologyTransportSource.cs)
 是不可变、无推进游标的区间积分源。`Integrate(fromSimTimeNs, toExclusiveSimTimeNs)`
 使用左闭右开的原始仿真时间区间，不依赖界面帧率、处理时间或显示延迟。
 
@@ -56,11 +56,11 @@ flowchart LR
 显示幅度、极性、压力波形增益不参与物理量计算。例如 VT=450 mL、VD=150 mL 时，
 一次有效呼吸提供 300 mL 的肺泡洗出体积；这与胸阻抗显示为 500 或 1000 counts 无关。
 示例使用的 VT、每搏量等仍是研究基准，不自动标为患者同组的 0 SD。
-后续自动默认继续遵守[已确定的患者默认规则](oxygenation-prototype.md#后续患者参数的默认规则)。
+后续自动默认继续遵守[已确定的患者默认规则](../../research/oxygenation/oxygenation-prototype.md#后续患者参数的默认规则)。
 
 ## 氧合与光学采样时间
 
-[IArterialOxygenationSource](../src/Monitor.Simulation/Physiology/ArterialOxygenationSource.cs)
+[IArterialOxygenationSource](../../../src/Monitor.Simulation/Physiology/ArterialOxygenationSource.cs)
 提供 `ReadAt(sourceSimTimeNs)`，返回带同一时间戳的模型 SaO₂。
 实现必须是纯读取：提供该时刻的状态，或明确拒绝缺失历史；不能返回“最新值”代替。
 
@@ -71,7 +71,7 @@ flowchart LR
 - 内部接受 0–100% 生理饱和度，与仪器当前报告范围分离。
 - 样本数和步长都有上界，构造前完整验证配置、数值与时间溢出。
 
-[光学源](../src/Monitor.Simulation/Authoring/PulseOximeterIllustrationSource.cs)
+[光学源](../../../src/Monitor.Simulation/Authoring/PulseOximeterIllustrationSource.cs)
 按每个样本的 `block.StartSimTimeNs + i × 8 ms` 查询；即使数据块在约两秒后才到达，
 也不使用当时的仿真前沿。血液输送所带来的生理变化应已经包含在氧合输出中；
 此接口不再次叠加采集延迟，也不擅自将既有 Pleth 脉搏传播延迟当作血氧输送延迟。
@@ -80,7 +80,7 @@ flowchart LR
 缺乏有效外周脉动时，质量门限保持原有行为，模型 SaO₂ 不直接冒充可测 SpO₂。
 固定目标／种子波动和生理氧合源是互斥模式，不能在生理状态上再叠加预设波动。
 
-[本地预览会话](../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.cs)
+[本地预览会话](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.cs)
 已提供可选的 `oxygenation` 入口，要求启用测量；不改变现有调用者的默认模式。
 每个最多 50 ms 的推进块先完成氧合历史查询和光学转换，再发布采集状态。
 缺失历史、返回时间不符或超出光学范围时，该推进块可在补齐输入后重试。
@@ -92,7 +92,7 @@ flowchart LR
 
 ## 可重现的 C# → Python → 光学测量回放
 
-新增[回放工具](../tools/replay_oxygenation_transport.py)直接消费 C# 输出的有效通气量和
+新增[回放工具](../../../tools/replay_oxygenation_transport.py)直接消费 C# 输出的有效通气量和
 射血量。8 ms 内以区间平均流量推进原型，肺气量转换为 STPD，血液体积不做气体换算；
 死腔已在输入侧扣除，不再重复扣减。初值取解析平均通气／血流稳态，不做周期预热。
 

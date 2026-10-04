@@ -1,7 +1,7 @@
 # Contributing
 
 Project contributions follow AGPL-3.0-or-later. Preserve third-party
-ownership and notices; see `LICENSE`, `docs/license-scope.md`, and
+ownership and notices; see `LICENSE`, `docs/legal/license-scope.md`, and
 `eng/licenses/`.
 
 This software is a teaching simulator, not a clinical device. Keep

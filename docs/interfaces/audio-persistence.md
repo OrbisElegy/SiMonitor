@@ -1,0 +1,288 @@
+# 音频输出、原生 ABI 与本地偏好接口
+
+[接口总览](README.md) · 公开声明：[Infrastructure](api/infrastructure.md)。
+
+本文记录 `Monitor.Infrastructure.Audio`、`Preferences` 和 `native/sim_audio_native` 的当前契约。
+音频是显式启用的本地输出/试听链；身份 SQLite 与加密备份见
+[权威、身份与恢复接口](authority-identity-recovery.md)。公开声明之外的桌面 UI 行为以调用方为准。
+
+## 时间线与线程所有权
+
+源码：[ToneVoice](../../src/Monitor.Infrastructure/Audio/ToneVoice.cs)、
+[SampleToneRenderer](../../src/Monitor.Infrastructure/Audio/SampleToneRenderer.cs)、
+[AudioClockBridge](../../src/Monitor.Infrastructure/Audio/AudioClockBridge.cs)。
+
+内部时间线固定为 **48000 Hz、mono、float32 PCM**；frame 是一帧单声道采样，48 frames=1 ms。
+Renderer.Position / RenderedThroughFrame 是下一个尚未渲染的位置，不是硬件播放游标。
+控制/调度线程串行处理命令、设备生命周期和 Pump；唯一原生 consumer callback 可与之并发。
+不要在 callback 里打开/关闭设备、加载资源、写 WAV、调用生命周期 owner 或更新 UI。
+
+```csharp
+AudioClockBridge(long ticksPerSecond, long initialTicks, long initialFrame);
+void Observe(long monotonicTicks, long engineFrame);
+long MapToFrame(long monotonicTicks);
+```
+
+ClockBridge 根据最近一对严格递增 ticks/frame 观测估算仿射比例；初始斜率为 48000 frames/s。
+MapToFrame 使用向上取整，定位到请求时间及之后第一帧，也可映射 exclusive expiry。
+所有输入 ticks/frame 非负，频率大于零；倒退、相同观测或映射溢出抛参数/溢出异常。
+观测必须属于同一 48 kHz 引擎时间线；callback 到达时刻、另一采样率的原生 frame 不能直接输入。
+该类不做设备时间质量过滤、重采样偏移补偿或物理延迟标定。
+
+## 音色、调度与 PCM 缓冲
+
+`TonePreset(Id, FrequencyMilliHz, AttackFrames, HoldFrames, ReleaseFrames, GainQ15)`
+另含 Sample、BeatPitchPercent。频率单位 milliHz，范围 20000–20000000；Attack/Release 至少 1 frame，
+Hold 非负，合计不超过 480000 frames；GainQ15 为 0–16384，BeatPitchPercent 为 70–97。
+默认 BeatAudition 为 795 Hz，包络 240/4800/720 frames，GainQ15=8192。
+采样音色 TotalFrames 取资源长度，其余取包络合计；无效 preset 在创建或调度时抛 ArgumentException。
+
+```csharp
+ToneVoice(TonePreset preset);
+int ToneVoice.Render(Span<float> destination);
+void ToneVoice.Cancel();
+ToneVoiceState ToneVoice.CaptureState();
+static ToneVoice ToneVoice.Restore(ToneVoiceState state);
+ToneScheduleResult SampleToneRenderer.Schedule(
+    long cancellationKey, TonePreset preset, long targetFrame, long expiryFrame);
+void SampleToneRenderer.Cancel(long cancellationKey);
+void SampleToneRenderer.DiscardForDiscontinuity(long nextFrame);
+void SampleToneRenderer.Render(Span<float> destination);
+```
+
+Voice.Render 返回实际 voice 帧数，剩余 destination 清零；Finished 以 voice 结束位置判断。
+Cancel 未开始 voice 立即结束，已开始 voice 从当前相位最多淡出 240 frames（5 ms）。
+CaptureState/Restore 用于离线确定性延续，包含 preset/frame/cancelFrame，非法快照被拒绝。
+
+Renderer 最多 32 个待播/活动 voice；Schedule 返回 Accepted/Expired/Duplicate/Full。
+expiryFrame 是 **exclusive 最晚开始时刻**，不是声音截断时刻；`expiry <= Position` 为 Expired。
+仍有效的迟到命令从 Position 开始。key 仅对仍占据 slot 的 voice 去重，全局去重和 epoch 策略不在这里。
+混音完成后整体限幅到 [-1,1]；Render 使 Position 前进 destination.Length。
+Cancel 清除尚未开始的 cue，已开始的使用淡出；已提交给设备的 PCM 无法收回。
+DiscardForDiscontinuity 只接受不倒退的新位置，丢弃所有旧命令；调用者还必须退役排队 PCM。
+
+源码：[资源音色](../../src/Monitor.Infrastructure/Audio/SelectedMonitorTones.cs)、
+[资源 manifest](../../src/Monitor.Infrastructure/Audio/SelectedTones/manifest.json)、
+[WAV 导出](../../src/Monitor.Infrastructure/Audio/ToneWaveFixture.cs)。
+
+SelectedMonitorTones.Alarm(level, volumePercent) / Heartbeat(volumePercent, saturationPercent=97)
+返回采样 preset；volume 为 0–100。Heartbeat pitch 使用 70–97 的离散 bank，97 使用原 heartbeat。
+PCM 是程序集嵌入的 48 kHz signed 16-bit little-endian mono，预加载后才进入 render 路径。
+Info/Notice/Warning/Critical/Heartbeat 长度分别为 8640/7680/6240/168000/4800 frames；
+HeartbeatPitchA 含 28×4800 frames。缺资源或长度错误抛 `AudioTone.MissingAsset` / `AudioTone.InvalidAsset`。
+这些采样与 timing 是项目当前选用的素材和编排，不表示音色认证或厂商设备兼容性。
+
+`ToneWaveFixture.Write(Stream output, TonePreset preset, int beatCount, int periodFrames,
+CancellationToken cancellationToken=default)` 输出 RIFF/WAVE 48 kHz mono signed PCM16。
+beatCount 1–128、periodFrames 至少 preset.TotalFrames、总长最多 60 s；需要可写 Stream。
+取消抛 OperationCanceledException，已经写出的前缀不会回滚；调用者拥有 stream，方法只 Flush、不关闭。
+
+源码：[AudioPcmBuffer](../../src/Monitor.Infrastructure/Audio/AudioPcmBuffer.cs)、
+[AudioRenderSession](../../src/Monitor.Infrastructure/Audio/AudioRenderSession.cs)。
+
+| 类型/方法 | 契约 |
+| --- | --- |
+| `AudioPcmBuffer(int sampleRate=48000, int channels=1, int capacityMilliseconds=40)` | 通用缓冲范围 8–192 kHz、1–8 channels、20–100 ms；capacity 向整数 frame 计算 |
+| `bool TryWrite(ReadOnlySpan<float> interleaved)` | producer 单独调用；完整 frames、有限值且绝对值≤1，空间足够才整体发布，否则 false |
+| `int Read(Span<float> destination)` | consumer 单独调用；返回实际 PCM frames，尾部静音；非完整帧 geometry 全部静音且不消费 |
+| `WritableFrames` | producer 侧快照，consumer 只能释放容量 |
+| `AudioRenderSession(long initialFrame=0, int capacityMilliseconds=40)` | 固定 48 kHz mono，拥有 renderer、缓冲和 scratch，不打开设备 |
+| `ToneScheduleResult? Schedule(long key, TonePreset preset, long targetFrame, long expiryFrame)` | 退役后返回 null，否则交给 renderer |
+| `bool TryProduce(int frames)` | frames 必须 1…CapacityFrames；满缓冲或已退役返回 false，满缓冲不推进 renderer |
+| `int Read(Span<float> destination)` | 第一次 underrun 输出已有前缀+静音，累计缺帧并永久退役；之后静音 |
+| `void Cancel(long key)` / `void Retire()` | 取消渲染 cue / 原子锁存退役，Retire 不等于停止 OS 设备 |
+
+每流仅一个 producer 与一个 consumer；替换时创建新对象，不重置活跃 queue。
+RequiresReplacement 一旦为 true 不会恢复；UnderrunFrames 表示缺失引擎帧数。
+BufferedFrames、RenderedThroughFrame 供调度端查看，不是硬件时钟或延迟测量。
+
+## 设备端口与生命周期
+
+源码：[AudioOutputLifecycle](../../src/Monitor.Infrastructure/Audio/AudioOutputLifecycle.cs)、
+[SoundPreviewPlayback](../../src/Monitor.Infrastructure/Audio/SoundPreviewPlayback.cs)。
+
+```csharp
+interface IAudioOutputDevice {
+    bool Start();
+    bool StopAndClose();
+}
+interface IAudioOutputFactory {
+    IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+}
+interface IPumpedAudioOutput : IAudioOutputFactory, IDisposable {
+    bool Pump();
+}
+```
+
+Open(null, ...) 跟随系统默认设备，返回尚未启动的 device；null 表示失败且 factory 没留下 callback/资源。
+如设备格式不同，adapter 显式转换。StopAndClose=true 表示 callback 已 join 且资源已释放；
+false 必须保留所有权允许重试，不能卸载仍可能被调用的原生代码。
+
+`AudioOutputLifecycle(factory)` 暴露 State/Failure/Generation，只有 Running 时 Session 非空。
+`Replace(string? deviceId, long initialFrame, int capacityMilliseconds=40)` 先验证和分配 candidate、
+预填一队列静音，再退役/关闭旧流，然后增加 generation、Open、Start。
+旧流 StopAndClose 失败时返回 false，不开新流；Open/Start 失败也返回 false。
+State 为 Stopped/Running/DeviceLost/StopFailed；Failure 区分 None/Open/Start/Stop/Underrun/DeviceLost/SessionRetired。
+`CheckHealth()` 由控制线程调用，发现退役就关闭并返回 false；不自动重试。
+`DeviceLost(long generation)` 只接受当前 generation，过期设备通知忽略。
+`Stop()` 成功置 Stopped/None，失败保留 StopFailed 与资源所有权；adapter 的意外异常仍可能向外传播。
+
+源码：[NativeAudioOutputFactory](../../src/Monitor.Infrastructure/Audio/NativeAudioOutputFactory.cs)、
+[NativeAudioClockSample](../../src/Monitor.Infrastructure/Audio/NativeAudioClockSample.cs)。
+
+NativeAudioOutputFactory(string libraryPath, bool allowTestBackend=false) 实现 IPumpedAudioOutput。
+libraryPath 必须 fully qualified，显式加载，无 DLL search-path fallback；ABI 版本必须为 1。
+默认拒绝导出 sa_test_render 的测试库；只可同时拥有一个 device，重复 Open 抛 DeviceStillOwned。
+设备 ID 按 UTF-8 传递，禁止内嵌 NUL；原生 open 失败映射 null。
+`Pump()` 每次最多搬运一队列容量，先 drain managed staging，再填 native queue；每次生产最多 240 frames。
+native queue 是排队容量目标；native underrun 映射 session 缺帧，其他退役原因令 session 退役。
+Status / PeriodSnapshot 在无 device 时为 null；Open 后的诊断字段见下文 sa_info。
+`ReadClock()` 在无 device 或旧库无该可选 symbol 时返回 Result=-2 的零值采样。
+`Dispose()` 要求先成功关闭 device，否则抛 CloseBeforeUnload；成功后卸载动态库。
+
+NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequency、Qpc100Nanoseconds。
+`Nominal48kElapsedFrames` 只有 Result=0、HResult=0、frequency 非零且转换不溢出时才非空，
+按 `position * 48000 / frequency` 向下取整。它只是名义设备累计时间，不能直接当 renderer frontier。
+
+## 本地试听与报警播放入口
+
+源码：[MonitorAlarmPlayback](../../src/Monitor.Infrastructure/Audio/MonitorAlarmPlayback.cs)。
+
+`SoundPreviewPlayback(Func<IPumpedAudioOutput>).PlayAsync(int volumePercent, CancellationToken)`
+在专用 owner 线程播放三段设置试听、运行约 2.4 s；volume 0–100，并发调用抛 AlreadyPlaying。
+`MonitorAlarmPlayback(Func<IPumpedAudioOutput>)` 提供
+SetHeartbeatEnabled(bool)、SubmitHeartbeat(int volumePercent, int pitchPercent=97)、
+SetRequest(MonitorAlarmSoundRequest?)、RunAsync(CancellationToken)。
+请求包含 Level、VolumePercent、MonitorSoundTiming；null 清除报警音请求。
+RunAsync 仅允许一个 worker；SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
+OutputActive 只表示曾成功 pumping 且 worker 尚活动，不保证物理出声或已达到延迟目标。
+返回 SoundPreviewResult：Completed（试听正常结束）、Stopped（取消）、Unavailable（打开/加载不可用）、
+Interrupted（Pump/健康失败）、StopFailed（关闭失败，优先保留资源所有权）。
+
+`MonitorAlarmSequencer.Update(request)` 根据当前请求重新排程；同一请求沿 rendered timeline 推进，
+不补播错过的 burst。UpdateHeartbeat(bool enabled, int? volumePercent, int pitchPercent=97)
+收到非空 volume 才新增 beat。报警 cue 最晚启动期限为 target+2400 frames（50 ms），beat 为+12000（250 ms）。
+请求变更取消当前已知 key，音量零不排程；Info 只有 Timing.InfoTone=true 才播放。
+该链没有网络报警 director、全局事件去重、权威 epoch 接入或自动设备重连。
+
+## native/sim_audio_native ABI 1
+
+权威声明：[sim_audio.h](../../native/sim_audio_native/sim_audio.h)；
+实现：[sim_audio.c](../../native/sim_audio_native/sim_audio.c)；
+构建边界：[native README](../../native/sim_audio_native/README.md)。
+
+导出 C ABI，managed delegate 使用 Cdecl；sa_output 为 opaque handle。
+生产构建只启用 Windows WASAPI shared playback；其他平台 open 返回 unavailable，
+不会偷偷回退 null backend。SIM_AUDIO_TEST 使用 null backend，只允许默认设备。
+
+```c
+uint32_t sa_abi_version(void); /* 1 */
+int32_t sa_open(const char* device_id_utf8, uint32_t capacity_ms, sa_output** out);
+int32_t sa_submit(sa_output* output, const float* pcm, uint32_t frames);
+int32_t sa_start(sa_output* output);
+int32_t sa_close(sa_output* output);
+uint32_t sa_info(sa_output* output, uint32_t key);
+int32_t sa_clock_sample(sa_output* output, uint64_t* position,
+    uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult);
+/* SIM_AUDIO_TEST only */
+void sa_test_render(sa_output* output, float* pcm, uint32_t frames);
+```
+
+| 返回码 | 意义与具体边界 |
+| --- | --- |
+| 0 | 成功；sa_clock_sample 表示准确采样 |
+| -1 | 无效参数/PCM/设备 ID；空句柄通常为 -1，sa_info 例外返回 0 |
+| -2 | 后端、设备、分配、启动或时钟不可用；sa_close 停止失败时也为 -2 |
+| -3 | sa_submit 空间不足，整次输入不写入 |
+| -4 | 流已退役，不能继续 submit/start/clock |
+| 1 | 仅 sa_clock_sample：S_FALSE 降低精度，不能用于调度校准 |
+
+sa_open 的 out 非空；验证后先置 *out=NULL。capacity_ms 为 20–100，设备 ID 可 NULL 但不可空字符串。
+Windows ID 需有效 UTF-8 并能转换到后端的 64-wide-char ID 容器；不支持时返回 -1/-2。
+成功打开 48 kHz mono float 接口和 `48 * capacity_ms` frame ring，但尚未启动。
+调用顺序：open → submit 静音或有效 PCM → start → submit/info/clock → close。
+sa_submit frames 是 float 元素数；所有值有限且在 [-1,1]，先完整校验再写。
+若写入过程中被退役，结果仍可为 -4；不要重播给旧 handle 或假定队列仍能恢复。
+
+callback 先清零，再读有效 PCM；首次不足保存 missing frames，退役 reason 由 0 原子改为 1。
+stop/reroute/interruption 通知将 reason 设为 2，underrun 不得把 2 覆盖为 1。
+之后 callback 保持静音。sa_close 先退役为 2，再 stop/uninit/join、释放 clock/ring/context/handle；
+停止失败保留 handle，必须重试 close。成功 close 后不得再访问句柄或相关缓冲。
+sa_test_render 走同一 consumer，但要求有效 handle/buffer；它不是可向生产传入任意指针的安全包装。
+
+| sa_info key | 数值/单位 |
+| --- | --- |
+| 1 / 2 / 3 | 原生 sample rate Hz / channels / format：1=f32、2=s16、3=s24、4=s32、5=u8 |
+| 4 | 后端报告 period frames，不能解读成物理延迟 |
+| 5 | Windows 实际 WASAPI buffer frames；不支持返回 0 |
+| 6 / 7 / 8 | retired reason 0/1/2；第一次 underrun 缺帧；producer 可写引擎 frames |
+| 9 | low-latency qualified，当前恒为 0 |
+| 10 | 打开时 period snapshot 状态：0 不可用/旧库、1 可用、2 查询失败 |
+| 11–15 | default/fundamental/minimum/maximum/current engine period frames |
+| 16 / 17 / 18 | snapshot engine rate Hz / HRESULT bits / engine channels |
+
+未知 key 或空句柄返回 0；11–18 为打开时快照，不是实时观测。旧 ABI1 DLL 的可选项可能全零，
+零表示不可用，不能据此声称零周期或零延迟。
+sa_clock_sample 是可选 ABI1 扩展，只允许 owner thread。有效输出指针先全部清零；空输出指针为 -1。
+设备 position 必须除以 frequency 才是秒，QPC 已为 100 ns 单位，不是 QueryPerformanceCounter ticks。
+Windows 从当前流拥有的 IAudioClock 读取；失败可在 hresult 保留 HRESULT，其余数值为零。
+生产 qualification、声音实际到达扬声器的延迟仍无此 API 的直接证据。
+
+## 本地偏好文件与失败语义
+
+源码：[DisplayPreferenceStore](../../src/Monitor.Infrastructure/Preferences/DisplayPreferenceStore.cs)、
+[显示配置](../../src/Monitor.Application/Presentation/MonitorDisplayConfiguration.cs)、
+[报警偏好](../../src/Monitor.Application/Presentation/MonitorAlarmPreferences.cs)、
+[确认时间](../../src/Monitor.Application/Presentation/MeasurementConfirmationTiming.cs)、
+[声音偏好](../../src/Monitor.Application/Presentation/MonitorSoundPreferences.cs)、
+[生成器偏好](../../src/Monitor.Application/Presentation/MonitorGeneratorPreferences.cs)。
+
+```csharp
+record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout,
+    MonitorAlarmPreferences? Alarms=null, MonitorSoundPreferences? Sound=null,
+    MonitorGeneratorPreferences? Generator=null);
+DisplayPreferenceStore(string path);
+DisplayPreferences Load(out bool rejected);
+bool Save(DisplayPreferences preferences);
+```
+
+path 为调用者指定路径，Save 规范化成绝对路径并创建父目录；没有内建默认位置。
+存储只包含显示/报警/声音配置和可选生成器编辑输入，不保存波形状态、活动报警、测试 notice 或声音启用授权。
+Sound.HeartbeatEnabled 是偏好值，不能替代运行时显式启用本地输出。
+
+文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；最多读取 32768 bytes、最大深度 8。
+未配置字符串枚举 converter，普通 enum 属性以整数表示；字典键按 System.Text.Json 的键表示规则。
+未知属性拒绝，构造器必需参数必须存在。顶层必需 Version/Skin/Slots/PaperLayout，slot 必需
+Channel/Automatic/Minimum/Maximum/Speed；Speed 为 0.1 mm/s，合法值 125/250/500。
+Skin 为 ThreeRows=0/FiveRows=1/SevenRows=2，slot 数量必须分别 3/5/7；channel 0–6。
+PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由桌面调用方解释。
+
+| 版本 | Load 兼容规则 |
+| --- | --- |
+| 1 | Alarms/Sound/Generator 可缺省 |
+| 2 | Alarms 必须非空 |
+| 3 | Alarms、Sound 必须非空 |
+| 4 | Alarms、Sound、Generator 必须非空 |
+| 5 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+
+Save 总是写 Version=5；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
+Alarms.ConfirmationTimings 是以 MonitorNumeric 为键的可选覆盖字典，旧文件省略时得到空字典；
+每项包含 CriticalLow/WarningLow/WarningHigh/CriticalHigh，各自 TriggerMilliseconds/RecoveryMilliseconds 为 0–600000。
+未覆盖项经 ConfirmationFor 使用 DefaultFor；ABP/PA/CVP mean 默认低限触发/恢复 4000/3000 ms，
+高限 10000/3000 ms，其他支持指标默认 0/0。空字典不等于所有指标固定零时长。
+其余报警阈值倍率随各 MeasurementLimits 描述定义，不能把存储整数当 UI 显示单位。
+
+Sound 保存 Volume/HeartbeatVolume（0–100）、HeartbeatEnabled、BeatSource（0–2）、PitchSource（0–1）、
+PauseSeconds（1–3600）、Timing；Timing 周期单位 ms，Info 5000–120000、Notice 1500–60000、
+Warning 3500–60000、Critical 250–2000，另有 InfoTone。
+Generator 保存 Ecg/EcgName、Respiration/Ejection、Seed、Numbers/Flags/Choices、ApplyDelaySeconds、Oxygenation；
+ApplyDelaySeconds 为 0–60、0.1 s 步进，三个字典上限分别 64/32/16。它不是仿真 checkpoint。
+
+Load 找不到文件/目录：返回 `MonitorDisplayConfiguration.Default()`、PaperLayout=0，rejected=false。
+IO、权限、JSON 或参数校验失败：返回相同默认值，rejected=true，不改写坏文件。
+有效旧文件保留缺省 Alarms/Sound/Generator 为 null，应用调用方自行选择回退值。
+Save 先做参数校验，再创建随机同目录 `.tmp` 文件、序列化、Flush(flushToDisk:true)、
+File.Move(overwrite:true) 发布；finally 尝试删除临时文件。
+IO/UnauthorizedAccessException 返回 false；非法参数、路径规范化或序列化的其他异常不会统一转 false。
+因此调用方应区分用户输入无效、加载被拒绝、保存失败和文件缺失；成功 Save 只说明文件发布成功。

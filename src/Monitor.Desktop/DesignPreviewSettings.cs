@@ -282,11 +282,30 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
             ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
         var alertGroups = new List<(string Title, Control Start)>
-        { ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled) };
-        alertGroups.AddRange(MeasuredLimitNotice.Descriptors.Select(d => (d.Label, (Control)Alerts.AdditionalLimits.Editors[d.Numeric])));
+        { (Alerts.Parameters[0].Title, Alerts.Children[0]), (Alerts.Parameters[1].Title, Alerts.SpO2Enabled) };
+        alertGroups.AddRange(Alerts.Parameters.Skip(2).Select(p => (p.Title, (Control)Alerts.AdditionalLimits.Editors[p.Numeric])));
+        int alertSettings = alertGroups.Count;
         alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
         alertGroups.Add(("通知策略", Alerts.NotificationSettings));
-        SectionPages[4] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
+        var alarmSections = SettingsSections.Split("报警", Alerts, new Dictionary<int, string> { [0] = "测量参数", [alertSettings] = "提示与声音" }, alertGroups.ToArray());
+        SectionPages[4] = alarmSections;
+        for (int section = 0; section < Alerts.Parameters.Count; section++)
+        {
+            int index = section;
+            var switches = Alerts.SwitchesFor(Alerts.Parameters[index].Numeric);
+            void RefreshState()
+            {
+                bool enabled = switches.Any(s => s.IsChecked == true);
+                alarmSections.SetDetail(index, enabled ? "开" : "关", enabled ? "已启用" : "已关闭");
+            }
+            foreach (var toggle in switches) { toggle.IsCheckedChanged += (_, _) => RefreshState(); }
+            RefreshState();
+        }
+        Alerts.NotificationSettings.ParameterRequested += numeric =>
+        {
+            Alerts.ShowSoundPage(numeric);
+            alarmSections.SelectedSection = Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(numeric);
+        };
         SectionPages[5] = SettingsSections.Split("生命体征", vitals,
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
             ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),

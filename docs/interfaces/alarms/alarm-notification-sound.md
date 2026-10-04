@@ -1,6 +1,6 @@
 # 通知意图到声音执行接口
 
-`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面始终绑定已登记条件以处理用户确认；“报警 → 通知策略”设置默认方式与独立短／长覆盖。产品默认仍为持续播放，默认方式、条件覆盖和视觉保持通过版本 10 偏好保存。声音输出开关不随偏好恢复。
+`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面始终绑定已登记条件以处理用户确认；“报警 → 通知策略”设置默认方式，各测量参数的“声音”分组设置独立短／长覆盖。产品默认仍为持续播放，默认方式、条件覆盖和视觉保持通过版本 10 偏好保存。声音输出开关不随偏好恢复。
 
 ## 请求与单组排程
 

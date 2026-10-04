@@ -93,7 +93,12 @@ internal sealed class AlarmConfirmationEditor : UserControl
         Groups.SelectedIndex = 0;
     }
 
-    internal void AddPage(string title, Control content) => Groups.Items.Add(Page(title, content));
+    internal TabItem AddPage(string title, Control content)
+    {
+        var page = Page(title, content);
+        Groups.Items.Add(page);
+        return page;
+    }
 
     private static TabItem Page(string title, Control content) => new()
     {

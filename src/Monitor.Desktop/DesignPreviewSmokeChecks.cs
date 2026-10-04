@@ -1092,14 +1092,22 @@ internal static class DesignPreviewSmokeChecks
             var settingsSession = window.Session;
             var alarmGroups = window.Settings.SectionPages[4];
             string?[] alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-            Require(alarmLabels.Contains("EtCO₂") && alarmLabels.Contains("PR · PLETH") && alarmLabels.Contains("ABP 平均压") &&
-                !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries");
+            Require(alarmLabels.Contains("EtCO₂，已关闭") && alarmLabels.Contains("PR · PLETH，已关闭") && alarmLabels.Contains("ABP 平均压，已关闭") &&
+                !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries with their state");
+            var alarmHeaders = alarmGroups.Sections.Items.Cast<ListBoxItem>().Where(item => !item.IsEnabled).ToArray();
+            Require(alarmHeaders.Select(item => ((TextBlock)item.Content!).Text).SequenceEqual(["测量参数", "提示与声音"]) &&
+                alarmHeaders.All(item => !item.Focusable) && alarmGroups.DetailFor(0) == "关",
+                "alarm navigation separates measurements from shared prompt and sound settings");
+            window.Settings.Alerts.NoExpirationEnabled.IsChecked = true;
+            Require(alarmGroups.DetailFor(window.Settings.Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(MonitorNumeric.EtCo2)) == "开",
+                "EtCO2 state includes the no-expiration alarm");
+            window.Settings.Alerts.NoExpirationEnabled.IsChecked = false;
             window.Settings.Tabs.SelectedIndex = 4;
-            alarmGroups.Sections.SelectedIndex = 0;
+            alarmGroups.SelectedSection = 0;
             var heartRateGroups = window.Settings.Alerts.HeartRateConfirmation;
             var originalConfirmation = heartRateGroups.Read();
             Require(string.Join(" / ", heartRateGroups.Groups.Items.Cast<TabItem>().Select(item => item.Header?.ToString())) ==
-                "阈值 / 触发确认 / 恢复确认", "alarm parameters use the existing advanced-page tab pattern");
+                "阈值 / 触发确认 / 恢复确认 / 声音", "alarm parameters use the existing advanced-page tab pattern");
             heartRateGroups.Groups.SelectedIndex = 1;
             heartRateGroups.Fields[0].Value = 1.25m;
             Capture(window, "ui-preview-alarm-trigger-groups.png");
@@ -1118,13 +1126,13 @@ internal static class DesignPreviewSmokeChecks
             Require(alarmScroll.Extent.Width <= alarmScroll.Viewport.Width + 1 &&
                 alarmScroll.Extent.Height <= alarmScroll.Viewport.Height + 100,
                 $"grouped alarm pages avoid horizontal scrolling and a long vertical stack in compact layout: extent {alarmScroll.Extent}, viewport {alarmScroll.Viewport}");
-            alarmGroups.Sections.SelectedIndex = 1;
-            alarmGroups.Sections.SelectedIndex = 0;
+            alarmGroups.SelectedSection = 1;
+            alarmGroups.SelectedSection = 0;
             Require(heartRateGroups.Groups.SelectedIndex == 2 && heartRateGroups.Read().CriticalLow == new BoundaryConfirmationTiming(1250, 750) &&
                 ReferenceEquals(settingsSession, window.Session), "alarm navigation preserves edited values, selected subgroup and running session");
             heartRateGroups.Restore(originalConfirmation);
             heartRateGroups.Groups.SelectedIndex = 0;
-            alarmGroups.Sections.SelectedIndex = Array.IndexOf(alarmLabels, "EtCO₂");
+            alarmGroups.SelectedSection = window.Settings.Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(MonitorNumeric.EtCo2);
             var co2Groups = window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].Confirmation.Groups;
             co2Groups.SelectedIndex = 3;
             Capture(window, "ui-preview-alarm-co2-absence-group.png");
@@ -1139,7 +1147,7 @@ internal static class DesignPreviewSmokeChecks
                 absenceScroll.Extent.Height <= absenceScroll.Viewport.Height + 100,
                 $"CO2 condition and confirmation fit the compact group: extent {absenceScroll.Extent}, viewport {absenceScroll.Viewport}");
             co2Groups.SelectedIndex = 0;
-            alarmGroups.Sections.SelectedIndex = 0;
+            alarmGroups.SelectedSection = 0;
             window.Width = 1440; window.Height = 940;
             window.Settings.Tabs.SelectedIndex = 3;
             var soundGroups = window.Settings.SectionPages[3];

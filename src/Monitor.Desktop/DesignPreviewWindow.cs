@@ -134,6 +134,23 @@ internal sealed class DesignPreviewWindow : Window
         MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
         Settings.Apply.Classes.Add("accent");
         Settings.ResetAll.Click += (_, _) => ResetAllSettings();
+        Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
+    }
+    internal void UpdateOxygenationVentilation()
+    {
+        try
+        {
+            decimal multiplier = Settings.Oxygenation.ReadDemandMultiplier();
+            long effectiveNs = _session.UpdateOxygenationVentilation(Settings.Oxygenation.ReadVentilation(), multiplier);
+            decimal baseline = _session.OxygenationParameters!.OxygenDemandMlStpdPerMinute;
+            Settings.Status.Text = $"通气／耗氧将于仿真 {effectiveNs / 1_000_000_000m:0.000} s 生效；基础 {baseline:0.###} × {multiplier:0.##} = {baseline * multiplier:0.###} mL O₂/min。氧储备、基线与测量窗口已保留。";
+        }
+        catch (InvalidOperationException)
+        { Settings.Status.Text = "请先启用双波长指脉氧教学源及实时氧合模型，并应用设置。"; }
+        catch (ArgumentException error) when (error.Message == "Oxygenation.VentilationFlowTooHigh")
+        { Settings.Status.Text = "通气未更新：当前吸气时程下流量超出原型范围，请减小 VT 或增加吸气时长。"; }
+        catch (Exception error) when (error is ArgumentException or OverflowException)
+        { Settings.Status.Text = "通气／耗氧参数无效，当前运行未改变。请检查 VT、VD、FiO₂ 和耗氧倍增器。"; }
     }
     internal void ResetAllSettings()
     {
@@ -221,7 +238,9 @@ internal sealed class DesignPreviewWindow : Window
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
         var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: opticalTarget is null ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation);
+            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation,
+            realtimeOxygenation: Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
+                ? Settings.Oxygenation.ReadConfiguration() : null);
         var ecg = CapturePaper(ecgConfig);
         return (next, ecgConfig, ecg, config);
     }
@@ -287,6 +306,11 @@ internal sealed class DesignPreviewWindow : Window
         { Settings.Status.Text = "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
         { Settings.Status.Text = "未应用：" + Settings.BreathingConstraintDescription() + "原运行与画面保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "Oxygenation.VentilationFlowTooHigh")
+        { Settings.Status.Text = "未应用：当前吸气时程下流量超出氧合原型范围，请减小 VT 或增加吸气时长。原运行保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
+            exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
+        { Settings.Status.Text = "未应用：" + OxygenationPatientPanel.Explain(exception) + "原运行保持不变。"; }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。"; }
     }

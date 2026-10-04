@@ -855,6 +855,9 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureAlarmSmokeChecks.Verify);
+        NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
+        NativeSmokePartition.Run(RealtimeOxygenationSmokeChecks.Verify);
+        NativeSmokePartition.Run(OxygenationDefaultsSmokeChecks.Verify);
     }
     private static void VerifyIntegratedWindow()
     {

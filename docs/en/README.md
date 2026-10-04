@@ -8,6 +8,8 @@ The repository contains a .NET desktop application, a deterministic simulation l
 
 For a shorter overview, see the [English summary](summary.md). Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
 
+See the [interface reference](../interfaces/README.md) (Chinese) for current module contracts, data formats, native audio ABI, command-line entry points, and complete C# public declarations.
+
 ## Screenshots
 
 **Main monitor view**

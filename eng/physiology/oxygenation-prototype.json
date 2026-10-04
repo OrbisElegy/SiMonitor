@@ -1,0 +1,73 @@
+{
+  "model_id": "OxygenTransportPrototype@1",
+  "status": "offline_float_prototype_not_clinically_calibrated",
+  "parameters": {
+    "frc_ml_btps": 2200,
+    "dead_space_ml_btps": 150,
+    "respiratory_rate_per_min": 16,
+    "inspiration_fraction": 0.4,
+    "cardiac_output_ml_per_min": 5000,
+    "hemoglobin_g_per_dl": 15,
+    "shunt_fraction": 0.02,
+    "oxygen_demand_ml_stpd_per_min": 250,
+    "respiratory_quotient": 0.8,
+    "consumption_floor_content_ml_per_dl": 2,
+    "volume_recovery_seconds": 2
+  },
+  "blood_volume": {
+    "method": "nadler_adult",
+    "profile": {
+      "age_years": 35,
+      "formula_sex": "male",
+      "height_cm": 175,
+      "weight_kg": 70
+    },
+    "arterial_fraction": 0.2
+  },
+  "reference_control": {
+    "inspired_oxygen_fraction": 0.21,
+    "tidal_volume_ml_btps": 450,
+    "airway_open": true
+  },
+  "evidence": [
+    {
+      "url": "https://doi.org/10.1152/jappl.1979.46.3.599",
+      "supports": "Standard oxygen dissociation curve, not a dynamic hypoxia trajectory"
+    },
+    {
+      "url": "https://doi.org/10.1016/j.bja.2020.01.004",
+      "supports": "Adult reference magnitudes for FRC, tidal volume, Hb, shunt, dead space, RQ and oxygen demand; not this model's fitted parameters"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41467-020-18672-6",
+      "supports": "Blood oxygen content includes Hb-bound and dissolved components; mix contents by flow"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/21936146/",
+      "supports": "Nadler adult blood volume model attribution"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5534181/",
+      "supports": "Table 1 reproduces the male/female Nadler coefficients, height in metres, weight in kilograms, output in litres"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/16756741/",
+      "supports": "Fixed mL/kg estimation is unsuitable across obesity; no obesity estimator is implemented here"
+    }
+  ],
+  "authored_assumptions": [
+    "Adult circulating model only; low/no-flow and pediatric states are rejected or excluded",
+    "Nadler admission restricted to age18..90, height140..210cm, weight40..150kg and BMI18.5..<30; these are prototype bounds, not validated clinical formula boundaries",
+    "Blood volume is estimated, not measured; effective arterial/systemic-venous split0.2/0.8 is independent of Nadler",
+    "Other physiological parameters do not automatically scale from patient demographics",
+    "Cardiac output5L/min, constant Hb, fixed37C and pH7.4; lung capillary equilibrium is instantaneous",
+    "Systemic oxygen consumption is lumped in venous blood; no separate organ/tissue pool",
+    "Actual demand scales linearly below venous oxygen content2mL/dL; unmet demand is tracked, not interpreted as injury",
+    "O2/CO2/inert gas inventories use STPD; lung volume uses BTPS at760mmHg with water vapour47mmHg",
+    "CO2 production enters the gas reservoir immediately as RQ times actual oxygen consumption; no blood CO2 buffer or Bohr shift",
+    "Inspiratory-gated mixed-gas washout integrates to max(VT-VD,0) per breath; not a lung mechanics or dead-space plug-flow model",
+    "Open airway replenishes net gas uptake and relaxes the isobaric gas reservoir toward reference FRC over2s",
+    "Closed airway has no gas input/output and its isobaric reservoir contracts; airway pressure and passive reopening mechanics are not predicted",
+    "Sensitivity ranges deliberately extend beyond the reference cohort and are not population confidence intervals"
+  ]
+}

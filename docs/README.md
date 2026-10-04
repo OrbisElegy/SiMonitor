@@ -11,9 +11,15 @@
 
 ## 接口与集成
 
+- [当前实现接口总览](interfaces/README.md)
+- [音频输出、原生 ABI 与本地偏好接口](interfaces/audio-persistence.md)
+- [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
+- [桌面与命令行入口](interfaces/desktop-tools.md)
+- [测量、通知与波形呈现接口](interfaces/measurements-presentation.md)
 - [成人氧合基线与教师耗氧倍增器](interfaces/oxygenation/oxygenation-defaults.md)
 - [氧合第三步：深低数值、测量恢复与报警验证](interfaces/oxygenation/oxygenation-reporting.md)
 - [氧合第二步：物理输入与原始采样时间](interfaces/oxygenation/oxygenation-transport.md)
+- [仿真、采集与波形接口](interfaces/simulation.md)
 
 ## 技术调研
 

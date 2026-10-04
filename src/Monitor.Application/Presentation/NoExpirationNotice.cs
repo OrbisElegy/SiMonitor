@@ -12,12 +12,17 @@ public static class NoExpirationNotice
         if (!enabled) { return null; }
         if (delaySeconds is null or < 5 or > 120)
         { return new("co2-absence-settings", MonitorNoticeLevel.Info, "CO₂ 呼吸等待时限无效：请输入5–120秒整数") { Audible = false }; }
-        if (activity is not { Status: WaveformMeasurementStatus.Valid, ContinuousUsableSinceNs: { } since, LastSampleNs: { } last } ||
-            since < 0 || since > last || last > nowNs || nowNs - last > 500_000_000 ||
-            activity.LastExpirationNs is { } invalid && (invalid < 0 || invalid > last)) { return null; }
+        if (!HasUsableActivity(nowNs, activity)) { return null; }
+        long since = activity!.ContinuousUsableSinceNs!.Value;
+        long last = activity.LastSampleNs!.Value;
         long anchor = Math.Max(since, activity.LastExpirationNs ?? since);
         return last - anchor >= delaySeconds.Value * 1_000_000_000L
             ? new("co2-no-expiration", MonitorNoticeLevel.Critical, "CO₂ 未检出呼吸") { Numeric = MonitorNumeric.Co2RespirationRate }
             : null;
     }
+
+    internal static bool HasUsableActivity(long nowNs, CapnographyActivity? activity) =>
+        activity is { Status: WaveformMeasurementStatus.Valid, ContinuousUsableSinceNs: { } since, LastSampleNs: { } last } &&
+        since >= 0 && since <= last && last <= nowNs && nowNs - last <= 500_000_000 &&
+        (activity.LastExpirationNs is null || activity.LastExpirationNs >= 0 && activity.LastExpirationNs <= last);
 }

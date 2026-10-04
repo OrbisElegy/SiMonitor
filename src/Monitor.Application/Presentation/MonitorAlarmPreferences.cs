@@ -9,6 +9,8 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
     public IReadOnlyDictionary<MonitorNumeric, MeasurementConfirmationTiming> ConfirmationTimings { get; init; } =
         new Dictionary<MonitorNumeric, MeasurementConfirmationTiming>();
 
+    public BoundaryConfirmationTiming NoExpirationConfirmation { get; init; } = new(0, 0);
+
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric) =>
         ConfirmationTimings.TryGetValue(numeric, out var timing) ? timing : MeasurementConfirmationTiming.DefaultFor(numeric);
 
@@ -29,6 +31,8 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
             !InRange(NoExpirationSeconds, 5, 120) || NoExpirationEnabled && NoExpirationSeconds is null ||
             Additional is null || Additional.Count != MeasuredLimitNotice.Descriptors.Count)
         { throw new ArgumentException("AlarmPreferences.Invalid"); }
+        if (NoExpirationConfirmation is null) { throw new ArgumentException("AlarmConfirmation.MissingTiming"); }
+        NoExpirationConfirmation.Validate();
         if (ConfirmationTimings is null) { throw new ArgumentException("AlarmConfirmation.MissingConfiguration"); }
         foreach (var (numeric, timing) in ConfirmationTimings)
         {

@@ -210,13 +210,13 @@ void Reset();
 ```
 
 上述构造器、`Evaluate` 和 `Reset` 属于 `ConfirmedLimitNotice`。每个实时会话、每个数值持有一个
-实例；支持 RR·RESP、PR·PLETH、EtCO₂、RR·CO₂、ABP/PA/CVP 平均压，不支持 HR 或 SpO₂。
+实例；支持 HR、SpO₂、RR·RESP、PR·PLETH、EtCO₂、RR·CO₂、ABP/PA/CVP 平均压。
 完整定义见 [ConfirmedLimitNotice](../../src/Monitor.Application/Presentation/ConfirmedLimitNotice.cs)、
 [MeasurementConfirmationTiming](../../src/Monitor.Application/Presentation/MeasurementConfirmationTiming.cs)。
 
 `MeasurementConfirmationTiming` 的四个边界各有触发/恢复时间，单位整数毫秒、0–600000。
 0 表示首个有效证据立即确认。压力默认下限触发 4000 ms、上限 10000 ms、恢复 3000 ms；
-另四个数值均为 0 ms。Warning 和 Critical 边界独立积累，波动到另一严重程度不会清除
+其余数值均为 0 ms；SpO₂ 仅支持下限，两个上限阈值必须为空、上限确认时间必须为零。Warning 和 Critical 边界独立积累，波动到另一严重程度不会清除
 仍连续成立的 Warning 证据。输出优先级为 CriticalLow、CriticalHigh、WarningLow、WarningHigh。
 
 计时只使用 `snapshot.SampleTimeNs`。重复样本时间不增时；回退、相邻观察间隔大于
@@ -228,6 +228,14 @@ void Reset();
 [MonitorAlarmPreferences](../../src/Monitor.Application/Presentation/MonitorAlarmPreferences.cs)
 保存报警开关/阈值及 `ConfirmationTimings` 覆盖字典，`ConfirmationFor(numeric)` 回退到默认值；
 空覆盖字典合法，未知数值或空 timing 非法。这里保存配置，不保存活动确认状态。
+
+[ConfirmedNoExpirationNotice](../../src/Monitor.Application/Presentation/ConfirmedNoExpirationNotice.cs)
+提供 `Evaluate(enabled, delaySeconds, nowNs, activity, timing)` 和 `Reset()`。呼吸等待时限为
+5–120 秒整数，达到时限后从首次观察到条件成立的 CO₂ 采样时刻积累额外触发确认。
+恢复检测到呼气后开始恢复确认，期间再次达到等待时限会取消恢复。两种确认均为 0–600000 ms，
+默认 0/0；通过独立的 `MonitorAlarmPreferences.NoExpirationConfirmation` 保存。
+计时只使用 `activity.LastSampleNs`，不使用刷新时钟或缺失的数值呼吸率。无效活动、采集段变化、
+回退及大于 500 ms 的间隔清空旧状态。详细接口和配置行为见[报警确认配置](alarms/alarm-confirmation.md)。
 
 其他独立入口：
 

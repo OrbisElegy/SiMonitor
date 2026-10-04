@@ -9,10 +9,10 @@ public sealed class ConfirmedLimitNotice
 {
     private const long MaximumObservationGapNs = 500_000_000;
     private readonly MeasurementLimitDescriptor _descriptor;
-    private readonly Boundary _warningLow = new();
-    private readonly Boundary _criticalLow = new();
-    private readonly Boundary _warningHigh = new();
-    private readonly Boundary _criticalHigh = new();
+    private readonly BoundaryConfirmation _warningLow = new();
+    private readonly BoundaryConfirmation _criticalLow = new();
+    private readonly BoundaryConfirmation _warningHigh = new();
+    private readonly BoundaryConfirmation _criticalHigh = new();
     private MeasurementLimits? _limits;
     private MeasurementConfirmationTiming? _timing;
     private long? _lastSampleTimeNs;
@@ -71,31 +71,5 @@ public sealed class ConfirmedLimitNotice
         _criticalLow.Reset();
         _warningHigh.Reset();
         _criticalHigh.Reset();
-    }
-
-    private sealed class Boundary
-    {
-        public bool Active { get; private set; }
-        private long? _pendingSinceNs;
-
-        public void Update(bool breached, long now, BoundaryConfirmationTiming timing)
-        {
-            if (breached == Active)
-            {
-                _pendingSinceNs = null;
-                return;
-            }
-            _pendingSinceNs ??= now;
-            long delay = (long)(breached ? timing.TriggerMilliseconds : timing.RecoveryMilliseconds) * 1_000_000;
-            if (now - _pendingSinceNs.Value < delay) { return; }
-            Active = breached;
-            _pendingSinceNs = null;
-        }
-
-        public void Reset()
-        {
-            Active = false;
-            _pendingSinceNs = null;
-        }
     }
 }

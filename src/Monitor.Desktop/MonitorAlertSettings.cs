@@ -12,6 +12,8 @@ internal sealed class MonitorAlertSettings : StackPanel
 {
     private readonly ConfirmedLimitNotice _heartRateNotice = new(MonitorNumeric.HeartRate);
     private readonly ConfirmedLimitNotice _spO2Notice = new(MonitorNumeric.SpO2);
+    private readonly ConfirmedNoExpirationNotice _noExpirationNotice = new();
+    private readonly TextBlock _noExpirationError = new() { Foreground = Avalonia.Media.Brushes.OrangeRed, TextWrapping = Avalonia.Media.TextWrapping.Wrap, IsVisible = false };
     internal AlarmConfirmationEditor HeartRateConfirmation { get; } = new(MeasuredLimitNotice.HeartRateDescriptor);
     internal AlarmConfirmationEditor SpO2Confirmation { get; } = new(MeasuredLimitNotice.SpO2Descriptor);
     internal CheckBox HeartRateEnabled { get; } = new() { Content = "启用实测 HR 上下限提示", IsChecked = false };
@@ -24,6 +26,8 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
     internal CheckBox NoExpirationEnabled { get; } = new() { Content = "启用 CO₂ 持续未检出呼吸提示", IsChecked = false };
     internal NumericUpDown NoExpirationSeconds { get; } = new() { Minimum = 5, Maximum = 120, Value = 20, Increment = 1, Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown NoExpirationTriggerSeconds { get; } = AlarmConfirmationEditor.CreateTimingField();
+    internal NumericUpDown NoExpirationRecoverySeconds { get; } = AlarmConfirmationEditor.CreateTimingField();
     internal AdditionalMeasurementLimits AdditionalLimits { get; } = new();
     internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
     internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
@@ -46,6 +50,9 @@ internal sealed class MonitorAlertSettings : StackPanel
         { field.ValueChanged += (_, _) => _heartRateNotice.Reset(); }
         foreach (var field in new[] { CriticalSpO2, WarningSpO2 }.Concat(SpO2Confirmation.Fields))
         { field.ValueChanged += (_, _) => _spO2Notice.Reset(); }
+        NoExpirationEnabled.IsCheckedChanged += (_, _) => NoExpirationEdited();
+        foreach (var field in new[] { NoExpirationSeconds, NoExpirationTriggerSeconds, NoExpirationRecoverySeconds })
+        { field.ValueChanged += (_, _) => NoExpirationEdited(); }
         Margin = new Thickness(20); Spacing = 12;
         Children.Add(HeartRateEnabled);
         var heartRateThresholds = AlarmConfirmationEditor.CreateFieldsPanel();
@@ -70,8 +77,33 @@ internal sealed class MonitorAlertSettings : StackPanel
             {
                 var absence = new StackPanel { Spacing = 6 };
                 absence.Children.Add(NoExpirationEnabled);
-                Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds, absence);
-                absence.Children.Add(DesktopInformationPages.Help("topic-14"));
+                var absenceFields = AlarmConfirmationEditor.CreateFieldsPanel();
+                absenceFields.MaxWidth = 660;
+                Row("呼吸等待时限（秒）", NoExpirationSeconds, absenceFields);
+                Row("额外触发确认（秒）", NoExpirationTriggerSeconds, absenceFields);
+                Row("恢复确认（秒）", NoExpirationRecoverySeconds, absenceFields);
+                foreach (var row in absenceFields.Children.Cast<StackPanel>())
+                {
+                    row.Width = 200;
+                    row.Margin = new Thickness(0, 0, 16, 8);
+                    ((NumericUpDown)row.Children[1]).Width = 200;
+                }
+                absence.Children.Add(absenceFields);
+                var resetAbsence = new Button { Content = "恢复默认确认时间" };
+                resetAbsence.Click += (_, _) =>
+                {
+                    NoExpirationTriggerSeconds.Value = 0;
+                    NoExpirationRecoverySeconds.Value = 0;
+                };
+                var absenceActions = new WrapPanel { Orientation = Orientation.Horizontal };
+                absenceActions.Children.Add(resetAbsence);
+                var effect = Text("修改立即生效，并重新确认此报警。");
+                effect.Margin = new Thickness(12, 4, 0, 4);
+                effect.VerticalAlignment = VerticalAlignment.Center;
+                absenceActions.Children.Add(effect);
+                absenceActions.Children.Add(DesktopInformationPages.Help("topic-14"));
+                absence.Children.Add(absenceActions);
+                absence.Children.Add(_noExpirationError);
                 AdditionalLimits.Editors[descriptor.Numeric].Confirmation.AddPage("未检出呼吸", absence);
             }
         }
@@ -107,6 +139,7 @@ internal sealed class MonitorAlertSettings : StackPanel
                     Read(editor.WarningLow, d.Divisor), Read(editor.WarningHigh, d.Divisor), Read(editor.CriticalHigh, d.Divisor));
             }), NoticeColorEnabled.IsChecked == true)
         {
+            NoExpirationConfirmation = ReadNoExpirationTiming(),
             ConfirmationTimings = MeasuredLimitNotice.Descriptors
                 .Select(d => (d.Numeric, Timing: AdditionalLimits.Editors[d.Numeric].Confirmation.Read()))
                 .Concat(new[]
@@ -133,6 +166,8 @@ internal sealed class MonitorAlertSettings : StackPanel
         SpO2Enabled.IsChecked = preferences.SpO2Enabled;
         WarningSpO2.Value = preferences.SpO2Warning / 1000m; CriticalSpO2.Value = preferences.SpO2Critical / 1000m;
         NoExpirationEnabled.IsChecked = preferences.NoExpirationEnabled; NoExpirationSeconds.Value = preferences.NoExpirationSeconds;
+        NoExpirationTriggerSeconds.Value = preferences.NoExpirationConfirmation.TriggerMilliseconds / 1000m;
+        NoExpirationRecoverySeconds.Value = preferences.NoExpirationConfirmation.RecoveryMilliseconds / 1000m;
         NoticeColorEnabled.IsChecked = preferences.NoticeColorEnabled;
         foreach (var d in MeasuredLimitNotice.Descriptors)
         {
@@ -149,8 +184,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         if (EvaluatePrimary(MonitorNumeric.HeartRate, snapshot) is { } heartRate) { yield return heartRate; }
         if (EvaluatePrimary(MonitorNumeric.SpO2, snapshot) is { } saturation) { yield return saturation; }
         foreach (var notice in AdditionalLimits.Notices(snapshot)) { yield return notice; }
-        int? delay = NoExpirationSeconds.Value is { } seconds && seconds == decimal.Truncate(seconds) ? checked((int)seconds) : null;
-        if (NoExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, delay, snapshot.SampleTimeNs, snapshot.Capnography.Activity) is { } absence)
+        if (EvaluateNoExpiration(snapshot) is { } absence)
         { yield return absence; }
         if (ProductIdentity.DevelopmentFeatures && TestLevel.SelectedIndex > 0)
         {
@@ -162,7 +196,48 @@ internal sealed class MonitorAlertSettings : StackPanel
     {
         _heartRateNotice.Reset();
         _spO2Notice.Reset();
+        _noExpirationNotice.Reset();
         AdditionalLimits.Reset();
+    }
+
+    private BoundaryConfirmationTiming ReadNoExpirationTiming() => new(
+        AlarmConfirmationEditor.ReadMilliseconds(NoExpirationTriggerSeconds),
+        AlarmConfirmationEditor.ReadMilliseconds(NoExpirationRecoverySeconds));
+
+    private int? ReadNoExpirationDelay() => NoExpirationSeconds.Value is { } seconds &&
+        seconds >= 5 && seconds <= 120 && seconds == decimal.Truncate(seconds) ? (int)seconds : null;
+
+    private void NoExpirationEdited()
+    {
+        _noExpirationNotice.Reset();
+        try
+        {
+            _ = ReadNoExpirationTiming();
+            if (NoExpirationEnabled.IsChecked == true && ReadNoExpirationDelay() is null)
+            { throw new ArgumentException("呼吸等待时限须为 5–120 秒整数。"); }
+            _noExpirationError.Text = null;
+            _noExpirationError.IsVisible = false;
+        }
+        catch (ArgumentException error)
+        {
+            _noExpirationError.Text = error.Message;
+            _noExpirationError.IsVisible = true;
+        }
+    }
+
+    private MonitorNotice? EvaluateNoExpiration(LiveMeasurementSnapshot snapshot)
+    {
+        try
+        {
+            return _noExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, ReadNoExpirationDelay(),
+                snapshot.SampleTimeNs, snapshot.Capnography.Activity, ReadNoExpirationTiming());
+        }
+        catch (ArgumentException)
+        {
+            _noExpirationNotice.Reset();
+            return new("co2-absence-settings", MonitorNoticeLevel.Info, "CO₂ 未检出呼吸设置无效：确认时间须为 0–600 秒，最多三位小数")
+            { Audible = false };
+        }
     }
 
     private MonitorNotice? EvaluatePrimary(MonitorNumeric numeric, LiveMeasurementSnapshot snapshot)

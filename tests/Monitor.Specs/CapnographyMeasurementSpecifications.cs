@@ -13,6 +13,7 @@ internal static class CapnographyMeasurementSpecifications
     public static Specification[] All =>
     [
         new(nameof(NoExpirationUsesContinuousAcquisitionAndResetsOnFaults), NoExpirationUsesContinuousAcquisitionAndResetsOnFaults),
+        new(nameof(ConfirmedAbsenceTracksFlatAndReturningWaveform), ConfirmedAbsenceTracksFlatAndReturningWaveform),
         new(nameof(CapnographyMeasuresAcquiredSamplesRatherThanSettings), CapnographyMeasuresAcquiredSamplesRatherThanSettings),
         new(nameof(CapnographyHandlesAbsenceQualityAndAtomicRejection), CapnographyHandlesAbsenceQualityAndAtomicRejection),
         new(nameof(CapnographyRestoresMidBreathAndResetsDiscontinuities), CapnographyRestoresMidBreathAndResetsDiscontinuities),
@@ -153,6 +154,42 @@ internal static class CapnographyMeasurementSpecifications
         Check.That(Notice(restored, 21_390_000_000) is null, "confirmed expiration clears absence immediately");
         Check.That(NoExpirationNotice.Evaluate(false, 20, 0, null) is null &&
             NoExpirationNotice.Evaluate(true, null, 0, null) is { Level: MonitorNoticeLevel.Info, Audible: false }, "disabled and invalid threshold paths remain explicit");
+    }
+
+    private static void ConfirmedAbsenceTracksFlatAndReturningWaveform()
+    {
+        var measurement = new CapnographyMeasurement(Channel);
+        var filter = new ConfirmedNoExpirationNotice();
+        var timing = new BoundaryConfirmationTiming(400, 300);
+        long? pendingSinceNs = null;
+        long? recoverySinceNs = null;
+        bool triggered = false;
+        bool recovered = false;
+        for (int block = 0; block < 50; block++)
+        {
+            measurement.Consume(Wire(block, flat: block <= 30));
+            long nowNs = block * 200_000_000L + 190_000_000;
+            var activity = measurement.Read(nowNs).Activity;
+            bool absent = NoExpirationNotice.Evaluate(true, 5, nowNs, activity) is not null;
+            if (absent) { pendingSinceNs ??= nowNs; }
+            if (triggered && !absent) { recoverySinceNs ??= nowNs; }
+            var notice = filter.Evaluate(true, 5, nowNs, activity, timing);
+            if (!triggered)
+            {
+                bool due = pendingSinceNs is { } start && nowNs - start >= 400_000_000;
+                Check.That((notice is not null) == due, "real flat acquisition adds confirmation after the observed detection window");
+                triggered = due;
+            }
+            else
+            {
+                bool due = recoverySinceNs is { } start && nowNs - start >= 300_000_000;
+                Check.That((notice is null) == due, "only a detector-confirmed expiration starts recovery on real acquisition");
+                recovered |= due;
+            }
+            Check.That(filter.Evaluate(true, 5, nowNs + 100_000_000, activity, timing) == notice,
+                "later read without acquisition does not advance either confirmation");
+        }
+        Check.That(triggered && recovered, "real waveform demonstrates both alarm transitions");
     }
 
     private static byte[] Wire(int block, bool flat = false, bool badQuality = false, int scale = 1, ulong epoch = 1, bool spike = false, ulong revision = 1, int[]? onsetSamples = null)

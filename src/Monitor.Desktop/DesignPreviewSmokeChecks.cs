@@ -894,6 +894,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureAlarmSmokeChecks.Verify);
         NativeSmokePartition.Run(PrimaryAlarmConfirmationSmokeChecks.Verify);
+        NativeSmokePartition.Run(NoExpirationAlarmSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgAlarmSmokeChecks.Verify);
         EcgTemplateDetectionSmokeChecks.Register();
         NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
@@ -1122,8 +1123,14 @@ internal static class DesignPreviewSmokeChecks
             Capture(window, "ui-preview-alarm-co2-absence-group.png");
             Require(window.Settings.Alerts.NoExpirationEnabled.GetVisualAncestors().Contains(window.Settings) &&
                 window.Settings.Alerts.NoExpirationSeconds.GetVisualAncestors().Contains(window.Settings) &&
+                window.Settings.Alerts.NoExpirationTriggerSeconds.GetVisualAncestors().Contains(window.Settings) &&
+                window.Settings.Alerts.NoExpirationRecoverySeconds.GetVisualAncestors().Contains(window.Settings) &&
                 !window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].CriticalLow.GetVisualAncestors().Contains(window.Settings),
                 "CO2 absence has its own subgroup within EtCO2");
+            var absenceScroll = window.Settings.Alerts.NoExpirationSeconds.GetVisualAncestors().OfType<ScrollViewer>().First();
+            Require(absenceScroll.Extent.Width <= absenceScroll.Viewport.Width + 1 &&
+                absenceScroll.Extent.Height <= absenceScroll.Viewport.Height + 100,
+                $"CO2 condition and confirmation fit the compact group: extent {absenceScroll.Extent}, viewport {absenceScroll.Viewport}");
             co2Groups.SelectedIndex = 0;
             alarmGroups.Sections.SelectedIndex = 0;
             window.Width = 1440; window.Height = 940;

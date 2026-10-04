@@ -16,14 +16,17 @@ internal sealed class AdditionalMeasurementLimits
         MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new ConfirmedLimitNotice(d.Numeric));
     internal IReadOnlyDictionary<MonitorNumeric, LimitEditor> Editors { get; } =
         MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new LimitEditor(d));
+    internal IReadOnlyList<AlarmLifecycleJournal> Lifecycles => _notices.Values.Select(n => n.Lifecycle).ToArray();
+
     internal AdditionalMeasurementLimits()
     {
         foreach (var (numeric, notice) in _notices)
         {
             var editor = Editors[numeric];
-            editor.Enabled.IsCheckedChanged += (_, _) => notice.Reset();
+            editor.Enabled.IsCheckedChanged += (_, _) => notice.Reset(editor.Enabled.IsChecked == true
+                ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
             foreach (var field in new[] { editor.CriticalLow, editor.WarningLow, editor.WarningHigh, editor.CriticalHigh }.Concat(editor.Confirmation.Fields))
-            { field.ValueChanged += (_, _) => notice.Reset(); }
+            { field.ValueChanged += (_, _) => notice.Reset(AlarmTransitionReason.ConfigurationChanged); }
         }
     }
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
@@ -34,7 +37,7 @@ internal sealed class AdditionalMeasurementLimits
             MonitorNotice? notice;
             MeasurementConfirmationTiming? timing = null;
             try { timing = Editors[descriptor.Numeric].Confirmation.Read(); }
-            catch (ArgumentException) { _notices[descriptor.Numeric].Reset(); }
+            catch (ArgumentException) { _notices[descriptor.Numeric].Reset(AlarmTransitionReason.InvalidConfiguration); }
             notice = timing is null
                 ? new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 确认时间无效：请输入 0–600 秒，最多三位小数")
                 : _notices[descriptor.Numeric].Evaluate(limits, snapshot, timing);
@@ -42,9 +45,9 @@ internal sealed class AdditionalMeasurementLimits
             { yield return notice; }
         }
     }
-    internal void Reset()
+    internal void Reset(AlarmTransitionReason reason = AlarmTransitionReason.SessionReset)
     {
-        foreach (var notice in _notices.Values) { notice.Reset(); }
+        foreach (var notice in _notices.Values) { notice.Reset(reason); }
     }
 
     internal sealed class LimitEditor : StackPanel

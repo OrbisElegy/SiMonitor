@@ -74,6 +74,7 @@ internal static class Program
             .. PressureLimitSpecifications.All,
             .. AlarmConfirmationSpecifications.All,
             .. NoExpirationConfirmationSpecifications.All,
+            .. AlarmLifecycleSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

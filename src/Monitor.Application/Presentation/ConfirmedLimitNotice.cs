@@ -17,9 +17,12 @@ public sealed class ConfirmedLimitNotice
     private MeasurementConfirmationTiming? _timing;
     private long? _lastSampleTimeNs;
 
+    public AlarmLifecycleJournal Lifecycle { get; }
+
     public ConfirmedLimitNotice(MonitorNumeric numeric)
     {
         _descriptor = MeasuredLimitNotice.Describe(numeric);
+        Lifecycle = numeric == MonitorNumeric.SpO2 ? new(_descriptor.Id + "-low") : new(_descriptor.Id + "-low", _descriptor.Id + "-high");
     }
 
     public MonitorNotice? Evaluate(MeasurementLimits limits, LiveMeasurementSnapshot snapshot,
@@ -32,18 +35,22 @@ public sealed class ConfirmedLimitNotice
         var instantaneous = MeasuredLimitNotice.Evaluate(_descriptor.Numeric, limits, snapshot);
         ArgumentOutOfRangeException.ThrowIfNegative(snapshot.SampleTimeNs);
         var (status, value) = MeasuredLimitNotice.Read(_descriptor.Numeric, snapshot);
+        long now = snapshot.SampleTimeNs;
         if (!limits.Enabled || instantaneous?.Level == MonitorNoticeLevel.Info ||
             status != WaveformMeasurementStatus.Valid || value is not { } measured ||
             measured < _descriptor.Minimum || measured > _descriptor.Maximum)
         {
-            Reset();
+            var reason = !limits.Enabled ? AlarmTransitionReason.Disabled
+                : instantaneous?.Id == _descriptor.Id + "-settings" ? AlarmTransitionReason.InvalidConfiguration
+                : AlarmTransitionReason.DataUnavailable;
+            Interrupt(now, reason);
             return instantaneous;
         }
 
-        long now = snapshot.SampleTimeNs;
-        if (_limits != limits || _timing != timing || _lastSampleTimeNs is { } last &&
-            (now < last || now - last > MaximumObservationGapNs))
-        { Reset(); }
+        if (_limits is not null && (_limits != limits || _timing != timing))
+        { Interrupt(now, AlarmTransitionReason.ConfigurationChanged); }
+        else if (_lastSampleTimeNs is { } last && (now < last || now - last > MaximumObservationGapNs))
+        { Interrupt(now, now < last ? AlarmTransitionReason.ClockRewind : AlarmTransitionReason.ObservationGap); }
         _limits = limits;
         _timing = timing;
         _lastSampleTimeNs = now;
@@ -55,6 +62,9 @@ public sealed class ConfirmedLimitNotice
         _warningHigh.Update(limits.WarningHigh is { } warningHigh && measured > warningHigh, now, timing.WarningHigh);
         _criticalHigh.Update(limits.CriticalHigh is { } criticalHigh && measured > criticalHigh, now, timing.CriticalHigh);
 
+        ObserveDirection(low: true, now);
+        if (_descriptor.Numeric != MonitorNumeric.SpO2) { ObserveDirection(low: false, now); }
+
         if (_criticalLow.Active) { return MeasuredLimitNotice.CreateNotice(_descriptor, low: true, critical: true); }
         if (_criticalHigh.Active) { return MeasuredLimitNotice.CreateNotice(_descriptor, low: false, critical: true); }
         if (_warningLow.Active) { return MeasuredLimitNotice.CreateNotice(_descriptor, low: true, critical: false); }
@@ -62,8 +72,28 @@ public sealed class ConfirmedLimitNotice
         return null;
     }
 
-    public void Reset()
+    private void ObserveDirection(bool low, long nowNs)
     {
+        var critical = low ? _criticalLow : _criticalHigh;
+        var warning = low ? _warningLow : _warningHigh;
+        MonitorNoticeLevel? level = critical.Active ? MonitorNoticeLevel.Critical : warning.Active ? MonitorNoticeLevel.Warning : null;
+        Lifecycle.Observe(_descriptor.Id + (low ? "-low" : "-high"), nowNs, level,
+            critical.Pending || warning.Pending, critical.Active ? critical.Pending : warning.Active && warning.Pending);
+    }
+
+    public void Reset() => Reset(AlarmTransitionReason.SessionReset);
+
+    public void Reset(AlarmTransitionReason reason)
+    {
+        if (reason is not (AlarmTransitionReason.SessionReset or AlarmTransitionReason.ConfigurationChanged or
+            AlarmTransitionReason.InvalidConfiguration or AlarmTransitionReason.Disabled))
+        { throw new ArgumentException("AlarmLifecycle.InvalidResetReason", nameof(reason)); }
+        Interrupt(Lifecycle.LastObservationNs, reason);
+    }
+
+    private void Interrupt(long nowNs, AlarmTransitionReason reason)
+    {
+        Lifecycle.Interrupt(nowNs, reason);
         _limits = null;
         _timing = null;
         _lastSampleTimeNs = null;

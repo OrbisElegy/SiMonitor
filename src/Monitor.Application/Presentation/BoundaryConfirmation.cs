@@ -5,6 +5,7 @@ internal sealed class BoundaryConfirmation
 {
     public bool Active { get; private set; }
     private long? _pendingSinceNs;
+    public bool Pending => _pendingSinceNs is not null;
 
     public void Update(bool breached, long now, BoundaryConfirmationTiming timing)
     {

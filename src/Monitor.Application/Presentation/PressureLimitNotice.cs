@@ -18,6 +18,8 @@ public sealed class PressureLimitNotice
         _notice = new(numeric);
     }
 
+    public AlarmLifecycleJournal Lifecycle => _notice.Lifecycle;
+
     public MonitorNotice? Evaluate(MeasurementLimits limits, LiveMeasurementSnapshot snapshot) =>
         _notice.Evaluate(limits, snapshot);
 

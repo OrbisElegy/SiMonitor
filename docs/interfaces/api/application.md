@@ -650,6 +650,36 @@ public sealed class PulseOximeterMeasurement
 }
 ```
 
+## Presentation/AlarmLifecycleJournal.cs
+
+源码：[AlarmLifecycleJournal.cs](../../../src/Monitor.Application/Presentation/AlarmLifecycleJournal.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public enum AlarmConditionState
+{
+    Unobserved, Disabled, Normal, PendingTrigger, Active, PendingRecovery, Indeterminate
+}
+public enum AlarmTransitionKind
+{
+    StateChanged, Started, SeverityChanged, Ended
+}
+public enum AlarmTransitionReason
+{
+    None, Confirmed, Recovered, Disabled, ConfigurationChanged, InvalidConfiguration,
+    DataUnavailable, ObservationGap, ClockRewind, SignalSegmentChanged, SessionReset
+}
+public sealed record AlarmEpisodeId(string ConditionId, ulong Occurrence);
+public sealed record AlarmConditionSnapshot(string ConditionId, AlarmConditionState State, AlarmEpisodeId? Episode, MonitorNoticeLevel? Level, long ChangedAtNs, AlarmTransitionReason Reason);
+public sealed record AlarmLifecycleTransition(ulong Sequence, long SampleTimeNs, string ConditionId, AlarmEpisodeId? Episode, AlarmTransitionKind Kind, AlarmConditionState PreviousState, AlarmConditionState State, MonitorNoticeLevel? PreviousLevel, MonitorNoticeLevel? Level, AlarmTransitionReason Reason);
+public sealed class AlarmLifecycleJournal
+{
+    public const int Capacity = 256;
+    public ulong DroppedTransitionCount { get; private set; }
+    public IReadOnlyList<AlarmConditionSnapshot> Conditions { get; }
+    public IReadOnlyList<AlarmLifecycleTransition> Transitions { get; }
+}
+```
+
 ## Presentation/CapturedRecordBinding.cs
 
 源码：[CapturedRecordBinding.cs](../../../src/Monitor.Application/Presentation/CapturedRecordBinding.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -1020,9 +1050,11 @@ public sealed class CapturedRecordZoomedDrag
 ```csharp
 public sealed class ConfirmedLimitNotice
 {
+    public AlarmLifecycleJournal Lifecycle { get; }
     public ConfirmedLimitNotice(MonitorNumeric numeric);
     public MonitorNotice? Evaluate(MeasurementLimits limits, LiveMeasurementSnapshot snapshot, MeasurementConfirmationTiming? timing = null);
     public void Reset();
+    public void Reset(AlarmTransitionReason reason);
 }
 ```
 
@@ -1033,8 +1065,10 @@ public sealed class ConfirmedLimitNotice
 ```csharp
 public sealed class ConfirmedNoExpirationNotice
 {
+    public AlarmLifecycleJournal Lifecycle { get; }
     public MonitorNotice? Evaluate(bool enabled, int? delaySeconds, long nowNs, CapnographyActivity? activity, BoundaryConfirmationTiming? timing = null);
     public void Reset();
+    public void Reset(AlarmTransitionReason reason);
 }
 ```
 
@@ -1445,6 +1479,7 @@ public sealed record OxygenationPatientPreferences(OxygenationPatientProfile Pro
 ```csharp
 public sealed class PressureLimitNotice
 {
+    public AlarmLifecycleJournal Lifecycle { get; }
     public const long LowConfirmationNs = 4_000_000_000;
     public const long HighConfirmationNs = 10_000_000_000;
     public const long RecoveryConfirmationNs = 3_000_000_000;

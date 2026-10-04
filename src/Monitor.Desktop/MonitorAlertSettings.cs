@@ -42,14 +42,19 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown NoticeInterval { get; } = Number(10, 1.5m, 60);
     internal NumericUpDown WarningInterval { get; } = Number(5, 3.5m, 60);
     internal NumericUpDown CriticalInterval { get; } = Number(1.5m, .25m, 2);
+    internal IReadOnlyList<AlarmLifecycleJournal> AlarmLifecycles =>
+        new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
+
     internal MonitorAlertSettings()
     {
-        HeartRateEnabled.IsCheckedChanged += (_, _) => _heartRateNotice.Reset();
-        SpO2Enabled.IsCheckedChanged += (_, _) => _spO2Notice.Reset();
+        HeartRateEnabled.IsCheckedChanged += (_, _) => _heartRateNotice.Reset(HeartRateEnabled.IsChecked == true
+            ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
+        SpO2Enabled.IsCheckedChanged += (_, _) => _spO2Notice.Reset(SpO2Enabled.IsChecked == true
+            ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
         foreach (var field in new[] { CriticalLowHeartRate, WarningLowHeartRate, WarningHeartRate, CriticalHeartRate }.Concat(HeartRateConfirmation.Fields))
-        { field.ValueChanged += (_, _) => _heartRateNotice.Reset(); }
+        { field.ValueChanged += (_, _) => _heartRateNotice.Reset(AlarmTransitionReason.ConfigurationChanged); }
         foreach (var field in new[] { CriticalSpO2, WarningSpO2 }.Concat(SpO2Confirmation.Fields))
-        { field.ValueChanged += (_, _) => _spO2Notice.Reset(); }
+        { field.ValueChanged += (_, _) => _spO2Notice.Reset(AlarmTransitionReason.ConfigurationChanged); }
         NoExpirationEnabled.IsCheckedChanged += (_, _) => NoExpirationEdited();
         foreach (var field in new[] { NoExpirationSeconds, NoExpirationTriggerSeconds, NoExpirationRecoverySeconds })
         { field.ValueChanged += (_, _) => NoExpirationEdited(); }
@@ -155,7 +160,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal void RestorePreferences(MonitorAlarmPreferences preferences)
     {
         preferences.Validate();
-        Reset();
+        Reset(AlarmTransitionReason.ConfigurationChanged);
         HeartRateConfirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.HeartRate));
         SpO2Confirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.SpO2));
         HeartRateEnabled.IsChecked = preferences.HeartRate.Enabled;
@@ -192,12 +197,12 @@ internal sealed class MonitorAlertSettings : StackPanel
             { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null };
         }
     }
-    internal void Reset()
+    internal void Reset(AlarmTransitionReason reason = AlarmTransitionReason.SessionReset)
     {
-        _heartRateNotice.Reset();
-        _spO2Notice.Reset();
-        _noExpirationNotice.Reset();
-        AdditionalLimits.Reset();
+        _heartRateNotice.Reset(reason);
+        _spO2Notice.Reset(reason);
+        _noExpirationNotice.Reset(reason);
+        AdditionalLimits.Reset(reason);
     }
 
     private BoundaryConfirmationTiming ReadNoExpirationTiming() => new(
@@ -209,17 +214,19 @@ internal sealed class MonitorAlertSettings : StackPanel
 
     private void NoExpirationEdited()
     {
-        _noExpirationNotice.Reset();
         try
         {
             _ = ReadNoExpirationTiming();
             if (NoExpirationEnabled.IsChecked == true && ReadNoExpirationDelay() is null)
             { throw new ArgumentException("呼吸等待时限须为 5–120 秒整数。"); }
+            _noExpirationNotice.Reset(NoExpirationEnabled.IsChecked == true
+                ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
             _noExpirationError.Text = null;
             _noExpirationError.IsVisible = false;
         }
         catch (ArgumentException error)
         {
+            _noExpirationNotice.Reset(AlarmTransitionReason.InvalidConfiguration);
             _noExpirationError.Text = error.Message;
             _noExpirationError.IsVisible = true;
         }
@@ -234,7 +241,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         }
         catch (ArgumentException)
         {
-            _noExpirationNotice.Reset();
+            _noExpirationNotice.Reset(AlarmTransitionReason.InvalidConfiguration);
             return new("co2-absence-settings", MonitorNoticeLevel.Info, "CO₂ 未检出呼吸设置无效：确认时间须为 0–600 秒，最多三位小数")
             { Audible = false };
         }
@@ -257,7 +264,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         }
         catch (ArgumentException)
         {
-            filter.Reset();
+            filter.Reset(AlarmTransitionReason.InvalidConfiguration);
             var descriptor = MeasuredLimitNotice.Describe(numeric);
             return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：请检查阈值范围和精度，以及确认时间（0–600 秒，最多三位小数）");
         }

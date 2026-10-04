@@ -13,6 +13,7 @@
 
 - [当前实现接口总览](interfaces/README.md)
 - [报警确认配置接口](interfaces/alarms/alarm-confirmation.md)
+- [本地报警生命周期接口](interfaces/alarms/alarm-lifecycle.md)
 - [音频输出、原生 ABI 与本地偏好接口](interfaces/audio-persistence.md)
 - [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
 - [桌面与命令行入口](interfaces/desktop-tools.md)

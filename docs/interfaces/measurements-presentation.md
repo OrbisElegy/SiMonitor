@@ -221,7 +221,7 @@ void Reset();
 
 计时只使用 `snapshot.SampleTimeNs`。重复样本时间不增时；回退、相邻观察间隔大于
 500 ms、质量无效、开关/阈值/时间配置变化都会清空旧证据。不可用后移除提示不代表
-患者恢复事件。非法确认配置在修改内部状态前抛出异常；显式 `Reset()` 结束旧会话证据。
+患者恢复事件；确认器的 `Lifecycle` 会记录相应中断原因和不可判定状态。非法确认配置在修改内部状态前抛出异常；显式 `Reset()` 结束旧会话证据。
 
 [PressureLimitNotice](../../src/Monitor.Application/Presentation/PressureLimitNotice.cs) 保留原压力
 专用构造器、`Evaluate(limits, snapshot)`、`Reset()`，委托给通用确认器和压力默认时间。
@@ -236,6 +236,11 @@ void Reset();
 默认 0/0；通过独立的 `MonitorAlarmPreferences.NoExpirationConfirmation` 保存。
 计时只使用 `activity.LastSampleNs`，不使用刷新时钟或缺失的数值呼吸率。无效活动、采集段变化、
 回退及大于 500 ms 的间隔清空旧状态。详细接口和配置行为见[报警确认配置](alarms/alarm-confirmation.md)。
+
+上述确认器的 `Lifecycle` 为 `AlarmLifecycleJournal`，提供只读的条件快照、最近转换及淘汰数量。
+每个方向独立分配 owner 内身份，Warning/Critical 升降级保留身份，恢复与数据中断使用不同原因。
+记录由确认状态同步生成，不改变 `MonitorNotice` 相等性、横幅轮换或声音请求。详细状态、
+有界保留和连续性边界见[本地报警生命周期接口](alarms/alarm-lifecycle.md)。
 
 其他独立入口：
 

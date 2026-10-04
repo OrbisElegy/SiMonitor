@@ -176,6 +176,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal SoundSettingsPanel Sound { get; } = new();
     internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
+    internal OxygenationSettingsPanel Oxygenation { get; } = new();
     internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1下传）", IsChecked = false };
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
@@ -190,7 +191,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 75, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+    internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
@@ -464,7 +465,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         }
         return checked((int)(value * scale));
     }
-    internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true
+    internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true && Oxygenation.Realtime.IsChecked != true
         ? ReadVitalValue(OpticalTarget, 1000, "SpO₂ 目标") : null;
     internal (int Period, int Inspiration) ReadBreathingTiming()
     {
@@ -517,12 +518,22 @@ internal sealed partial class DesignPreviewSettings : UserControl
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
         panel.Children.Add(Text("指脉氧"));
         panel.Children.Add(OpticalEnabled);
-        panel.Children.Add(Text("SpO₂ 教学目标（75–100%）")); panel.Children.Add(OpticalTarget);
+        panel.Children.Add(Oxygenation);
+        panel.Children.Add(Text("SpO₂ 教学目标（0–100%）")); panel.Children.Add(OpticalTarget);
         panel.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); panel.Children.Add(OpticalModulation);
         AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
-        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，75至100");
+        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，0至100");
         Add("SpO₂波动幅度（±百分点，0–2.5；0关闭）", OpticalVariation);
-        OpticalEnabled.IsCheckedChanged += (_, _) => OpticalTarget.IsEnabled = OpticalModulation.IsEnabled = OpticalVariation.IsEnabled = OpticalEnabled.IsChecked == true;
+        void RefreshOpticalControls()
+        {
+            bool enabled = OpticalEnabled.IsChecked == true;
+            OpticalModulation.IsEnabled = enabled;
+            OpticalTarget.IsEnabled = OpticalVariation.IsEnabled = enabled && Oxygenation.Realtime.IsChecked != true;
+            Oxygenation.IsEnabled = enabled;
+        }
+        OpticalEnabled.IsCheckedChanged += (_, _) => RefreshOpticalControls();
+        Oxygenation.Realtime.IsCheckedChanged += (_, _) => RefreshOpticalControls();
+        RefreshOpticalControls();
         panel.Children.Add(DesktopInformationPages.Help("topic-5"));
         panel.Children.Add(DesktopInformationPages.Help("topic-6"));
         Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);

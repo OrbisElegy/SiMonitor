@@ -74,7 +74,8 @@ internal sealed partial class DesignPreviewSettings
             EjectionSelection, RateSeed.Text ?? "", GeneratorNumbers().ToDictionary(p => p.Key,
                 p => p.Value.Value is { } v && v >= p.Value.Minimum && v <= p.Value.Maximum ? (decimal?)v : null),
             GeneratorFlags().ToDictionary(p => p.Key, p => p.Value.IsChecked == true),
-            GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex));
+            GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex))
+        { Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true) };
         result.Validate();
         return result;
     }
@@ -105,6 +106,7 @@ internal sealed partial class DesignPreviewSettings
         foreach (var (key, field) in numbers) { field.Value = saved.Numbers[key]; }
         foreach (var (key, field) in choices) { field.SelectedIndex = saved.Choices[key]; }
         foreach (var (key, field) in flags) { field.IsChecked = saved.Flags[key]; }
+        Oxygenation.Restore(saved.Oxygenation);
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }
     }

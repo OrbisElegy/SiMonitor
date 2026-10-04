@@ -23,6 +23,9 @@ internal static class Program
                 { return NativeAudioCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 if (args[0] == "--audio-tone-fixture")
                 { return AudioFixtureCommand.Execute(args, Console.OpenStandardOutput(), Console.Error, cancellation.Token); }
+                if (args[0] is "--oxygen-transport-fixture" or "--oxygenation-replay-check" or
+                    "--oxygen-deep-transport-fixture" or "--oxygenation-deep-replay-check" or "--oxygenation-realtime-check")
+                { return OxygenationFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 return SvgFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token);
             }
             finally { Console.CancelKeyPress -= handler; }
@@ -53,6 +56,9 @@ internal static class Program
             .. EcgHeartRateMeasurementSpecifications.All,
             .. PlethMeasurementSpecifications.All,
             .. PulseOximeterChainSpecifications.All,
+            .. OxygenationTransportSpecifications.All,
+            .. DeepOxygenationSpecifications.All,
+            .. RealtimeOxygenationSpecifications.All,
             .. ImpedanceRespirationMeasurementSpecifications.All,
             .. LiveWaveformMeasurementSpecifications.All,
             .. MeanPressureMeasurementSpecifications.All,

@@ -30,8 +30,7 @@ public sealed class LiveWaveformMeasurements
         _calibration = calibration;
         _optical = NewOptical();
     }
-    public static LiveWaveformMeasurements CreateIllustration() => new(new(PulseOximeterIllustrationSource.ModelId,
-        [new(400000, 100000), new(1600000, 70000)]));
+    public static LiveWaveformMeasurements CreateIllustration() => new(OpticalSaturationMeasurement.CreateIllustration());
     private OpticalSaturationAcquisition NewOptical() => new(PulseOximeterIllustrationSource.RedChannelId,
         PulseOximeterIllustrationSource.InfraredChannelId, _calibration);
 

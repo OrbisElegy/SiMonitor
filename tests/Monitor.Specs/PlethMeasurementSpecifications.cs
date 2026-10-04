@@ -139,7 +139,7 @@ internal static class PlethMeasurementSpecifications
         Check.That(calculator.Estimate(Pairs(), 5_000_000_000).Status == WaveformMeasurementStatus.NoData, "old window cannot look fresh");
         foreach (var pairs in new[]
         {
-            Pairs(0, 0), Pairs(1, 1), Pairs(2000),
+            Pairs(0, 0), Pairs(1, 1),
             Pairs().Select(p => p with { QualityFlags = 1 }).ToArray(),
             Pairs().Select(p => p with { Red = 0 }).ToArray(),
             Pairs().Select(p => p with { Infrared = 1_000_000 }).ToArray(),
@@ -148,8 +148,11 @@ internal static class PlethMeasurementSpecifications
         {
             var result = calculator.Estimate(pairs, 3_992_000_000);
             Check.That(result.Status == WaveformMeasurementStatus.PoorSignal && result.SaturationMilliPercent is null,
-                "flat, low modulation, out-of-calibration, flagged, clipped or discordant pairs never default to normal saturation");
+                "flat, low modulation, flagged, clipped or discordant pairs never default to normal saturation");
         }
+        var outside = calculator.Estimate(Pairs(2000), 3_992_000_000);
+        Check.That(outside.Status == WaveformMeasurementStatus.OutOfRange && outside.SaturationMilliPercent is null && outside.RatioPpm == 4000000,
+            "a caller-owned calibration never extrapolates or confuses an uncovered optical ratio with poor signal");
         var malformed = Pairs(); malformed[2] = malformed[2] with { SampleTimeNs = 17_000_000 };
         bool rejected = false;
         try { calculator.Estimate(malformed, 3_992_000_000); } catch (ArgumentException) { rejected = true; }

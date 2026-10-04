@@ -30,7 +30,7 @@ public sealed class PulseOximeterMeasurement
     // hardware, or pass a saturation target to the measurement layer.
     public static PulseOximeterMeasurement CreateIllustration(Guid plethChannel) => new(plethChannel,
         PulseOximeterIllustrationSource.RedChannelId, PulseOximeterIllustrationSource.InfraredChannelId,
-        new(PulseOximeterIllustrationSource.ModelId, [new(400000, 100000), new(1600000, 70000)]));
+        OpticalSaturationMeasurement.CreateIllustration());
 
     public PulseOximeterReading Consume(ReadOnlySpan<byte> wire)
     {

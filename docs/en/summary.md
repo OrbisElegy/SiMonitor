@@ -29,6 +29,9 @@ establish Windows device behavior or release acceptance.
 
 ## Technical documentation
 
+- [Interface reference](../interfaces/README.md) (Chinese) covers current module
+  contracts, data formats, native audio ABI, command-line entry points, and
+  complete C# public declarations, with links to their implementation.
 - [Vascular pressure runoff](../research/physiology/vascular-pressure-runoff-research.md) describes
   the implemented deterministic RC reservoir for arterial and pulmonary-artery
   pressure, its empirical pulse-shape layer, evidence, acceptance conditions,

@@ -82,11 +82,11 @@ internal static class PressureAlarmSmokeChecks
             var previous = window.Session;
             window.Settings.CardiacRateEnabled.IsChecked = true;
             window.Settings.RateSeed.Text = "invalid";
-            window.ApplySettings();
+            window.RestartSettings();
             Require(ReferenceEquals(previous, window.Session) && alerts.Notices(snapshot).Any(n => n.Numeric == MonitorNumeric.AbpMean && n.Level == MonitorNoticeLevel.Critical),
                 "failed Apply retains the running session and confirmed alarm");
             window.Settings.CardiacRateEnabled.IsChecked = false;
-            window.ApplySettings();
+            window.RestartSettings();
             window.Pause();
             Require(!ReferenceEquals(previous, window.Session) && !alerts.Notices(snapshot).Any(n => n.Numeric == MonitorNumeric.AbpMean),
                 "successful Apply resets the alarm even if the old snapshot is read again");

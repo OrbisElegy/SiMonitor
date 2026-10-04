@@ -38,7 +38,7 @@ internal sealed class OxygenationSettingsPanel : StackPanel
         Add("教师耗氧倍增器（1–4 倍，默认 1）", DemandMultiplier);
         _inputs.Children.Add(new TextBlock
         {
-            Text = "首次启用后点击“应用并从头开始”。运行中用下方按钮调整通气和耗氧倍增器，保留当前氧储备；VT 设为 0 可观察下降，恢复 450 mL 可观察回升。呼吸节律与机械射血沿用当前场景。",
+            Text = "首次启用后点击“从头开始”。运行中用下方按钮调整通气和耗氧倍增器，保留当前氧储备；VT 设为 0 可观察下降，恢复 450 mL 可观察回升。呼吸节律与机械射血沿用当前场景。",
             TextWrapping = TextWrapping.Wrap
         });
         _inputs.Children.Add(new TextBlock

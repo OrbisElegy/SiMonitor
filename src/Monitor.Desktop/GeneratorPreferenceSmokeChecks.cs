@@ -22,14 +22,14 @@ internal static class GeneratorPreferenceSmokeChecks
                 try
                 {
                     Configure(window.Settings, selection);
-                    window.ApplySettings(); original = window.Session;
+                    window.RestartSettings(); original = window.Session;
                     appliedParameters = [window.Settings.AppliedEcgParameters.Text, window.Settings.AppliedRespirationParameters.Text, window.Settings.AppliedEjectionParameters.Text];
                     expected = window.Settings.CaptureGenerator();
                     // Use the real persistence Apply path with the same complete editor snapshot.
                     var writer = new DesignPreviewWindow(path);
                     try
                     {
-                        writer.Settings.RestoreGenerator(expected); writer.ApplySettings();
+                        writer.Settings.RestoreGenerator(expected); writer.RestartSettings();
                         Require(!writer.PreferenceNotice.IsVisible && File.Exists(path), "configured generator saves");
                         writer.Settings.HeartRate.Value = 99; // unapplied draft must not replace saved settings
                     }

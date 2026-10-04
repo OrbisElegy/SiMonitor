@@ -117,14 +117,18 @@ public sealed class VascularPressureSource
         new(physiology, plan);
 
     // Returns complete physical pressure as Q32.32 centi-mmHg.
-    public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default)
+    public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default) =>
+        EvaluateIntervalAt(simTimeNs, _physiology.EpochAnchorSimTimeNs, long.MaxValue, true, cancellationToken);
+
+    internal long EvaluateIntervalAt(long simTimeNs, long fromEventTimeNs, long toExclusiveEventTimeNs,
+        bool includeInitialPressure, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (simTimeNs < _physiology.EpochAnchorSimTimeNs)
         { throw new EventWaveformException("VascularPressure.InvalidTime", nameof(simTimeNs)); }
         long sourceTime = Math.Max(_physiology.EpochAnchorSimTimeNs, simTimeNs - _plan.TransitDelayNs);
         Int128 pressure = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q62One +
-            (Int128)(_plan.InitialPressureCentiMmHg - _plan.AsymptoticPressureCentiMmHg) *
+            (Int128)(includeInitialPressure ? _plan.InitialPressureCentiMmHg - _plan.AsymptoticPressureCentiMmHg : 0) *
             Decay(sourceTime - _physiology.EpochAnchorSimTimeNs);
         // Age == support has zero weight; the remaining integer-ns interval is
         // exactly support wide, so ceil(support/selectedPeriod) bounds its events.
@@ -133,35 +137,40 @@ public sealed class VascularPressureSource
         int morphologyGain = 1000;
         long pulse = 0;
         long morphologyEjectionDuration = _plan.EjectionDurationNs;
-        RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, (Int128)sourceTime + 1,
-            MaximumEjectionCount, item =>
-            {
-                int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
-                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) :
-                    _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, item.CycleIndex) :
-                        _physiology.SeededRate?.EjectionGainPermille(item.CycleIndex) ?? 1000;
-                if (gain == 0) { return; }
-                long age = sourceTime - item.SimTimeNs;
-                long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;
-                long coefficient = EjectionCoefficient(age, duration);
-                pressure += FixedPointMath.RoundDivideTiesToEven((Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient * gain, 1000);
-                if (_morphologyTable is not null)
+        long eventFrom = Math.Max(begin, fromEventTimeNs);
+        var eventTo = Int128.Min((Int128)sourceTime + 1, toExclusiveEventTimeNs);
+        if (eventTo > eventFrom)
+        {
+            RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo,
+                MaximumEjectionCount, item =>
                 {
-                    long morphologyDuration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.Morphology!.DurationNs) : _plan.Morphology!.DurationNs;
-                    if (age < morphologyDuration)
+                    int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
+                        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+                        _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) :
+                        _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, item.CycleIndex) :
+                            _physiology.SeededRate?.EjectionGainPermille(item.CycleIndex) ?? 1000;
+                    if (gain == 0) { return; }
+                    long age = sourceTime - item.SimTimeNs;
+                    long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;
+                    long coefficient = EjectionCoefficient(age, duration);
+                    pressure += FixedPointMath.RoundDivideTiesToEven((Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient * gain, 1000);
+                    if (_morphologyTable is not null)
                     {
-                        long contribution = PeriodicLutLinear.Interpolate(_morphologyTable,
-                            (ulong)(((UInt128)age << 64) / (ulong)morphologyDuration)).Value;
-                        pulse += (long)FixedPointMath.RoundDivideTiesToEven((Int128)contribution * gain, 1000);
+                        long morphologyDuration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.Morphology!.DurationNs) : _plan.Morphology!.DurationNs;
+                        if (age < morphologyDuration)
+                        {
+                            long contribution = PeriodicLutLinear.Interpolate(_morphologyTable,
+                                (ulong)(((UInt128)age << 64) / (ulong)morphologyDuration)).Value;
+                            pulse += (long)FixedPointMath.RoundDivideTiesToEven((Int128)contribution * gain, 1000);
+                        }
                     }
-                }
-                if (_morphologyTable is not null && age < _morphologyPeriodNs)
-                {
-                    morphologyAge = age; morphologyGain = gain;
-                    morphologyEjectionDuration = duration;
-                }
-            }, cancellationToken);
+                    if (_morphologyTable is not null && age < _morphologyPeriodNs)
+                    {
+                        morphologyAge = age; morphologyGain = gain;
+                        morphologyEjectionDuration = duration;
+                    }
+                }, cancellationToken);
+        }
         cancellationToken.ThrowIfCancellationRequested();
         // Retain all weighted contributions in Int128/Q62, then round once to
         // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.

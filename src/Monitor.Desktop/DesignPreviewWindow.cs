@@ -25,6 +25,8 @@ internal sealed class DesignPreviewWindow : Window
     private readonly TextBlock _state = Text("", 12);
     private readonly ListBox _navigation = new();
     private WaveformEnvelope[] _ecg;
+    private (ProjectedEcgDemoConfiguration Ecg, PhysiologyDemoConfiguration Physiology,
+        WaveformEnvelope[] Paper, long EffectiveNs, int EcgSelection, int RespirationSelection, int EjectionSelection)? _pendingPresentation;
     private LiveMonitorTrace _monitor;
     internal LiveMonitorView MonitorView { get; private set; }
     private LocalMonitorPreviewSession _session;
@@ -52,6 +54,7 @@ internal sealed class DesignPreviewWindow : Window
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
         _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
+        _session.DiscardStartup();
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
         if (preferences.Generator is { } generator)
@@ -60,6 +63,7 @@ internal sealed class DesignPreviewWindow : Window
             {
                 Settings.RestoreGenerator(generator);
                 var restored = BuildConfiguredSources();
+                restored.Session.DiscardStartup();
                 Settings.MarkParametersApplied(restored.Configuration, restored.Physiology);
                 _session = restored.Session; _ecg = restored.Paper;
             }
@@ -133,7 +137,8 @@ internal sealed class DesignPreviewWindow : Window
         };
         MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
         Settings.Apply.Classes.Add("accent");
-        Settings.ResetAll.Click += (_, _) => ResetAllSettings();
+        Settings.Restart.Click += (_, _) => RestartSettings();
+        Settings.ResetAll.Click += async (_, _) => await ConfirmResetAllSettings();
         Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
     }
     internal void UpdateOxygenationVentilation()
@@ -152,13 +157,54 @@ internal sealed class DesignPreviewWindow : Window
         catch (Exception error) when (error is ArgumentException or OverflowException)
         { Settings.Status.Text = "通气／耗氧参数无效，当前运行未改变。请检查 VT、VD、FiO₂ 和耗氧倍增器。"; }
     }
+    internal Window? ResetConfirmation { get; private set; }
+    private async Task ConfirmResetAllSettings()
+    {
+        if (ResetConfirmation is not null) { return; }
+        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88, MinHeight = 44 };
+        var confirm = new Button
+        { Content = "恢复默认设置", MinHeight = 44, Foreground = Brush.Parse("#B42318") };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(confirm);
+        var content = new StackPanel { Margin = new Thickness(24), Spacing = 20 };
+        content.Children.Add(Text("恢复全部默认设置？", 20, true));
+        content.Children.Add(new TextBlock
+        {
+            Text = "波形、显示、声音、报警及生命体征设置将恢复默认值。未应用的编辑和当前扫描历史会被清除，监护声音将关闭。此操作无法撤销。",
+            TextWrapping = TextWrapping.Wrap
+        });
+        content.Children.Add(buttons);
+        var dialog = new Window
+        {
+            Title = "恢复默认设置",
+            Width = 480,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+            Background = DesktopFluentStyle.Surface,
+            FontFamily = PreviewFont,
+            FontSize = 14,
+            Content = content
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        confirm.Click += (_, _) => dialog.Close(true);
+        ResetConfirmation = dialog;
+        try
+        {
+            if (await dialog.ShowDialog<bool>(this) && !_closed) { ResetAllSettings(); }
+        }
+        finally { ResetConfirmation = null; }
+    }
+
     internal void ResetAllSettings()
     {
         Pause();
         Settings.Sound.Close();
         Settings = CreateSettings();
         ConnectSettings();
-        ApplySettings();
+        RestartSettings();
         if (!PreferenceNotice.IsVisible) { Settings.Status.Text = "已恢复全部默认设置并从头开始。"; }
     }
     internal void SelectPage(int page)
@@ -244,7 +290,9 @@ internal sealed class DesignPreviewWindow : Window
         var ecg = CapturePaper(ecgConfig);
         return (next, ecgConfig, ecg, config);
     }
-    internal void ApplySettings()
+    internal void ApplySettings() => ApplySettings(restart: false);
+    internal void RestartSettings() => ApplySettings(restart: true);
+    private void ApplySettings(bool restart)
     {
         try
         {
@@ -254,16 +302,38 @@ internal sealed class DesignPreviewWindow : Window
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
             var (next, ecgConfig, ecg, physiology) = BuildConfiguredSources();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
-            Pause(); _session = next; _monitor = new(next); _ecg = ecg;
-            Settings.Alerts.AdditionalLimits.Reset();
-            Settings.MarkParametersApplied(ecgConfig, physiology);
+            long delayNs = Settings.ReadApplyDelayNs();
+            long? effective = null;
+            if (restart)
+            {
+                next.DiscardStartup();
+                Pause();
+                _session = next;
+                _pendingPresentation = null;
+                _ecg = ecg;
+                Settings.MarkParametersApplied(ecgConfig, physiology);
+                Settings.Alerts.AdditionalLimits.Reset();
+                Settings.Sound.ResetBeatSource();
+                Settings.Sound.ResetPitchState();
+            }
+            else
+            {
+                effective = _session.ScheduleSource(next, delayNs);
+                _pendingPresentation = (ecgConfig, physiology, ecg, effective.Value,
+                    Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+                _session.UpdateDisplay(next.Display);
+            }
+            _monitor = new(_session);
             MonitorView = new(_monitor);
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
-            Settings.Sound.ResetBeatSource(); Settings.Sound.ResetPitchState();
-            SelectPage(Page); Settings.Status.Text = "已应用；监护从头开始，十二导联快照已更新。"; Start();
+            MonitorView.Refresh();
+            SelectPage(Page);
+            Settings.Status.Text = restart ? "已从头开始；启动过渡段已裁掉，十二导联快照已更新。" :
+                $"已安排在仿真 {effective / 1_000_000_000m:0.0} s 接续；保留历史与测量窗口，扫屏约再延后 2.2 秒显示。暂停时倒计时停止，再次应用替换待生效设置。";
+            if (restart) { Start(); }
             if (_preferences is not null)
             {
                 bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator));
@@ -272,6 +342,10 @@ internal sealed class DesignPreviewWindow : Window
                 if (!saved) { Settings.Status.Text += "本地配置保存失败，重启后不会保留本次设置更改。"; }
             }
         }
+        catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
+        { Settings.Status.Text = "患者资料或氧合基线改变，请点击“从头开始”；接续应用保留当前氧储备。原运行与待生效设置保持。"; }
+        catch (ArgumentException exception) when (exception.Message == "Preview.InvalidApplyDelay")
+        { Settings.Status.Text = "未应用：接续延迟须为 0–60 秒，精确到 0.1 秒。原运行与待生效设置保持。"; }
         catch (ArgumentException exception) when (exception.Message is "SoundPreferences.Invalid" or "AlarmSound.InvalidTiming")
         { Settings.Status.Text = "未应用或保存：请检查声音页的音量、来源、暂停时长及报警声音间隔。原波形会话保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "AlarmPreferences.Invalid")
@@ -346,7 +420,17 @@ internal sealed class DesignPreviewWindow : Window
         if (_closed || _timer is null || !ReferenceEquals(timer, _timer)) { return; }
         try
         {
-            _session.Advance(deltaNs); _monitor.InvalidateVisual();
+            _session.Advance(deltaNs);
+            if (_pendingPresentation is { } applied && _session.PendingSourceTimeNs is null)
+            {
+                _ecg = applied.Paper;
+                Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
+                    applied.RespirationSelection, applied.EjectionSelection);
+                _pendingPresentation = null;
+                Settings.Status.Text = $"已于仿真 {applied.EffectiveNs / 1_000_000_000m:0.0} s 接续计算；历史与测量窗口已保留，扫屏按采集缓冲继续显示。";
+                if (Page == 1) { SelectPage(Page); }
+            }
+            _monitor.InvalidateVisual();
             MonitorView.Refresh();
             Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats, _session.DetectedPulses, _session.Measurements);
             UpdateState();
@@ -357,7 +441,7 @@ internal sealed class DesignPreviewWindow : Window
     private void UpdateState()
     {
         _state.Text = $"{(_timer is null ? "已暂停" : "运行中")} · {_session.SimulationTimeNs / 1_000_000_000}s";
-        if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续生成" : "暂停生成"; }
+        if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续扫描" : "暂停扫描"; }
     }
     internal static (PhysiologyDemoConfiguration Physiology, ProjectedEcgDemoConfiguration Ecg) ResolveStyle(int ecg, int resp, int ejection)
     {

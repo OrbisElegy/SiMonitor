@@ -28,16 +28,17 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal TextBlock AppliedEcgParameters { get; } = Text("");
     internal TextBlock AppliedRespirationParameters { get; } = Text("");
     internal TextBlock AppliedEjectionParameters { get; } = Text("");
-    internal void MarkParametersApplied(ProjectedEcgDemoConfiguration configuration, PhysiologyDemoConfiguration physiology)
+    internal void MarkParametersApplied(ProjectedEcgDemoConfiguration configuration, PhysiologyDemoConfiguration physiology,
+        int? ecgSelection = null, int? respirationSelection = null, int? ejectionSelection = null)
     {
-        _appliedShapeSelection = EcgSelection;
+        _appliedShapeSelection = ecgSelection ?? EcgSelection;
         _appliedTContour = configuration.TContour;
         _appliedInfarction = configuration.Infarction;
         _appliedZones = configuration.Zones;
-        AppliedEcgParameters.Text = "心电图 · " + EcgChoices[EcgSelection] + "\n" + EcgTemplateSummary.Describe(configuration);
+        AppliedEcgParameters.Text = "心电图 · " + EcgChoices[ecgSelection ?? EcgSelection] + "\n" + EcgTemplateSummary.Describe(configuration);
         string plateau = physiology.Co2PlateauStartCentiMmHg is { } value
             ? (value / 100m).ToString("0.##", CultureInfo.InvariantCulture) + " mmHg" : "随模板";
-        AppliedRespirationParameters.Text = $"呼吸 · {RespirationChoices[RespirationSelection]}\n" +
+        AppliedRespirationParameters.Text = $"呼吸 · {RespirationChoices[respirationSelection ?? RespirationSelection]}\n" +
             $"周期 {physiology.BreathPeriodMilliseconds} ms · 吸气 {physiology.InspirationMilliseconds} ms\n" +
             $"RESP 相对信号幅度 {physiology.RespAmplitudeCounts} · 心源性干扰幅度 {physiology.RespCardiacArtifactCounts}\n" +
             $"CO₂ 基线 {physiology.Co2BaselineMmHg} mmHg · 呼气末目标 {physiology.Co2EndExpiratoryMmHg} mmHg · 平台起始高度 {plateau}\n" +
@@ -45,7 +46,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             $"管路延迟 {physiology.Co2TransportDelayMilliseconds} ms · 展宽步长 {physiology.Co2DispersionStepMilliseconds} ms";
         bool noEjection = !physiology.VentricularMechanicalEnabled || physiology.CardiacActivity is
             CardiacActivity.Absent or CardiacActivity.AtrialOnly || VentricularDisorganizationReference.IsPattern(physiology.ConductionPattern);
-        AppliedEjectionParameters.Text = "射血 · " + EjectionChoices[EjectionSelection] + "\n" +
+        AppliedEjectionParameters.Text = "射血 · " + EjectionChoices[ejectionSelection ?? EjectionSelection] + "\n" +
             (noEjection ? "无有效射血" : "按已应用节律与机械事件生成射血");
         RefreshShapeSummary();
     }
@@ -159,9 +160,18 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return (baselineMmHg, targetMmHg, plateauCentiMmHg);
     }
     internal int EjectionSelection { get; set; }
-    internal Button Apply { get; } = new() { Content = "应用并从头开始", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-    internal Button ResetAll { get; } = new() { Content = "恢复全部默认设置", MinHeight = 44, Margin = new Thickness(12, 0, 0, 0) };
-    internal Button Run { get; } = new() { Content = "暂停生成", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button Apply { get; } = new() { Content = "应用", MinWidth = 88, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button Restart { get; } = new() { Content = "从头开始", MinWidth = 104, MinHeight = 44 };
+    internal NumericUpDown ApplyDelaySeconds { get; } = new()
+    { Minimum = 0, Maximum = 60, Increment = 0.1m, Value = 3, FormatString = "0.0", Width = 116, Height = 44, VerticalContentAlignment = VerticalAlignment.Center };
+    internal long ReadApplyDelayNs()
+    {
+        if (ApplyDelaySeconds.Value is not { } seconds || seconds < 0 || seconds > 60 || seconds * 10 != decimal.Truncate(seconds * 10))
+        { throw new ArgumentException("Preview.InvalidApplyDelay"); }
+        return checked((long)(seconds * 1_000_000_000));
+    }
+    internal Button ResetAll { get; } = new() { Content = "恢复默认设置…", MinHeight = 44, Padding = new Thickness(8, 0) };
+    internal Button Run { get; } = new() { Content = "暂停扫描", MinWidth = 104, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
     internal ListBox Tabs { get; } = new();
     internal Dictionary<int, SettingsSections> SectionPages { get; } = [];
@@ -193,7 +203,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal TextBlock Status { get; } = Text("选择后应用；显示设置不改变患者原始波形。");
+    internal TextBlock Status { get; } = Text("应用后接续当前波形；从头开始会清空扫描历史。");
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
     private readonly StackPanel _slotRows = new() { Spacing = 12 };
@@ -329,14 +339,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (Tabs.SelectedIndex == 0) { _generation.Content = _home; }
         }, handledEventsToo: true);
         Tabs.SelectedIndex = 0;
-        var controls = new WrapPanel { Margin = new Thickness(20, 12), Orientation = Orientation.Horizontal };
-        Apply.Margin = new Thickness(0, 0, 12, 0); controls.Children.Add(Apply); controls.Children.Add(Run); controls.Children.Add(ResetAll);
-        ToolTip.SetTip(ResetAll, "重置所有设置和未应用编辑，保存默认值，并从头开始模拟；声音保持关闭。");
-        Apply.Click += (_, _) => apply(); Run.Click += (_, _) => run();
+        var controls = BuildActionFooter(apply, run);
         var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
         _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);
         Grid.SetRow(navigation, 1); root.Children.Add(navigation); Grid.SetRow(controls, 2); root.Children.Add(controls);
-        Status.Margin = new Thickness(20, 0, 20, 16); Grid.SetRow(Status, 3); root.Children.Add(Status); Content = root;
+        Status.Margin = new Thickness(20, 0, 20, 16); Status.Foreground = Brush.Parse("#616161"); Grid.SetRow(Status, 3); root.Children.Add(Status); Content = root;
     }
     private StylePreviewData Preview(int ecg, int resp, int ejection)
     {

@@ -45,24 +45,24 @@ internal static class DisplayPreferenceSmokeChecks
                 alarms.NoticeInterval.Value = 12.25m; alarms.WarningInterval.Value = 6.5m;
                 alarms.CriticalInterval.Value = 1.75m;
                 Require(!File.Exists(path), "draft edits do not persist");
-                window.ApplySettings();
+                window.RestartSettings();
                 Require(File.Exists(path) && !window.PreferenceNotice.IsVisible, "applied display saves");
                 string saved = File.ReadAllText(path);
                 var soundSession = window.Session;
-                sound.BeatSource.SelectedIndex = -1; window.ApplySettings();
+                sound.BeatSource.SelectedIndex = -1; window.RestartSettings();
                 Require(ReferenceEquals(soundSession, window.Session) && File.ReadAllText(path) == saved,
                     "invalid sound source cannot replace session or saved preferences");
                 sound.BeatSource.SelectedIndex = 2;
                 var beforeInvalidAlarm = window.Session;
-                alarms.WarningHeartRate.Value = 190; window.ApplySettings();
+                alarms.WarningHeartRate.Value = 190; window.RestartSettings();
                 Require(ReferenceEquals(beforeInvalidAlarm, window.Session) && File.ReadAllText(path) == saved,
                     "invalid enabled alarm ordering preserves session and saved configuration");
                 alarms.WarningHeartRate.Value = 130.25m;
                 window.Settings.Slots[0].Minimum.Text = "invalid"; var live = window.Session;
-                window.ApplySettings();
+                window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && File.ReadAllText(path) == saved, "invalid application preserves file and live state");
                 window.Settings.Slots[0].Minimum.Text = "-2.5";
-                window.Settings.PaperLayout.SelectedIndex = -1; window.ApplySettings();
+                window.Settings.PaperLayout.SelectedIndex = -1; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && File.ReadAllText(path) == saved, "invalid paper layout rejects before runtime replacement");
                 window.Settings.PaperLayout.SelectedIndex = 0;
             }
@@ -158,7 +158,7 @@ internal static class DisplayPreferenceSmokeChecks
             var unsavable = new DesignPreviewWindow(blocked); unsavable.Show();
             try
             {
-                var live = unsavable.Session; unsavable.Settings.Skin.SelectedIndex = 0; unsavable.ApplySettings();
+                var live = unsavable.Session; unsavable.Settings.Skin.SelectedIndex = 0; unsavable.RestartSettings();
                 Require(!ReferenceEquals(live, unsavable.Session) && unsavable.Session.Display.Skin == MonitorSkin.ThreeRows &&
                     unsavable.PreferenceNotice.IsVisible && unsavable.Settings.Status.Text!.Contains("保存失败", StringComparison.Ordinal),
                     "save failure retains applied runtime and reports lack of persistence");

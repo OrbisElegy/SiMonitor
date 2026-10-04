@@ -13,6 +13,33 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    private static void VerifyActionFooter(DesignPreviewWindow window)
+    {
+        var settings = window.Settings;
+        var arrows = settings.ApplyDelaySeconds.GetVisualDescendants().OfType<RepeatButton>().ToArray();
+        var increase = arrows.Single(b => b.Name == "PART_IncreaseButton");
+        var decrease = arrows.Single(b => b.Name == "PART_DecreaseButton");
+        Point Position(Control control) => control.TranslatePoint(default, settings)!.Value;
+        Require(Position(increase).X == Position(decrease).X && Position(increase).Y < Position(decrease).Y,
+            "delay stepper uses vertically stacked arrows beside its editable value");
+        increase.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(settings.ApplyDelaySeconds.Value == 3.1m, "stepper retains decimal increment semantics");
+        decrease.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(settings.ApplyDelaySeconds.Value == 3m, "stepper decrements without losing the typed value");
+        settings.ApplyDelaySeconds.Value = 60;
+        Require(!increase.IsEnabled && decrease.IsEnabled, "upper bound disables increment");
+        settings.ApplyDelaySeconds.Value = 0;
+        Require(increase.IsEnabled && !decrease.IsEnabled, "lower bound disables decrement");
+        settings.ApplyDelaySeconds.Value = 3;
+        Require(Position(settings.Apply).X > Position(settings.Restart).X &&
+            Position(settings.Restart).X > Position(settings.Run).X &&
+            Position(settings.ResetAll).X + settings.ResetAll.Bounds.Width + 24 < Position(settings.Run).X,
+            "primary action trails secondary actions and destructive reset is separated");
+        Require(Position(settings.ApplyDelaySeconds).Y + settings.ApplyDelaySeconds.Bounds.Height <= Position(settings.Apply).Y &&
+            new[] { settings.Apply, settings.Restart, settings.Run, settings.ResetAll }.All(b => b.Bounds.Height >= 44),
+            "delay has its own labeled row and actions retain consistent hit targets");
+    }
+
     private static void VerifyUiRefinement()
     {
         var groups = Enumerable.Range(0, DesignPreviewSettings.EcgChoiceCount).GroupBy(EcgChooserGroups.For).ToArray();
@@ -24,6 +51,7 @@ internal static class DesignPreviewSmokeChecks
         try
         {
             window.SelectPage(2); Capture(window, "ui-refine-home.png");
+            VerifyActionFooter(window);
             Require(window.Title == ProductIdentity.WindowTitle, "formal product name used in title");
             Button Named(string prefix) => window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith(prefix, StringComparison.Ordinal) == true);
             void Click(Button button) => button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
@@ -68,7 +96,7 @@ internal static class DesignPreviewSmokeChecks
                 window.Settings.AppliedEcgParameters.Text == initialEcg &&
                 window.Settings.AppliedRespirationParameters.Text == initialRespiration,
                 "ECG editor omits parameter summary and drafts do not alter applied overview");
-            window.ApplySettings();
+            window.RestartSettings();
             string? appliedEcg = window.Settings.AppliedEcgParameters.Text;
             string? appliedRespiration = window.Settings.AppliedRespirationParameters.Text;
             Require(appliedEcg != initialEcg && appliedRespiration!.Contains("-650", StringComparison.Ordinal),
@@ -76,7 +104,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.InfarctionParameters.Delay.Value = null;
             window.Settings.RespSignalAmplitude.Value = 350;
             var session = window.Session;
-            window.ApplySettings();
+            window.RestartSettings();
             window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
             Require(ReferenceEquals(session, window.Session) && window.Settings.AppliedEcgParameters.Text == appliedEcg &&
                 window.Settings.AppliedRespirationParameters.Text == appliedRespiration,
@@ -100,7 +128,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.OpticalEnabled.IsChecked = true;
             window.Settings.OpticalVariation.Value = 2.5m;
             window.Settings.OpticalTarget.Value = 97.5m;
-            window.ApplySettings();
+            window.RestartSettings();
             HashSet<string> hr = [], pr = [], spo2 = [];
             for (int i = 0; i < 450; i++)
             {
@@ -128,7 +156,7 @@ internal static class DesignPreviewSmokeChecks
         window.Settings.RespiratoryRate.Value = 20;
         window.Settings.EtCo2Target.Value = 50;
         var previous = window.Session;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(!ReferenceEquals(previous, window.Session), "seeded high-rate source and paper capture apply together");
         for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         var reading = window.Session.Measurements!;
@@ -139,33 +167,33 @@ internal static class DesignPreviewSmokeChecks
             reading.Capnography.RespirationsMilliPerMinute.Value is >= 19500 and <= 20500,
             "RR and EtCO2 changes reach sampled CO2 measurements");
         var samples = window.Session.Samples(0, 0, 20_000_000_000).ToArray();
-        window.ApplySettings();
+        window.RestartSettings();
         for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(samples.SequenceEqual(window.Session.Samples(0, 0, 20_000_000_000)),
             "same applied seed reproduces acquired ECG samples");
         previous = window.Session;
         var timer = window.ActiveTimer;
         window.Settings.RateSeed.Text = "invalid";
-        window.ApplySettings();
+        window.RestartSettings();
         Require(ReferenceEquals(previous, window.Session) && ReferenceEquals(timer, window.ActiveTimer),
             "invalid seed cannot replace live session or timer");
         window.Settings.RateSeed.Text = new string('1', 64);
         window.Settings.EcgSelection = 1;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(ReferenceEquals(previous, window.Session), "unsupported rhythm retains live state");
         window.Settings.EcgSelection = 0;
         window.Settings.OpticalVariation.Value = 2.5m;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(!ReferenceEquals(previous, window.Session), "98% plus2.5pp now applies within bounded source range");
         previous = window.Session;
         window.Settings.OpticalVariation.Value = 2;
         window.Settings.OpticalTarget.Value = 95;
         window.Settings.EtCo2Variation.Value = 5;
         window.Settings.RespirationSelection = 1;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(ReferenceEquals(previous, window.Session), "seeded CO2 rejects depth-response breathing without replacing live session");
         window.Settings.RespirationSelection = 0;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(!ReferenceEquals(previous, window.Session), "seeded optical target applies with cardiac variation");
         for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(window.Session.Measurements!.Capnography.EndTidalCentiMmHg.Value is >= 4400 and <= 5600,
@@ -186,22 +214,22 @@ internal static class DesignPreviewSmokeChecks
         int? oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
         window.Settings.AbpPulseGain.Value = 1.5m;
         window.Settings.PaPulseGain.Value = .5m;
-        window.ApplySettings();
+        window.RestartSettings();
         for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(window.Session.Measurements!.AbpMean.MeanCentiMmHg > oldAbp && window.Session.Measurements!.PaMean.MeanCentiMmHg < oldPa,
             "ABP and PA controls change waveform-derived means independently");
         previous = window.Session;
         window.Settings.AbpPulseGain.Value = null;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(ReferenceEquals(previous, window.Session), "missing pressure gain preserves live session");
         window.Settings.AbpPulseGain.Value = 1.5m;
         int? oldMean = window.Session.Measurements!.CvpMean.MeanCentiMmHg;
         previous = window.Session;
         window.Settings.CvpBaseline.Value = null;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(ReferenceEquals(previous, window.Session), "missing CVP baseline preserves active source");
         window.Settings.CvpBaseline.Value = 12;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(!ReferenceEquals(previous, window.Session), "CVP baseline applies");
         for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(oldMean.HasValue && window.Session.Measurements!.CvpMean.MeanCentiMmHg == oldMean + 600,
@@ -214,7 +242,7 @@ internal static class DesignPreviewSmokeChecks
         Require(window.Settings.ReadBreathingTiming() == (3000, 990) && window.Settings.BreathingTiming.Text!.Contains("2010", StringComparison.Ordinal),
             "draft inspiration percentage previews actual millisecond timing");
         previous = window.Session;
-        window.ApplySettings();
+        window.RestartSettings();
         Require(!ReferenceEquals(previous, window.Session), "changed inspiration applies");
         for (int i = 0; i < 700; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
         Require(oldEcg.SequenceEqual(window.Session.Samples(0, 0, 35_000_000_000)) &&
@@ -229,7 +257,7 @@ internal static class DesignPreviewSmokeChecks
         foreach (decimal? invalid in new decimal?[] { 10, 62.5m, 90, null })
         {
             window.Settings.InspirationPercent.Value = invalid;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(ReferenceEquals(previous, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                 window.Settings.Status.Text!.Contains("375", StringComparison.Ordinal), "invalid timing preserves live source and gives actionable constraint");
         }
@@ -248,7 +276,7 @@ internal static class DesignPreviewSmokeChecks
             var live = window.Session; var timer = window.ActiveTimer;
             void Reject(string text)
             {
-                window.ApplySettings();
+                window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                     window.Settings.Status.Text!.Contains(text, StringComparison.Ordinal), "variation rejection names corrective action and preserves live state");
             }
@@ -273,13 +301,13 @@ internal static class DesignPreviewSmokeChecks
             foreach (int pattern in new[] { 1, 2, 3 })
             { window.Settings.RespirationSelection = pattern; Reject("仅支持规则呼吸"); }
             window.Settings.EtCo2Variation.Value = 0; window.Settings.RateSeed.Text = "invalid dormant seed";
-            window.ApplySettings();
+            window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "turning variation off repairs conflict without requiring unused seed");
             window.Settings.RespirationSelection = 0; window.Settings.EtCo2Target.Value = 6;
             window.Settings.EtCo2Variation.Value = 1; window.Settings.RateSeed.Text = new string('1', 64);
-            live = window.Session; window.ApplySettings();
+            live = window.Session; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "exact lower excursion boundary applies after correction");
-            window.Settings.EtCo2Target.Value = 79; live = window.Session; window.ApplySettings();
+            window.Settings.EtCo2Target.Value = 79; live = window.Session; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "exact upper excursion boundary applies after correction");
         }
         finally { window.Close(); }
@@ -290,7 +318,7 @@ internal static class DesignPreviewSmokeChecks
         try
         {
             window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.OpticalEnabled.IsChecked = true;
-            window.ApplySettings();
+            window.RestartSettings();
             var live = window.Session; var timer = window.ActiveTimer;
             foreach (var (field, invalid, valid, name) in new[]
             {
@@ -308,22 +336,22 @@ internal static class DesignPreviewSmokeChecks
                 decimal? original = field.Value;
                 foreach (decimal? value in new decimal?[] { invalid, null })
                 {
-                    field.Value = value; window.ApplySettings();
+                    field.Value = value; window.RestartSettings();
                     Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                         window.Settings.Status.Text!.Contains(name, StringComparison.Ordinal) && window.Settings.Status.Text.Contains("最小单位", StringComparison.Ordinal),
                         "unsupported vital precision or missing value rejects without silent truncation");
                 }
-                field.Value = valid; window.ApplySettings();
+                field.Value = valid; window.RestartSettings();
                 Require(!ReferenceEquals(live, window.Session), "exact source precision remains supported");
                 live = window.Session; timer = window.ActiveTimer; field.Value = original;
             }
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.OpticalEnabled.IsChecked = false;
             window.Settings.HeartRate.Value = null; window.Settings.RateVariation.Value = null;
             window.Settings.OpticalTarget.Value = null; window.Settings.OpticalVariation.Value = null; window.Settings.OpticalModulation.Value = null;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "disabled cardiac and optical sources ignore dormant invalid drafts");
             live = window.Session;
-            window.Settings.OpticalEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.OpticalEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("SpO₂ 目标", StringComparison.Ordinal),
                 "reenabling source restores field validation");
         }
@@ -340,7 +368,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Co2Baseline.Value = 5; window.Settings.Co2CustomPlateau.IsChecked = true;
             window.Settings.Co2PlateauStart.Value = 32.25m; window.Settings.Co2Rise.Value = 700;
             window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
-            window.ApplySettings();
+            window.RestartSettings();
             for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             var live = window.Session; var timer = window.ActiveTimer; long frontier = live.FrontierNs;
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
@@ -363,11 +391,12 @@ internal static class DesignPreviewSmokeChecks
                 "shape reset clears overrides and invalid input while preserving gas target and signal");
             window.Settings.RespCardiacArtifact.Value = null; Reset(0);
             Require(window.Settings.ReadRespirationSignal() == (1000, 0), "signal reset repairs invalid signal draft");
-            window.ApplySettings(); Require(!ReferenceEquals(live, window.Session), "explicit application activates reset drafts");
+            window.RestartSettings(); Require(!ReferenceEquals(live, window.Session), "explicit application activates reset drafts");
             var (period, inspiration) = window.Settings.ReadBreathingTiming();
             var config = DesignPreviewWindow.ResolveStyle(0, 2, 0).Physiology with
             { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration, Co2EndExpiratoryMmHg = 45 };
             var reference = new LocalMonitorPreviewSession(config, window.Session.Display);
+            reference.DiscardStartup();
             for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
             { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "applied reset recovers source with retained template and vitals"); }
@@ -393,15 +422,17 @@ internal static class DesignPreviewSmokeChecks
                     window.Settings.Co2CustomPlateau.IsChecked = custom;
                     window.Settings.Co2Baseline.Value = custom ? 5 : 0;
                     window.Settings.Co2PlateauStart.Value = custom ? 32.25m : null;
-                    var previous = window.Session; window.ApplySettings();
+                    var previous = window.Session; window.RestartSettings();
                     Require(!ReferenceEquals(previous, window.Session) && window.Settings.Co2PlateauStart.IsEnabled == custom,
                         "CO2 level edits apply and disabled plateau ignores dormant invalid draft");
                     var (period, inspiration) = window.Settings.ReadBreathingTiming();
                     var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
                     { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
                     var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    original.DiscardStartup();
                     var expected = new LocalMonitorPreviewSession(baseline with
                     { Co2BaselineMmHg = custom ? 5 : 0, Co2PlateauStartCentiMmHg = custom ? 3225 : null }, window.Session.Display);
+                    expected.DiscardStartup();
                     for (int i = 0; i < 200; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                     for (int channel = 0; channel < 7; channel++)
@@ -418,36 +449,36 @@ internal static class DesignPreviewSmokeChecks
             var live = window.Session; var timer = window.ActiveTimer;
             foreach (decimal? value in new decimal?[] { null, 40.01m, 32.251m })
             {
-                window.Settings.Co2PlateauStart.Value = value; window.ApplySettings();
+                window.Settings.Co2PlateauStart.Value = value; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                     window.Settings.Status.Text!.Contains("平台起始", StringComparison.Ordinal), "invalid active plateau rejects atomically");
             }
             window.Settings.Co2PlateauStart.Value = 4.99m; window.Settings.Co2Baseline.Value = 5;
-            window.ApplySettings(); Require(ReferenceEquals(live, window.Session), "plateau below baseline rejects");
+            window.RestartSettings(); Require(ReferenceEquals(live, window.Session), "plateau below baseline rejects");
             window.Settings.Co2CustomPlateau.IsChecked = false;
             foreach (var field in new[] { window.Settings.Co2Baseline, window.Settings.EtCo2Target })
             {
                 decimal? original = field.Value;
                 foreach (decimal? value in new decimal?[] { null, 5.5m })
                 {
-                    field.Value = value; window.ApplySettings();
+                    field.Value = value; window.RestartSettings();
                     Require(ReferenceEquals(live, window.Session), "pressure integer inputs do not silently truncate");
                 }
                 field.Value = original;
             }
-            window.Settings.Co2Baseline.Value = 41; window.ApplySettings();
+            window.Settings.Co2Baseline.Value = 41; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "baseline exceeding target rejects");
             window.Settings.Co2Baseline.Value = 5; window.Settings.EtCo2Variation.Value = 1;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("基线为 0", StringComparison.Ordinal),
                 "nonzero baseline and seeded variation give actionable conflict");
             window.Settings.Co2Baseline.Value = 0; window.Settings.Co2CustomPlateau.IsChecked = true;
-            window.Settings.Co2PlateauStart.Value = 40; window.ApplySettings();
+            window.Settings.Co2PlateauStart.Value = 40; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "flat reference plateau supports zero-baseline seeded response");
             window.Settings.EtCo2Variation.Value = 0; window.Settings.Co2Baseline.Value = 5;
-            window.Settings.Co2PlateauStart.Value = 5; window.ApplySettings();
-            Require(window.Settings.Status.Text!.StartsWith("已应用", StringComparison.Ordinal), "plateau equal to baseline accepted");
-            window.Settings.Co2PlateauStart.Value = 32.25m; window.ApplySettings();
+            window.Settings.Co2PlateauStart.Value = 5; window.RestartSettings();
+            Require(window.Settings.Status.Text!.StartsWith("已从头开始", StringComparison.Ordinal), "plateau equal to baseline accepted");
+            window.Settings.Co2PlateauStart.Value = 32.25m; window.RestartSettings();
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
             window.Settings.RespirationGroups.SelectedIndex = 1;
             Capture(window, "ui-preview-co2-level-editor.png");
@@ -471,11 +502,13 @@ internal static class DesignPreviewSmokeChecks
                     var (period, inspiration) = window.Settings.ReadBreathingTiming();
                     var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
                     { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
-                    var live = window.Session; window.ApplySettings();
+                    var live = window.Session; window.RestartSettings();
                     Require(!ReferenceEquals(live, window.Session), "CO2 shape timing applies to all respiratory templates");
                     var expected = new LocalMonitorPreviewSession(baseline with
                     { Co2DeadSpaceMilliseconds = timing.DeadSpace, Co2RiseMilliseconds = timing.Rise, Co2FallMilliseconds = timing.Fall }, window.Session.Display);
+                    expected.DiscardStartup();
                     var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    original.DiscardStartup();
                     for (int i = 0; i < 240; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                     for (int channel = 0; channel < 7; channel++)
@@ -490,15 +523,15 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespirationSelection = 0;
             window.Settings.RespiratoryRate.Value = 60; window.Settings.InspirationPercent.Value = 10;
             window.Settings.Co2Fall.Value = 100;
-            window.ApplySettings();
-            Require(window.Settings.ReadBreathingTiming() == (1000, 100) && window.Settings.Status.Text!.StartsWith("已应用", StringComparison.Ordinal),
+            window.RestartSettings();
+            Require(window.Settings.ReadBreathingTiming() == (1000, 100) && window.Settings.Status.Text!.StartsWith("已从头开始", StringComparison.Ordinal),
                 "shorter CO2 fall permits valid inspiration previously rejected by fixed200ms limit");
             var session = window.Session; var timer = window.ActiveTimer;
-            window.Settings.Co2Fall.Value = 101; window.ApplySettings();
+            window.Settings.Co2Fall.Value = 101; window.RestartSettings();
             Require(ReferenceEquals(session, window.Session) && window.Settings.Status.Text!.Contains("101", StringComparison.Ordinal) &&
                 window.Settings.BreathingTiming.Text!.Contains("101", StringComparison.Ordinal), "fall limit updates summary and rejection");
             window.Settings.Co2Fall.Value = 100;
-            window.Settings.Co2DeadSpace.Value = 200; window.Settings.Co2Rise.Value = 700; window.ApplySettings();
+            window.Settings.Co2DeadSpace.Value = 200; window.Settings.Co2Rise.Value = 700; window.RestartSettings();
             Require(ReferenceEquals(session, window.Session) && window.Settings.Status.Text!.Contains("900", StringComparison.Ordinal),
                 "expiration equal to dead space plus rise rejects with current constraint");
             foreach (var field in new[] { window.Settings.Co2DeadSpace, window.Settings.Co2Rise, window.Settings.Co2Fall })
@@ -506,17 +539,17 @@ internal static class DesignPreviewSmokeChecks
                 decimal? previous = field.Value;
                 foreach (decimal? invalid in new decimal?[] { null, 1.5m })
                 {
-                    field.Value = invalid; window.ApplySettings();
+                    field.Value = invalid; window.RestartSettings();
                     Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                         window.Settings.Status.Text!.Contains("1–10000", StringComparison.Ordinal), "invalid CO2 timing retains session and timer");
                 }
                 field.Value = previous;
             }
-            window.Settings.Co2Rise.Value = 699; window.ApplySettings();
+            window.Settings.Co2Rise.Value = 699; window.RestartSettings();
             Require(!ReferenceEquals(session, window.Session), "expiration with one millisecond plateau applies");
             window.Settings.RespiratoryRate.Value = 16; window.Settings.InspirationPercent.Value = 50;
             window.Settings.Co2Rise.Value = 700; window.Settings.Co2Fall.Value = 300;
-            window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            window.RestartSettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
             window.Settings.RespirationGroups.SelectedIndex = 1;
             Capture(window, "ui-preview-co2-timing-editor.png");
             window.Width = 960; Capture(window, "ui-preview-co2-timing-editor-compact.png");
@@ -539,11 +572,13 @@ internal static class DesignPreviewSmokeChecks
                 {
                     window.Settings.Co2TransportDelay.Value = response.Delay;
                     window.Settings.Co2DispersionStep.Value = response.Dispersion;
-                    var previous = window.Session; window.ApplySettings();
+                    var previous = window.Session; window.RestartSettings();
                     Require(!ReferenceEquals(previous, window.Session), "valid CO2 response applies across respiratory templates");
                     var expected = new LocalMonitorPreviewSession(baseline with
                     { Co2TransportDelayMilliseconds = response.Delay, Co2DispersionStepMilliseconds = response.Dispersion }, window.Session.Display);
+                    expected.DiscardStartup();
                     var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    original.DiscardStartup();
                     for (int i = 0; i < 240; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                     long end = expected.FrontierNs;
@@ -562,7 +597,7 @@ internal static class DesignPreviewSmokeChecks
             {
                 foreach (decimal? invalid in new decimal?[] { null, .5m })
                 {
-                    field.Value = invalid; window.ApplySettings();
+                    field.Value = invalid; window.RestartSettings();
                     Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                         window.Settings.Status.Text!.Contains("管路延迟", StringComparison.Ordinal),
                         "invalid CO2 response preserves session and timer with actionable error");
@@ -570,11 +605,11 @@ internal static class DesignPreviewSmokeChecks
                 field.Value = 0;
             }
             window.Settings.Co2TransportDelay.Value = 5000; window.Settings.Co2DispersionStep.Value = 500;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "CO2 response UI upper bounds accepted");
             window.Settings.RespirationSelection = 0;
             window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
-            window.ApplySettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
+            window.RestartSettings(); window.SelectPage(2); window.Settings.OpenAdvanced(1);
             window.Settings.RespirationGroups.SelectedIndex = 2;
             Capture(window, "ui-preview-co2-response-editor.png");
             window.Width = 960; Capture(window, "ui-preview-co2-response-editor-compact.png");
@@ -590,11 +625,13 @@ internal static class DesignPreviewSmokeChecks
             {
                 window.Settings.RespirationSelection = pattern;
                 window.Settings.RespSignalAmplitude.Value = -400; window.Settings.RespCardiacArtifact.Value = 120;
-                window.ApplySettings();
+                window.RestartSettings();
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
                 var expected = new LocalMonitorPreviewSession(baseline with { RespAmplitudeCounts = pattern == 3 ? 1000 : -400, RespCardiacArtifactCounts = 120 }, window.Session.Display);
+                expected.DiscardStartup();
                 var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                original.DiscardStartup();
                 for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                 long end = expected.FrontierNs;
                 for (int channel = 0; channel < 7; channel++)
@@ -609,14 +646,14 @@ internal static class DesignPreviewSmokeChecks
             var live = window.Session;
             foreach (decimal? invalid in new decimal?[] { null, 1.5m })
             {
-                window.Settings.RespSignalAmplitude.Value = invalid; window.ApplySettings();
+                window.Settings.RespSignalAmplitude.Value = invalid; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session), "incomplete or fractional RESP amplitude rejects atomically");
             }
-            window.Settings.RespSignalAmplitude.Value = 0; window.Settings.RespCardiacArtifact.Value = 0; window.ApplySettings();
+            window.Settings.RespSignalAmplitude.Value = 0; window.Settings.RespCardiacArtifact.Value = 0; window.RestartSettings();
             for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Require(window.Session.Samples(1, 0, window.Session.FrontierNs).All(s => s.Value == 0) &&
                 window.Session.Samples(4, 0, window.Session.FrontierNs).Any(s => s.Value > 0), "zero impedance signal is not apnea or absent CO2");
-            window.Settings.RespCardiacArtifact.Value = null; live = window.Session; window.ApplySettings();
+            window.Settings.RespCardiacArtifact.Value = null; live = window.Session; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("心源性干扰", StringComparison.Ordinal), "missing cardiac artifact gives actionable rejection");
             window.Settings.RespCardiacArtifact.Value = 120; window.Settings.RespSignalAmplitude.Value = -400;
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
@@ -852,6 +889,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
+        NativeSmokePartition.Run(MonitorContinuationSmokeChecks.Verify);
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureAlarmSmokeChecks.Verify);
@@ -1073,7 +1111,7 @@ internal static class DesignPreviewSmokeChecks
             Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 6, "all six categories remain available through settings navigation");
             var source = window.Session;
             window.Settings.Slots[0].Minimum.Text = "NaN";
-            window.ApplySettings();
+            window.RestartSettings();
             Require(ReferenceEquals(window.Session, source) && ReferenceEquals(window.ActiveTimer, timer), "invalid settings preserve live session and timer");
             window.Settings.Skin.SelectedIndex = 0;
             window.Settings.OpticalEnabled.IsChecked = true;
@@ -1083,7 +1121,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Slots[0].Maximum.Text = "0.01";
             window.Settings.Slots[1].Speed.SelectedIndex = 2;
             window.Settings.Slots[2].Speed.SelectedIndex = 0;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(!ReferenceEquals(source, window.Session) && window.Session.Display.Slots.Count == 3, "apply changes fixed skin and restarts");
             Require(window.MonitorView.NumericTexts.All(t => t == "---"), "apply clears previous numeric readings until newly acquired");
             window.Pulse(timer, 50_000_000);
@@ -1111,12 +1149,12 @@ internal static class DesignPreviewSmokeChecks
                 window.Settings.EcgSelection = choice.Item1;
                 window.Settings.RespirationSelection = choice.Item2;
                 window.Settings.EjectionSelection = choice.Item3;
-                window.ApplySettings();
+                window.RestartSettings();
                 Require(!ReferenceEquals(source, window.Session), "supported rhythm/breathing/ejection combination applies");
             }
             window.Settings.Skin.SelectedIndex = 2;
             window.Settings.EcgSelection = window.Settings.RespirationSelection = window.Settings.EjectionSelection = 0;
-            window.ApplySettings(); window.SelectPage(0);
+            window.RestartSettings(); window.SelectPage(0);
             for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Capture(window, "ui-preview-perfusion.png");
             VerifySeededVitals(window);
@@ -1145,7 +1183,7 @@ internal static class DesignPreviewSmokeChecks
         {
             foreach (int choice in new[] { 6, 7, 8, 9, 37, 38, 39, 8 })
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "atrial product preset applies atomically");
                 var rates = new HashSet<int>();
                 for (int i = 0; i < 400; i++)
@@ -1195,7 +1233,7 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "atrial product paper contains complete twelve-lead acquisition");
                 window.SelectPage(0);
             }
-            var live = window.Session; window.Settings.EjectionSelection = 1; window.ApplySettings();
+            var live = window.Session; window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "incompatible ventricular-premature ejection cannot replace atrial session");
         }
         finally { window.Close(); }
@@ -1207,7 +1245,7 @@ internal static class DesignPreviewSmokeChecks
         {
             foreach (int choice in new[] { 98, 99, 100, 101, 99, 0 })
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "atrial shape replaces preceding compound/rhythm source");
                 if (choice == 98) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1227,10 +1265,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-atrial-shape-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "atrial shape paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 101; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 101; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for atrial shape");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "atrial shape permits independent no-ejection setting");
         }
         finally { window.Close(); }
@@ -1243,7 +1281,7 @@ internal static class DesignPreviewSmokeChecks
         {
             foreach (int choice in new[] { 101, 102, 103, 104, 105, 106, 102, 0 })
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "ventricular shape replaces preceding compound/rhythm source");
                 if (choice == 101) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1263,10 +1301,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-ventricular-shape-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "ventricular shape paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 106; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 106; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for ventricular shape");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "ventricular shape permits independent no-ejection setting");
         }
         finally { window.Close(); }
@@ -1279,7 +1317,7 @@ internal static class DesignPreviewSmokeChecks
         {
             foreach (int choice in new[] { 106, 107, 108, 109, 110, 111, 112, 113, 114, 0 })
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "T contour replaces preceding compound/rhythm source");
                 if (choice == 106) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1304,10 +1342,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-t-contour-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "T contour paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 114; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 114; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for T contour");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "T contour permits independent no-ejection setting");
             window.Settings.EjectionSelection = 0;
             window.Settings.EcgSelection = 107;
@@ -1317,14 +1355,16 @@ internal static class DesignPreviewSmokeChecks
             editor.Peak.Value = 450; editor.SecondPeak.Value = 150; editor.Crossing.Value = 25;
             Require(window.Settings.ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal) &&
                 window.Settings.ShapeEditSummary.Text!.Contains("峰幅 450", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text.Contains("过零 25%", StringComparison.Ordinal), "draft summary follows contour fields before application");
-            window.ApplySettings();
+            window.RestartSettings();
             Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal), "successful contour application marks only accepted shape applied");
             var edited = editor.Read(TContourProductPreset.Create(0));
             Require(edited is { PeakMicrovolts: 450, SecondPeakMicrovolts: 150, CrossingPositionPermille: 250 }, "advanced contour preserves independent lobes and crossing");
             var (period, inspiration) = window.Settings.ReadBreathingTiming();
             var baseline = DesignPreviewWindow.ResolveStyle(107, 0, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
             var expected = new LocalMonitorPreviewSession(baseline with { TContour = edited }, window.Session.Display);
+            expected.DiscardStartup();
             var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+            original.DiscardStartup();
             for (int i = 0; i < 100; i++)
             {
                 window.Pulse(window.ActiveTimer, 50_000_000);
@@ -1344,27 +1384,28 @@ internal static class DesignPreviewSmokeChecks
                 Require((int)plan.Target == target && (target != 0 || plan.ChestMask == 10), "target editor preserves exact chest selection or limb target");
                 if (target == 0)
                 { Require(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(107, 0, 0).Ecg with { TContour = plan }).Contains("V2、V4", StringComparison.Ordinal), "summary identifies selected chest leads"); }
-                live = window.Session; window.ApplySettings();
+                live = window.Session; window.RestartSettings();
                 Require(!ReferenceEquals(live, window.Session), "each target applies through shared monitor and paper path");
                 var targetSource = new LocalMonitorPreviewSession(baseline with { TContour = plan }, window.Session.Display);
+                targetSource.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); targetSource.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
                 { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(targetSource.Samples(channel, 0, targetSource.FrontierNs)), "selected target retains projected acquisition parity across channels"); }
             }
             editor.Target.SelectedIndex = 0;
             foreach (var lead in editor.ChestLeads) { lead.IsChecked = false; }
-            live = window.Session; window.ApplySettings();
+            live = window.Session; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal) &&
                 window.Settings.ShapeEditStatus.Text!.Contains("输入不完整或无效", StringComparison.Ordinal), "empty chest selection rejects atomically with actionable message and invalid draft state");
             editor.ChestLeads[1].IsChecked = true;
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 0; window.Settings.Tabs.SelectedIndex = 5;
             Capture(window, "ui-preview-t-contour-target-editor.png");
-            live = window.Session; editor.Crossing.Value = null; window.ApplySettings();
+            live = window.Session; editor.Crossing.Value = null; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.ShapeEditStatus.Text!.Contains("输入不完整或无效", StringComparison.Ordinal), "missing contour parameter rejects without replacing session or showing stale summary");
             window.Settings.EcgSelection = 108;
             Require(editor.Crossing.Value == 65 && editor.Peak.Value == 300 && editor.SecondPeak.Value == 200 && editor.Target.SelectedIndex == 2 &&
                 editor.ChestLeads.Select((lead, index) => (lead.IsChecked == true) == (index == 0)).All(matches => matches), "switching contour resets draft and target to selected template");
-            window.Settings.EcgSelection = 0; window.ApplySettings();
+            window.Settings.EcgSelection = 0; window.RestartSettings();
             Require(!editor.IsVisible && !ReferenceEquals(live, window.Session), "incompatible template ignores stale contour edits");
         }
         finally { window.Close(); }
@@ -1377,7 +1418,7 @@ internal static class DesignPreviewSmokeChecks
         {
             foreach (int choice in Enumerable.Range(114, 51).Append(115).Append(125).Append(135).Append(0))
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "regional snapshot replaces preceding compound/rhythm source");
                 if (choice == 114) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1419,10 +1460,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-regional-infarction-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "regional snapshot paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 164; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 164; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for regional snapshot");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "regional snapshot permits independent no-ejection setting");
             window.Settings.EjectionSelection = 0;
             foreach (int choice in new[] { 118, 128, 136, 148, 164 })
@@ -1435,11 +1476,12 @@ internal static class DesignPreviewSmokeChecks
                 var edited = editor.Read(pair.Ecg.Infarction)!;
                 Require(edited.RepolarizationDelayNs == 80_000_000 && edited.Stage == pair.Ecg.Infarction!.Stage &&
                     (choice < 135 ? edited.Territory == pair.Ecg.Infarction.Territory : edited.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.CustomChest && edited.ChestMask == 10), "regional editor preserves snapshot and limb territory or custom chest mask");
-                live = window.Session; window.ApplySettings();
+                live = window.Session; window.RestartSettings();
                 Require(!ReferenceEquals(live, window.Session) && window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) &&
                     window.Settings.ShapeEditSummary.Text!.Contains("局部 QT 440 ms", StringComparison.Ordinal), "regional delay and mask apply atomically with accepted extended QT summary");
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var source = new LocalMonitorPreviewSession(pair.Physiology with { Infarction = edited, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration }, window.Session.Display);
+                source.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); source.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
                 { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(source.Samples(channel, 0, source.FrontierNs)), "edited region reaches shared acquired source"); }
@@ -1470,22 +1512,24 @@ internal static class DesignPreviewSmokeChecks
                     Necrosis: Monitor.Simulation.Physiology.NecrosisIllustrationShape.QS, QrsTemplatePermille: 600,
                     TPeakMicrovolts: -500, JMicrovolts: 200, StEndMicrovolts: 100, StArchMicrovolts: 150
                 }, "independent infarction components preserve all authored controls");
-                window.ApplySettings();
+                window.RestartSettings();
                 Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text!.Contains("独立分量", StringComparison.Ordinal) &&
                     !window.Settings.ShapeEditSummary.Text.Contains("ST–T 融合", StringComparison.Ordinal), "component mode summary does not claim stage fusion");
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var config = pair.Physiology with { Infarction = plan, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
                 var expected = new LocalMonitorPreviewSession(config, window.Session.Display);
+                expected.DiscardStartup();
                 var stage = new LocalMonitorPreviewSession(config with { Infarction = pair.Physiology.Infarction }, window.Session.Display);
+                stage.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); stage.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
                 {
                     Require(window.Session.Samples(channel, 0, expected.FrontierNs).SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "component editing reaches acquired samples");
                     if (channel > 0) { Require(expected.Samples(channel, 0, expected.FrontierNs).SequenceEqual(stage.Samples(channel, 0, stage.FrontierNs)), "component editing preserves mechanical and respiratory channels"); }
                 }
-                live = window.Session; controls.JPoint.Value = null; window.ApplySettings();
+                live = window.Session; controls.JPoint.Value = null; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("ST／T", StringComparison.Ordinal), "incomplete independent components reject atomically");
-                controls.ComponentsEnabled.IsChecked = false; window.ApplySettings();
+                controls.ComponentsEnabled.IsChecked = false; window.RestartSettings();
                 Require(!ReferenceEquals(live, window.Session) && controls.Read(pair.Ecg.Infarction) == pair.Ecg.Infarction, "disabling component editing exactly restores original fusion stage despite stale fields");
             }
             var zoneEditor = window.Settings.InfarctionParameters;
@@ -1498,10 +1542,11 @@ internal static class DesignPreviewSmokeChecks
             var zones = zoneEditor.ReadZones(zonePair.Ecg.Infarction)!;
             Require(zones.Ischemia.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.Inferior && zones.Injury.ChestMask == 2 &&
                 zones.Necrosis.Territory == Monitor.Simulation.Physiology.InfarctionTerritory.Lateral, "separate component selectors retain different regions");
-            window.ApplySettings();
+            window.RestartSettings();
             Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text!.Contains("缺血：下壁", StringComparison.Ordinal), "zone summary and applied status identify separate regions");
             var zoneTiming = window.Settings.ReadBreathingTiming();
             var zoneSource = new LocalMonitorPreviewSession(zonePair.Physiology with { Infarction = null, Zones = zones, BreathPeriodMilliseconds = zoneTiming.Item1, InspirationMilliseconds = zoneTiming.Item2 }, window.Session.Display);
+            zoneSource.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); zoneSource.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
             { Require(window.Session.Samples(channel, 0, zoneSource.FrontierNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.FrontierNs)), "zone edits reach shared acquired monitor channels"); }
@@ -1519,15 +1564,15 @@ internal static class DesignPreviewSmokeChecks
             Capture(window, "ui-preview-infarction-zones.png");
             Require(zoneEditor.Groups.Bounds.Width > 0 && zoneEditor.Groups.Bounds.Width <= window.Width, "group navigation fits compact window");
             window.Width = 1440;
-            live = window.Session; zoneEditor.IschemiaRegion.SelectedIndex = -1; window.ApplySettings();
+            live = window.Session; zoneEditor.IschemiaRegion.SelectedIndex = -1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "missing zone choice rejects atomically");
-            zoneEditor.SeparateRegions.IsChecked = false; window.ApplySettings();
+            zoneEditor.SeparateRegions.IsChecked = false; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction) is null, "disabling separate zones restores shared region and ignores hidden invalid selection");
             zoneEditor.SeparateRegions.IsChecked = true;
             zoneEditor.IschemiaRegion.SelectedIndex = zoneEditor.InjuryRegion.SelectedIndex = zoneEditor.NecrosisRegion.SelectedIndex = 0;
             zoneEditor.Delay.Value = zoneEditor.TPeak.Value = zoneEditor.JPoint.Value = zoneEditor.StEnd.Value = zoneEditor.StArch.Value = zoneEditor.QrsWeight.Value = null;
             zoneEditor.Necrosis.SelectedIndex = -1;
-            live = window.Session; window.ApplySettings();
+            live = window.Session; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session) && zoneEditor.Groups.Items.OfType<TabItem>().Skip(1).All(page => !page.IsEnabled),
                 "disabled zones ignore dormant invalid parameters and disable their parameter groups");
             var inactive = zoneEditor.ReadZones(zonePair.Ecg.Infarction)!;
@@ -1541,26 +1586,27 @@ internal static class DesignPreviewSmokeChecks
                 BreathPeriodMilliseconds = zoneTiming.Item1,
                 InspirationMilliseconds = zoneTiming.Item2
             }, window.Session.Display);
+            reference.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
             { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "all closed regions produce the unmodified electrode-reference acquisition"); }
             live = window.Session;
             foreach (var region in new[] { zoneEditor.IschemiaRegion, zoneEditor.InjuryRegion, zoneEditor.NecrosisRegion })
             {
-                region.SelectedIndex = 2; window.ApplySettings();
+                region.SelectedIndex = 2; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && zoneEditor.Delay.Value is null && zoneEditor.QrsWeight.Value is null,
                     "reenabled region validates its preserved invalid draft instead of applying neutral data");
                 region.SelectedIndex = 0;
             }
             zoneEditor.InjuryRegion.SelectedIndex = 2;
             zoneEditor.JPoint.Value = 200; zoneEditor.StEnd.Value = 100; zoneEditor.StArch.Value = 150;
-            window.ApplySettings();
+            window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session) && zoneEditor.ReadZones(zonePair.Ecg.Infarction)!.Components.JMicrovolts == 200,
                 "valid injury-only edits apply while other dormant drafts remain invalid");
             zoneEditor.Groups.SelectedIndex = 2; zoneEditor.InjuryRegion.SelectedIndex = 0;
             Require(zoneEditor.Groups.SelectedIndex == 0, "closing the displayed region returns navigation to region selection");
             Capture(window, "ui-preview-infarction-inactive-zones.png");
-            window.Settings.EcgSelection = 164; window.ApplySettings();
+            window.Settings.EcgSelection = 164; window.RestartSettings();
             Require(zoneEditor.SeparateRegions.IsChecked != true, "template selection clears separate zone mode");
             Require(zoneEditor.Groups.SelectedIndex == 0 && zoneEditor.Groups.Items.OfType<TabItem>().Skip(2).All(page => !page.IsEnabled),
                 "stage mode resets group selection and disables independent ST/QRS editing");
@@ -1571,18 +1617,18 @@ internal static class DesignPreviewSmokeChecks
             var infarctionEditor = window.Settings.InfarctionParameters;
             live = window.Session;
             foreach (var lead in infarctionEditor.ChestLeads) { lead.IsChecked = false; }
-            window.ApplySettings();
+            window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("至少选择一个胸导联", StringComparison.Ordinal), "empty infarction mask preserves running session");
             infarctionEditor.ChestLeads[1].IsChecked = true;
             Require(window.Settings.ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal), "correcting region input restores a pending draft rather than stale accepted state");
             foreach (decimal? delay in new decimal?[] { null, 1.5m, 500 })
             {
-                infarctionEditor.Delay.Value = delay; window.ApplySettings();
+                infarctionEditor.Delay.Value = delay; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && !window.Settings.ShapeEditStatus.Text!.Contains("· 已应用", StringComparison.Ordinal), "missing, fractional or cycle-overlapping delay rejects atomically without marking draft applied");
             }
             window.Settings.EcgSelection = 135;
             Require(infarctionEditor.Delay.Value == 0 && infarctionEditor.ChestLeads.Select((lead, i) => (lead.IsChecked == true) == (i < 3)).All(matches => matches), "new chest template restores mask and delay defaults");
-            window.Settings.EcgSelection = 0; window.ApplySettings();
+            window.Settings.EcgSelection = 0; window.RestartSettings();
             Require(!infarctionEditor.IsVisible && !ReferenceEquals(live, window.Session), "reference template clears infarction editing");
         }
         finally { window.Close(); }
@@ -1596,7 +1642,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 97, 98, 77, 98, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "fusion preset atomically replaces and clears preceding morphology");
                 if (choice == 97) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1620,10 +1666,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-high-k-fusion-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "fusion paper retains complete twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 98; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 98; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace fusion source");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "fusion supports independent disabled ejection");
         }
         finally { window.Close(); }
@@ -1637,7 +1683,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 89, 90, 91, 92, 93, 94, 95, 96, 97, 90, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "quinidine preset atomically replaces previous morphology");
                 if (choice == 89) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1665,10 +1711,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-quinidine-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "quinidine paper retains full twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 97; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 97; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing quinidine source");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "quinidine retains independent no-ejection control");
         }
         finally { window.Close(); }
@@ -1682,7 +1728,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 86, 87, 88, 89, 87, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "digitalis preset replaces previous morphology atomically");
                 if (choice == 86) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1709,10 +1755,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(1); Capture(window, $"ui-preview-digitalis-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "digitalis paper has complete twelve-lead record"); window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 87; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 87; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without changing digitalis source");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "digitalis permits independent disabled ejection");
         }
         finally { window.Close(); }
@@ -1726,7 +1772,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 80, 82, 83, 84, 85, 86, 82, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "calcium preset atomically replaces previous electrolyte morphology");
                 if (choice == 80) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1754,10 +1800,10 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "calcium paper retains full twelve-lead snapshot");
                 window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 84; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 84; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for calcium template");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "calcium template retains independent no-ejection option");
         }
         finally { window.Close(); }
@@ -1771,7 +1817,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 77, 78, 79, 80, 81, 78, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "low-potassium preset replaces prior cardiac morphology atomically");
                 if (choice == 77) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1801,10 +1847,10 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "low-potassium paper retains complete twelve-lead snapshot");
                 window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 80; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 80; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace T-U template");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "low-potassium template permits independent absent ejection");
         }
         finally { window.Close(); }
@@ -1818,7 +1864,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 75, 76, 77, 74, 75, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "high-T preset replaces incompatible rhythm atomically");
                 if (choice is 21 or 74) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1857,10 +1903,10 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "high-T paper retains complete twelve-lead snapshot");
                 window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 75; window.ApplySettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EcgSelection = 75; window.RestartSettings(); var live = window.Session;
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing high-T source");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "independent disabled ejection remains supported with high T");
         }
         finally { window.Close(); }
@@ -1890,7 +1936,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 72, 74, 73, 20, 0 })
             {
                 window.Settings.Tabs.SelectedIndex = 0; window.Settings.EcgSelection = choice;
-                window.ApplySettings();
+                window.RestartSettings();
                 window.Settings.OpenAdvanced(0);
                 window.Settings.SectionPages[5].Sections.SelectedIndex = 3;
                 Capture(window, $"ui-preview-advanced-{choice}.png");
@@ -1920,7 +1966,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 72, 73, 74, 72, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "standstill/PEA replaces previous rhythm atomically");
                 if (choice == 21) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -1957,7 +2003,7 @@ internal static class DesignPreviewSmokeChecks
                 if (noPulse)
                 {
                     var live = window.Session;
-                    window.Settings.EjectionSelection = 1; window.ApplySettings();
+                    window.Settings.EjectionSelection = 1; window.RestartSettings();
                     Require(ReferenceEquals(live, window.Session), "PVC-only ejection rejects without replacing standstill/PEA");
                     window.Settings.EjectionSelection = 0;
                 }
@@ -1977,7 +2023,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 66, 67, 68, 69, 70, 71, 6 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "AF variants replace VF and clear preceding aberrancy/deficit state");
                 if (choice == 21) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -2016,9 +2062,9 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate controls reject for irregular AF");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak ejection rejects for AF");
         }
         finally { window.Close(); }
@@ -2031,7 +2077,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 59, 60, 61, 62, 63, 64, 65, 59, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "preexcitation presets replace VF and reset preceding PR/delta state");
                 if (choice == 21) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -2061,11 +2107,11 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "preexcitation has full twelve-lead snapshot");
                 window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 59; window.ApplySettings();
+            window.Settings.EcgSelection = 59; window.RestartSettings();
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only variable rate rejects without changing preexcitation timing");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override cannot replace preexcitation");
         }
         finally { window.Close(); }
@@ -2078,7 +2124,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 53, 54, 55, 56, 57, 58, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "bundle presets replace VF and clear preceding morphology");
                 if (choice == 21) { continue; }
                 var mode = choice == 0 ? Monitor.Simulation.Physiology.EcgBundleBlockIllustration.Reference
@@ -2108,11 +2154,11 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "bundle paper contains full twelve-lead snapshot");
                 window.SelectPage(0);
             }
-            window.Settings.EcgSelection = 53; window.ApplySettings();
+            window.Settings.EcgSelection = 53; window.RestartSettings();
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only variable timing cannot silently replace fixed bundle preset");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak ejection rejects for isolated conduction morphology");
         }
         finally { window.Close(); }
@@ -2125,7 +2171,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 44, 45, 46, 47, 48, 49, 50, 51, 52, 2 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "PVC groups replace VF and previous grouped timing");
                 if (choice == 21) { continue; }
                 var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
@@ -2194,9 +2240,9 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot alter PVC group timing");
-            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override rejects for PVC groups");
         }
         finally { window.Close(); }
@@ -2209,7 +2255,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 40, 41, 4, 42, 43, 5 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "PAC/PJC presets replace VF and preceding variant atomically");
                 if (choice == 21) { continue; }
                 for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
@@ -2249,9 +2295,9 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.EjectionSelection = 1; window.ApplySettings();
+            window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak-ejection option cannot replace PJC session");
-            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot override authored premature timing");
         }
         finally { window.Close(); }
@@ -2264,7 +2310,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 31, 32, 33, 34, 35, 36, 33 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "automatic rhythm clears prior disorganization and variant state");
                 if (choice == 21) { continue; }
                 for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
@@ -2304,10 +2350,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate controls cannot silently replace automatic rhythm timing");
             window.Settings.CardiacRateEnabled.IsChecked = false;
-            window.Settings.EjectionSelection = 1; window.ApplySettings();
+            window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only ejection rejects atomically for automatic rhythms");
         }
         finally { window.Close(); }
@@ -2320,7 +2366,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 26, 27, 28, 29, 30, 26 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "VT preset can replace VF and clear fusion/capture state");
                 if (choice == 21) { continue; }
                 for (int i = 0; i < 320; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
@@ -2331,6 +2377,7 @@ internal static class DesignPreviewSmokeChecks
                     // never replace measured HR with the authored ventricular rate.
                     var independent = new LocalMonitorPreviewSession(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Physiology,
                         MonitorDisplayConfiguration.Default(), enableMeasurements: true);
+                    independent.DiscardStartup();
                     while (independent.SimulationTimeNs < window.Session.SimulationTimeNs) { independent.Advance(50_000_000); }
                     Require(reading.HeartRate.Status != WaveformMeasurementStatus.Uncountable &&
                         reading.HeartRate == independent.Measurements!.HeartRate,
@@ -2372,7 +2419,7 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate override cannot alter VT");
         }
         finally { window.Close(); }
@@ -2385,7 +2432,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 21, 23, 24, 25, 23 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "SVT presets replace prior disorganized and bundle state");
                 if (choice == 21) { continue; }
                 for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
@@ -2409,7 +2456,7 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot alter SVT timing");
         }
         finally { window.Close(); }
@@ -2422,7 +2469,7 @@ internal static class DesignPreviewSmokeChecks
             foreach (int choice in new[] { 20, 10, 21, 18, 22, 0 })
             {
                 var previous = window.Session;
-                window.Settings.EcgSelection = choice; window.ApplySettings();
+                window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "disorganized and conducted presets can replace each other");
                 for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
                 var reading = window.Session.Measurements!;
@@ -2456,7 +2503,7 @@ internal static class DesignPreviewSmokeChecks
             // Alternate independent escape clocks and conducted rhythms to catch stale state.
             foreach (int choice in new[] { 19, 10, 18, 11, 12, 13, 14, 15, 16, 17, 10 })
             {
-                var previous = window.Session; window.Settings.EcgSelection = choice; window.ApplySettings();
+                var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
                 Require(!ReferenceEquals(previous, window.Session), "block presets reset incompatible prior rhythm state atomically");
                 for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
                 Require(window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.Valid, "block ECG produces measured ventricular rate");
@@ -2469,7 +2516,7 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "block twelve-lead capture is complete");
                 window.SelectPage(0);
             }
-            var live = window.Session; window.Settings.CardiacRateEnabled.IsChecked = true; window.ApplySettings();
+            var live = window.Session; window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "sinus rate override cannot overwrite block timing");
         }
         finally { window.Close(); }

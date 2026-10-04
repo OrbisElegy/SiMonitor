@@ -12,14 +12,21 @@ public sealed class LocalMonitorPreviewSession
 {
     public const long PresentationLatencyNs = 2_200_000_000;
     public const int RetainedBlockCount = 202;
+    public const long StartupDiscardNs = 12_000_000_000;
+    private long _sourceTimeOffsetNs;
+    private readonly PhysiologyIllustrationConfiguration _configuration;
+    private readonly RealtimeOxygenationConfiguration? _realtimeConfiguration;
+    private LocalMonitorPreviewSession? _pendingSource;
+    private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
+    public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
     private readonly LiveWaveformMeasurements? _measurements;
     private PulseOximeterIllustrationSource? _opticalSource;
     private RealtimeOxygenationSource? _realtimeOxygenation;
     private readonly Guid _opticalInstanceId = Guid.NewGuid();
-    private readonly int _opticalModulationPermille;
-    private readonly bool _usesOxygenation;
+    private int _opticalModulationPermille;
+    private bool _usesOxygenation;
     private long _measurementFrontier;
     private static readonly long AcquisitionLatencyNs = FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs;
     public LiveMeasurementSnapshot? Measurements => _measurements?.Read(Math.Max(_measurementFrontier,
@@ -30,16 +37,19 @@ public sealed class LocalMonitorPreviewSession
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
-    public MonitorDisplayConfiguration Display { get; }
-    public MonitorSweepRanges Ranges { get; }
-    public RealtimeOxygenationSnapshot? Oxygenation => _realtimeOxygenation?.Snapshot;
-    public OxygenReservoirParameters? OxygenationParameters { get; }
+    public MonitorDisplayConfiguration Display { get; private set; }
+    public MonitorSweepRanges Ranges { get; private set; }
+    public RealtimeOxygenationSnapshot? Oxygenation => _realtimeOxygenation?.Snapshot is { } snapshot
+        ? snapshot with { SourceSimTimeNs = snapshot.SourceSimTimeNs - _sourceTimeOffsetNs } : null;
+    public OxygenReservoirParameters? OxygenationParameters { get; private set; }
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
         bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
         SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
         RealtimeOxygenationConfiguration? realtimeOxygenation = null)
     {
         ArgumentNullException.ThrowIfNull(display);
+        _configuration = configuration;
+        _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration);
         _opticalModulationPermille = opticalModulationPermille;
         if (realtimeOxygenation is not null)
@@ -73,7 +83,87 @@ public sealed class LocalMonitorPreviewSession
     }
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null) =>
         (_realtimeOxygenation ?? throw new InvalidOperationException("Preview.RealtimeOxygenationNotEnabled"))
-            .ChangeVentilation(ventilation, SimulationTimeNs, oxygenDemandMultiplier);
+            .ChangeVentilation(ventilation, checked(SimulationTimeNs + _sourceTimeOffsetNs), oxygenDemandMultiplier) - _sourceTimeOffsetNs;
+
+    public void DiscardStartup()
+    {
+        if (SimulationTimeNs != 0 || _sourceTimeOffsetNs != 0 || _pendingSource is not null)
+        { throw new InvalidOperationException("Preview.StartupAlreadyStarted"); }
+        var source = _source.Fork();
+        var oxygenation = _realtimeOxygenation?.Fork();
+        for (long time = 50_000_000; time <= StartupDiscardNs; time += 50_000_000)
+        {
+            oxygenation?.AdvanceTo(time);
+            source.AdvanceTo(time, 50, 1, 100);
+        }
+        _source = source;
+        _realtimeOxygenation = oxygenation;
+        _sourceTimeOffsetNs = StartupDiscardNs;
+    }
+
+    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (ReferenceEquals(definition, this) || definition.SimulationTimeNs != 0 || definition._sourceTimeOffsetNs != 0 ||
+            definition._pendingSource is not null || (definition._measurements is null) != (_measurements is null))
+        { throw new ArgumentException("Preview.SourceMustBeFresh", nameof(definition)); }
+        if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
+        if (_realtimeOxygenation is not null && definition._realtimeOxygenation is not null &&
+            OxygenationParameters != definition.OxygenationParameters)
+        { throw new ArgumentException("Preview.OxygenationBaselineRequiresRestart"); }
+        long effective = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
+        // Validate against the current source without generating future samples.
+        var trial = _source.Fork();
+        trial.ContinueWith(definition._source);
+        _pendingSource = definition;
+        PendingSourceTimeNs = effective;
+        return effective;
+    }
+
+    public void UpdateDisplay(MonitorDisplayConfiguration display)
+    {
+        ArgumentNullException.ThrowIfNull(display);
+        if (Display.Slots.SequenceEqual(display.Slots)) { return; }
+        Display = display;
+        Ranges = new(display);
+        Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
+    }
+
+    private void ActivatePendingSource()
+    {
+        var definition = _pendingSource!;
+        long sourceTime = checked(SimulationTimeNs + _sourceTimeOffsetNs);
+        var source = _source.Fork();
+        source.ContinueWith(definition._source);
+        RealtimeOxygenationSource? oxygenation = null;
+        if (definition._realtimeConfiguration is { } config)
+        {
+            var transport = PhysiologyIllustrationSource.CreateTransport(definition._configuration,
+                config.Ventilation, config.ReferenceStrokeVolumeMicroliters);
+            oxygenation = _realtimeOxygenation?.Fork() ?? new(transport, config.Parameters, config.OxygenDemandMultiplier, sourceTime);
+            oxygenation.ChangeTransport(transport, sourceTime, config.OxygenDemandMultiplier);
+        }
+        _previousOpticalSources.Add((sourceTime, _opticalSource));
+        _source = source;
+        _realtimeOxygenation = oxygenation;
+        _opticalSource = definition._opticalSource;
+        _opticalModulationPermille = definition._opticalModulationPermille;
+        _usesOxygenation = definition._usesOxygenation;
+        OxygenationParameters = definition.OxygenationParameters;
+        _pendingSource = null;
+        PendingSourceTimeNs = null;
+    }
+
+    private WaveformEnvelope Rebase(WaveformEnvelope block) => block with
+    {
+        InstanceId = _opticalInstanceId,
+        StartSimTimeNs = checked(block.StartSimTimeNs - _sourceTimeOffsetNs),
+        Planes = block.Planes.Select(p => p with
+        {
+            FirstSampleIndex = checked(p.FirstSampleIndex - (ulong)(_sourceTimeOffsetNs /
+                (1_000_000_000L * p.SampleRateDenominator / p.SampleRateNumerator)))
+        }).ToArray()
+    };
 
     public void Advance(long deltaNs)
     {
@@ -84,37 +174,49 @@ public sealed class LocalMonitorPreviewSession
         DetectedBeats = [];
         while (deltaNs > 0)
         {
+            if (PendingSourceTimeNs is { } effective && SimulationTimeNs >= effective) { ActivatePendingSource(); }
             long chunk = Math.Min(deltaNs, 50_000_000);
+            if (PendingSourceTimeNs is { } pending) { chunk = Math.Min(chunk, pending - SimulationTimeNs); }
             long next = checked(SimulationTimeNs + chunk);
             var oxygenation = _realtimeOxygenation?.Fork();
-            oxygenation?.AdvanceTo(next);
+            long sourceNext = checked(next + _sourceTimeOffsetNs);
+            oxygenation?.AdvanceTo(sourceNext);
             var optics = oxygenation is null ? _opticalSource : new PulseOximeterIllustrationSource(
                 PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
                 _opticalInstanceId, oxygenation, _opticalModulationPermille);
             // Resolve all optical source-time reads before publishing the chunk.
             // Missing history/range errors leave acquisition and clocks retryable.
             PhysiologyWaveformGroup source = _usesOxygenation ? _source.Fork() : _source;
-            var wires = source.AdvanceTo(next, 50, 1, 100);
-            byte[][]? opticalWires = optics is null ? null : wires.Select(wire => optics.ConvertAcquiredPulse(wire)).ToArray();
+            byte[][] wires = source.AdvanceTo(sourceNext, 50, 1, 100)
+                .Where(w => WaveformEnvelopeCodec.Decode(w).StartSimTimeNs >= _sourceTimeOffsetNs).ToArray();
+            byte[]?[] opticalWires = wires.Select(wire =>
+            {
+                long start = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs;
+                foreach (var previous in _previousOpticalSources)
+                {
+                    if (start < previous.ToExclusiveSourceTimeNs) { return previous.Source?.ConvertAcquiredPulse(wire); }
+                }
+                return optics?.ConvertAcquiredPulse(wire);
+            }).ToArray();
             _source = source;
             _realtimeOxygenation = oxygenation;
             _opticalSource = optics;
-            if (wires.Count > 0)
+            if (wires.Length > 0)
             {
-                for (int index = 0; index < wires.Count; index++)
+                for (int index = 0; index < wires.Length; index++)
                 {
                     byte[] wire = wires[index];
                     if (_measurements is null) { break; }
-                    byte[] measurementWire = wire;
-                    if (_opticalSource is not null)
+                    byte[] measurementWire = WaveformEnvelopeCodec.EncodeRaw(Rebase(WaveformEnvelopeCodec.Decode(wire)));
+                    if (opticalWires[index] is { } opticalWire)
                     {
-                        var optical = WaveformEnvelopeCodec.Decode(opticalWires![index]);
+                        var optical = WaveformEnvelopeCodec.Decode(opticalWire);
                         var original = WaveformEnvelopeCodec.Decode(wire);
-                        measurementWire = WaveformEnvelopeCodec.EncodeRaw(original with
+                        measurementWire = WaveformEnvelopeCodec.EncodeRaw(Rebase(original with
                         {
                             InstanceId = optical.InstanceId,
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
-                        });
+                        }));
                     }
                     var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses);
                     _measurementFrontier = measured.SampleTimeNs;
@@ -125,7 +227,9 @@ public sealed class LocalMonitorPreviewSession
                     { pulses.AddRange(detectedPulses); }
                     else { pulses.Clear(); }
                 }
-                _blocks = _blocks.Concat(wires.Select(b => WaveformEnvelopeCodec.Decode(b))).TakeLast(RetainedBlockCount).ToArray();
+                _blocks = _blocks.Concat(wires.Select(b => Rebase(WaveformEnvelopeCodec.Decode(b)))).TakeLast(RetainedBlockCount).ToArray();
+                long acquiredEnd = WaveformEnvelopeCodec.Decode(wires[^1]).StartSimTimeNs + 200_000_000;
+                _previousOpticalSources.RemoveAll(p => p.ToExclusiveSourceTimeNs <= acquiredEnd);
                 DataRevision++;
             }
             SimulationTimeNs = next;

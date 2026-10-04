@@ -96,7 +96,7 @@ public sealed class PhysiologyWaveformGroup
             }
             foreach (DelayedSignalSample sample in pending)
             {
-                long value = generator.VascularPressure is { } pressure
+                long value = source.ActiveFromEventTimeNs is not null ? generator.EvaluateAt(sample.SourceSimTimeNs) : generator.VascularPressure is { } pressure
                     ? pressure.EvaluateAt(sample.SourceSimTimeNs)
                     : generator.PlethRunoff is { } runoff ? runoff.EvaluateAt(sample.SourceSimTimeNs)
                     : composition!.EvaluateAt(sample.SourceSimTimeNs);
@@ -130,6 +130,23 @@ public sealed class PhysiologyWaveformGroup
             streamEpoch, configurationRevision, firstBlockSequence, plans[0].Physiology.EpochAnchorSimTimeNs,
             maximumBufferedBlocks, plans.Select(plan => plan.Plane).ToArray());
         return Restore(new(sources, assembler.CaptureState()));
+    }
+
+    public void ContinueWith(PhysiologyWaveformGroup definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (!_channels.Select(c => (c.Id, c.QualityFlags, c.PressureZeroOffsetCentiMmHg))
+                .SequenceEqual(definition._channels.Select(c => (c.Id, c.QualityFlags, c.PressureZeroOffsetCentiMmHg))) ||
+            !_assembler.CaptureState().Planes.Select(p => p.Configuration)
+                .SequenceEqual(definition._assembler.CaptureState().Planes.Select(p => p.Configuration)))
+        { throw new ArgumentException("PhysiologyGroup.ChannelMismatch", nameof(definition)); }
+        // Validate every new generator before publishing. Delays, assembler,
+        // sample indices and already acquired samples stay on the same stream.
+        var channels = _channels.Select((channel, index) => channel with
+        {
+            Generator = channel.Generator.ContinueWith(definition._channels[index].Generator.CaptureState())
+        }).ToArray();
+        _channels = channels;
     }
 
     public PhysiologyWaveformGroupState CaptureState() => new(Array.AsReadOnly(_channels.Select(channel =>

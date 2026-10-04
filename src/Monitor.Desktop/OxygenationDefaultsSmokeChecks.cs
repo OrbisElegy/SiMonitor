@@ -43,7 +43,7 @@ internal static class OxygenationDefaultsSmokeChecks
             patient.OverrideFrc.IsChecked = true;
             patient.Frc.Value = 2400;
             var applied = patient.Read()!;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Settings.Restart.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.Pause();
             var session = window.Session;
             Require(session.OxygenationParameters == applied.Resolved.Parameters, "Apply uses the full unrounded patient baseline");
@@ -83,12 +83,12 @@ internal static class OxygenationDefaultsSmokeChecks
                 "invalid live demand rejects the complete ventilation and demand edit");
             settings.DemandMultiplier.Value = 2;
             patient.Age.Value = 19;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Settings.Restart.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Require(ReferenceEquals(session, window.Session) && window.Settings.Status.Text!.Contains("Hb", StringComparison.Ordinal),
                 "unsupported central Hb requires an explicit input and preserves the current session");
             window.Settings.RestoreGenerator(saved.Generator!);
             settings.DemandMultiplier.Value = 2;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Settings.Restart.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.Pause();
             saved = new DisplayPreferenceStore(path).Load(out rejected);
             Require(!rejected && saved.Generator!.Oxygenation!.OxygenDemandMultiplier == 2 &&

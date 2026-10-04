@@ -51,6 +51,7 @@ internal static class Program
             .. PhysiologyWaveformGroupSpecifications.All,
             .. PhysiologyIllustrationSpecifications.All,
             .. MonitorDisplaySpecifications.All,
+            .. MonitorContinuationSpecifications.All,
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
             .. EcgHeartRateMeasurementSpecifications.All,

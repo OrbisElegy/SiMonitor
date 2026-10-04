@@ -1,0 +1,665 @@
+{
+  "ReferenceSetId": "AdultOxygenationDefaults@1",
+  "Frc": [
+    {
+      "Sex": "male",
+      "AgeYears": 18,
+      "HeightCm": 140,
+      "FrcMlBtps": 1659.728889653
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 18,
+      "HeightCm": 165,
+      "FrcMlBtps": 2613.497392543
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 18,
+      "HeightCm": 175,
+      "FrcMlBtps": 3074.951593692
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 18,
+      "HeightCm": 190,
+      "FrcMlBtps": 3859.531951026
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 18,
+      "HeightCm": 210,
+      "FrcMlBtps": 5089.17914452
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 20,
+      "HeightCm": 140,
+      "FrcMlBtps": 1683.965027062
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 20,
+      "HeightCm": 165,
+      "FrcMlBtps": 2651.660903655
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 20,
+      "HeightCm": 175,
+      "FrcMlBtps": 3119.853474846
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 20,
+      "HeightCm": 190,
+      "FrcMlBtps": 3915.890641463
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 20,
+      "HeightCm": 210,
+      "FrcMlBtps": 5163.493718313
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 25.125,
+      "HeightCm": 140,
+      "FrcMlBtps": 1705.118929621
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 25.125,
+      "HeightCm": 165,
+      "FrcMlBtps": 2684.970963825
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 25.125,
+      "HeightCm": 175,
+      "FrcMlBtps": 3159.044951714
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 25.125,
+      "HeightCm": 190,
+      "FrcMlBtps": 3965.081905966
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 25.125,
+      "HeightCm": 210,
+      "FrcMlBtps": 5228.357323688
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 29.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 1703.383818468
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 29.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 2682.238765511
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 29.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3155.830340678
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 29.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 3961.047080173
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 29.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 5223.037002069
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 30,
+      "HeightCm": 140,
+      "FrcMlBtps": 1703.377169222
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 30,
+      "HeightCm": 165,
+      "FrcMlBtps": 2682.228295255
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 30,
+      "HeightCm": 175,
+      "FrcMlBtps": 3155.818021734
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 30,
+      "HeightCm": 190,
+      "FrcMlBtps": 3961.031618024
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 30,
+      "HeightCm": 210,
+      "FrcMlBtps": 5223.016613679
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 35,
+      "HeightCm": 140,
+      "FrcMlBtps": 1704.12149677
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 35,
+      "HeightCm": 165,
+      "FrcMlBtps": 2683.400353003
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 35,
+      "HeightCm": 175,
+      "FrcMlBtps": 3157.19702477
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 35,
+      "HeightCm": 190,
+      "FrcMlBtps": 3962.762476581
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 35,
+      "HeightCm": 210,
+      "FrcMlBtps": 5225.298923912
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 59.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 1885.367618521
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 59.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 2968.800137002
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 59.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3492.988643753
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 59.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 4384.232032397
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 59.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 5781.04871449
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 60,
+      "HeightCm": 140,
+      "FrcMlBtps": 1885.470996956
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 60,
+      "HeightCm": 165,
+      "FrcMlBtps": 2968.962922185
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 60,
+      "HeightCm": 175,
+      "FrcMlBtps": 3493.180171228
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 60,
+      "HeightCm": 190,
+      "FrcMlBtps": 4384.47242851
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 60,
+      "HeightCm": 210,
+      "FrcMlBtps": 5781.365700824
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 69.5,
+      "HeightCm": 140,
+      "FrcMlBtps": 1983.734085088
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 69.5,
+      "HeightCm": 165,
+      "FrcMlBtps": 3123.693207486
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 69.5,
+      "HeightCm": 175,
+      "FrcMlBtps": 3675.230529776
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 69.5,
+      "HeightCm": 190,
+      "FrcMlBtps": 4612.973318396
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 69.5,
+      "HeightCm": 210,
+      "FrcMlBtps": 6082.666992811
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 79.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 2087.732975314
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 79.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 3287.455391857
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 79.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3867.907511684
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 79.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 4854.812236909
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 79.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 6401.555810431
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 80,
+      "HeightCm": 140,
+      "FrcMlBtps": 2087.828799199
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 80,
+      "HeightCm": 165,
+      "FrcMlBtps": 3287.606281243
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 80,
+      "HeightCm": 175,
+      "FrcMlBtps": 3868.085042972
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 80,
+      "HeightCm": 190,
+      "FrcMlBtps": 4855.035065678
+    },
+    {
+      "Sex": "male",
+      "AgeYears": 80,
+      "HeightCm": 210,
+      "FrcMlBtps": 6401.849632465
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 18,
+      "HeightCm": 140,
+      "FrcMlBtps": 1624.853744879
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 18,
+      "HeightCm": 165,
+      "FrcMlBtps": 2492.810594906
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 18,
+      "HeightCm": 175,
+      "FrcMlBtps": 2905.729406605
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 18,
+      "HeightCm": 190,
+      "FrcMlBtps": 3599.901440669
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 18,
+      "HeightCm": 210,
+      "FrcMlBtps": 4672.124385081
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 20,
+      "HeightCm": 140,
+      "FrcMlBtps": 1656.061349706
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 20,
+      "HeightCm": 165,
+      "FrcMlBtps": 2540.688533582
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 20,
+      "HeightCm": 175,
+      "FrcMlBtps": 2961.538032669
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 20,
+      "HeightCm": 190,
+      "FrcMlBtps": 3669.04261841
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 20,
+      "HeightCm": 210,
+      "FrcMlBtps": 4761.859114728
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 25.125,
+      "HeightCm": 140,
+      "FrcMlBtps": 1709.587843868
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 25.125,
+      "HeightCm": 165,
+      "FrcMlBtps": 2622.807562557
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 25.125,
+      "HeightCm": 175,
+      "FrcMlBtps": 3057.259575983
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 25.125,
+      "HeightCm": 190,
+      "FrcMlBtps": 3787.631817011
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 25.125,
+      "HeightCm": 210,
+      "FrcMlBtps": 4915.769852486
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 29.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 1740.882381486
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 29.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 2670.81887138
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 29.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3113.223664142
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 29.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 3856.965596382
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 29.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 5005.754549747
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 30,
+      "HeightCm": 140,
+      "FrcMlBtps": 1740.936452585
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 30,
+      "HeightCm": 165,
+      "FrcMlBtps": 2670.901825927
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 30,
+      "HeightCm": 175,
+      "FrcMlBtps": 3113.320359602
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 30,
+      "HeightCm": 190,
+      "FrcMlBtps": 3857.085392163
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 30,
+      "HeightCm": 210,
+      "FrcMlBtps": 5005.910026446
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 35,
+      "HeightCm": 140,
+      "FrcMlBtps": 1763.833685501
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 35,
+      "HeightCm": 165,
+      "FrcMlBtps": 2706.030196704
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 35,
+      "HeightCm": 175,
+      "FrcMlBtps": 3154.267529909
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 35,
+      "HeightCm": 190,
+      "FrcMlBtps": 3907.814746743
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 35,
+      "HeightCm": 210,
+      "FrcMlBtps": 5071.749010785
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 59.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 1837.846959933
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 59.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 2819.579539375
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 59.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3286.625625937
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 59.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 4071.792885758
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 59.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 5284.567687778
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 60,
+      "HeightCm": 140,
+      "FrcMlBtps": 1837.887452386
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 60,
+      "HeightCm": 165,
+      "FrcMlBtps": 2819.6416619
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 60,
+      "HeightCm": 175,
+      "FrcMlBtps": 3286.698038677
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 60,
+      "HeightCm": 190,
+      "FrcMlBtps": 4071.882597734
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 60,
+      "HeightCm": 210,
+      "FrcMlBtps": 5284.684120274
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 69.5,
+      "HeightCm": 140,
+      "FrcMlBtps": 1881.423569066
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 69.5,
+      "HeightCm": 165,
+      "FrcMlBtps": 2886.433699806
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 69.5,
+      "HeightCm": 175,
+      "FrcMlBtps": 3364.553768698
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 69.5,
+      "HeightCm": 190,
+      "FrcMlBtps": 4168.337881571
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 69.5,
+      "HeightCm": 210,
+      "FrcMlBtps": 5409.868404098
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 79.99,
+      "HeightCm": 140,
+      "FrcMlBtps": 1934.327636829
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 79.99,
+      "HeightCm": 165,
+      "FrcMlBtps": 2967.59781753
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 79.99,
+      "HeightCm": 175,
+      "FrcMlBtps": 3459.16222556
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 79.99,
+      "HeightCm": 190,
+      "FrcMlBtps": 4285.54807994
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 79.99,
+      "HeightCm": 210,
+      "FrcMlBtps": 5561.989409354
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 80,
+      "HeightCm": 140,
+      "FrcMlBtps": 1934.377467356
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 80,
+      "HeightCm": 165,
+      "FrcMlBtps": 2967.674266297
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 80,
+      "HeightCm": 175,
+      "FrcMlBtps": 3459.251337597
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 80,
+      "HeightCm": 190,
+      "FrcMlBtps": 4285.658480637
+    },
+    {
+      "Sex": "female",
+      "AgeYears": 80,
+      "HeightCm": 210,
+      "FrcMlBtps": 5562.132692663
+    }
+  ]
+}

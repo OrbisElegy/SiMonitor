@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../eng/physiology/oxygenation-defaults-validation.json" LogicalName="OxygenationDefaultsValidation" />
     <ProjectReference Include="../../src/Monitor.Domain/Monitor.Domain.csproj" />
     <ProjectReference Include="../../src/Monitor.Application/Monitor.Application.csproj" />
     <ProjectReference Include="../../src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />

@@ -650,6 +650,30 @@ public sealed class PulseOximeterMeasurement
 }
 ```
 
+## Presentation/AlarmAttentionJournal.cs
+
+源码：[AlarmAttentionJournal.cs](../../../src/Monitor.Application/Presentation/AlarmAttentionJournal.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public enum AlarmLatchingMode { NonLatching, UntilAcknowledged }
+public enum AlarmAttentionState { None, ActiveUnacknowledged, ActiveAcknowledged, RecoveredUnacknowledged }
+public enum AlarmAttentionKind { Started, Replaced, SeverityChanged, Acknowledged, Recovered, Interrupted, PolicyChanged }
+public sealed record AlarmAttentionSnapshot(string ConditionId, ulong Revision, AlarmEpisodeId? Episode, MonitorNoticeLevel? Level, AlarmAttentionState State, AlarmLatchingMode LatchingMode)
+{
+    public bool NeedsAcknowledgement { get; }
+}
+public sealed record AlarmAttentionRecord(ulong Sequence, long SampleTimeNs, AlarmAttentionKind Kind, AlarmAttentionSnapshot Previous, AlarmAttentionSnapshot Current, AlarmTransitionReason Reason);
+public sealed class AlarmAttentionJournal
+{
+    public const int Capacity = 256;
+    public ulong DroppedRecordCount { get; private set; }
+    public IReadOnlyList<AlarmAttentionSnapshot> Conditions { get; }
+    public IReadOnlyList<AlarmAttentionRecord> Records { get; }
+    public void Configure(string conditionId, AlarmLatchingMode mode);
+    public bool Acknowledge(AlarmEpisodeId episode, ulong expectedRevision);
+}
+```
+
 ## Presentation/AlarmLifecycleJournal.cs
 
 源码：[AlarmLifecycleJournal.cs](../../../src/Monitor.Application/Presentation/AlarmLifecycleJournal.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -674,6 +698,7 @@ public sealed record AlarmLifecycleTransition(ulong Sequence, long SampleTimeNs,
 public sealed class AlarmLifecycleJournal
 {
     public const int Capacity = 256;
+    public AlarmAttentionJournal Attention { get; }
     public ulong DroppedNotificationCount { get; private set; }
     public IReadOnlyList<AlarmNotificationRecord> NotificationRecords { get; }
     public AlarmNotificationPolicy NotificationPolicyFor(string conditionId);

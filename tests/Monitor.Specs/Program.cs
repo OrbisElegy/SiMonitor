@@ -75,6 +75,7 @@ internal static class Program
             .. AlarmConfirmationSpecifications.All,
             .. NoExpirationConfirmationSpecifications.All,
             .. AlarmLifecycleSpecifications.All,
+            .. AlarmAttentionSpecifications.All,
             .. AlarmNotificationSpecifications.All,
             .. NotificationSoundSpecifications.All,
             .. NotificationSettingsSpecifications.All,

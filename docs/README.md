@@ -12,6 +12,7 @@
 ## 接口与集成
 
 - [当前实现接口总览](interfaces/README.md)
+- [报警确认与保持状态接口](interfaces/alarms/alarm-attention.md)
 - [报警确认配置接口](interfaces/alarms/alarm-confirmation.md)
 - [本地报警生命周期接口](interfaces/alarms/alarm-lifecycle.md)
 - [报警通知决策接口](interfaces/alarms/alarm-notification-policy.md)

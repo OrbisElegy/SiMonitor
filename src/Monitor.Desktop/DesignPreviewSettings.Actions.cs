@@ -27,8 +27,8 @@ internal sealed partial class DesignPreviewSettings
                 content.Bind(ContentPresenter.ContentProperty, new Binding(nameof(ButtonSpinner.Content)) { Source = spinner });
                 Grid.SetRowSpan(content, 2);
                 grid.Children.Add(content);
-                AddArrow("PART_IncreaseButton", "⌃", "增加接续延迟", 0);
-                AddArrow("PART_DecreaseButton", "⌄", "减少接续延迟", 1);
+                AddArrow("PART_IncreaseButton", "⌃", "settings.delayIncrease", 0);
+                AddArrow("PART_DecreaseButton", "⌄", "settings.delayDecrease", 1);
                 var border = new Border
                 {
                     BorderBrush = Brush.Parse("#8A8A8A"),
@@ -73,7 +73,7 @@ internal sealed partial class DesignPreviewSettings
                     var pressed = new Style(s => s.OfType<RepeatButton>().Class(":pressed"));
                     pressed.Setters.Add(new Setter(BackgroundProperty, Brush.Parse("#DCDCDC")));
                     button.Styles.Add(pressed);
-                    AutomationProperties.SetName(button, label);
+                    Localization.Bind(button, AutomationProperties.NameProperty, label);
                     scope.Register(name, button);
                     Grid.SetColumn(button, 1);
                     Grid.SetRow(button, row);
@@ -81,13 +81,17 @@ internal sealed partial class DesignPreviewSettings
                 }
             })));
         ApplyDelaySeconds.Styles.Add(spinnerStyle);
-        AutomationProperties.SetName(ApplyDelaySeconds, "接续延迟（秒）");
-        AutomationProperties.SetHelpText(ApplyDelaySeconds, "0 到 60 秒，可直接输入；上下方向键每次调整 0.1 秒。");
+        Localization.Bind(ApplyDelaySeconds, AutomationProperties.NameProperty, "settings.delayName");
+        Localization.Bind(ApplyDelaySeconds, AutomationProperties.HelpTextProperty, "settings.delayHelp");
         var delay = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        var label = new Label { Content = "接续延迟", Target = ApplyDelaySeconds, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
+        var label = new Label { Target = ApplyDelaySeconds, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
+        Localization.Bind(label, ContentControl.ContentProperty, "settings.delay");
         delay.Children.Add(label);
         delay.Children.Add(ApplyDelaySeconds);
-        delay.Children.Add(new TextBlock { Text = "秒 · 0–60", Foreground = Brush.Parse("#616161"), VerticalAlignment = VerticalAlignment.Center });
+        var unit = LocalizedText("settings.delayUnit");
+        unit.Foreground = Brush.Parse("#616161");
+        unit.VerticalAlignment = VerticalAlignment.Center;
+        delay.Children.Add(unit);
 
         var actions = new Grid { ColumnDefinitions = new("*,Auto") };
         ResetAll.HorizontalAlignment = HorizontalAlignment.Left;
@@ -101,9 +105,9 @@ internal sealed partial class DesignPreviewSettings
         primary.Children.Add(Apply);
         Grid.SetColumn(primary, 1);
         actions.Children.Add(primary);
-        ToolTip.SetTip(Apply, "按接续延迟应用设置，保留当前扫描历史。");
-        ToolTip.SetTip(Restart, "应用当前设置并清空扫描历史，从头开始。");
-        ToolTip.SetTip(ResetAll, "恢复全部默认设置，包括波形、显示、声音和报警；清除当前历史。");
+        Localization.Bind(Apply, ToolTip.TipProperty, "settings.applyTip");
+        Localization.Bind(Restart, ToolTip.TipProperty, "settings.restartTip");
+        Localization.Bind(ResetAll, ToolTip.TipProperty, "settings.resetTip");
         Apply.Click += (_, _) => apply();
         Run.Click += (_, _) => run();
         var contents = new StackPanel { Spacing = 16 };

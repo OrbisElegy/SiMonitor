@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
@@ -20,7 +21,7 @@ internal sealed class DesignPreviewWindow : Window
 {
     internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
     private readonly ContentControl _workspace = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
-    private readonly TextBlock _title = Text("监护波形", 27, true);
+    private readonly TextBlock _title = Text("", 27, true);
     private readonly TextBlock _subtitle = Text("", 13);
     private readonly TextBlock _state = Text("", 12);
     private readonly ListBox _navigation = new();
@@ -40,6 +41,10 @@ internal sealed class DesignPreviewWindow : Window
     internal DesignPreviewTrace? CurrentPaper => (_workspace.Content as Viewbox)?.Child as DesignPreviewTrace;
     internal LiveMonitorTrace MonitorTrace => _monitor;
     private readonly DisplayPreferenceStore? _preferences;
+    private readonly LanguagePreferenceStore? _languagePreferences;
+    internal DesktopLocalization Localization { get; }
+    internal TextBlock LanguageNotice { get; } = Text("", 12);
+    private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
     internal DesignPreviewWindow(string? preferencesPath = null)
     {
@@ -49,6 +54,13 @@ internal sealed class DesignPreviewWindow : Window
         Background = DesktopFluentStyle.Canvas; Foreground = DesktopFluentStyle.Text;
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _preferences = preferencesPath is null ? null : new(preferencesPath);
+        _languagePreferences = preferencesPath is null ? null : new(Path.ChangeExtension(preferencesPath, ".language.json"));
+        bool languageRejected = false;
+        Localization = new(_languagePreferences?.Load(out languageRejected));
+        if (ProductIdentity.DevelopmentFeatures)
+        { Localization.Bind(this, TitleProperty, "shell.developmentTitle", ProductIdentity.Name); }
+        LanguageNotice.IsVisible = languageRejected;
+        Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageRejected");
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
         Settings = CreateSettings();
@@ -81,8 +93,8 @@ internal sealed class DesignPreviewWindow : Window
         PreferenceNotice.IsVisible = rejected;
         if (rejected)
         {
-            PreferenceNotice.Text = "部分本地配置无法恢复，相关设置已使用默认值。";
-            Settings.Status.Text = "部分本地配置无法恢复，相关设置已使用默认值；应用有效设置后将重新保存。";
+            Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.recoveryNotice");
+            SetStatus("settings.recoveryStatus");
         }
         ConnectSettings();
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
@@ -92,12 +104,15 @@ internal sealed class DesignPreviewWindow : Window
         DockPanel.SetDock(brand, Dock.Top); sidebar.Children.Add(brand);
         var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
         footer.Children.Add(PreferenceNotice);
-        footer.Children.Add(_state); footer.Children.Add(Text("离线教学模拟\n不得用于临床决策", 12));
+        footer.Children.Add(LanguageNotice);
+        footer.Children.Add(_state);
+        var disclaimer = Text("", 12);
+        Localization.Bind(disclaimer, TextBlock.TextProperty, "shell.disclaimer");
+        footer.Children.Add(disclaimer);
         DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
-        string[] labels = ["监护波形", "十二导联", "设置", "帮助", "关于"];
         SettingsSections.StyleNavigation(_navigation);
-        _navigation.ItemsSource = labels.Select(title => SettingsSections.Item(title, showChevron: false)).ToArray();
-        AutomationProperties.SetName(_navigation, "主导航");
+        _navigation.ItemsSource = PageKeys.Select(key => SettingsSections.Item(key, showChevron: false, localization: Localization)).ToArray();
+        Localization.Bind(_navigation, AutomationProperties.NameProperty, "shell.navigation");
         _navigation.SelectionChanged += (_, args) =>
         {
             if (ReferenceEquals(args.Source, _navigation) && _navigation.SelectedIndex >= 0 && _navigation.SelectedIndex != Page)
@@ -124,9 +139,10 @@ internal sealed class DesignPreviewWindow : Window
     }
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
             ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
-            () => new WaveformDemoWindow(projected: true).Show(this));
+            () => new WaveformDemoWindow(projected: true).Show(this), Localization);
     private void ConnectSettings()
     {
+        Settings.LanguageChanged += SelectLanguage;
         void UpdateNotificationMode()
         {
             Settings.Sound.UseNotificationPlayback(Settings.Alerts.AlarmLifecycles);
@@ -150,6 +166,16 @@ internal sealed class DesignPreviewWindow : Window
         Settings.ResetAll.Click += async (_, _) => await ConfirmResetAllSettings();
         Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
     }
+    private void SelectLanguage(string locale)
+    {
+        Localization.Select(locale);
+        UpdateState();
+        LanguageNotice.IsVisible = _languagePreferences is not null && !_languagePreferences.Save(Localization.Locale);
+        Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageSaveFailed");
+    }
+
+    private void SetStatus(string key, params object?[] arguments) =>
+        Localization.Bind(Settings.Status, TextBlock.TextProperty, key, arguments);
     private void BindAlarmAttention()
     {
         var journals = Settings.Alerts.AlarmLifecycles;
@@ -174,36 +200,37 @@ internal sealed class DesignPreviewWindow : Window
             decimal multiplier = Settings.Oxygenation.ReadDemandMultiplier();
             long effectiveNs = _session.UpdateOxygenationVentilation(Settings.Oxygenation.ReadVentilation(), multiplier);
             decimal baseline = _session.OxygenationParameters!.OxygenDemandMlStpdPerMinute;
-            Settings.Status.Text = $"通气／耗氧将于仿真 {effectiveNs / 1_000_000_000m:0.000} s 生效；基础 {baseline:0.###} × {multiplier:0.##} = {baseline * multiplier:0.###} mL O₂/min。氧储备、基线与测量窗口已保留。";
+            SetStatus("settings.ventilationScheduled", effectiveNs / 1_000_000_000m, baseline, multiplier, baseline * multiplier);
         }
         catch (InvalidOperationException)
-        { Settings.Status.Text = "请先启用双波长指脉氧教学源及实时氧合模型，并应用设置。"; }
+        { SetStatus("validation.oxygenDisabled"); }
         catch (ArgumentException error) when (error.Message == "Oxygenation.VentilationFlowTooHigh")
-        { Settings.Status.Text = "通气未更新：当前吸气时程下流量超出原型范围，请减小 VT 或增加吸气时长。"; }
+        { SetStatus("validation.ventilationFlow"); }
         catch (Exception error) when (error is ArgumentException or OverflowException)
-        { Settings.Status.Text = "通气／耗氧参数无效，当前运行未改变。请检查 VT、VD、FiO₂ 和耗氧倍增器。"; }
+        { SetStatus("validation.ventilationParameters"); }
     }
     internal Window? ResetConfirmation { get; private set; }
     private async Task ConfirmResetAllSettings()
     {
         if (ResetConfirmation is not null) { return; }
-        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88, MinHeight = 44 };
+        var cancel = new Button { IsCancel = true, MinWidth = 88, MinHeight = 44 };
         var confirm = new Button
-        { Content = "恢复默认设置", MinHeight = 44, Foreground = Brush.Parse("#B42318") };
+        { MinHeight = 44, Foreground = Brush.Parse("#B42318") };
+        Localization.Bind(cancel, ContentControl.ContentProperty, "common.cancel");
+        Localization.Bind(confirm, ContentControl.ContentProperty, "settings.resetTitle");
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Right };
         buttons.Children.Add(cancel);
         buttons.Children.Add(confirm);
         var content = new StackPanel { Margin = new Thickness(24), Spacing = 20 };
-        content.Children.Add(Text("恢复全部默认设置？", 20, true));
-        content.Children.Add(new TextBlock
-        {
-            Text = "波形、显示、声音、报警及生命体征设置将恢复默认值。未应用的编辑和当前扫描历史会被清除，监护声音将关闭。此操作无法撤销。",
-            TextWrapping = TextWrapping.Wrap
-        });
+        var question = Text("", 20, true);
+        Localization.Bind(question, TextBlock.TextProperty, "settings.resetQuestion");
+        content.Children.Add(question);
+        var warning = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        Localization.Bind(warning, TextBlock.TextProperty, "settings.resetWarning");
+        content.Children.Add(warning);
         content.Children.Add(buttons);
         var dialog = new Window
         {
-            Title = "恢复默认设置",
             Width = 480,
             SizeToContent = SizeToContent.Height,
             CanResize = false,
@@ -214,6 +241,7 @@ internal sealed class DesignPreviewWindow : Window
             FontSize = 14,
             Content = content
         };
+        Localization.Bind(dialog, TitleProperty, "settings.resetTitle");
         cancel.Click += (_, _) => dialog.Close(false);
         confirm.Click += (_, _) => dialog.Close(true);
         ResetConfirmation = dialog;
@@ -228,25 +256,24 @@ internal sealed class DesignPreviewWindow : Window
     {
         Pause();
         Settings.Sound.Close();
+        SelectLanguage(BuiltInLocalizations.DefaultLocale);
         Settings = CreateSettings();
         ConnectSettings();
         RestartSettings();
-        if (!PreferenceNotice.IsVisible) { Settings.Status.Text = "已恢复全部默认设置并从头开始。"; }
+        if (!PreferenceNotice.IsVisible) { SetStatus("settings.resetDone"); }
     }
     internal void SelectPage(int page)
     {
         if (page is < 0 or > 4) { throw new ArgumentOutOfRangeException(nameof(page)); }
         Page = page;
         _navigation.SelectedIndex = page;
-        _title.Text = page switch { 0 => "监护波形", 1 => "十二导联", 2 => "设置", 3 => "帮助", _ => "关于" };
-        _subtitle.Text = page switch
+        Localization.Bind(_title, TextBlock.TextProperty, PageKeys[page]);
+        if (page == 0) { Localization.Bind(_subtitle, TextBlock.TextProperty, "shell.monitorSubtitle", _session.Display.Slots.Count); }
+        else
         {
-            0 => $"{_session.Display.Slots.Count}个固定槽位 · 独立扫速",
-            1 => "监护采样快照",
-            2 => "按分类与参数组浏览设置",
-            3 => "操作说明与参数说明",
-            _ => "版本与开源许可"
-        };
+            string key = page switch { 1 => "shell.ecgSubtitle", 2 => "shell.settingsSubtitle", 3 => "shell.helpSubtitle", _ => "shell.aboutSubtitle" };
+            Localization.Bind(_subtitle, TextBlock.TextProperty, key);
+        }
         _workspace.Content = page switch
         {
             0 => MonitorView,
@@ -359,64 +386,64 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             MonitorView.Refresh();
             SelectPage(Page);
-            Settings.Status.Text = restart ? "已从头开始；启动过渡段已裁掉，十二导联快照已更新。" :
-                $"已安排在仿真 {effective / 1_000_000_000m:0.0} s 接续；保留历史与测量窗口，扫屏约再延后 2.2 秒显示。暂停时倒计时停止，再次应用替换待生效设置。";
+            if (restart) { SetStatus("settings.restarted"); }
+            else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
             if (_preferences is not null)
             {
                 bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator));
                 PreferenceNotice.IsVisible = !saved;
-                PreferenceNotice.Text = saved ? "" : "本地配置保存失败；本次运行已生效。";
-                if (!saved) { Settings.Status.Text += "本地配置保存失败，重启后不会保留本次设置更改。"; }
+                Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
+                if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
             }
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
-        { Settings.Status.Text = "患者资料或氧合基线改变，请点击“从头开始”；接续应用保留当前氧储备。原运行与待生效设置保持。"; }
+        { SetStatus("validation.baselineRestart"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidApplyDelay")
-        { Settings.Status.Text = "未应用：接续延迟须为 0–60 秒，精确到 0.1 秒。原运行与待生效设置保持。"; }
+        { SetStatus("validation.applyDelay"); }
         catch (ArgumentException exception) when (exception.Message is "SoundPreferences.Invalid" or "AlarmSound.InvalidTiming")
-        { Settings.Status.Text = "未应用或保存：请检查声音页的音量、来源、暂停时长及报警声音间隔。原波形会话保持不变。"; }
+        { SetStatus("validation.sound"); }
         catch (ArgumentException exception) when (exception.Message == "AlarmNotification.InvalidDraft")
-        { Settings.Status.Text = "未应用或保存：请修正“报警 → 通知策略”中的模式或时间。原运行保持不变。"; }
+        { SetStatus("validation.notification"); }
         catch (ArgumentException exception) when (exception.Message == "AlarmPreferences.Invalid")
-        { Settings.Status.Text = "未应用或保存：启用的报警阈值须完整且按 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限排列；SpO₂ 须 Critical 下限 < Warning 下限。CO₂ 未检出呼吸时限须为 5–120 秒。请检查报警页。原波形会话保持不变。"; }
+        { SetStatus("validation.alarmLimits"); }
         catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")
-        { Settings.Status.Text = "未应用：共用种子须为 64 个小写十六进制字符（0–9、a–f）；可在生命体征 → 共用随机种子中点击生成随机种子。原运行与画面保持不变。"; }
+        { SetStatus("validation.seed"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.CardiacRateRequiresSinus")
-        { Settings.Status.Text = "未应用：心率调整仅支持窦性参考及 1:1 下传；请关闭生命体征 → 心率中的调整开关，或改用兼容模板。原运行与画面保持不变。"; }
+        { SetStatus("validation.cardiacRate"); }
         catch (ArgumentException exception) when (exception.Message == "SeededCo2.InvalidRange")
-        { Settings.Status.Text = "未应用：CO₂ 呼气末目标减去／加上波动幅度后，须仍在 5–80 mmHg 内；请在生命体征 → 呼吸与 CO₂ 中调整目标或幅度。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Range"); }
         catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
-        { Settings.Status.Text = "未应用：CO₂ 逐呼吸随机波动目前仅支持规则呼吸；请在生命体征 → 呼吸与 CO₂ 中将波动幅度设为 0，或选择规则呼吸。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Regular"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("Preview.InvalidVitalValue", StringComparison.Ordinal))
-        { Settings.Status.Text = $"未应用：请填写有效的 {exception.ParamName}。原运行与画面保持不变。"; }
+        { SetStatus("validation.vitalValue", exception.ParamName); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Levels")
-        { Settings.Status.Text = "未应用：CO₂ 基线须为 0–80、呼气末目标须为 5–80 mmHg 的整数；平台起始高度最多两位小数，须位于基线与呼气末目标之间。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Levels"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.Co2BaselineVariationConflict")
-        { Settings.Status.Text = "未应用：当前模型的 CO₂ 逐呼吸随机波动要求基线为 0；请将基线归零或关闭波动。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Baseline"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Timing")
-        { Settings.Status.Text = "未应用：CO₂ 死腔、上升和下降时长须为 1–10000 ms 的整数，并满足当前吸呼时程。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Timing"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Response")
-        { Settings.Status.Text = "未应用：CO₂ 管路延迟须为 0–5000 ms 的整数，展宽步长须为 0–500 ms 的整数。原运行与画面保持不变。"; }
+        { SetStatus("validation.co2Response"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidRespirationSignal")
-        { Settings.Status.Text = "未应用：RESP 信号幅度须为 −1000–1000 的整数，心源性干扰须为 −200–200 的整数。原运行与画面保持不变。"; }
+        { SetStatus("validation.respirationSignal"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionComponents")
-        { Settings.Status.Text = "未应用：请检查 QRS 形态、混合比例及 ST／T 分量的整数值。原运行与画面保持不变。"; }
+        { SetStatus("validation.qrs"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InfarctionChestRequired")
-        { Settings.Status.Text = "未应用：梗死快照须至少选择一个胸导联。原运行与画面保持不变。"; }
+        { SetStatus("validation.infarctionLead"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionDelay")
-        { Settings.Status.Text = "未应用：局部复极延长须为 0–500 ms 的整数，并满足当前心搏周期约束。原运行与画面保持不变。"; }
+        { SetStatus("validation.repolarization"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.TContourChestRequired")
-        { Settings.Status.Text = "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。"; }
+        { SetStatus("validation.waveLead"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
-        { Settings.Status.Text = "未应用：" + Settings.BreathingConstraintDescription() + "原运行与画面保持不变。"; }
+        { SetStatus("validation.breathingDetail", Settings.BreathingConstraintDescription()); }
         catch (ArgumentException exception) when (exception.Message == "Oxygenation.VentilationFlowTooHigh")
-        { Settings.Status.Text = "未应用：当前吸气时程下流量超出氧合原型范围，请减小 VT 或增加吸气时长。原运行保持不变。"; }
+        { SetStatus("validation.oxygenFlow"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
             exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
-        { Settings.Status.Text = "未应用：" + OxygenationPatientPanel.Explain(exception) + "原运行保持不变。"; }
+        { SetStatus("validation.patientDetail", OxygenationPatientPanel.Explain(exception)); }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
-        { Settings.Status.Text = "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。"; }
+        { SetStatus("validation.configuration"); }
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {
@@ -457,7 +484,7 @@ internal sealed class DesignPreviewWindow : Window
                 Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
                     applied.RespirationSelection, applied.EjectionSelection);
                 _pendingPresentation = null;
-                Settings.Status.Text = $"已于仿真 {applied.EffectiveNs / 1_000_000_000m:0.0} s 接续计算；历史与测量窗口已保留，扫屏按采集缓冲继续显示。";
+                SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
                 if (Page == 1) { SelectPage(Page); }
             }
             _monitor.InvalidateVisual();
@@ -467,12 +494,12 @@ internal sealed class DesignPreviewWindow : Window
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
-        { Pause(); Settings.Status.Text = "生成失败，已暂停。可检查设置后重新开始。"; }
+        { Pause(); SetStatus("settings.generationFailed"); }
     }
     private void UpdateState()
     {
-        _state.Text = $"{(_timer is null ? "已暂停" : "运行中")} · {_session.SimulationTimeNs / 1_000_000_000}s";
-        if (Settings is not null) { Settings.Run.Content = _timer is null ? "继续扫描" : "暂停扫描"; }
+        _state.Text = Localization.Format("shell.state", Localization.Get(_timer is null ? "shell.paused" : "shell.running"), _session.SimulationTimeNs / 1_000_000_000);
+        if (Settings is not null) { Settings.Run.Content = Localization.Get(_timer is null ? "settings.resume" : "settings.pause"); }
     }
     internal static (PhysiologyDemoConfiguration Physiology, ProjectedEcgDemoConfiguration Ecg) ResolveStyle(int ecg, int resp, int ejection)
     {

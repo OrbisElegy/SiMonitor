@@ -102,8 +102,8 @@ internal static class NotificationSettingsSmokeChecks
                 !high.RepeatSeconds.IsEnabled && !high.ReminderEnabled.IsEnabled && high.Read().ReminderMilliseconds == 500,
                 "explicit long high-limit alarm overrides short default and retains dormant short settings");
 
-            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 3;
-            var sections = window.Settings.SectionPages[3];
+            window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
+            var sections = window.Settings.SectionPages[4];
             sections.Sections.SelectedIndex = sections.Sections.Items.Count - 1;
             panel.Condition.SelectedIndex = 1;
             high.Advanced.IsExpanded = false;

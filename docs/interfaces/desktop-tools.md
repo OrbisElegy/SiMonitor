@@ -44,6 +44,10 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 偏好路径由 `Environment.SpecialFolder.LocalApplicationData` 加 `Monitor/display-preferences.json` 构成；不依赖启动工作目录。保存失败时本次内存配置仍可生效，由界面报告不能持久保存。具体字段、版本和错误语义见[音频与持久化](audio-persistence.md)。
 
+语言选择位于“设置 → 通用”，即时切换已迁移的中英文文案，并独立保存至
+`Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
+会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
+
 ## 记录呈现与原生输入
 
 | 公开入口 | 输入／输出 | 调用约束 |

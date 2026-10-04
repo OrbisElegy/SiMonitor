@@ -23,6 +23,8 @@ internal sealed class SettingsSections : UserControl
     }
     internal bool Compact => _compact.IsVisible;
     internal SettingsSections(string category, params (string Title, Control Content)[] sections)
+        : this(null, category, sections) { }
+    internal SettingsSections(DesktopLocalization? localization, string category, params (string Title, Control Content)[] sections)
     {
         var pages = sections.Select(section => SettingsScroll.Create(new Border
         {
@@ -35,9 +37,15 @@ internal sealed class SettingsSections : UserControl
             Child = section.Content
         })).ToArray();
         StyleNavigation(Sections);
-        Sections.ItemsSource = sections.Select(s => Item(s.Title)).ToArray();
-        _compact.ItemsSource = sections.Select(s => s.Title).ToArray();
+        Sections.ItemsSource = sections.Select(s => Item(s.Title, localization: localization)).ToArray();
+        if (localization is null) { _compact.ItemsSource = sections.Select(s => s.Title).ToArray(); }
+        else { localization.SetChoices(_compact, sections.Select(s => s.Title).ToArray()); }
         AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
+        if (localization is not null)
+        {
+            localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", text.GetString(category)));
+            localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", text.GetString(category)));
+        }
         var heading = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 12) }; top.Children.Add(heading); top.Children.Add(_compact);
         var root = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(16) };
@@ -48,6 +56,7 @@ internal sealed class SettingsSections : UserControl
             if (!ReferenceEquals(args.Source, Sections) || Sections.SelectedIndex < 0) { return; }
             int selected = Sections.SelectedIndex; _compact.SelectedIndex = selected;
             heading.Text = category + " / " + sections[selected].Title; _detail.Content = pages[selected];
+            localization?.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading", text.GetString(category), text.GetString(sections[selected].Title)));
         };
         _compact.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compact) && _compact.SelectedIndex >= 0) { Sections.SelectedIndex = _compact.SelectedIndex; } };
         _adaptNavigation = width =>
@@ -64,7 +73,7 @@ internal sealed class SettingsSections : UserControl
         list.Padding = new Thickness(4);
         list.VerticalAlignment = VerticalAlignment.Top;
     }
-    internal static ListBoxItem Item(string title, bool showChevron = true)
+    internal static ListBoxItem Item(string title, bool showChevron = true, DesktopLocalization? localization = null)
     {
         var text = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) };
         var indicator = new Border { Width = 3, Height = 18, CornerRadius = new CornerRadius(2), Background = DesktopFluentStyle.Accent, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
@@ -77,6 +86,8 @@ internal sealed class SettingsSections : UserControl
         }
         var item = new ListBoxItem { MinHeight = 44, Padding = new Thickness(4, 10, 10, 10), Margin = new Thickness(0, 0, 0, 4), Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(item, title);
+        localization?.Bind(text, TextBlock.TextProperty, title);
+        localization?.Bind(item, AutomationProperties.NameProperty, title);
         item.PropertyChanged += (_, args) =>
         {
             if (args.Property != ListBoxItem.IsSelectedProperty) { return; }

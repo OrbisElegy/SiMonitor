@@ -14,6 +14,8 @@
 - [当前实现接口总览](interfaces/README.md)
 - [报警确认配置接口](interfaces/alarms/alarm-confirmation.md)
 - [本地报警生命周期接口](interfaces/alarms/alarm-lifecycle.md)
+- [报警通知决策接口](interfaces/alarms/alarm-notification-policy.md)
+- [通知意图到声音执行接口](interfaces/alarms/alarm-notification-sound.md)
 - [音频输出、原生 ABI 与本地偏好接口](interfaces/audio-persistence.md)
 - [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
 - [桌面与命令行入口](interfaces/desktop-tools.md)
@@ -25,6 +27,7 @@
 
 ## 技术调研
 
+- [短／长警报声音语义与实现映射](research/alarms/alarm-sound-duration-research.md)
 - [独立氧合下降模型调研](research/oxygenation/oxygenation-model-research.md)
 - [独立氧合模型：原型与参数验证](research/oxygenation/oxygenation-prototype.md)
 - [逐搏充盈与房室时序](research/physiology/cardiac-filling-perfusion.md)

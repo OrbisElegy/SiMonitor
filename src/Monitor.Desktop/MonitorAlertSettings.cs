@@ -44,6 +44,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown CriticalInterval { get; } = Number(1.5m, .25m, 2);
     internal IReadOnlyList<AlarmLifecycleJournal> AlarmLifecycles =>
         new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
+    internal AlarmNotificationSettingsPanel NotificationSettings { get; }
 
     internal MonitorAlertSettings()
     {
@@ -125,9 +126,12 @@ internal sealed class MonitorAlertSettings : StackPanel
         Row("Info 单声间隔（秒）", InfoInterval); Row("Notice 三联音组间隔（秒）", NoticeInterval);
         Row("Warning（3+2）×2 组间隔（秒）", WarningInterval); Row("Critical 单声间隔（秒）", CriticalInterval);
         Children.Add(Text("间隔从每组起点计算；音色和时序为可调教学实现。"));
+        NotificationSettings = new(AlarmLifecycles);
+        Children.Add(NotificationSettings);
     }
     internal MonitorAlarmPreferences CapturePreferences()
     {
+        var notifications = NotificationSettings.Read();
         static int? Read(NumericUpDown field, int scale)
         {
             if (field.Value is null) { return null; }
@@ -144,6 +148,8 @@ internal sealed class MonitorAlertSettings : StackPanel
                     Read(editor.WarningLow, d.Divisor), Read(editor.WarningHigh, d.Divisor), Read(editor.CriticalHigh, d.Divisor));
             }), NoticeColorEnabled.IsChecked == true)
         {
+            PlaybackMode = notifications.Mode,
+            Notifications = notifications.Overrides,
             NoExpirationConfirmation = ReadNoExpirationTiming(),
             ConfirmationTimings = MeasuredLimitNotice.Descriptors
                 .Select(d => (d.Numeric, Timing: AdditionalLimits.Editors[d.Numeric].Confirmation.Read()))
@@ -182,6 +188,7 @@ internal sealed class MonitorAlertSettings : StackPanel
             editor.CriticalLow.Value = saved.CriticalLow / (decimal)d.Divisor; editor.WarningLow.Value = saved.WarningLow / (decimal)d.Divisor;
             editor.WarningHigh.Value = saved.WarningHigh / (decimal)d.Divisor; editor.CriticalHigh.Value = saved.CriticalHigh / (decimal)d.Divisor;
         }
+        NotificationSettings.Restore(preferences, AlarmLifecycles);
     }
     internal MonitorSoundTiming Timing => new(InfoTone.IsChecked == true, Milliseconds(InfoInterval), Milliseconds(NoticeInterval), Milliseconds(WarningInterval), Milliseconds(CriticalInterval));
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)

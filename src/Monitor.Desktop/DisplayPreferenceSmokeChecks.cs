@@ -37,6 +37,14 @@ internal static class DisplayPreferenceSmokeChecks
                 alarms.NoExpirationTriggerSeconds.Value = 1.125m;
                 alarms.NoExpirationRecoverySeconds.Value = 2.25m;
                 alarms.NoticeColorEnabled.IsChecked = false;
+                alarms.NotificationSettings.Mode.SelectedIndex = 1;
+                foreach (var (id, notification) in alarms.NotificationSettings.Editors)
+                {
+                    notification.SelectedSoundMode = id == "hr-low" ? 2 : 1;
+                    notification.RepeatSeconds.Value = 1.125m;
+                    notification.ReminderSeconds.Value = 2.25m;
+                    notification.ReminderEnabled.IsChecked = id != "hr-low";
+                }
                 foreach (var d in MeasuredLimitNotice.Descriptors)
                 {
                     var editor = alarms.AdditionalLimits.Editors[d.Numeric]; editor.Enabled.IsChecked = true;
@@ -85,6 +93,11 @@ internal static class DisplayPreferenceSmokeChecks
                 Require(!reopened.Settings.Sound.ResumeAlarmAudio.IsEnabled && reopened.Settings.Sound.PublishedAlarm is null,
                     "restoration does not start a pause or publish an alarm");
                 var alarms = reopened.Settings.Alerts.CapturePreferences();
+                Require(alarms.PlaybackMode == AlarmPlaybackMode.Notifications &&
+                    alarms.Notifications.Count == MonitorAlarmPreferences.NotificationConditionIds.Count &&
+                    alarms.Notifications.All(e => e.Value == new AlarmNotificationSettings(1125, e.Key != "hr-low", 2250) { SoundMode = e.Key == "hr-low" ? AlarmSoundMode.Continuous : AlarmSoundMode.SingleGroup }) &&
+                    reopened.Settings.Alerts.AlarmLifecycles.SelectMany(j => j.Conditions).All(c => c.Episode is null),
+                    "notification configuration round trips without restoring active episodes or hardware audio opt-in");
                 Require(alarms.HeartRate.Enabled && alarms.HeartRate.WarningHigh == 130250 &&
                     alarms.SpO2Enabled && alarms.SpO2Warning == 93500 && alarms.NoExpirationEnabled &&
                     alarms.NoExpirationSeconds == 35 && alarms.NoExpirationConfirmation == new BoundaryConfirmationTiming(1125, 2250) && !alarms.NoticeColorEnabled &&
@@ -124,9 +137,12 @@ internal static class DisplayPreferenceSmokeChecks
             var versionFour = JsonNode.Parse(valid)!.AsObject();
             versionFour["Version"] = 4;
             versionFour["Alarms"]!.AsObject().Remove("ConfirmationTimings");
+            versionFour["Alarms"]!.AsObject().Remove("PlaybackMode");
+            versionFour["Alarms"]!.AsObject().Remove("Notifications");
             File.WriteAllText(path, versionFour.ToJsonString());
             var migratedFour = store.Load(out rejected);
-            Require(!rejected && migratedFour.Generator is not null &&
+            Require(!rejected && migratedFour.Generator is not null && migratedFour.Alarms!.PlaybackMode == AlarmPlaybackMode.Continuous &&
+                migratedFour.Alarms.Notifications.Count == 0 &&
                 migratedFour.Alarms!.ConfirmationFor(MonitorNumeric.AbpMean).WarningHigh == new BoundaryConfirmationTiming(10000, 3000),
                 "version four retains generator and migrates pressure confirmation defaults");
             var versionFive = JsonNode.Parse(valid)!.AsObject();

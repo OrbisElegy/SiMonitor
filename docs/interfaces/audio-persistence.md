@@ -154,6 +154,7 @@ NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequenc
 SetHeartbeatEnabled(bool)、SubmitHeartbeat(int volumePercent, int pitchPercent=97)、
 SetRequest(MonitorAlarmSoundRequest?)、RunAsync(CancellationToken)。
 请求包含 Level、VolumePercent、MonitorSoundTiming；null 清除报警音请求。
+新增 NotificationSequence：0 沿用持续播放，正值指定 owner 内的一次声音组身份。
 RunAsync 仅允许一个 worker；SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
 OutputActive 只表示曾成功 pumping 且 worker 尚活动，不保证物理出声或已达到延迟目标。
 返回 SoundPreviewResult：Completed（试听正常结束）、Stopped（取消）、Unavailable（打开/加载不可用）、
@@ -163,6 +164,10 @@ Interrupted（Pump/健康失败）、StopFailed（关闭失败，优先保留资
 不补播错过的 burst。UpdateHeartbeat(bool enabled, int? volumePercent, int pitchPercent=97)
 收到非空 volume 才新增 beat。报警 cue 最晚启动期限为 target+2400 frames（50 ms），beat 为+12000（250 ms）。
 请求变更取消当前已知 key，音量零不排程；Info 只有 Timing.InfoTone=true 才播放。
+正序号请求只执行一组；重复/过期身份不重播，同/低等级的新请求在组忙碌时合并，更高等级可打断。
+`AlarmNotificationSoundRouter` 提供来源事件绑定、最高等级合并、暂停/恢复及有界路由记录；
+sequencer 提供有界 Dispatches、DroppedDispatchCount 与 MissedNotificationCount。
+混合路由使用完整提示快照，已注册条件遵循独立短／长策略；未注册的可听信息、技术及测试提示保留持续声音，同级由持续来源承担，静音输出故障不参与仲裁。软件排程记录不等同于物理交付，产品模式与完整行为见[通知声音执行接口](alarms/alarm-notification-sound.md)。
 该链没有网络报警 director、全局事件去重、权威 epoch 接入或自动设备重连。
 
 ## native/sim_audio_native ABI 1
@@ -263,10 +268,15 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5–7 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–9 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
 
-Save 总是写 Version=7；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=9；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
+Alarms.PlaybackMode 默认 Continuous（0），Notifications（1）表示默认短警报；它只作用于跟随默认的条件。
+Alarms.Notifications 按已注册条件 ID 保存 AlarmNotificationSettings 覆盖项，缺省为空。
+各项保存 SoundMode（Inherit=0、SingleGroup=1、Continuous=2）、RepeatSuppressionMilliseconds、ReminderEnabled、ReminderMilliseconds；关闭提醒或切成长警报仍保留短警报配置。版本 8 缺少 SoundMode 时使用 Inherit，保持原默认模式。
+版本 1–7 缺少新字段时保留持续声音及默认通知策略，不恢复活动事件、计时、通知记录或音频 opt-in。
+完整范围及桌面映射见[通知策略接口](alarms/alarm-notification-policy.md)。
 Alarms.ConfirmationTimings 是以 MonitorNumeric 为键的可选覆盖字典，旧文件省略时得到空字典；
 每项包含 CriticalLow/WarningLow/WarningHigh/CriticalHigh，各自 TriggerMilliseconds/RecoveryMilliseconds 为 0–600000。
 未覆盖项经 ConfirmationFor 使用 DefaultFor；ABP/PA/CVP mean 默认低限触发/恢复 4000/3000 ms，

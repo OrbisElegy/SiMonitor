@@ -16,14 +16,15 @@ public readonly record struct RealtimeOxygenationSnapshot(long SourceSimTimeNs, 
 // sensor never advances the physiology. The fixed grid is independent of UI pacing.
 public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
 {
+    private readonly record struct TransportChange(long AtSimTimeNs, PhysiologyTransportSource Transport, decimal OxygenDemandMultiplier);
     public const int HistoryCapacity = 1024; // 8.184s, including the 2s acquisition delay.
     private readonly OxygenReservoirParameters _parameters;
     private readonly decimal _initialOxygenMl;
     private PhysiologyTransportSource _transport;
-    private PhysiologyTransportSource? _pendingTransport;
-    private long _pendingAtNs;
+    // At most the current unstarted interval and the next grid boundary.
+    // A later live edit must not replace an earlier, not-yet-integrated change.
+    private TransportChange[] _pendingChanges = [];
     private decimal _oxygenDemandMultiplier;
-    private decimal _pendingOxygenDemandMultiplier;
     private OxygenReservoirState _reservoirs;
     private List<ArterialOxygenationSample> _history;
     public long SourceSimTimeNs => _history[^1].SourceSimTimeNs;
@@ -37,7 +38,6 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         ArgumentNullException.ThrowIfNull(parameters);
         OxygenReservoirModel.ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
         _oxygenDemandMultiplier = oxygenDemandMultiplier;
-        _pendingOxygenDemandMultiplier = oxygenDemandMultiplier;
         _parameters = parameters;
         _transport = transport;
         ValidateVentilationFlow(transport.CaptureState().Ventilation);
@@ -55,10 +55,8 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         _parameters = source._parameters;
         _initialOxygenMl = source._initialOxygenMl;
         _transport = source._transport;
-        _pendingTransport = source._pendingTransport;
-        _pendingAtNs = source._pendingAtNs;
+        _pendingChanges = source._pendingChanges;
         _oxygenDemandMultiplier = source._oxygenDemandMultiplier;
-        _pendingOxygenDemandMultiplier = source._pendingOxygenDemandMultiplier;
         _reservoirs = source._reservoirs;
         _history = [.. source._history];
     }
@@ -72,16 +70,16 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         var history = new List<ArterialOxygenationSample>(_history);
         var reservoirs = _reservoirs;
         var transport = _transport;
-        var pending = _pendingTransport;
+        int appliedChanges = 0;
         decimal multiplier = _oxygenDemandMultiplier;
         long time = SourceSimTimeNs;
         while (toSimTimeNs - time >= OxygenReservoirModel.StepNs)
         {
-            if (pending is not null && time >= _pendingAtNs)
+            while (appliedChanges < _pendingChanges.Length && time >= _pendingChanges[appliedChanges].AtSimTimeNs)
             {
-                transport = pending;
-                multiplier = _pendingOxygenDemandMultiplier;
-                pending = null;
+                var change = _pendingChanges[appliedChanges++];
+                transport = change.Transport;
+                multiplier = change.OxygenDemandMultiplier;
             }
             long next = checked(time + OxygenReservoirModel.StepNs);
             reservoirs = OxygenReservoirModel.Step(reservoirs, _parameters, transport.Integrate(time, next), multiplier);
@@ -92,7 +90,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         _reservoirs = reservoirs;
         _history = history;
         _transport = transport;
-        _pendingTransport = pending;
+        _pendingChanges = _pendingChanges.Skip(appliedChanges).ToArray();
         _oxygenDemandMultiplier = multiplier;
     }
 
@@ -100,16 +98,16 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
     // time. Never rewrite an already integrated partial interval or old samples.
     public long ChangeVentilation(VentilationTransportPlan ventilation, long atSimTimeNs, decimal? oxygenDemandMultiplier = null)
     {
-        ValidateVentilationFlow(ventilation);
-        decimal multiplier = oxygenDemandMultiplier ?? (_pendingTransport is not null ? _pendingOxygenDemandMultiplier : _oxygenDemandMultiplier);
+        var transport = _pendingChanges.Length > 0 ? _pendingChanges[^1].Transport : _transport;
+        ValidateVentilationFlow(ventilation, transport);
+        decimal multiplier = oxygenDemandMultiplier ?? (_pendingChanges.Length > 0 ? _pendingChanges[^1].OxygenDemandMultiplier : _oxygenDemandMultiplier);
         OxygenReservoirModel.ValidateOxygenDemandMultiplier(multiplier);
         if (atSimTimeNs < SourceSimTimeNs || atSimTimeNs - SourceSimTimeNs >= OxygenReservoirModel.StepNs)
         { throw new ArgumentOutOfRangeException(nameof(atSimTimeNs)); }
-        var next = PhysiologyTransportSource.Restore(_transport.CaptureState() with { Ventilation = ventilation });
+        var next = PhysiologyTransportSource.Restore(transport.CaptureState() with { Ventilation = ventilation });
         long effectiveNs = checked(SourceSimTimeNs + (atSimTimeNs == SourceSimTimeNs ? 0 : OxygenReservoirModel.StepNs));
-        _pendingTransport = next;
-        _pendingAtNs = effectiveNs;
-        _pendingOxygenDemandMultiplier = multiplier;
+        _pendingChanges = _pendingChanges.Where(change => change.AtSimTimeNs < effectiveNs)
+            .Append(new TransportChange(effectiveNs, next, multiplier)).ToArray();
         return effectiveNs;
     }
 
@@ -120,9 +118,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         OxygenReservoirModel.ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
         ArgumentOutOfRangeException.ThrowIfNotEqual(atSimTimeNs, SourceSimTimeNs);
         var trial = new RealtimeOxygenationSource(transport, _parameters, oxygenDemandMultiplier, atSimTimeNs);
-        _pendingTransport = trial._transport;
-        _pendingAtNs = atSimTimeNs;
-        _pendingOxygenDemandMultiplier = oxygenDemandMultiplier;
+        _pendingChanges = [new(atSimTimeNs, trial._transport, oxygenDemandMultiplier)];
     }
 
     public ArterialOxygenationSample ReadAt(long sourceSimTimeNs)
@@ -151,10 +147,10 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         { throw new ArgumentException("Oxygenation.InvalidVentilation", nameof(ventilation)); }
     }
 
-    private void ValidateVentilationFlow(VentilationTransportPlan ventilation)
+    private void ValidateVentilationFlow(VentilationTransportPlan ventilation, PhysiologyTransportSource? transport = null)
     {
         ValidateVentilation(ventilation);
-        var physiology = _transport.CaptureState().Physiology;
+        var physiology = (transport ?? _transport).CaptureState().Physiology;
         long flowDurationNs = physiology.InspirationDurationNs - physiology.InspiratoryPauseNs;
         // All supported depth patterns peak at 1000 permille. Bound the integer
         // interval volume before accepting controls, including sub-step breaths.

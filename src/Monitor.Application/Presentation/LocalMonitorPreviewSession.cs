@@ -14,7 +14,7 @@ public sealed class LocalMonitorPreviewSession
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
     private long _sourceTimeOffsetNs;
-    private readonly PhysiologyIllustrationConfiguration _configuration;
+    private PhysiologyIllustrationConfiguration _configuration;
     private readonly RealtimeOxygenationConfiguration? _realtimeConfiguration;
     private LocalMonitorPreviewSession? _pendingSource;
     private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
@@ -24,6 +24,8 @@ public sealed class LocalMonitorPreviewSession
     private readonly LiveWaveformMeasurements? _measurements;
     private PulseOximeterIllustrationSource? _opticalSource;
     private RealtimeOxygenationSource? _realtimeOxygenation;
+    private PhysiologyWaveformGroup? _pendingVentilationSource;
+    private long _pendingVentilationTimeNs;
     private readonly Guid _opticalInstanceId = Guid.NewGuid();
     private int _opticalModulationPermille;
     private bool _usesOxygenation;
@@ -50,7 +52,7 @@ public sealed class LocalMonitorPreviewSession
         ArgumentNullException.ThrowIfNull(display);
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
-        _source = PhysiologyIllustrationSource.Create(configuration);
+        _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
         _opticalModulationPermille = opticalModulationPermille;
         if (realtimeOxygenation is not null)
         {
@@ -81,15 +83,35 @@ public sealed class LocalMonitorPreviewSession
         }
         Display = display; Ranges = new(display);
     }
-    public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null) =>
-        (_realtimeOxygenation ?? throw new InvalidOperationException("Preview.RealtimeOxygenationNotEnabled"))
-            .ChangeVentilation(ventilation, checked(SimulationTimeNs + _sourceTimeOffsetNs), oxygenDemandMultiplier) - _sourceTimeOffsetNs;
+    public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null)
+    {
+        var oxygenation = (_realtimeOxygenation ?? throw new InvalidOperationException("Preview.RealtimeOxygenationNotEnabled")).Fork();
+        long effectiveNs = oxygenation.ChangeVentilation(ventilation, checked(SimulationTimeNs + _sourceTimeOffsetNs), oxygenDemandMultiplier);
+        var definition = PhysiologyIllustrationSource.Create(_configuration, ventilation: ventilation);
+        var trial = _source.Fork();
+        trial.ContinueWith(definition);
+        // Publish both pending changes only after validating the full edit.
+        _realtimeOxygenation = oxygenation;
+        _pendingVentilationSource = definition;
+        _pendingVentilationTimeNs = effectiveNs;
+        return effectiveNs - _sourceTimeOffsetNs;
+    }
+
+    private void ActivatePendingVentilation()
+    {
+        if (_pendingVentilationSource is null) { return; }
+        var source = _source.Fork();
+        source.ContinueWith(_pendingVentilationSource);
+        _source = source;
+        _pendingVentilationSource = null;
+    }
 
     public void DiscardStartup()
     {
         if (SimulationTimeNs != 0 || _sourceTimeOffsetNs != 0 || _pendingSource is not null)
         { throw new InvalidOperationException("Preview.StartupAlreadyStarted"); }
         var source = _source.Fork();
+        if (_pendingVentilationSource is not null) { source.ContinueWith(_pendingVentilationSource); }
         var oxygenation = _realtimeOxygenation?.Fork();
         for (long time = 50_000_000; time <= StartupDiscardNs; time += 50_000_000)
         {
@@ -98,6 +120,7 @@ public sealed class LocalMonitorPreviewSession
         }
         _source = source;
         _realtimeOxygenation = oxygenation;
+        _pendingVentilationSource = null;
         _sourceTimeOffsetNs = StartupDiscardNs;
     }
 
@@ -105,7 +128,8 @@ public sealed class LocalMonitorPreviewSession
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (ReferenceEquals(definition, this) || definition.SimulationTimeNs != 0 || definition._sourceTimeOffsetNs != 0 ||
-            definition._pendingSource is not null || (definition._measurements is null) != (_measurements is null))
+            definition._pendingSource is not null || definition._pendingVentilationSource is not null ||
+            (definition._measurements is null) != (_measurements is null))
         { throw new ArgumentException("Preview.SourceMustBeFresh", nameof(definition)); }
         if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
         if (_realtimeOxygenation is not null && definition._realtimeOxygenation is not null &&
@@ -146,6 +170,8 @@ public sealed class LocalMonitorPreviewSession
         _previousOpticalSources.Add((sourceTime, _opticalSource));
         _source = source;
         _realtimeOxygenation = oxygenation;
+        _configuration = definition._configuration;
+        _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;
         _opticalModulationPermille = definition._opticalModulationPermille;
         _usesOxygenation = definition._usesOxygenation;
@@ -175,8 +201,11 @@ public sealed class LocalMonitorPreviewSession
         while (deltaNs > 0)
         {
             if (PendingSourceTimeNs is { } effective && SimulationTimeNs >= effective) { ActivatePendingSource(); }
+            long sourceTime = checked(SimulationTimeNs + _sourceTimeOffsetNs);
+            if (_pendingVentilationSource is not null && sourceTime >= _pendingVentilationTimeNs) { ActivatePendingVentilation(); }
             long chunk = Math.Min(deltaNs, 50_000_000);
             if (PendingSourceTimeNs is { } pending) { chunk = Math.Min(chunk, pending - SimulationTimeNs); }
+            if (_pendingVentilationSource is not null) { chunk = Math.Min(chunk, _pendingVentilationTimeNs - sourceTime); }
             long next = checked(SimulationTimeNs + chunk);
             var oxygenation = _realtimeOxygenation?.Fork();
             long sourceNext = checked(next + _sourceTimeOffsetNs);

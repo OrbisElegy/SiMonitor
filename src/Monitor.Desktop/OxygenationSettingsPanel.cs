@@ -38,7 +38,7 @@ internal sealed class OxygenationSettingsPanel : StackPanel
         Add("教师耗氧倍增器（1–4 倍）", DemandMultiplier);
         _inputs.Children.Add(new TextBlock
         {
-            Text = "首次启用需从头开始；下方按钮仅更新通气和耗氧。",
+            Text = "首次启用需从头开始；通气更新同步作用于 RESP 和 CO₂ 波形。",
             TextWrapping = TextWrapping.Wrap
         });
         _inputs.Children.Add(UpdateVentilation);

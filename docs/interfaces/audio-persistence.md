@@ -268,9 +268,9 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5–9 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–10 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
 
-Save 总是写 Version=9；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=10；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
 Alarms.PlaybackMode 默认 Continuous（0），Notifications（1）表示默认短警报；它只作用于跟随默认的条件。
 Alarms.Notifications 按已注册条件 ID 保存 AlarmNotificationSettings 覆盖项，缺省为空。
@@ -299,3 +299,5 @@ Save 先做参数校验，再创建随机同目录 `.tmp` 文件、序列化、F
 File.Move(overwrite:true) 发布；finally 尝试删除临时文件。
 IO/UnauthorizedAccessException 返回 false；非法参数、路径规范化或序列化的其他异常不会统一转 false。
 因此调用方应区分用户输入无效、加载被拒绝、保存失败和文件缺失；成功 Save 只说明文件发布成功。
+
+版本 10 的通知项还保存 LatchingMode（NonLatching=0、UntilAcknowledged=1）；旧文件缺省为非保持。仅控制恢复后的视觉提示，不恢复确认状态或声音请求。用户确认、确认后提醒和软件退役水位见[确认与保持接口](alarms/alarm-attention.md)。

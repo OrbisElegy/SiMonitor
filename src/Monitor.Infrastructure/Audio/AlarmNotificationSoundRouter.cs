@@ -29,9 +29,10 @@ public sealed class AlarmNotificationSoundRouter
     public ulong MissedRecordCount { get; private set; }
 
     public MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals,
-        int volumePercent, MonitorSoundTiming timing, bool enabled, IReadOnlyList<MonitorNotice>? notices = null)
+        int volumePercent, MonitorSoundTiming timing, bool enabled, IReadOnlyList<MonitorNotice>? notices = null, ulong retiredNotificationSequence = 0)
     {
         ArgumentNullException.ThrowIfNull(journals);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(retiredNotificationSequence, _requestSequence);
         new MonitorAlarmSoundRequest(MonitorNoticeLevel.Critical, volumePercent, timing).Validate();
         if (journals.Any(j => j is null) || journals.Distinct().Count() != journals.Count)
         { throw new ArgumentException("AlarmSound.InvalidJournals", nameof(journals)); }
@@ -69,12 +70,21 @@ public sealed class AlarmNotificationSoundRouter
             _cursors[journal] = cursor;
         }
         bool canPlay = enabled && volumePercent > 0;
-        var active = conditions.Where(c => c.Episode is not null && c.Level is not null).ToArray();
+        var attention = journals.SelectMany(j => j.Attention.Conditions).ToDictionary(c => c.ConditionId, StringComparer.Ordinal);
         AlarmNotificationPolicy PolicyFor(string id) => journals.Single(j => j.Conditions.Any(c => c.ConditionId == id)).NotificationPolicyFor(id);
-        var longConditions = active.Where(c => PolicyFor(c.ConditionId).SoundDuration == AlarmSoundDuration.Continuous).ToArray();
         bool Eligible(AlarmConditionSnapshot c) => _latest.TryGetValue(c.ConditionId, out var decision) &&
             decision.RequestsNotification && decision.Episode == c.Episode && decision.Level == c.Level &&
             PolicyFor(c.ConditionId) == decision.Policy;
+        bool Unacknowledged(AlarmConditionSnapshot condition) => attention[condition.ConditionId].State != AlarmAttentionState.ActiveAcknowledged;
+        bool AcknowledgedReminder(AlarmConditionSnapshot condition) =>
+            Eligible(condition) &&
+            attention[condition.ConditionId].AcknowledgedAtNs is { } acknowledgedAt &&
+            _latest.TryGetValue(condition.ConditionId, out var decision) && decision.Kind == AlarmNotificationKind.Reminder &&
+            decision.SampleTimeNs > acknowledgedAt &&
+            (due.Contains(condition.ConditionId) || _request is { NotificationSequence: > 0 } && _request.NotificationSequence > retiredNotificationSequence && _requestConditions.Contains(condition.ConditionId));
+        var active = conditions.Where(c => c.Episode is not null && c.Level is not null &&
+            (Unacknowledged(c) || AcknowledgedReminder(c))).ToArray();
+        var longConditions = active.Where(c => Unacknowledged(c) && PolicyFor(c.ConditionId).SoundDuration == AlarmSoundDuration.Continuous).ToArray();
         if (!canPlay)
         {
             _request = null;
@@ -87,7 +97,7 @@ public sealed class AlarmNotificationSoundRouter
         bool resumed = !_wasEnabled;
         if (resumed)
         {
-            foreach (var c in active.Where(Eligible)) { due.Add(c.ConditionId); }
+            foreach (var c in active.Where(c => Unacknowledged(c) && Eligible(c))) { due.Add(c.ConditionId); }
         }
         _wasEnabled = true;
         var highest = active.Select(c => c.Level).DefaultIfEmpty(null).Max();

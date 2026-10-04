@@ -38,6 +38,8 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     private AudioOutputLifecycle? _owner;
     private bool _heartbeatEnabled;
     private bool _outputActive;
+    private ulong _retiredNotificationSequence;
+    public ulong RetiredNotificationSequence => Volatile.Read(ref _retiredNotificationSequence);
     // Reports successful output pumping, not physical sound or latency.
     public bool OutputActive => Volatile.Read(ref _outputActive);
     private BeatSubmission? _beat;
@@ -80,6 +82,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     sequencer.Update(Volatile.Read(ref _request));
+                    Volatile.Write(ref _retiredNotificationSequence, Math.Max(RetiredNotificationSequence, sequencer.RetiredNotificationSequence));
                     var beat = Interlocked.Exchange(ref _beat, null);
                     int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
                     sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
@@ -116,6 +119,7 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session)
     private long _beatKey;
     private IReadOnlyList<int> _onsets = [];
     private ulong _latestNotificationSequence;
+    public ulong RetiredNotificationSequence { get; private set; }
     private long _singleGroupEndFrame;
     private bool _singleGroupFinished;
     private readonly Queue<AlarmSoundDispatchRecord> _dispatches = new();
@@ -131,6 +135,7 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session)
         {
             Record(active.NotificationSequence, AlarmSoundDispatchStage.RenderWindowElapsed);
             _singleGroupFinished = true;
+            RetiredNotificationSequence = _latestNotificationSequence;
         }
         if (request is { NotificationSequence: > 0 })
         {

@@ -18,7 +18,8 @@ internal static class NotificationSoundSpecifications
         new(nameof(NotificationRouterArbitratesContinuousSources), NotificationRouterArbitratesContinuousSources),
         new(nameof(NotificationRouterPreservesSuppressionAndValidatesMixedSources), NotificationRouterPreservesSuppressionAndValidatesMixedSources),
         new(nameof(NotificationRouterContinuousRefreshPreservesPcm), NotificationRouterContinuousRefreshPreservesPcm),
-        new(nameof(NotificationRouterMixesIndependentDurations), NotificationRouterMixesIndependentDurations)
+        new(nameof(NotificationRouterMixesIndependentDurations), NotificationRouterMixesIndependentDurations),
+        new(nameof(AcknowledgementStopsSoundAndReminderRetirementRestoresPriority), AcknowledgementStopsSoundAndReminderRetirementRestoresPriority)
     ];
 
     private static float[] Render(AudioRenderSession session, MonitorAlarmSequencer sequencer,
@@ -72,6 +73,7 @@ internal static class NotificationSoundSpecifications
         Check.That(head.Concat(tail).SequenceEqual(Render(referenceSession, referenceSequencer, first, 4 * 48000)),
             "busy same-level reminder neither truncates a Warning group nor starts a deferred replay");
         Check.That(sequencer.Dispatches.Any(d => d.NotificationSequence == 2 && d.Stage == AlarmSoundDispatchStage.CoalescedWhileBusy), "busy decision is visible");
+        Check.That(sequencer.RetiredNotificationSequence == 2, "group completion also retires coalesced reminder identities");
         var third = first with { NotificationSequence = 3 };
         Check.That(Render(session, sequencer, third, 4800).Any(v => v != 0), "fresh reminder after completion starts a new group");
         var before = sequencer.Dispatches;
@@ -302,4 +304,61 @@ internal static class NotificationSoundSpecifications
         Check.That(router.Update([filter.Lifecycle], 0, new(), true) is null &&
             router.Update([filter.Lifecycle], 50, new(), true)?.NotificationSequence == 2, "mute/unmute gets fresh identity rather than replaying a cancelled group");
     }
+    private static void AcknowledgementStopsSoundAndReminderRetirementRestoresPriority()
+    {
+        var high = new ConfirmedLimitNotice(MonitorNumeric.HeartRate);
+        var low = new ConfirmedLimitNotice(MonitorNumeric.SpO2);
+        var router = new AlarmNotificationSoundRouter();
+        var journals = new[] { high.Lifecycle, low.Lifecycle };
+        var limits = MeasuredLimitNotice.HeartRateDescriptor.TeachingDefaults with { Enabled = true };
+        var saturation = MeasuredLimitNotice.SpO2Descriptor.TeachingDefaults with { Enabled = true };
+        high.Lifecycle.ConfigureNotifications("hr-high", new(0, 500));
+        low.Lifecycle.ConfigureNotifications("spo2-low", new() { SoundDuration = AlarmSoundDuration.Continuous });
+        var empty = LiveWaveformMeasurements.CreateIllustration().Read(0);
+        void Read(long milliseconds, int rate = 180001)
+        {
+            var snapshot = empty with
+            {
+                SampleTimeNs = milliseconds * 1_000_000,
+                HeartRate = new(WaveformMeasurementStatus.Valid, rate, milliseconds * 1_000_000),
+                SpO2 = empty.SpO2 with { Status = WaveformMeasurementStatus.Valid, SaturationMilliPercent = 90000 }
+            };
+            high.Evaluate(limits, snapshot);
+            low.Evaluate(saturation, snapshot);
+        }
+        MonitorAlarmSoundRequest? Route(bool enabled = true, ulong retired = 0) => router.Update(journals, 50, new(), enabled, retiredNotificationSequence: retired);
+        void Acknowledge()
+        {
+            var state = high.Lifecycle.Attention.Conditions.Single(c => c.ConditionId == "hr-high");
+            Check.That(high.Lifecycle.Attention.Acknowledge(state.Episode!, state.Revision), "explicit current acknowledgement succeeds");
+        }
+        Read(0);
+        Check.That(Route() is { Level: MonitorNoticeLevel.Critical, NotificationSequence: > 0 }, "unacknowledged short critical wins");
+        Acknowledge();
+        Check.That(Route() is { Level: MonitorNoticeLevel.Warning, NotificationSequence: 0 }, "acknowledgement cancels old intent and reveals lower continuous alarm");
+        Read(500);
+        var reminder = Route()!;
+        Check.That(reminder is { Level: MonitorNoticeLevel.Critical, NotificationSequence: > 0 }, "fresh configured reminder can sound after acknowledgement");
+        Check.That(Route() == reminder, "refresh does not truncate the reminder group");
+        var session = new AudioRenderSession();
+        var sequencer = new MonitorAlarmSequencer(session);
+        Render(session, sequencer, reminder, 6 * 48000);
+        Check.That(sequencer.RetiredNotificationSequence == reminder.NotificationSequence &&
+            Route(retired: sequencer.RetiredNotificationSequence) is { Level: MonitorNoticeLevel.Warning, NotificationSequence: 0 },
+            "completed reminder releases priority to lower continuous sound without replaying its request");
+        Route(false);
+        Read(1000); Route(false);
+        Check.That(Route() is { Level: MonitorNoticeLevel.Warning }, "pause consumes acknowledged reminders; resume never replays them");
+        Read(1100, 130000); Read(1200);
+        Check.That(Route() is { Level: MonitorNoticeLevel.Critical, NotificationSequence: > 0 }, "confirmed re-escalation rearms sound");
+        Read(1700); // A reminder is pending, but the operator acknowledges before the router consumes it.
+        Acknowledge();
+        Check.That(Route() is { Level: MonitorNoticeLevel.Warning }, "a pre-acknowledgement reminder cannot replay after a delayed router update");
+        Read(2200);
+        Check.That(Route() is { Level: MonitorNoticeLevel.Critical, NotificationSequence: > 0 }, "a later reminder holds priority while its group is pending");
+        high.Lifecycle.ConfigureNotifications("hr-high", new() { SoundDuration = AlarmSoundDuration.Continuous });
+        Check.That(Route() is { Level: MonitorNoticeLevel.Warning, NotificationSequence: 0 },
+            "changing an acknowledged reminder to long sound immediately releases priority without undoing acknowledgement");
+    }
+
 }

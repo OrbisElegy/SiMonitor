@@ -9,11 +9,12 @@ public enum AlarmSoundDuration { SingleGroup, Continuous }
 public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds, bool ReminderEnabled, int ReminderMilliseconds)
 {
     public AlarmSoundMode SoundMode { get; init; }
+    public AlarmLatchingMode LatchingMode { get; init; }
     public static AlarmNotificationSettings Default { get; } = new(0, false, 30000);
 
     public void Validate()
     {
-        if (!Enum.IsDefined(SoundMode) || RepeatSuppressionMilliseconds is < 0 or > AlarmNotificationPolicy.MaximumMilliseconds ||
+        if (!Enum.IsDefined(LatchingMode) || !Enum.IsDefined(SoundMode) || RepeatSuppressionMilliseconds is < 0 or > AlarmNotificationPolicy.MaximumMilliseconds ||
             ReminderMilliseconds is < 1 or > AlarmNotificationPolicy.MaximumMilliseconds)
         { throw new ArgumentException("AlarmNotification.InvalidSettings"); }
     }

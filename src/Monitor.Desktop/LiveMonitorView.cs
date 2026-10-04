@@ -20,6 +20,10 @@ internal sealed class LiveMonitorView : UserControl
     private readonly List<(TextBlock Pi, PulseIndicator Bar)> _opticalRows = [];
     private readonly MonitorNoticeRotation _rotation = new();
     private MonitorNotice[] _notices = [];
+    private MonitorNotice[] _rawNotices = [];
+    internal Func<IEnumerable<MonitorNotice>, IEnumerable<MonitorNotice>>? NoticeProjection { get; set; }
+    private AlarmAttentionSnapshot? _displayedAttention;
+    internal Func<string, AlarmAttentionSnapshot?>? AttentionFor { get; set; }
     private MonitorNotice[]? _highlightNotices;
     private bool? _highlightOn, _highlightNoticeColor;
     private double _pulseMinimum, _pulseMaximum;
@@ -54,7 +58,13 @@ internal sealed class LiveMonitorView : UserControl
         var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
         var header = new Grid { ColumnDefinitions = new("*,2*,*"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
-        header.Children.Add(Clock); Grid.SetColumn(_noticeBackground, 1); _noticeBackground.Child = Notice; header.Children.Add(_noticeBackground); Grid.SetColumn(AudioPauseStatus, 2); header.Children.Add(AudioPauseStatus); root.Children.Add(header);
+        header.Children.Add(Clock);
+        Grid.SetColumn(_noticeBackground, 1);
+        _noticeBackground.Child = Notice;
+        header.Children.Add(_noticeBackground);
+        Grid.SetColumn(AudioPauseStatus, 2);
+        header.Children.Add(AudioPauseStatus);
+        root.Children.Add(header);
         var body = new Grid { ColumnDefinitions = new("*,190") };
         Grid.SetRow(body, 1); root.Children.Add(body); body.Children.Add(trace);
         var numbers = new Grid();
@@ -134,6 +144,11 @@ internal sealed class LiveMonitorView : UserControl
         { _pulseMaximum = _pulseMinimum; }
         RefreshReadings(snapshot);
     }
+    internal void RefreshAttention()
+    {
+        _notices = (NoticeProjection?.Invoke(_rawNotices) ?? _rawNotices).ToArray();
+        RefreshNotice();
+    }
     internal void RefreshReadings(LiveMeasurementSnapshot snapshot)
     {
         List<string> notices = [];
@@ -173,16 +188,17 @@ internal sealed class LiveMonitorView : UserControl
         }
         foreach (var (pi, _) in _opticalRows)
         { pi.Text = "PI " + (snapshot.SpO2.PerfusionMilliPercent is { } value ? ((decimal)value / 1000).ToString("0.00", CultureInfo.InvariantCulture) : "---") + " %"; }
-        _notices = notices.Distinct().Select(n => new MonitorNotice(n, MonitorNoticeLevel.Info, n))
+        _rawNotices = notices.Distinct().Select(n => new MonitorNotice(n, MonitorNoticeLevel.Info, n))
             .Concat(AdditionalNotices?.Invoke(snapshot) ?? []).ToArray();
-        RefreshNotice();
+        RefreshAttention();
     }
     private void RefreshNotice()
     {
         _rotation.Update(_notices, _trace.Session.SimulationTimeNs);
         var notice = _rotation.Current;
         Notice.Text = notice?.Text ?? "";
-        if (notice is not null && _rotation.CriticalElapsedNs(notice.Id) is { } elapsed)
+        _displayedAttention = notice is null ? null : AttentionFor?.Invoke(notice.Id);
+        if (_displayedAttention?.State != AlarmAttentionState.RecoveredUnacknowledged && notice is not null && _rotation.CriticalElapsedNs(notice.Id) is { } elapsed)
         {
             long seconds = elapsed / 1_000_000_000;
             Notice.Text += $"（{seconds / 60:00}:{seconds % 60:00}）";
@@ -196,7 +212,8 @@ internal sealed class LiveMonitorView : UserControl
         bool on = timeNs % 1_000_000_000 < 500_000_000;
         bool noticeColor = NoticeColorEnabled?.Invoke() != false;
         var level = _rotation.Current?.Level;
-        bool bannerOn = on && level is not null && level != MonitorNoticeLevel.Info && (level != MonitorNoticeLevel.Notice || noticeColor);
+        bool bannerOn = on && _displayedAttention?.State != AlarmAttentionState.ActiveAcknowledged &&
+            _displayedAttention?.State != AlarmAttentionState.RecoveredUnacknowledged && level is not null && level != MonitorNoticeLevel.Info && (level != MonitorNoticeLevel.Notice || noticeColor);
         _noticeBackground.Background = !bannerOn ? Brushes.Transparent : level switch
         {
             MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
@@ -208,7 +225,8 @@ internal sealed class LiveMonitorView : UserControl
         _highlightNotices = _notices; _highlightOn = on; _highlightNoticeColor = noticeColor;
         void Paint(TextBlock text, MonitorNumeric? numeric, IBrush normal)
         {
-            var level = _notices.Where(n => n.Numeric == numeric && numeric is not null && n.Level != MonitorNoticeLevel.Info)
+            var level = _notices.Where(n => n.Numeric == numeric && numeric is not null && n.Level != MonitorNoticeLevel.Info &&
+                AttentionFor?.Invoke(n.Id)?.State != AlarmAttentionState.ActiveAcknowledged)
                 .Select(n => (MonitorNoticeLevel?)n.Level).Max();
             bool highlight = on && level is not null && (level != MonitorNoticeLevel.Notice || noticeColor);
             ((Border)text.Parent!).Background = !highlight ? Brushes.Transparent : level switch

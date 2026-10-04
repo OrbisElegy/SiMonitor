@@ -53,12 +53,12 @@ internal static class EcgAlarmSmokeChecks
                     firstSampleTimeNs ??= snapshot.SampleTimeNs;
                     bool confirmed = snapshot.SampleTimeNs - firstSampleTimeNs.Value >= confirmationMilliseconds * 1_000_000L;
                     // This ECG-only fixture has no optical acquisition. Its existing
-                    // SpO2 NoData Info remains while physiological confirmation waits.
-                    var expectedRequest = confirmed ? referenceRequest : new MonitorAlarmSoundRequest(
-                        MonitorNoticeLevel.Info, (int)window.Settings.Sound.Volume.Value, alerts.Timing);
+                    // SpO2 NoData Info remains visible while the unified router
+                    // keeps its default sound disabled during confirmation.
+                    MonitorAlarmSoundRequest? expectedRequest = confirmed ? referenceRequest : null;
                     view.RefreshReadings(snapshot);
                     view.RefreshNumericHighlights(0);
-                    window.Settings.Sound.UpdateAlarm(view.HighestNotice, alerts.Timing, measurement: snapshot);
+                    window.Settings.Sound.UpdateAlarm(view.HighestNotice, alerts.Timing, measurement: snapshot, notices: view.ActiveNotices);
                     var notice = view.ActiveNotices.SingleOrDefault(n => n.Numeric == MonitorNumeric.HeartRate);
                     var request = window.Settings.Sound.PublishedAlarm;
                     Require(snapshot.HeartRate.Status == WaveformMeasurementStatus.Valid && notice?.Level == (confirmed ? expectedLevel : null) &&

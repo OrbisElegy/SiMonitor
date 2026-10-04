@@ -141,6 +141,7 @@ internal；公开边界是 `EcgHeartRateMeasurement.ReadRhythm`、`Consume` 的�
 当前单导联筛查使用约 30 s RR 支持窗和 5 s 持续确认；疑似房颤还要求足够的非一致
 心房活动证据。缺少 P 波本身不足以给出疑似房颤。信号不可用、流不连续、RR 或心房证据
 不足可中断活动状态；中断不是正常恢复。消费、查询或恢复时不要自行合成转换事件。
+这些分析结果不属于当前数值报警登记条件，不进入独立报警声音链路；模拟波形模板名称也不作为报警检测证据。
 
 ## 本地预览会话与显示偏好
 
@@ -241,7 +242,7 @@ void Reset();
 每个方向独立分配 owner 内身份，Warning/Critical 升降级保留身份，恢复与数据中断使用不同原因。
 记录由确认状态同步生成，不改变 `MonitorNotice` 相等性、横幅轮换或声音请求。详细状态、
 有界保留和连续性边界见[本地报警生命周期接口](alarms/alarm-lifecycle.md)。
-其 `Attention` 提供独立的用户确认、恢复保持和旧修订拒绝契约，见[确认与保持状态接口](alarms/alarm-attention.md)；当前不改变声光显示或偏好保存。
+其 `Attention` 提供独立的用户确认、恢复保持和旧修订拒绝契约，见[确认与保持状态接口](alarms/alarm-attention.md)；已确认标记、恢复后视觉保持和声音仲裁使用该状态；默认监护皮肤不添加操作按钮，确认入口留待后续皮肤接口；偏好只保存保持策略。
 `ConfigureNotifications` 可为已有条件配置独立重复抑制及持续提醒；`NotificationRecords`
 提供有界通知意图，`DroppedNotificationCount` 明确淘汰情况。首次及确认升级不额外延迟，
 同级重复只延后通知，持续提醒不改变事件。显式单组声音通道可消费这些意图，产品默认仍为原持续声音；详见[通知决策接口](alarms/alarm-notification-policy.md)及[声音执行接口](alarms/alarm-notification-sound.md)。

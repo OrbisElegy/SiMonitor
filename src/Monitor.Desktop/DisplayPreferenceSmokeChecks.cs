@@ -40,6 +40,7 @@ internal static class DisplayPreferenceSmokeChecks
                 alarms.NotificationSettings.Mode.SelectedIndex = 1;
                 foreach (var (id, notification) in alarms.NotificationSettings.Editors)
                 {
+                    notification.LatchUntilAcknowledged.IsChecked = id == "hr-low";
                     notification.SelectedSoundMode = id == "hr-low" ? 2 : 1;
                     notification.RepeatSeconds.Value = 1.125m;
                     notification.ReminderSeconds.Value = 2.25m;
@@ -95,7 +96,7 @@ internal static class DisplayPreferenceSmokeChecks
                 var alarms = reopened.Settings.Alerts.CapturePreferences();
                 Require(alarms.PlaybackMode == AlarmPlaybackMode.Notifications &&
                     alarms.Notifications.Count == MonitorAlarmPreferences.NotificationConditionIds.Count &&
-                    alarms.Notifications.All(e => e.Value == new AlarmNotificationSettings(1125, e.Key != "hr-low", 2250) { SoundMode = e.Key == "hr-low" ? AlarmSoundMode.Continuous : AlarmSoundMode.SingleGroup }) &&
+                    alarms.Notifications.All(e => e.Value == new AlarmNotificationSettings(1125, e.Key != "hr-low", 2250) { SoundMode = e.Key == "hr-low" ? AlarmSoundMode.Continuous : AlarmSoundMode.SingleGroup, LatchingMode = e.Key == "hr-low" ? AlarmLatchingMode.UntilAcknowledged : AlarmLatchingMode.NonLatching }) &&
                     reopened.Settings.Alerts.AlarmLifecycles.SelectMany(j => j.Conditions).All(c => c.Episode is null),
                     "notification configuration round trips without restoring active episodes or hardware audio opt-in");
                 Require(alarms.HeartRate.Enabled && alarms.HeartRate.WarningHigh == 130250 &&

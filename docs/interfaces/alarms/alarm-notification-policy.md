@@ -2,7 +2,7 @@
 
 `AlarmLifecycleJournal` 在确认器处理有效采样或中断时，同步生成独立的通知决策。生理事件和通知记录分别保留：真实发生、升级和恢复仍由确认器决定，重复通知抑制不能删除、延后或改写它们。
 
-本接口输出可审查的通知意图，已提供显式选择的[单组声音执行通道](alarm-notification-sound.md)。产品默认仍使用原有最高等级持续声音链路；生成意图不等于已播放、被用户听见或已确认。“报警 → 通知策略”提供模式选择和按条件编辑，并通过版本 9 偏好保存；声音输出本身仍须手动启用。
+本接口输出可审查的通知意图，已提供显式选择的[单组声音执行通道](alarm-notification-sound.md)。产品默认仍为持续声音，统一经通知声音路由处理确认状态；生成意图不等于已播放、被用户听见或已确认。“报警 → 通知策略”提供模式选择和按条件编辑，并通过版本 10 偏好保存；声音输出本身仍须手动启用。
 
 ## 配置契约
 
@@ -35,6 +35,7 @@ public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds
     bool ReminderEnabled, int ReminderMilliseconds)
 {
     public AlarmSoundMode SoundMode { get; init; }
+    public AlarmLatchingMode LatchingMode { get; init; }
 }
 ```
 
@@ -42,9 +43,9 @@ public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds
 
 `MonitorAlarmPreferences.PlaybackMode` 默认为 Continuous，仅作为没有独立覆盖条件的默认。Notifications 表示默认短警报。选择了 SingleGroup/Continuous 的条件不受全局默认更改影响；一个默认下可同时存在不同条件的短、长警报。`Notifications` 是以条件 ID 为键的可选覆盖字典；`NotificationConditionIds` 声明已有数值方向和未检出呼吸条件，`NotificationFor(id)` 对缺省项返回默认设置，对未知条件拒绝。SpO₂ 不接受上限条目。模式、字典和所有条目在保存及恢复前完整校验。
 
-桌面“通知策略”分为“事件声音”和“默认声音”页签。“事件声音”选择器显示各条件当前有效的短／长声音及默认／独立来源；单选按钮直接选择跟随默认、短或长。短警报的重复抑制与提醒放入默认折叠的“短警报高级参数”，长警报仅保留“更多操作”中的恢复默认入口，不堆叠无关字段。有效修改立即发布到对应 journal，下一次采集证据决定新通知；其他条件和生理确认计时不受影响。无效草稿保留上次有效策略，切换条件保留草稿；任一草稿无效时禁止保存或重启应用。恢复条件默认值只作用于该条件的通知配置。切换声音时长不重置活动事件；切成长警报立即依据当前活动条件持续播放，切成短警报等待该条件下一次有效观察生成新策略意图。长警报恢复确认完成、禁用或数据中断即停止，不包含用户确认或保持功能。短警报相关字段在长模式下隐藏并保留输入值；若存在无效草稿，自动展开并允许修正原字段，选择器标记“待修正”且继续显示上次有效声音。切换页签和条件都不清除草稿。
+桌面“通知策略”分为“事件声音”和“默认声音”页签。“事件声音”选择器显示各条件当前有效的短／长声音及默认／独立来源；单选按钮直接选择跟随默认、短或长。短警报的重复抑制与提醒放入默认折叠的“短警报高级参数”，长警报在“保持与更多操作”中提供视觉保持配置和恢复默认入口，不堆叠无关字段。有效修改立即发布到对应 journal，下一次采集证据决定新通知；其他条件和生理确认计时不受影响。无效草稿保留上次有效策略，切换条件保留草稿；任一草稿无效时禁止保存或重启应用。恢复条件默认值只作用于该条件的通知配置。切换声音时长不重置活动事件；切成长警报立即依据当前活动条件持续播放，切成短警报等待该条件下一次有效观察生成新策略意图。长警报恢复确认完成、禁用或数据中断即停止，确认后的声音及视觉保持见[确认与保持接口](alarm-attention.md)。短警报相关字段在长模式下隐藏并保留输入值；若存在无效草稿，自动展开并允许修正原字段，选择器标记“待修正”且继续显示上次有效声音。切换页签和条件都不清除草稿。
 
-`DisplayPreferenceStore` 写版本 9，版本 1–8 继续读取；版本 8 缺少 SoundMode 时按 Inherit 解析，保留原全局模式及通知字段；更旧文件缺少 PlaybackMode/Notifications 时使用 Continuous 和空覆盖字典，不启用原本关闭的报警或声音输出。点击现有“应用”保存配置；重新打开仅恢复模式与策略，不恢复事件、抑制截止、游标、请求或声音暂停。通知层之外的确认配置与迁移规则不变。
+`DisplayPreferenceStore` 写版本 10，版本 1–9 继续读取；版本 8 缺少 SoundMode 时按 Inherit 解析，保留原全局模式及通知字段；更旧文件缺少 PlaybackMode/Notifications 时使用 Continuous 和空覆盖字典，不启用原本关闭的报警或声音输出。点击现有“应用”保存配置；重新打开仅恢复模式与策略，不恢复事件、抑制截止、游标、请求或声音暂停。通知层之外的确认配置与迁移规则不变。
 
 时长依据与厂商语义的边界见[短／长警报调研](../../research/alarms/alarm-sound-duration-research.md)。
 
@@ -79,3 +80,5 @@ public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds
 ## 声音执行边界
 
 `AlarmNotificationSoundRouter` 将当前有效意图合成为单组声音请求，支持最高等级仲裁、暂停期间丢弃与恢复重判；`MonitorAlarmSequencer` 依据独立请求序号执行，合并忙碌期间的同/低等级请求，允许更高等级打断。具体规则、记录及执行边界见[声音执行接口](alarm-notification-sound.md)。通知记录、软件排程记录与物理设备交付仍是不同事实，不将其冒充用户确认。
+
+版本 10 增加每条件 `LatchingMode`（NonLatching=0、UntilAcknowledged=1），用于恢复后视觉保持，与短／长声音方式独立。旧版本缺少该字段时使用非保持；未知枚举值原子拒绝。有效编辑同时发布通知策略与保持策略，恢复时仅恢复配置，不恢复确认状态。

@@ -191,6 +191,30 @@ internal sealed class MonitorAlertSettings : StackPanel
         NotificationSettings.Restore(preferences, AlarmLifecycles);
     }
     internal MonitorSoundTiming Timing => new(InfoTone.IsChecked == true, Milliseconds(InfoInterval), Milliseconds(NoticeInterval), Milliseconds(WarningInterval), Milliseconds(CriticalInterval));
+    internal const string RetainedNoticePrefix = "retained:";
+    internal IEnumerable<MonitorNotice> ProjectAttention(IEnumerable<MonitorNotice> notices)
+    {
+        var attention = AlarmLifecycles.SelectMany(j => j.Attention.Conditions).ToDictionary(c => c.ConditionId, StringComparer.Ordinal);
+        foreach (var notice in notices)
+        {
+            if (attention.TryGetValue(notice.Id, out var state))
+            {
+                if (state.State is AlarmAttentionState.None or AlarmAttentionState.RecoveredUnacknowledged || state.Level != notice.Level) { continue; }
+                yield return state.State == AlarmAttentionState.ActiveAcknowledged
+                    ? notice with { Text = notice.Text + " · 已确认", Audible = false } : notice;
+            }
+            else { yield return notice; }
+        }
+        foreach (var state in attention.Values.Where(c => c.State == AlarmAttentionState.RecoveredUnacknowledged))
+        {
+            string label = state.ConditionId == "co2-no-expiration" ? "CO₂ · 未检出呼吸" :
+                MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.HeartRateDescriptor).Prepend(MeasuredLimitNotice.SpO2Descriptor)
+                    .Single(d => state.ConditionId == d.Id + "-low" || state.ConditionId == d.Id + "-high").Label +
+                    (state.ConditionId.EndsWith("-low", StringComparison.Ordinal) ? " · 低限" : " · 高限");
+            yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, label + " · 已恢复，待确认") { Audible = false };
+        }
+    }
+
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
     {
         if (EvaluatePrimary(MonitorNumeric.HeartRate, snapshot) is { } heartRate) { yield return heartRate; }

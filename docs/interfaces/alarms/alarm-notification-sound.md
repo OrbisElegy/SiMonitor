@@ -1,6 +1,6 @@
 # 通知意图到声音执行接口
 
-`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面“报警 → 通知策略”的默认方式与独立短／长覆盖调用此入口；产品默认仍为原持续播放，默认方式和条件覆盖通过版本 9 偏好保存。声音输出开关不随偏好恢复。
+`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面始终绑定已登记条件以处理用户确认；“报警 → 通知策略”设置默认方式与独立短／长覆盖。产品默认仍为持续播放，默认方式、条件覆盖和视觉保持通过版本 10 偏好保存。声音输出开关不随偏好恢复。
 
 ## 请求与单组排程
 
@@ -44,7 +44,7 @@ MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals,
 
 相同等级中，只要还有有效长警报或未注册的持续提示，由持续请求承担声音；短警报意图被消费、不排队。更高级短警报可优先于低级长警报；高级条件解除后仍活动的低级长警报恢复。短改长可立即利用当前确认状态；长改短需新策略意图，旧意图不得复用。条件时长变更不重置生理事件身份或篡改横幅等级。
 
-长警报的路由记录在 `ContinuousConditions` 中保留条件快照（含事件身份），区别于未注册提示的 `ContinuousNotices`。来源或请求未改变的刷新不追加记录，不重启声音组。长警报不表示锁存，也不等待尚未实现的用户确认。
+长警报的路由记录在 `ContinuousConditions` 中保留条件快照（含事件身份），区别于未注册提示的 `ContinuousNotices`。来源或请求未改变的刷新不追加记录，不重启声音组。长警报本身不表示锁存；用户确认可停止其声音，恢复后视觉保持单独配置。
 
 ## 暂停、恢复与音量
 
@@ -61,10 +61,12 @@ MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals,
 
 上述缓冲区容量均为 `AlarmLifecycleJournal.Capacity`，返回只读快照。排程记录按处理顺序读取；旧组的结束记录可能位于较新请求的合并记录之后，不能仅按通知序号排序。各 owner 的计数互相独立，不代表全局身份或跨设备审计。
 
-Selected 和 RenderWindowElapsed 只描述软件排程选择及渲染窗口，不证明设备交付成功、扬声器出声或用户已听见。物理设备故障、失败关闭、自动重连与实际交付确认仍沿用现有音频生命周期边界；本轮未新增设备确认、用户确认、保持或连续性恢复。
+Selected 和 RenderWindowElapsed 只描述软件排程选择及渲染窗口，不证明设备交付成功、扬声器出声或用户已听见。物理设备故障、失败关闭、自动重连与实际交付确认仍沿用现有音频生命周期边界；设备确认及连续性恢复仍未接入；用户确认与视觉保持见[确认与保持接口](alarm-attention.md)。
 
 ## 音频输出故障反馈
 
 通知模式沿用 `SoundSettingsPanel.OutputNotice`：设备不可用、中断或释放失败显示 `audio-output`，其 `Audible=false`，不尝试通过失效设备播放自身故障，也不压低独立生理声音的优先级。发布请求、排程选择和渲染窗口结束均不能清除故障；取消重试也不证明恢复。成功试听完成或监护输出已有成功 pump 才沿用现有规则清除提示；释放失败继续禁止重开并要求重启客户端。
 
-此边界是既有软件输出状态反馈，没有新增物理扬声器交付确认或自动重连。通知设置与保存映射见[通知策略接口](alarm-notification-policy.md)；用户确认与保持仍未实现。
+此边界是既有软件输出状态反馈，没有新增物理扬声器交付确认或自动重连。通知设置与保存映射见[通知策略接口](alarm-notification-policy.md)；用户确认及视觉保持已接入，规则见[确认与保持接口](alarm-attention.md)。
+
+路由 `Update` 可接收 `retiredNotificationSequence` 软件退役水位，须不高于该 owner 已发布序号，非法值在消费游标前拒绝。已确认活动条件仅允许确认后的新提醒；已完成的提醒释放优先级，恢复后保持提示不参与声音。播放 worker 以单调、线程可见的水位汇报 sequencer 渲染窗口结束，包含组内合并请求，不能作为设备交付或用户确认凭证。

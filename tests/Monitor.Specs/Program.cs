@@ -59,6 +59,7 @@ internal static class Program
             .. OxygenationTransportSpecifications.All,
             .. DeepOxygenationSpecifications.All,
             .. RealtimeOxygenationSpecifications.All,
+            .. OxygenationDefaultsSpecifications.All,
             .. ImpedanceRespirationMeasurementSpecifications.All,
             .. LiveWaveformMeasurementSpecifications.All,
             .. MeanPressureMeasurementSpecifications.All,

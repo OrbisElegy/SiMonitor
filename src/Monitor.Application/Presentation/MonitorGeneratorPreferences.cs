@@ -6,6 +6,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     string Seed, IReadOnlyDictionary<string, decimal?> Numbers,
     IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate()
     {
         if (Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 3 ||
@@ -13,5 +14,6 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
             Numbers is null || Flags is null || Choices is null ||
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }
+        Oxygenation?.Validate();
     }
 }

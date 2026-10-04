@@ -32,6 +32,8 @@ internal static class Program
         }
         Specification[] specifications =
         [
+            .. LocalizationSpecifications.All,
+            .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. AssessmentSpecifications.All,
             .. IdentitySpecifications.All,

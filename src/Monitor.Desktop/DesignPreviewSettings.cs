@@ -235,12 +235,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private Control? _home;
     private Button? _returnFocus;
     internal int PreviewCacheCount => _previews.Count;
-    internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced)
+    internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced, DesktopLocalization? localization = null)
     {
+        Localization = localization ?? new DesktopLocalization();
+        InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
         InfarctionParameters.Changed += RefreshShapeSummary;
-        AutomationProperties.SetName(Skin, "监护皮肤与固定行数");
         var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
         var instruction = Text("选择生理信号，再选择分组与具体波形；应用后更新监护和十二导联。");
         instruction.Height = 44; generation.Children.Add(instruction);
@@ -259,13 +260,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(DesktopInformationPages.Help("settings-detail-2"));
         display.Children.Add(Skin);
-        display.Children.Add(Text("纸质十二导联排布")); display.Children.Add(PaperLayout);
-        AutomationProperties.SetName(PaperLayout, "纸质十二导联排布");
+        display.Children.Add(LocalizedText("display.paperLayout")); display.Children.Add(PaperLayout);
         display.Children.Add(DesktopInformationPages.Help("topic-1"));
         var headings = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
-        string[] labels = ["行", "通道 / 单位", "量程", "下限", "上限", "扫速 mm/s* "];
+        string[] labels = ["display.row", "display.channel", "display.range", "display.minimum", "display.maximum", "display.speed"];
         for (int column = 0; column < labels.Length; column++)
-        { var label = Text(labels[column]); Grid.SetColumn(label, column); headings.Children.Add(label); }
+        { var label = LocalizedText(labels[column]); Grid.SetColumn(label, column); headings.Children.Add(label); }
         display.Children.Add(headings);
         display.Children.Add(_slotRows);
         display.Children.Add(DesktopInformationPages.Help("topic-2"));
@@ -277,8 +277,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Control paperLabel = Before(display, PaperLayout), paperHelp = display.Children[^1];
         foreach (var control in new[] { paperLabel, PaperLayout, paperHelp }) { display.Children.Remove(control); paper.Children.Add(control); }
         display.Margin = new Thickness(0);
-        SectionPages[1] = new SettingsSections("显示", ("监护波形", display), ("十二导联纸图", paper));
-        SectionPages[2] = SettingsSections.Split("声音", Sound,
+        SectionPages[2] = new SettingsSections(Localization, "settings.display", ("shell.monitor", display), ("display.paper", paper));
+        SectionPages[3] = SettingsSections.Split("声音", Sound,
             ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
             ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
         var alertGroups = new List<(string Title, Control Start)>
@@ -286,8 +286,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         alertGroups.AddRange(MeasuredLimitNotice.Descriptors.Select(d => (d.Label, (Control)Alerts.AdditionalLimits.Editors[d.Numeric])));
         alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
         alertGroups.Add(("通知策略", Alerts.NotificationSettings));
-        SectionPages[3] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
-        SectionPages[4] = SettingsSections.Split("生命体征", vitals,
+        SectionPages[4] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
+        SectionPages[5] = SettingsSections.Split("生命体征", vitals,
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
             ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),
             ("压力", Before(vitals, AbpPulseGain)));
@@ -300,7 +300,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         appliedParameters.Children.Add(AppliedEjectionParameters);
         advancedGroups.Add(("当前已应用参数", appliedParameters));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
-        SectionPages[5] = new SettingsSections("高级参数", advancedGroups.ToArray());
+        SectionPages[6] = new SettingsSections("高级参数", advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[]
         {
             new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
@@ -312,22 +312,26 @@ internal sealed partial class DesignPreviewSettings : UserControl
         ResetRespirationPage.Click += (_, _) => ResetRespirationDraft();
         AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
-        string[] categories = ["波形生成", "显示", "声音", "报警", "生命体征", "高级参数"];
-        Control[] pages = [_generation, SectionPages[1], SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5]];
+        string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced"];
+        Control[] pages = [BuildGeneralPage(), _generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
-        Tabs.ItemsSource = categories.Select(title => SettingsSections.Item(title)).ToArray();
-        AutomationProperties.SetName(Tabs, "设置分类"); AutomationProperties.SetName(_compactCategory, "设置分类");
-        _compactCategory.ItemsSource = categories;
+        Tabs.ItemsSource = categories.Select(title => SettingsSections.Item(title, localization: Localization)).ToArray();
+        Localization.Bind(Tabs, AutomationProperties.NameProperty, "settings.categories");
+        Localization.Bind(_compactCategory, AutomationProperties.NameProperty, "settings.categories");
+        Localization.SetChoices(_compactCategory, categories);
         navigation.Children.Add(Tabs); Grid.SetColumn(detail, 1); navigation.Children.Add(detail);
+        var controls = BuildActionFooter(apply, run);
         Tabs.SelectionChanged += (_, args) =>
         {
             if (!ReferenceEquals(args.Source, Tabs) || Tabs.SelectedIndex < 0) { return; }
             int selected = Tabs.SelectedIndex; _compactCategory.SelectedIndex = selected;
-            if (selected == 0) { _generation.Content = _home; }
-            if (selected == 5) { RefreshAdvanced(more); }
+            if (selected == 1) { _generation.Content = _home; }
+            if (selected == 6) { RefreshAdvanced(more); }
             detail.Content = pages[selected];
+            controls.IsVisible = selected != 0;
+            Status.IsVisible = selected != 0;
         };
         _compactCategory.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compactCategory) && _compactCategory.SelectedIndex >= 0) { Tabs.SelectedIndex = _compactCategory.SelectedIndex; } };
         _adaptNavigation = width =>
@@ -337,10 +341,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
         };
         Tabs.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, args) =>
         {
-            if (Tabs.SelectedIndex == 0) { _generation.Content = _home; }
+            if (Tabs.SelectedIndex == 1) { _generation.Content = _home; }
         }, handledEventsToo: true);
-        Tabs.SelectedIndex = 0;
-        var controls = BuildActionFooter(apply, run);
+        Tabs.SelectedIndex = 1;
         var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
         _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);
         Grid.SetRow(navigation, 1); root.Children.Add(navigation); Grid.SetRow(controls, 2); root.Children.Add(controls);
@@ -561,8 +564,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal void OpenAdvanced(int channel)
     {
-        Tabs.SelectedIndex = 5;
-        SectionPages[5].Sections.SelectedIndex = channel switch { 0 => 0, 1 => 1, _ => 2 };
+        Tabs.SelectedIndex = 6;
+        SectionPages[6].Sections.SelectedIndex = channel switch { 0 => 0, 1 => 1, _ => 2 };
     }
     private void ResetRespirationDraft()
     {
@@ -661,8 +664,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
         for (int i = 0; i < defaults.Slots.Count; i++)
         {
             var slot = defaults.Slots[i];
-            var channel = new ComboBox { ItemsSource = LiveMonitorTrace.Names.Select((name, index) => name + " / " + LiveMonitorTrace.Units[index]).ToArray(), SelectedIndex = slot.Channel, MinWidth = 155 };
-            var automatic = new CheckBox { Content = "自动", IsChecked = true };
+            var channel = new ComboBox { MinWidth = 155 };
+            Localization.SetChoices(channel, LiveMonitorTrace.Names.Select((name, index) =>
+                (Func<Monitor.Application.Localization.ITextLocalizer, string>)(text => text.Format("display.channelUnit", name,
+                    index is 1 or 2 ? text.GetString("display.relative") : LiveMonitorTrace.Units[index]))));
+            channel.SelectedIndex = slot.Channel;
+            var automatic = new CheckBox { IsChecked = true };
+            Localization.Bind(automatic, ContentControl.ContentProperty, "display.automatic");
             var minimum = new TextBox { Text = slot.Range.Minimum.ToString(CultureInfo.InvariantCulture), MinWidth = 85, IsEnabled = false };
             var maximum = new TextBox { Text = slot.Range.Maximum.ToString(CultureInfo.InvariantCulture), MinWidth = 85, IsEnabled = false };
             automatic.IsCheckedChanged += (_, _) => minimum.IsEnabled = maximum.IsEnabled = automatic.IsChecked != true;
@@ -672,13 +680,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 var range = MonitorDisplayConfiguration.ReferenceRange(channel.SelectedIndex);
                 minimum.Text = range.Minimum.ToString(CultureInfo.InvariantCulture); maximum.Text = range.Maximum.ToString(CultureInfo.InvariantCulture);
             };
-            Avalonia.Automation.AutomationProperties.SetName(channel, $"第{i + 1}行通道");
-            Avalonia.Automation.AutomationProperties.SetName(minimum, $"第{i + 1}行下限");
-            Avalonia.Automation.AutomationProperties.SetName(maximum, $"第{i + 1}行上限");
+            Localization.Bind(channel, AutomationProperties.NameProperty, "display.rowChannel", i + 1);
+            Localization.Bind(minimum, AutomationProperties.NameProperty, "display.rowMinimum", i + 1);
+            Localization.Bind(maximum, AutomationProperties.NameProperty, "display.rowMaximum", i + 1);
             var row = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
             var speed = new ComboBox { ItemsSource = new[] { "12.5", "25", "50" }, SelectedIndex = 1 };
-            AutomationProperties.SetName(automatic, $"第{i + 1}行自动量程");
-            AutomationProperties.SetName(speed, $"第{i + 1}行扫描速度，相对毫米每秒");
+            Localization.Bind(automatic, AutomationProperties.NameProperty, "display.rowAutomatic", i + 1);
+            Localization.Bind(speed, AutomationProperties.NameProperty, "display.rowSpeed", i + 1);
             Control[] children = [Text((i + 1).ToString(CultureInfo.InvariantCulture)), channel, automatic, minimum, maximum, speed];
             for (int column = 0; column < children.Length; column++) { children[column].Margin = new Thickness(0, 0, 10, 0); Grid.SetColumn(children[column], column); row.Children.Add(children[column]); }
             _slotRows.Children.Add(row); Slots.Add(new(channel, automatic, minimum, maximum, speed));

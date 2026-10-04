@@ -10,6 +10,7 @@
 | 测量、质量、报警通知、扫线、记录、12 导联与手工测量 | [测量与呈现](measurements-presentation.md) | [Monitor.Application](api/application.md)、[Monitor.Domain](api/domain.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 会话权威、治疗、评分、身份、断线续算与恢复 | [权威、身份与恢复](authority-identity-recovery.md) | [Domain](api/domain.md)、[Application](api/application.md)、[Infrastructure](api/infrastructure.md) |
 | 声音输出、原生 ABI、偏好文件与存储 | [音频与持久化](audio-persistence.md) | [Monitor.Infrastructure](api/infrastructure.md) |
+| 本地化端口、中英文资源、格式校验与翻译协作 | [本地化](localization.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 桌面装配、控件、命令行、构建及开发工具 | [桌面与命令行入口](desktop-tools.md) | [Monitor.Desktop](api/desktop.md) |
 
 说明文档回答“怎样调用、什么时间／单位、失败后保留什么状态”。声明索引按源文件完整列出对程序集外可见的显式 `public` 声明，包含构造器、重载、属性、record 参数、枚举、端口和常量；方法实现、编译器合成成员及继承成员不重复展开。索引不是独立 SDK 或兼容性承诺。
@@ -75,6 +76,7 @@ flowchart LR
 | 端口 | 定义及契约说明 | 当前接入情况 |
 |---|---|---|
 | `IArterialOxygenationSource` | [仿真](simulation.md)／[声明](api/simulation.md) | 源时间 SaO₂ 读取；存在采样与实时实现，固定目标由光学源构造参数提供 |
+| `ITextLocalizer` | [本地化](localization.md)／[声明](api/application.md) | `CatalogTextLocalizer`，内置 `en`／`zh-CN`；桌面主壳及显示设置已接入 |
 | `IPasswordHasher` | [身份](authority-identity-recovery.md)／[声明](api/application.md) | `Pbkdf2PasswordHasher` |
 | `ICompromisedPasswordChecker` | 同上 | 注入泄露密码检查；宿主提供生产数据来源 |
 | `IBootstrapIdentityRepository` | 同上 | `SqliteIdentityRepository` |

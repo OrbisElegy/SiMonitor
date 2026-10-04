@@ -452,6 +452,53 @@ public sealed class SqliteIdentityRepository : IBootstrapIdentityRepository, IIn
 }
 ```
 
+## Localization/BuiltInLocalizations.cs
+
+源码：[BuiltInLocalizations.cs](../../../src/Monitor.Infrastructure/Localization/BuiltInLocalizations.cs) · 命名空间：`Monitor.Infrastructure.Localization`
+
+行为与协作约定见[本地化接口](../localization.md)。
+
+```csharp
+public sealed record SupportedLocale(string Code, string NativeName);
+public static class BuiltInLocalizations
+{
+    public const string DefaultLocale = "zh-CN";
+    public const string FallbackLocale = "en";
+    public static IReadOnlyList<SupportedLocale> Supported { get; }
+    public static string ResolveLocale(string? requestedLocale);
+    public static ITextLocalizer Create(string? requestedLocale = null);
+}
+```
+
+## Localization/CatalogTextLocalizer.cs
+
+源码：[CatalogTextLocalizer.cs](../../../src/Monitor.Infrastructure/Localization/CatalogTextLocalizer.cs) · 命名空间：`Monitor.Infrastructure.Localization`
+
+```csharp
+public sealed class CatalogTextLocalizer : ITextLocalizer
+{
+    public CatalogTextLocalizer(TranslationCatalog catalog, TranslationCatalog fallback);
+    public string Locale { get; }
+    public LocalizedText Resolve(string key);
+    public string GetString(string key);
+    public string Format(string key, params object?[] arguments);
+}
+```
+
+## Localization/TranslationCatalog.cs
+
+源码：[TranslationCatalog.cs](../../../src/Monitor.Infrastructure/Localization/TranslationCatalog.cs) · 命名空间：`Monitor.Infrastructure.Localization`
+
+```csharp
+public sealed class TranslationCatalog
+{
+    public string Locale { get; }
+    public IReadOnlyCollection<string> Keys { get; }
+    public static TranslationCatalog Parse(string locale, string json);
+    public void ValidateAgainst(TranslationCatalog fallback, bool requireComplete = false);
+}
+```
+
 ## Persistence/EncryptedSqliteBackupService.cs
 
 源码：[EncryptedSqliteBackupService.cs](../../../src/Monitor.Infrastructure/Persistence/EncryptedSqliteBackupService.cs) · 命名空间：`Monitor.Infrastructure.Persistence`
@@ -481,6 +528,20 @@ public sealed class DisplayPreferenceStore(string path)
 {
     public DisplayPreferences Load(out bool rejected);
     public bool Save(DisplayPreferences preferences);
+}
+```
+
+## Preferences/LanguagePreferenceStore.cs
+
+源码：[LanguagePreferenceStore.cs](../../../src/Monitor.Infrastructure/Preferences/LanguagePreferenceStore.cs) · 命名空间：`Monitor.Infrastructure.Preferences`
+
+独立语言偏好文件及失败语义见[本地化接口](../localization.md)。
+
+```csharp
+public sealed class LanguagePreferenceStore(string path)
+{
+    public string Load(out bool rejected);
+    public bool Save(string locale);
 }
 ```
 

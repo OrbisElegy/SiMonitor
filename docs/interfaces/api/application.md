@@ -333,6 +333,27 @@ public sealed class InstitutionAuthenticationService
 }
 ```
 
+## Localization/ITextLocalizer.cs
+
+源码：[ITextLocalizer.cs](../../../src/Monitor.Application/Localization/ITextLocalizer.cs) · 命名空间：`Monitor.Application.Localization`
+
+行为与协作约定见[本地化接口](../localization.md)。
+
+```csharp
+public sealed record LocalizedText(string Key, string Value, string RequestedLocale, string? ResolvedLocale)
+{
+    public bool IsMissing { get; }
+    public bool IsFallback { get; }
+}
+public interface ITextLocalizer
+{
+    public string Locale { get; }
+    public LocalizedText Resolve(string key);
+    public string GetString(string key);
+    public string Format(string key, params object?[] arguments);
+}
+```
+
 ## Measurements/CapnographyMeasurement.cs
 
 源码：[CapnographyMeasurement.cs](../../../src/Monitor.Application/Measurements/CapnographyMeasurement.cs) · 命名空间：`Monitor.Application.Measurements`

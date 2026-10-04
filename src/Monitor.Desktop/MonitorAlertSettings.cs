@@ -45,6 +45,12 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal IReadOnlyList<AlarmLifecycleJournal> AlarmLifecycles =>
         new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
     internal AlarmNotificationSettingsPanel NotificationSettings { get; }
+    internal IReadOnlyList<(MonitorNumeric Numeric, string Title)> Parameters { get; } =
+        MeasuredLimitNotice.Descriptors.Select(d => (d.Numeric, d.Label))
+            .Prepend((MonitorNumeric.SpO2, MeasuredLimitNotice.SpO2Descriptor.Label))
+            .Prepend((MonitorNumeric.HeartRate, "ECG 心率")).ToArray();
+    internal IReadOnlyDictionary<MonitorNumeric, TabItem> SoundPages => _soundPages;
+    private readonly Dictionary<MonitorNumeric, TabItem> _soundPages = [];
 
     internal MonitorAlertSettings()
     {
@@ -128,7 +134,32 @@ internal sealed class MonitorAlertSettings : StackPanel
         Children.Add(Text("间隔从每组起点计算；音色和时序为可调教学实现。"));
         NotificationSettings = new(AlarmLifecycles);
         Children.Add(NotificationSettings);
+        foreach (var (numeric, title) in Parameters)
+        {
+            var descriptor = MeasuredLimitNotice.Describe(numeric);
+            string[] ids = numeric switch
+            {
+                MonitorNumeric.SpO2 => [descriptor.Id + "-low"],
+                MonitorNumeric.EtCo2 => [descriptor.Id + "-low", descriptor.Id + "-high", "co2-no-expiration"],
+                _ => [descriptor.Id + "-low", descriptor.Id + "-high"]
+            };
+            _soundPages[numeric] = ConfirmationFor(numeric).AddPage("声音", NotificationSettings.CreateEventPage(numeric, title, ids));
+        }
     }
+    internal AlarmConfirmationEditor ConfirmationFor(MonitorNumeric numeric) => numeric switch
+    {
+        MonitorNumeric.HeartRate => HeartRateConfirmation,
+        MonitorNumeric.SpO2 => SpO2Confirmation,
+        _ => AdditionalLimits.Editors[numeric].Confirmation
+    };
+    internal IReadOnlyList<CheckBox> SwitchesFor(MonitorNumeric numeric) => numeric switch
+    {
+        MonitorNumeric.HeartRate => [HeartRateEnabled],
+        MonitorNumeric.SpO2 => [SpO2Enabled],
+        MonitorNumeric.EtCo2 => [AdditionalLimits.Editors[numeric].Enabled, NoExpirationEnabled],
+        _ => [AdditionalLimits.Editors[numeric].Enabled]
+    };
+    internal void ShowSoundPage(MonitorNumeric numeric) => ConfirmationFor(numeric).Groups.SelectedItem = _soundPages[numeric];
     internal MonitorAlarmPreferences CapturePreferences()
     {
         var notifications = NotificationSettings.Read();

@@ -47,12 +47,13 @@ internal static class NotificationSettingsSmokeChecks
             var episode = journal.Conditions.Single(c => c.ConditionId == "hr-high").Episode;
             var policy = journal.NotificationPolicyFor("hr-high");
             high.RepeatSeconds.Value = null;
-            panel.Condition.SelectedIndex = 0;
-            panel.Groups.SelectedIndex = 1;
-            panel.Groups.SelectedIndex = 0;
-            panel.Condition.SelectedIndex = 1;
-            Require(high.Advanced.IsExpanded && ((AlarmNotificationSettingsPanel.ConditionOption)panel.Condition.SelectedItem!).Summary.Contains("待修正", StringComparison.Ordinal),
-                "invalid draft exposes its fields and remains marked in the event selector across tabs");
+            var sections = window.Settings.SectionPages[4];
+            sections.SelectedSection = 1;
+            alerts.HeartRateConfirmation.Groups.SelectedIndex = 0;
+            panel.Overview[MonitorNumeric.HeartRate].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(high.Advanced.IsExpanded && panel.SummaryFor("hr-high").Contains("待修正", StringComparison.Ordinal) &&
+                sections.SelectedSection == 0 && ReferenceEquals(alerts.HeartRateConfirmation.Groups.SelectedItem, alerts.SoundPages[MonitorNumeric.HeartRate]),
+                "invalid draft exposes its fields, stays marked in the overview, and the overview opens the parameter sound page");
             bool rejected = false;
             try { alerts.CapturePreferences(); } catch (ArgumentException) { rejected = true; }
             Require(rejected && high.RepeatSeconds.Value is null && journal.NotificationPolicyFor("hr-high") == policy,
@@ -103,35 +104,41 @@ internal static class NotificationSettingsSmokeChecks
                 "explicit long high-limit alarm overrides short default and retains dormant short settings");
 
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 4;
-            var sections = window.Settings.SectionPages[4];
-            sections.Sections.SelectedIndex = sections.Sections.Items.Count - 1;
-            panel.Condition.SelectedIndex = 1;
+            sections.SelectedSection = 0;
+            alerts.ShowSoundPage(MonitorNumeric.HeartRate);
             high.Advanced.IsExpanded = false;
+            panel.Editors["hr-low"].Advanced.IsExpanded = false;
             window.ApplySettings();
             Capture("event-long-compact", 1000, 720);
-            var scroll = panel.GetVisualAncestors().OfType<ScrollViewer>().First();
-            Require(scroll.Extent.Width <= scroll.Viewport.Width + 1 && scroll.Extent.Height <= scroll.Viewport.Height + 20 &&
-                high.SoundChoices.All(c => c.GetVisualAncestors().Contains(panel)) &&
-                !panel.Editors["hr-low"].SoundChoices[0].GetVisualAncestors().Contains(panel),
-                $"compact event editor exposes all duration choices without stacked editors: extent={scroll.Extent}, viewport={scroll.Viewport}");
-            Require(((AlarmNotificationSettingsPanel.ConditionOption)panel.Condition.SelectedItem!).Summary.Contains("长警报（独立）", StringComparison.Ordinal) &&
+            var scroll = high.GetVisualAncestors().OfType<ScrollViewer>().First();
+            Require(scroll.Extent.Width <= scroll.Viewport.Width + 1 &&
+                high.SoundChoices.Concat(panel.Editors["hr-low"].SoundChoices).All(c => c.GetVisualAncestors().Contains(window.Settings)) &&
+                !panel.Editors["spo2-low"].SoundChoices[0].GetVisualAncestors().Contains(window.Settings) &&
+                !panel.Mode.GetVisualAncestors().Contains(window.Settings),
+                $"compact parameter sound page exposes only this parameter's events without horizontal scrolling: extent={scroll.Extent}, viewport={scroll.Viewport}");
+            Require(panel.SummaryFor("hr-high").Contains("长警报（独立）", StringComparison.Ordinal) &&
                 high.SoundChoices.Count(c => c.IsChecked == true) == 1,
                 "event summary resolves the applied independent duration and radio choice stays exclusive");
             high.SoundChoices[0].IsChecked = true;
             Require(high.Read().SoundMode == AlarmSoundMode.Inherit && high.Read().ReminderMilliseconds == 500 &&
-                ((AlarmNotificationSettingsPanel.ConditionOption)panel.Condition.SelectedItem!).Summary.Contains("短警报（默认）", StringComparison.Ordinal),
+                panel.SummaryFor("hr-high").Contains("短警报（默认）", StringComparison.Ordinal),
                 "following default updates the effective summary without clearing advanced values");
             Capture("event-inherit-compact", 1000, 720);
-            Require(panel.Condition.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("短警报（默认）", StringComparison.Ordinal) == true),
-                "visible selected-event summary refreshes when a radio choice changes");
+            sections.SelectedSection = alerts.Parameters.Count + 2;
+            Capture("default-compact", 1000, 720);
+            Require(panel.Mode.GetVisualAncestors().Contains(window.Settings) &&
+                panel.Overview[MonitorNumeric.HeartRate].GetVisualDescendants().OfType<TextBlock>()
+                    .Any(text => text.Text?.Contains("高限 短警报（默认）", StringComparison.Ordinal) == true),
+                "visible overview summary refreshes when a radio choice changes");
+            var overviewScroll = panel.GetVisualAncestors().OfType<ScrollViewer>().First();
+            Require(overviewScroll.Extent.Width <= overviewScroll.Viewport.Width + 1, "compact overview avoids horizontal scrolling");
+            sections.SelectedSection = 0;
             high.SoundChoices[1].IsChecked = true;
             high.Advanced.IsExpanded = true;
             Capture("event-short-expanded", 1440, 940);
-            Require(panel.Condition.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("短警报（独立）", StringComparison.Ordinal) == true),
-                "visible selected-event summary distinguishes independent short duration");
-            panel.Groups.SelectedIndex = 1;
-            Capture("default-compact", 1000, 720);
-            panel.Groups.SelectedIndex = 0;
+            Require(panel.SummaryFor("hr-high").Contains("短警报（独立）", StringComparison.Ordinal) &&
+                high.RepeatSeconds.GetVisualAncestors().Contains(window.Settings),
+                "summary distinguishes independent short duration and expanded fields stay on the parameter page");
             high.Advanced.IsExpanded = false;
             Capture("event-short-minimum", 960, 640);
             Require(scroll.Extent.Width <= scroll.Viewport.Width + 1, "minimum window wraps choices without horizontal scrolling");

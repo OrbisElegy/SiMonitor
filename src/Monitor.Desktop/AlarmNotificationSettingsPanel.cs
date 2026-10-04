@@ -2,14 +2,13 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
-using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
 
+// Event editors are hosted by their parameter pages; this page keeps the default and an overview.
 internal sealed class AlarmNotificationSettingsPanel : StackPanel
 {
     internal ComboBox Mode { get; } = new()
@@ -19,14 +18,17 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         MinHeight = 44,
         HorizontalAlignment = HorizontalAlignment.Stretch
     };
-    internal ComboBox Condition { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
-    internal TabControl Groups { get; } = new() { Padding = new Thickness(0) };
     internal IReadOnlyDictionary<string, ConditionEditor> Editors { get; }
+    internal IReadOnlyDictionary<MonitorNumeric, Button> Overview => _overviewButtons;
     internal AlarmPlaybackMode EffectiveMode { get; private set; }
     internal event Action? ModeChanged;
+    internal event Action<MonitorNumeric>? ParameterRequested;
     private readonly TextBlock _errors = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly string[] _ids;
-    private readonly ConditionOption[] _conditionItems;
+    private readonly Dictionary<string, string> _summaries = new(StringComparer.Ordinal);
+    private readonly StackPanel _overview = new() { Spacing = 4 };
+    private readonly Dictionary<MonitorNumeric, Button> _overviewButtons = [];
+    private readonly List<(string Title, string[] Ids, TextBlock Summary, Button Row)> _overviewRows = [];
     private static readonly bool[] LowOnly = [true];
     private static readonly bool[] BothDirections = [true, false];
     private bool _restoring;
@@ -42,36 +44,14 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             .Append((Id: "co2-no-expiration", Label: "CO₂ · 未检出呼吸")).ToArray();
         _ids = labels.Select(l => l.Id).ToArray();
         Editors = labels.ToDictionary(l => l.Id, l => new ConditionEditor(l.Label), StringComparer.Ordinal);
-        _conditionItems = labels.Select(l => new ConditionOption { Summary = l.Label }).ToArray();
-        Condition.ItemsSource = _conditionItems;
-        Condition.ItemTemplate = new FuncDataTemplate<ConditionOption>((option, _) =>
-        {
-            var text = new TextBlock();
-            text.Bind(TextBlock.TextProperty, new Binding(nameof(ConditionOption.Summary)) { Source = option });
-            return text;
-        });
         AutomationProperties.SetName(Mode, "默认报警声音方式");
-        AutomationProperties.SetName(Condition, "选择报警事件及当前生效声音");
-        AutomationProperties.SetName(Groups, "事件声音与默认声音");
-        var detail = new ContentControl();
-        var eventPage = new StackPanel { Spacing = 4 };
-        eventPage.Children.Add(Condition);
-        eventPage.Children.Add(detail);
-        var defaultPage = new StackPanel { Spacing = 8 };
-        defaultPage.Children.Add(new TextBlock { Text = "仅用于选择“跟随默认”的事件。", TextWrapping = TextWrapping.Wrap });
-        defaultPage.Children.Add(Mode);
-        defaultPage.Children.Add(new TextBlock { Text = "修改立即生效，应用后保存。", TextWrapping = TextWrapping.Wrap });
-        Groups.Items.Add(new TabItem { Header = "事件声音", Content = eventPage, MinHeight = 44, FontSize = 14, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0) });
-        Groups.Items.Add(new TabItem { Header = "默认声音", Content = defaultPage, MinHeight = 44, FontSize = 14, Padding = new Thickness(0) });
-        Groups.SelectedIndex = 0;
-        Children.Add(Groups);
+        Children.Add(new TextBlock { Text = "默认声音方式", TextWrapping = TextWrapping.Wrap });
+        Children.Add(Mode);
+        Children.Add(new TextBlock { Text = "仅用于选择“跟随默认”的事件；修改立即生效，应用后保存。", TextWrapping = TextWrapping.Wrap });
+        Children.Add(new TextBlock { Text = "各参数事件声音", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 0) });
+        Children.Add(_overview);
         Children.Add(_errors);
         Children.Add(DesktopInformationPages.Help("alarm-notification-settings"));
-        Condition.SelectionChanged += (_, _) =>
-        {
-            if (Condition.SelectedIndex >= 0) { detail.Content = Editors[_ids[Condition.SelectedIndex]]; }
-        };
-        Condition.SelectedIndex = 0;
         foreach (var (id, editor) in Editors)
         {
             var journal = journals.Single(j => j.Conditions.Any(c => c.ConditionId == id));
@@ -111,21 +91,67 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         RefreshErrors();
     }
 
+    // Moves the parameter's event editors into a page and adds its overview row.
+    internal Control CreateEventPage(MonitorNumeric numeric, string title, params string[] ids)
+    {
+        var page = new StackPanel { Spacing = 12 };
+        foreach (string id in ids)
+        {
+            var section = new StackPanel { Spacing = 4 };
+            section.Children.Add(new TextBlock { Text = Direction(id), FontWeight = FontWeight.SemiBold });
+            section.Children.Add(Editors[id]);
+            page.Children.Add(section);
+        }
+        page.Children.Add(DesktopInformationPages.Help("alarm-notification-settings"));
+        var name = new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        var summary = new TextBlock { Foreground = DesktopFluentStyle.SecondaryText, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        var chevron = new TextBlock { Text = "›", VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
+        var content = new Grid { ColumnDefinitions = new("120,*,16") };
+        content.Children.Add(name);
+        Grid.SetColumn(summary, 1);
+        content.Children.Add(summary);
+        Grid.SetColumn(chevron, 2);
+        content.Children.Add(chevron);
+        var row = new Button
+        {
+            Content = content,
+            MinHeight = 44,
+            Padding = new Thickness(12, 8),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch
+        };
+        row.Click += (_, _) => ParameterRequested?.Invoke(numeric);
+        _overview.Children.Add(row);
+        _overviewButtons[numeric] = row;
+        _overviewRows.Add((title, ids, summary, row));
+        RefreshErrors();
+        return page;
+    }
+
+    internal string SummaryFor(string id) => _summaries[id];
+
+    private static string Direction(string id) =>
+        id.EndsWith("-low", StringComparison.Ordinal) ? "低限" :
+        id.EndsWith("-high", StringComparison.Ordinal) ? "高限" : "未检出呼吸";
+
     private void RefreshErrors()
     {
         string[] invalid = Editors.Where(e => !e.Value.IsValid).Select(e => e.Value.Label).ToArray();
         _errors.Text = Mode.SelectedIndex is not (0 or 1) ? "请选择有效声音模式；保留上次有效模式。" :
             invalid.Length == 0 ? null : string.Join("、", invalid) + "：请选择有效声音方式；时间须在标注范围内且最多三位小数。保留上次有效策略。";
         _errors.IsVisible = _errors.Text is not null;
-        for (int index = 0; index < _ids.Length; index++)
+        foreach (string id in _ids)
         {
-            string id = _ids[index];
             var settings = _effective[id];
             string duration = settings.ToPolicy(EffectiveMode).SoundDuration == AlarmSoundDuration.Continuous ? "长警报" : "短警报";
             string source = settings.SoundMode == AlarmSoundMode.Inherit ? "默认" : "独立";
             string error = Editors[id].IsValid ? "" : " · 待修正";
-            string summary = $"{Editors[id].Label}  ·  {duration}（{source}）{error}";
-            _conditionItems[index].Summary = summary;
+            _summaries[id] = $"{duration}（{source}）{error}";
+        }
+        foreach (var (title, ids, summary, row) in _overviewRows)
+        {
+            summary.Text = string.Join("  ·  ", ids.Select(id => Direction(id) + " " + _summaries[id]));
+            AutomationProperties.SetName(row, title + " 事件声音：" + summary.Text);
         }
     }
 
@@ -160,12 +186,6 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         ModeChanged?.Invoke();
     }
 
-    internal sealed class ConditionOption : AvaloniaObject
-    {
-        internal static readonly StyledProperty<string> SummaryProperty = AvaloniaProperty.Register<ConditionOption, string>(nameof(Summary), "");
-        public string Summary { get => GetValue(SummaryProperty); set => SetValue(SummaryProperty, value); }
-    }
-
     internal sealed class ConditionEditor : StackPanel
     {
         internal string Label { get; }
@@ -188,6 +208,13 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         internal Expander Advanced { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(12, 8), MinHeight = 44 };
         private readonly StackPanel _shortSettings = new() { Spacing = 8 };
         private readonly TextBlock _defaultDescription = new();
+        private readonly TextBlock _error = new()
+        {
+            Text = "请选择声音方式；时间须在标注范围内且最多三位小数。保留上次有效策略。",
+            Foreground = Brushes.OrangeRed,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false
+        };
         internal NumericUpDown RepeatSeconds { get; } = Number(0, 0);
         internal CheckBox LatchUntilAcknowledged { get; } = new() { Content = "恢复后保留未确认提示", IsChecked = false };
         internal CheckBox ReminderEnabled { get; } = new() { Content = "持续活动时提醒", IsChecked = false };
@@ -240,6 +267,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             advancedContent.Children.Add(actions);
             Advanced.Content = advancedContent;
             Children.Add(Advanced);
+            Children.Add(_error);
             void Add(string text, NumericUpDown field)
             {
                 var row = new StackPanel { Spacing = 4, Width = 220, Margin = new Thickness(0, 0, 24, 8) };
@@ -296,6 +324,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             RepeatSeconds.IsEnabled = ReminderEnabled.IsEnabled = shortSound || invalid;
             ReminderSeconds.IsEnabled = invalid || shortSound && ReminderEnabled.IsChecked == true;
             Advanced.Header = shortSound || invalid ? "短警报高级参数" : "保持与更多操作";
+            _error.IsVisible = invalid;
             if (invalid) { Advanced.IsExpanded = true; }
         }
 

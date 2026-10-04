@@ -16,6 +16,7 @@ internal static class DesktopFluentStyle
     internal static readonly IBrush Surface = Brushes.White;
     internal static readonly IBrush Stroke = Brush.Parse("#E5E5E5");
     internal static readonly IBrush Text = Brush.Parse("#1A1A1A");
+    internal static readonly IBrush SecondaryText = Brush.Parse("#5C5C5C");
     internal static void Install(Avalonia.Application app)
     {
         app.RequestedThemeVariant = ThemeVariant.Light;

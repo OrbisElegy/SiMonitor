@@ -102,6 +102,25 @@ public sealed class AudioRenderSession
 }
 ```
 
+## Audio/AlarmNotificationSoundRouter.cs
+
+源码：[AlarmNotificationSoundRouter.cs](../../../src/Monitor.Infrastructure/Audio/AlarmNotificationSoundRouter.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed record AlarmSoundRoutingRecord(MonitorAlarmSoundRequest Request, IReadOnlyList<AlarmNotificationDecision> Decisions, bool Resumed)
+{
+    public IReadOnlyList<MonitorNotice> ContinuousNotices { get; init; }
+    public IReadOnlyList<AlarmConditionSnapshot> ContinuousConditions { get; init; }
+}
+public sealed class AlarmNotificationSoundRouter
+{
+    public ulong DroppedRouteCount { get; private set; }
+    public IReadOnlyList<AlarmSoundRoutingRecord> Routes { get; }
+    public ulong MissedRecordCount { get; private set; }
+    public MonitorAlarmSoundRequest? Update(IReadOnlyList<AlarmLifecycleJournal> journals, int volumePercent, MonitorSoundTiming timing, bool enabled, IReadOnlyList<MonitorNotice>? notices = null);
+}
+```
+
 ## Audio/MonitorAlarmPlayback.cs
 
 源码：[MonitorAlarmPlayback.cs](../../../src/Monitor.Infrastructure/Audio/MonitorAlarmPlayback.cs) · 命名空间：`Monitor.Infrastructure.Audio`
@@ -109,7 +128,18 @@ public sealed class AudioRenderSession
 ```csharp
 public sealed record MonitorAlarmSoundRequest(MonitorNoticeLevel Level, int VolumePercent, MonitorSoundTiming Timing)
 {
+    public ulong NotificationSequence { get; init; }
+    public void Validate();
 }
+public enum AlarmSoundDispatchStage
+{
+    Selected,
+    CoalescedWhileBusy,
+    SkippedSilent,
+    Interrupted,
+    RenderWindowElapsed
+}
+public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmSoundDispatchStage Stage, long RenderFrame);
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
     public bool OutputActive { get; }
@@ -120,6 +150,9 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 }
 public sealed class MonitorAlarmSequencer(AudioRenderSession session)
 {
+    public ulong MissedNotificationCount { get; private set; }
+    public ulong DroppedDispatchCount { get; private set; }
+    public IReadOnlyList<AlarmSoundDispatchRecord> Dispatches { get; }
     public void Update(MonitorAlarmSoundRequest? request);
     public void UpdateHeartbeat(bool enabled, int? volumePercent, int pitchPercent = 97);
 }

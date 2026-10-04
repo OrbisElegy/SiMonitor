@@ -50,9 +50,14 @@ public sealed class AlarmLifecycleJournal
     public const int Capacity = 256;
     private readonly Dictionary<string, AlarmConditionSnapshot> _conditions = new(StringComparer.Ordinal);
     private readonly Queue<AlarmLifecycleTransition> _transitions = new();
+    private readonly Dictionary<string, AlarmNotificationController> _notifications = new(StringComparer.Ordinal);
+    private readonly Queue<AlarmNotificationRecord> _notificationRecords = new();
+    private ulong _notificationSequence;
     private ulong _eventSequence;
     private ulong _occurrence;
     internal long LastObservationNs { get; private set; }
+    public ulong DroppedNotificationCount { get; private set; }
+    public IReadOnlyList<AlarmNotificationRecord> NotificationRecords => Array.AsReadOnly(_notificationRecords.ToArray());
     public ulong DroppedTransitionCount { get; private set; }
     public IReadOnlyList<AlarmConditionSnapshot> Conditions => Array.AsReadOnly(_conditions.Values.OrderBy(s => s.ConditionId, StringComparer.Ordinal).ToArray());
     public IReadOnlyList<AlarmLifecycleTransition> Transitions => Array.AsReadOnly(_transitions.ToArray());
@@ -60,7 +65,37 @@ public sealed class AlarmLifecycleJournal
     internal AlarmLifecycleJournal(params string[] conditionIds)
     {
         foreach (string id in conditionIds)
-        { _conditions.Add(id, new(id, AlarmConditionState.Unobserved, null, null, 0, AlarmTransitionReason.None)); }
+        {
+            _conditions.Add(id, new(id, AlarmConditionState.Unobserved, null, null, 0, AlarmTransitionReason.None));
+            _notifications.Add(id, new());
+        }
+    }
+
+    public AlarmNotificationPolicy NotificationPolicyFor(string conditionId) => Controller(conditionId).Policy;
+
+    public void ConfigureNotifications(string conditionId, AlarmNotificationPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        policy.Validate();
+        Controller(conditionId).Configure(policy);
+    }
+
+    private AlarmNotificationController Controller(string conditionId)
+    {
+        if (conditionId is null || !_notifications.TryGetValue(conditionId, out var controller))
+        { throw new ArgumentException("AlarmNotification.UnknownCondition", nameof(conditionId)); }
+        return controller;
+    }
+
+    private void RecordNotification(string id, long sampleTimeNs)
+    {
+        if (_notifications[id].Observe(_conditions[id], sampleTimeNs) is not { } decision) { return; }
+        if (_notificationRecords.Count == Capacity)
+        {
+            _notificationRecords.Dequeue();
+            DroppedNotificationCount++;
+        }
+        _notificationRecords.Enqueue(new(++_notificationSequence, decision));
     }
 
     internal void Observe(string id, long sampleTimeNs, MonitorNoticeLevel? level, bool pendingTrigger, bool pendingRecovery)
@@ -90,7 +125,11 @@ public sealed class AlarmLifecycleJournal
         LastObservationNs = sampleTimeNs;
         var previous = _conditions[id];
         if (previous.State == state && previous.Level == level &&
-            (state != AlarmConditionState.Indeterminate || previous.Reason == reason)) { return; }
+            (state != AlarmConditionState.Indeterminate || previous.Reason == reason))
+        {
+            RecordNotification(id, sampleTimeNs);
+            return;
+        }
         bool active = level is not null;
         var episode = active ? previous.Episode ?? new(id, ++_occurrence) : null;
         var kind = previous.Episode is null && active ? AlarmTransitionKind.Started
@@ -104,5 +143,6 @@ public sealed class AlarmLifecycleJournal
         }
         _transitions.Enqueue(new(++_eventSequence, sampleTimeNs, id, episode ?? previous.Episode, kind,
             previous.State, state, previous.Level, level, reason));
+        RecordNotification(id, sampleTimeNs);
     }
 }

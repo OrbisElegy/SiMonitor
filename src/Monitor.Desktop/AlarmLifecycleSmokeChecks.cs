@@ -51,6 +51,9 @@ internal static class AlarmLifecycleSmokeChecks
                 "all existing numeric and absence conditions have independent runtime lifecycle owners");
             foreach (var notice in window.MonitorView.ActiveNotices.Where(n => n.Level == MonitorNoticeLevel.Critical))
             { Require(State(notice.Id).Level == notice.Level && State(notice.Id).Episode is not null, "displayed alarm maps to confirmed event state"); }
+            Require(alerts.AlarmLifecycles.Sum(j => j.NotificationRecords.Count) == 10 &&
+                alerts.AlarmLifecycles.SelectMany(j => j.NotificationRecords).All(r => r.Decision.Kind == AlarmNotificationKind.FirstOccurrence),
+                "all existing alarm owners generate independent default notification intents");
             var original = Events();
             var sound = window.Settings.Sound.PublishedAlarm;
             Read(); Read();

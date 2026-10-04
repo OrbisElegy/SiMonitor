@@ -674,10 +674,43 @@ public sealed record AlarmLifecycleTransition(ulong Sequence, long SampleTimeNs,
 public sealed class AlarmLifecycleJournal
 {
     public const int Capacity = 256;
+    public ulong DroppedNotificationCount { get; private set; }
+    public IReadOnlyList<AlarmNotificationRecord> NotificationRecords { get; }
+    public AlarmNotificationPolicy NotificationPolicyFor(string conditionId);
+    public void ConfigureNotifications(string conditionId, AlarmNotificationPolicy policy);
     public ulong DroppedTransitionCount { get; private set; }
     public IReadOnlyList<AlarmConditionSnapshot> Conditions { get; }
     public IReadOnlyList<AlarmLifecycleTransition> Transitions { get; }
 }
+```
+
+## Presentation/AlarmNotificationPolicy.cs
+
+源码：[AlarmNotificationPolicy.cs](../../../src/Monitor.Application/Presentation/AlarmNotificationPolicy.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record AlarmNotificationPolicy(int RepeatSuppressionMilliseconds = 0, int ReminderMilliseconds = 0)
+{
+    public AlarmSoundDuration SoundDuration { get; init; }
+    public const int MaximumMilliseconds = 3600000;
+    public static AlarmNotificationPolicy Default { get; }
+    public void Validate();
+}
+public enum AlarmNotificationKind
+{
+    FirstOccurrence,
+    Recurrence,
+    SeverityEscalation,
+    RepeatSuppressed,
+    DeferredRepeat,
+    Reminder,
+    PolicyChanged
+}
+public sealed record AlarmNotificationDecision(AlarmEpisodeId Episode, MonitorNoticeLevel Level, long SampleTimeNs, AlarmNotificationKind Kind, AlarmNotificationPolicy Policy, long SuppressionRemainingNs = 0)
+{
+    public bool RequestsNotification { get; }
+}
+public sealed record AlarmNotificationRecord(ulong Sequence, AlarmNotificationDecision Decision);
 ```
 
 ## Presentation/CapturedRecordBinding.cs
@@ -1241,6 +1274,23 @@ public sealed record MeasurementConfirmationTiming(BoundaryConfirmationTiming Cr
 }
 ```
 
+## Presentation/AlarmNotificationSettings.cs
+
+源码：[AlarmNotificationSettings.cs](../../../src/Monitor.Application/Presentation/AlarmNotificationSettings.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public enum AlarmPlaybackMode { Continuous, Notifications }
+public enum AlarmSoundMode { Inherit, SingleGroup, Continuous }
+public enum AlarmSoundDuration { SingleGroup, Continuous }
+public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds, bool ReminderEnabled, int ReminderMilliseconds)
+{
+    public AlarmSoundMode SoundMode { get; init; }
+    public static AlarmNotificationSettings Default { get; }
+    public void Validate();
+    public AlarmNotificationPolicy ToPolicy(AlarmPlaybackMode defaultMode = AlarmPlaybackMode.Notifications);
+}
+```
+
 ## Presentation/MonitorAlarmPreferences.cs
 
 源码：[MonitorAlarmPreferences.cs](../../../src/Monitor.Application/Presentation/MonitorAlarmPreferences.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -1250,6 +1300,10 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
 {
     public IReadOnlyDictionary<MonitorNumeric, MeasurementConfirmationTiming> ConfirmationTimings { get; init; }
     public BoundaryConfirmationTiming NoExpirationConfirmation { get; init; }
+    public AlarmPlaybackMode PlaybackMode { get; init; }
+    public IReadOnlyDictionary<string, AlarmNotificationSettings> Notifications { get; init; }
+    public static IReadOnlyList<string> NotificationConditionIds { get; }
+    public AlarmNotificationSettings NotificationFor(string conditionId);
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric);
     public static MonitorAlarmPreferences Default { get; }
     public void Validate();

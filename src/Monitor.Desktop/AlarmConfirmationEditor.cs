@@ -35,14 +35,7 @@ internal sealed class AlarmConfirmationEditor : UserControl
             foreach (string operation in new[] { "触发", "恢复" })
             {
                 string label = boundary + " " + operation + "（秒）";
-                var field = new NumericUpDown
-                {
-                    Minimum = 0,
-                    Maximum = BoundaryConfirmationTiming.MaximumMilliseconds / 1000m,
-                    Increment = .1m,
-                    Width = 220,
-                    HorizontalAlignment = HorizontalAlignment.Left
-                };
+                var field = CreateTimingField();
                 AutomationProperties.SetName(field, descriptor.Label + " " + label);
                 var page = operation == "触发" ? trigger : recovery;
                 var row = new StackPanel { Spacing = 4, Width = 220, Margin = new Thickness(0, 0, 24, 8) };
@@ -114,16 +107,28 @@ internal sealed class AlarmConfirmationEditor : UserControl
 
     internal MeasurementConfirmationTiming Read()
     {
-        int Milliseconds(int index)
-        {
-            if (Fields[index].Value is not { } seconds || seconds < 0 || seconds > 600 ||
-                seconds * 1000 != decimal.Truncate(seconds * 1000))
-            { throw new ArgumentException("确认时间须为 0–600 秒，最多三位小数。"); }
-            return checked((int)(seconds * 1000));
-        }
+        int Milliseconds(int index) => ReadMilliseconds(Fields[index]);
         return new(new(Milliseconds(0), Milliseconds(1)), new(Milliseconds(2), Milliseconds(3)),
             Fields.Length == 4 ? new(0, 0) : new(Milliseconds(4), Milliseconds(5)),
             Fields.Length == 4 ? new(0, 0) : new(Milliseconds(6), Milliseconds(7)));
+    }
+
+    internal static NumericUpDown CreateTimingField() => new()
+    {
+        Minimum = 0,
+        Maximum = BoundaryConfirmationTiming.MaximumMilliseconds / 1000m,
+        Value = 0,
+        Increment = .1m,
+        Width = 220,
+        HorizontalAlignment = HorizontalAlignment.Left
+    };
+
+    internal static int ReadMilliseconds(NumericUpDown field)
+    {
+        if (field.Value is not { } seconds || seconds < 0 || seconds > 600 ||
+            seconds * 1000 != decimal.Truncate(seconds * 1000))
+        { throw new ArgumentException("确认时间须为 0–600 秒，最多三位小数。"); }
+        return checked((int)(seconds * 1000));
     }
 
     internal void Restore(MeasurementConfirmationTiming timing)

@@ -43,7 +43,7 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
@@ -69,7 +69,7 @@ public sealed class DisplayPreferenceStore(string path)
         preferences.Generator?.Validate();
         var data = new Document
         {
-            Version = 6,
+            Version = 7,
             Generator = preferences.Generator,
             Sound = sound,
             Alarms = alarms,

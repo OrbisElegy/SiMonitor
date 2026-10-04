@@ -34,6 +34,8 @@ internal static class DisplayPreferenceSmokeChecks
                 alarms.SpO2Confirmation.Fields[0].Value = .65m;
                 alarms.SpO2Confirmation.Fields[1].Value = 1.1m;
                 alarms.NoExpirationEnabled.IsChecked = true; alarms.NoExpirationSeconds.Value = 35;
+                alarms.NoExpirationTriggerSeconds.Value = 1.125m;
+                alarms.NoExpirationRecoverySeconds.Value = 2.25m;
                 alarms.NoticeColorEnabled.IsChecked = false;
                 foreach (var d in MeasuredLimitNotice.Descriptors)
                 {
@@ -85,7 +87,7 @@ internal static class DisplayPreferenceSmokeChecks
                 var alarms = reopened.Settings.Alerts.CapturePreferences();
                 Require(alarms.HeartRate.Enabled && alarms.HeartRate.WarningHigh == 130250 &&
                     alarms.SpO2Enabled && alarms.SpO2Warning == 93500 && alarms.NoExpirationEnabled &&
-                    alarms.NoExpirationSeconds == 35 && !alarms.NoticeColorEnabled &&
+                    alarms.NoExpirationSeconds == 35 && alarms.NoExpirationConfirmation == new BoundaryConfirmationTiming(1125, 2250) && !alarms.NoticeColorEnabled &&
                     alarms.Additional.Values.All(v => v.Enabled) && reopened.Settings.Alerts.TestLevel.SelectedIndex == 0,
                     "restart restores alarm configuration without transient test notices");
                 Require(alarms.ConfirmationFor(MonitorNumeric.HeartRate).CriticalHigh == new BoundaryConfirmationTiming(1500, 750) &&
@@ -138,6 +140,15 @@ internal static class DisplayPreferenceSmokeChecks
                 migratedFive.Alarms.ConfirmationFor(MonitorNumeric.SpO2) == MeasurementConfirmationTiming.DefaultFor(MonitorNumeric.SpO2) &&
                 migratedFive.Alarms.ConfirmationFor(MonitorNumeric.PulseRate).WarningHigh == new BoundaryConfirmationTiming(1125, 2250),
                 "version five retains additional timing overrides and primary opt-in with immediate defaults");
+            var versionSix = JsonNode.Parse(valid)!.AsObject();
+            versionSix["Version"] = 6;
+            versionSix["Alarms"]!.AsObject().Remove("NoExpirationConfirmation");
+            File.WriteAllText(path, versionSix.ToJsonString());
+            var migratedSix = store.Load(out rejected);
+            Require(!rejected && migratedSix.Alarms is { NoExpirationEnabled: true, NoExpirationSeconds: 35 } &&
+                migratedSix.Alarms.NoExpirationConfirmation == new BoundaryConfirmationTiming(0, 0) &&
+                migratedSix.Alarms.ConfirmationFor(MonitorNumeric.SpO2).CriticalLow == new BoundaryConfirmationTiming(650, 1100),
+                "version six preserves thresholds and numeric confirmation with immediate absence defaults");
             foreach (var edit in new Action<JsonObject>[] {
                 d => d.Remove("Generator"),
                 d => { d["Version"] = 4; d.Remove("Generator"); },
@@ -162,7 +173,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 6", "\"Version\": 99"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 7", "\"Version\": 99"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

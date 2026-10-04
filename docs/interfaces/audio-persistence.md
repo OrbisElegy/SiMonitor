@@ -263,14 +263,17 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–7 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
 
-Save 总是写 Version=5；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=7；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
 Alarms.ConfirmationTimings 是以 MonitorNumeric 为键的可选覆盖字典，旧文件省略时得到空字典；
 每项包含 CriticalLow/WarningLow/WarningHigh/CriticalHigh，各自 TriggerMilliseconds/RecoveryMilliseconds 为 0–600000。
 未覆盖项经 ConfirmationFor 使用 DefaultFor；ABP/PA/CVP mean 默认低限触发/恢复 4000/3000 ms，
 高限 10000/3000 ms，其他支持指标默认 0/0。空字典不等于所有指标固定零时长。
+Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 TriggerMilliseconds/RecoveryMilliseconds，
+范围同为 0–600000；旧文件省略时默认 0/0，显式 null、缺少边界时间字段或非法范围拒绝。
+此时间不包含原有 NoExpirationSeconds 呼吸等待时限，且不复用 RR·CO₂ 数值覆盖。
 其余报警阈值倍率随各 MeasurementLimits 描述定义，不能把存储整数当 UI 显示单位。
 
 Sound 保存 Volume/HeartbeatVolume（0–100）、HeartbeatEnabled、BeatSource（0–2）、PitchSource（0–1）、

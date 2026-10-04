@@ -1026,6 +1026,18 @@ public sealed class ConfirmedLimitNotice
 }
 ```
 
+## Presentation/ConfirmedNoExpirationNotice.cs
+
+源码：[ConfirmedNoExpirationNotice.cs](../../../src/Monitor.Application/Presentation/ConfirmedNoExpirationNotice.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed class ConfirmedNoExpirationNotice
+{
+    public MonitorNotice? Evaluate(bool enabled, int? delaySeconds, long nowNs, CapnographyActivity? activity, BoundaryConfirmationTiming? timing = null);
+    public void Reset();
+}
+```
+
 ## Presentation/EcgStripDisplayComposition.cs
 
 源码：[EcgStripDisplayComposition.cs](../../../src/Monitor.Application/Presentation/EcgStripDisplayComposition.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -1203,6 +1215,7 @@ public sealed record MeasurementConfirmationTiming(BoundaryConfirmationTiming Cr
 public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool SpO2Enabled, int? SpO2Warning, int? SpO2Critical, bool NoExpirationEnabled, int? NoExpirationSeconds, IReadOnlyDictionary<MonitorNumeric, MeasurementLimits> Additional, bool NoticeColorEnabled)
 {
     public IReadOnlyDictionary<MonitorNumeric, MeasurementConfirmationTiming> ConfirmationTimings { get; init; }
+    public BoundaryConfirmationTiming NoExpirationConfirmation { get; init; }
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric);
     public static MonitorAlarmPreferences Default { get; }
     public void Validate();

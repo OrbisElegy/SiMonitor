@@ -127,6 +127,13 @@ internal sealed class DesignPreviewWindow : Window
             () => new WaveformDemoWindow(projected: true).Show(this));
     private void ConnectSettings()
     {
+        void UpdateNotificationMode()
+        {
+            Settings.Sound.UseNotificationPlayback(Settings.Alerts.NotificationSettings.RequiresNotificationPlayback ? Settings.Alerts.AlarmLifecycles : null);
+            Settings.Sound.RefreshAudioPause();
+        }
+        Settings.Alerts.NotificationSettings.ModeChanged += UpdateNotificationMode;
+        UpdateNotificationMode();
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
         Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
@@ -296,6 +303,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         try
         {
+            _ = Settings.Alerts.NotificationSettings.Read();
             var alarms = _preferences is null ? null : Settings.Alerts.CapturePreferences();
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
@@ -348,6 +356,8 @@ internal sealed class DesignPreviewWindow : Window
         { Settings.Status.Text = "未应用：接续延迟须为 0–60 秒，精确到 0.1 秒。原运行与待生效设置保持。"; }
         catch (ArgumentException exception) when (exception.Message is "SoundPreferences.Invalid" or "AlarmSound.InvalidTiming")
         { Settings.Status.Text = "未应用或保存：请检查声音页的音量、来源、暂停时长及报警声音间隔。原波形会话保持不变。"; }
+        catch (ArgumentException exception) when (exception.Message == "AlarmNotification.InvalidDraft")
+        { Settings.Status.Text = "未应用或保存：请修正“报警 → 通知策略”中的模式或时间。原运行保持不变。"; }
         catch (ArgumentException exception) when (exception.Message == "AlarmPreferences.Invalid")
         { Settings.Status.Text = "未应用或保存：启用的报警阈值须完整且按 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限排列；SpO₂ 须 Critical 下限 < Warning 下限。CO₂ 未检出呼吸时限须为 5–120 秒。请检查报警页。原波形会话保持不变。"; }
         catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")

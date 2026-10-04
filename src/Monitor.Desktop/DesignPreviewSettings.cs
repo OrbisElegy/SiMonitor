@@ -285,6 +285,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         { ("ECG 心率", Alerts.Children[0]), ("SpO₂", Alerts.SpO2Enabled) };
         alertGroups.AddRange(MeasuredLimitNotice.Descriptors.Select(d => (d.Label, (Control)Alerts.AdditionalLimits.Editors[d.Numeric])));
         alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
+        alertGroups.Add(("通知策略", Alerts.NotificationSettings));
         SectionPages[3] = SettingsSections.Split("报警", Alerts, alertGroups.ToArray());
         SectionPages[4] = SettingsSections.Split("生命体征", vitals,
             ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),

@@ -42,6 +42,10 @@ internal static class RealtimeOxygenationSmokeChecks
             Require(ReferenceEquals(session, window.Session) && session.SimulationTimeNs == 30_000_000_000 && session.Oxygenation == before,
                 "live button retains the active session and oxygen reservoirs");
             AdvanceTo(180_000_000_000);
+            Require(session.Samples(1, 170_000_000_000, 175_000_000_000).All(sample => sample.Value == 0) &&
+                session.Samples(4, 170_000_000_000, 175_000_000_000).All(sample => sample.Value == 0) &&
+                session.Measurements!.Capnography.EndTidalCentiMmHg.Status != WaveformMeasurementStatus.Valid,
+                "live VT button removes RESP and expired CO2 samples and expires measured EtCO2");
             Refresh();
             Require(session.Measurements!.SpO2.Status == WaveformMeasurementStatus.Valid &&
                 int.TryParse(window.MonitorView.NumericTexts[1], out int deep) && deep < 70 &&
@@ -57,6 +61,10 @@ internal static class RealtimeOxygenationSmokeChecks
             window.Settings.Oxygenation.TidalVolume.Value = 450;
             window.Settings.Oxygenation.UpdateVentilation.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             AdvanceTo(300_000_000_000);
+            Require(session.Samples(1, 290_000_000_000, 295_000_000_000).Any(sample => sample.Value > 0) &&
+                session.Samples(4, 290_000_000_000, 295_000_000_000).Any(sample => sample.Value > 0) &&
+                session.Measurements!.Capnography.EndTidalCentiMmHg.Status == WaveformMeasurementStatus.Valid,
+                "restoring VT through the live button restores both waveforms and measured EtCO2");
             Refresh();
             Require(session.Measurements!.SpO2.SaturationMilliPercent > 95000 &&
                 window.MonitorView.HighestNotice is null && window.Settings.Sound.PublishedAlarm is null,

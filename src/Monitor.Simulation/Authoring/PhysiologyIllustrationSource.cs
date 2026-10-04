@@ -34,7 +34,8 @@ public static class PhysiologyIllustrationSource
             new(referenceStrokeVolumeMicroliters, ejectionDurationNs, response, configuration.IllustrateAfSystemicPulseDeficit));
     }
 
-    public static PhysiologyWaveformGroup Create(PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0)
+    public static PhysiologyWaveformGroup Create(PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0,
+        VentilationTransportPlan? ventilation = null)
     {
         configuration ??= PhysiologyIllustrationConfiguration.Default;
         // Preserve the existing authored control range, not a clinical range.
@@ -113,6 +114,11 @@ public static class PhysiologyIllustrationSource
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
                  new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+        if (ventilation is not null)
+        {
+            channels[1] = VentilationWaveformCoupling.Respiration(channels[1], ventilation);
+            channels[4] = VentilationWaveformCoupling.Capnogram(channels[4], ventilation);
+        }
         foreach (var (row, gain) in new[] { (3, configuration.AbpPulsePermille), (5, configuration.PaPulsePermille) })
         {
             if (gain == 1000) { continue; }

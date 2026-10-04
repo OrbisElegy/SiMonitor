@@ -41,11 +41,6 @@ internal sealed class OxygenationPatientPanel : StackPanel
         AddOverride("血红蛋白 Hb（g/dL）", OverrideHemoglobin, Hemoglobin);
         AddOverride("基础耗氧需求（mL O₂/min，STPD）", OverrideBasalDemand, BasalDemand);
         Children.Add(Summary);
-        _details.Children.Add(new TextBlock
-        {
-            Text = "参考方案：GLI 欧洲裔肺容量、NHANES III 白人成年人 Hb、Schofield 基础代谢及 Nadler 血容量。完整自动参考年龄为 20–80 岁；18–19 岁须指定 Hb，80 岁以上须指定 FRC。血容量自动估算限 BMI 18.5–<30。此方案不代表所有人群。",
-            TextWrapping = TextWrapping.Wrap
-        });
         foreach (var field in new[] { Age, PatientHeight, Weight, BloodVolume, Frc, Hemoglobin, BasalDemand })
         { field.ValueChanged += (_, _) => RefreshDefaults(); }
         foreach (var check in new[] { UseDefaults, OverrideBloodVolume, OverrideFrc, OverrideHemoglobin, OverrideBasalDemand })
@@ -105,7 +100,7 @@ internal sealed class OxygenationPatientPanel : StackPanel
             var patient = Read();
             if (patient is null)
             {
-                Summary.Text = "使用旧原型基线：血容量 4.824 L，FRC 2.2 L，Hb 15 g/dL，基础耗氧 250 mL/min；这些固定值不是人口学 0 SD。";
+                Summary.Text = "使用固定基线；切换基线需从头开始。";
                 return;
             }
             var values = patient.Resolved;
@@ -113,16 +108,12 @@ internal sealed class OxygenationPatientPanel : StackPanel
             if (!Frc.IsEnabled) { Frc.Value = decimal.Round(values.Frc.Value, 3); }
             if (!Hemoglobin.IsEnabled) { Hemoglobin.Value = decimal.Round(values.Hemoglobin.Value, 3); }
             if (!BasalDemand.IsEnabled) { BasalDemand.Value = decimal.Round(values.BasalOxygenDemand.Value, 3); }
-            Summary.Text = "待应用基线：" + Describe(values.BloodVolume, "血容量") + "；" + Describe(values.Frc, "FRC") + "；" +
-                Describe(values.Hemoglobin, "Hb") + "；" + Describe(values.BasalOxygenDemand, "基础耗氧") + "。患者资料与基线修改需从头开始。";
+            Summary.Text = "患者资料与基线修改需从头开始。";
         }
         catch (Exception error) when (error is ArgumentException or OverflowException)
         { Summary.Text = Explain(error); }
         finally { _refreshing = false; }
     }
-
-    private static string Describe(OxygenationBaselineValue value, string label) =>
-        $"{label} {value.Value:0.###} {value.Unit}（{(value.Origin == OxygenationBaselineOrigin.Explicit ? "手工" : value.Origin == OxygenationBaselineOrigin.ReferenceCenter ? "0 SD" : "公式估计")}）";
 
     internal static string Explain(Exception error) => error.Message switch
     {

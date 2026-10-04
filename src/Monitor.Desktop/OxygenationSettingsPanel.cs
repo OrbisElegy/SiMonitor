@@ -35,15 +35,10 @@ internal sealed class OxygenationSettingsPanel : StackPanel
         Add("死腔量 VD（mL，BTPS）", DeadSpace);
         Add("吸入氧浓度 FiO₂（%）", InspiredOxygen);
         _inputs.Children.Add(AirwayOpen);
-        Add("教师耗氧倍增器（1–4 倍，默认 1）", DemandMultiplier);
+        Add("教师耗氧倍增器（1–4 倍）", DemandMultiplier);
         _inputs.Children.Add(new TextBlock
         {
-            Text = "首次启用后点击“从头开始”。运行中用下方按钮调整通气和耗氧倍增器，保留当前氧储备；VT 设为 0 可观察下降，恢复 450 mL 可观察回升。呼吸节律与机械射血沿用当前场景。",
-            TextWrapping = TextWrapping.Wrap
-        });
-        _inputs.Children.Add(new TextBlock
-        {
-            Text = "耗氧需求 = 本次运行的基础耗氧量 × 教师倍增器。倍增器用于躁动等额外耗能，不修改基础值，也不自动改变心率或通气。患者资料草稿不会随此按钮应用。",
+            Text = "首次启用需从头开始；下方按钮仅更新通气和耗氧。",
             TextWrapping = TextWrapping.Wrap
         });
         _inputs.Children.Add(UpdateVentilation);

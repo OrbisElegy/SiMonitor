@@ -55,6 +55,8 @@ internal static class Program
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
             .. EcgHeartRateMeasurementSpecifications.All,
+            .. EcgDetectionRegressionSpecifications.All,
+            .. EcgRhythmSpecifications.All,
             .. PlethMeasurementSpecifications.All,
             .. PulseOximeterChainSpecifications.All,
             .. OxygenationTransportSpecifications.All,

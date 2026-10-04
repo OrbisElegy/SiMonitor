@@ -37,6 +37,7 @@ public sealed class LocalMonitorPreviewSession
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
+    public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; } = [];
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
     public MonitorDisplayConfiguration Display { get; private set; }
@@ -195,6 +196,8 @@ public sealed class LocalMonitorPreviewSession
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
         List<DetectedEcgBeat> beats = [];
+        List<DetectedEcgRhythmEvent> rhythmEvents = [];
+        DetectedRhythmEvents = [];
         List<DetectedPlethPulse> pulses = [];
         DetectedPulses = [];
         DetectedBeats = [];
@@ -247,7 +250,8 @@ public sealed class LocalMonitorPreviewSession
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
                         }));
                     }
-                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses);
+                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses, out var detectedRhythmEvents);
+                    rhythmEvents.AddRange(detectedRhythmEvents);
                     _measurementFrontier = measured.SampleTimeNs;
                     if (measured.HeartRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp)
                     { beats.AddRange(detected); }
@@ -267,6 +271,7 @@ public sealed class LocalMonitorPreviewSession
             Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
             deltaNs -= chunk;
         }
+        DetectedRhythmEvents = rhythmEvents.AsReadOnly();
         DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
     }

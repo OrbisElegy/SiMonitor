@@ -31,7 +31,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         _reservoirs, _reservoirs.ConservedOxygenMl - _initialOxygenMl, _history.Count, _oxygenDemandMultiplier);
 
     public RealtimeOxygenationSource(PhysiologyTransportSource transport, OxygenReservoirParameters parameters,
-        decimal oxygenDemandMultiplier = 1)
+        decimal oxygenDemandMultiplier = 1, long? initialSimTimeNs = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -43,7 +43,10 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         ValidateVentilationFlow(transport.CaptureState().Ventilation);
         _reservoirs = OxygenReservoirModel.ReferenceState(parameters);
         _initialOxygenMl = _reservoirs.ConservedOxygenMl;
-        _history = [new(transport.CaptureState().Physiology.EpochAnchorSimTimeNs,
+        long initialTime = initialSimTimeNs ?? transport.CaptureState().Physiology.EpochAnchorSimTimeNs;
+        if (initialTime < transport.CaptureState().Physiology.EpochAnchorSimTimeNs || initialTime % OxygenReservoirModel.StepNs != 0)
+        { throw new ArgumentOutOfRangeException(nameof(initialSimTimeNs)); }
+        _history = [new(initialTime,
             OxygenReservoirModel.ArterialSaturationMilliPercent(_reservoirs, parameters))];
     }
 
@@ -108,6 +111,18 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         _pendingAtNs = effectiveNs;
         _pendingOxygenDemandMultiplier = multiplier;
         return effectiveNs;
+    }
+
+    public void ChangeTransport(PhysiologyTransportSource transport, long atSimTimeNs, decimal oxygenDemandMultiplier)
+    {
+        ArgumentNullException.ThrowIfNull(transport);
+        ValidateVentilation(transport.CaptureState().Ventilation);
+        OxygenReservoirModel.ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
+        ArgumentOutOfRangeException.ThrowIfNotEqual(atSimTimeNs, SourceSimTimeNs);
+        var trial = new RealtimeOxygenationSource(transport, _parameters, oxygenDemandMultiplier, atSimTimeNs);
+        _pendingTransport = trial._transport;
+        _pendingAtNs = atSimTimeNs;
+        _pendingOxygenDemandMultiplier = oxygenDemandMultiplier;
     }
 
     public ArterialOxygenationSample ReadAt(long sourceSimTimeNs)

@@ -21,7 +21,7 @@ internal static class RealtimeOxygenationSmokeChecks
             window.Settings.Oxygenation.Realtime.IsChecked = true;
             window.Settings.Oxygenation.Patient.UseDefaults.IsChecked = false; // Preserve the authored prototype regression scenario.
             window.Settings.Alerts.SpO2Enabled.IsChecked = true;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Settings.Restart.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.Pause();
             var session = window.Session;
             Require(session.Oxygenation is not null && !window.Settings.OpticalTarget.IsEnabled &&

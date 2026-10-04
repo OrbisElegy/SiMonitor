@@ -114,7 +114,7 @@ internal sealed class OxygenationPatientPanel : StackPanel
             if (!Hemoglobin.IsEnabled) { Hemoglobin.Value = decimal.Round(values.Hemoglobin.Value, 3); }
             if (!BasalDemand.IsEnabled) { BasalDemand.Value = decimal.Round(values.BasalOxygenDemand.Value, 3); }
             Summary.Text = "待应用基线：" + Describe(values.BloodVolume, "血容量") + "；" + Describe(values.Frc, "FRC") + "；" +
-                Describe(values.Hemoglobin, "Hb") + "；" + Describe(values.BasalOxygenDemand, "基础耗氧") + "。患者资料与基线修改需应用并从头开始。";
+                Describe(values.Hemoglobin, "Hb") + "；" + Describe(values.BasalOxygenDemand, "基础耗氧") + "。患者资料与基线修改需从头开始。";
         }
         catch (Exception error) when (error is ArgumentException or OverflowException)
         { Summary.Text = Explain(error); }

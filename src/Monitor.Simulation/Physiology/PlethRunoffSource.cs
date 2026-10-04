@@ -65,7 +65,11 @@ public sealed class PlethRunoffSource
 
     public static PlethRunoffSource Create(RegularPhysiologyPlan physiology, PlethRunoffPlan plan) => new(physiology, plan);
 
-    public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default)
+    public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default) =>
+        EvaluateIntervalAt(simTimeNs, _physiology.EpochAnchorSimTimeNs, long.MaxValue, cancellationToken);
+
+    internal long EvaluateIntervalAt(long simTimeNs, long fromEventTimeNs, long toExclusiveEventTimeNs,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (simTimeNs < _physiology.EpochAnchorSimTimeNs) { throw Invalid(); }
@@ -73,21 +77,26 @@ public sealed class PlethRunoffSource
         if (source < _physiology.EpochAnchorSimTimeNs) { return 0; }
         long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, source - SupportNs + 1);
         Int128 sum = 0;
-        RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, begin, source + 1, MaximumHistoryEvents, beat =>
+        long eventFrom = Math.Max(begin, fromEventTimeNs);
+        var eventTo = Int128.Min(source + 1, toExclusiveEventTimeNs);
+        if (eventTo > eventFrom)
         {
-            int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
-                _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
-                _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
-                    _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
-            if (gain == 0) { return; }
-            long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
-            long join = (long)((Int128)duration * _joinIndex / 128);
-            long age = (long)(source - beat.SimTimeNs);
-            long value = age < join ? PeriodicLutLinear.Interpolate(_table, (ulong)(((UInt128)age << 64) / (ulong)duration)).Value :
-                (long)FixedPointMath.RoundDivideTiesToEven((Int128)_table[_joinIndex] * Tail(age - join), FixedPointMath.Q62One);
-            sum += FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
-        }, cancellationToken);
+            RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo, MaximumHistoryEvents, beat =>
+            {
+                int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
+                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+                    _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+                        _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
+                if (gain == 0) { return; }
+                long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
+                long join = (long)((Int128)duration * _joinIndex / 128);
+                long age = (long)(source - beat.SimTimeNs);
+                long value = age < join ? PeriodicLutLinear.Interpolate(_table, (ulong)(((UInt128)age << 64) / (ulong)duration)).Value :
+                    (long)FixedPointMath.RoundDivideTiesToEven((Int128)_table[_joinIndex] * Tail(age - join), FixedPointMath.Q62One);
+                sum += FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
+            }, cancellationToken);
+        }
         if (sum < 0 || sum > short.MaxValue * Q) { throw new EventWaveformException("PlethRunoff.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)sum;
     }

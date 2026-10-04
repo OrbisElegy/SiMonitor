@@ -20,7 +20,7 @@ internal static class DeepOxygenationSmokeChecks
             window.Settings.OpticalTarget.Value = 0;
             window.Settings.OpticalVariation.Value = 0;
             window.Settings.Alerts.SpO2Enabled.IsChecked = true;
-            window.ApplySettings();
+            window.RestartSettings();
             window.Pause();
             Require(window.Settings.OpticalTarget.Minimum == 0 && window.Settings.OpticalTarget.Value == 0,
                 "editor accepts physical zero without a75% floor");

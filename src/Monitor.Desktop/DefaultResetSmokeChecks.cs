@@ -21,11 +21,24 @@ internal static class DefaultResetSmokeChecks
             window.Settings.Skin.SelectedIndex = 0;
             window.Settings.PaperLayout.SelectedIndex = 1;
             window.Settings.Alerts.WarningHeartRate.Value = 140;
-            window.ApplySettings();
+            window.RestartSettings();
             var previous = window.Session;
             window.Settings.RateSeed.Text = "invalid draft";
             window.SelectPage(2);
             window.Settings.ResetAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(ReferenceEquals(previous, window.Session) && window.Settings.RateSeed.Text == "invalid draft" && window.ResetConfirmation is not null,
+                "reset first explains destructive consequences without changing the session or drafts");
+            var cancel = window.ResetConfirmation!.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "取消");
+            cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(window.ResetConfirmation is null && ReferenceEquals(previous, window.Session), "cancel preserves settings and history");
+            window.Settings.ResetAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var confirm = window.ResetConfirmation!.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "恢复默认设置");
+            Require(!confirm.IsDefault, "destructive confirmation is not activated by an accidental Return");
+            confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Require(window.Settings.Sound.AlarmEnabled.IsChecked == false, "reset leaves monitoring audio disabled");
             var saved = new DisplayPreferenceStore(path).Load(out bool rejected);
             Require(!rejected && saved.Display.Skin == MonitorSkin.FiveRows && saved.PaperLayout == 0, "reset persists default display");

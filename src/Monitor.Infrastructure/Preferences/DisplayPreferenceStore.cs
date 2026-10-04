@@ -23,7 +23,14 @@ public sealed class DisplayPreferenceStore(string path)
         public required int PaperLayout { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
         public MonitorSoundPreferences? Sound { get; init; }
-        public MonitorGeneratorPreferences? Generator { get; init; }
+        private MonitorGeneratorPreferences? _generator;
+        public MonitorGeneratorPreferences? Generator
+        {
+            get => _generator;
+            init { _generator = value; HasGenerator = true; }
+        }
+        [JsonIgnore]
+        public bool HasGenerator { get; private set; }
     }
     public DisplayPreferences Load(out bool rejected)
     {
@@ -36,12 +43,13 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
             if (data.Version >= 3 && data.Sound is null) { throw new ArgumentException("Preferences.MissingSound"); }
             data.Sound?.Validate();
+            if (data.Version >= 5 && !data.HasGenerator) { throw new ArgumentException("Preferences.MissingGenerator"); }
             if (data.Version == 4 && data.Generator is null) { throw new ArgumentException("Preferences.MissingGenerator"); }
             data.Generator?.Validate();
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
@@ -61,7 +69,7 @@ public sealed class DisplayPreferenceStore(string path)
         preferences.Generator?.Validate();
         var data = new Document
         {
-            Version = preferences.Generator is null ? 3 : 4,
+            Version = 6,
             Generator = preferences.Generator,
             Sound = sound,
             Alarms = alarms,

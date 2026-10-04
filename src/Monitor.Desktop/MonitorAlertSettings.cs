@@ -3,12 +3,17 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
 
 internal sealed class MonitorAlertSettings : StackPanel
 {
+    private readonly ConfirmedLimitNotice _heartRateNotice = new(MonitorNumeric.HeartRate);
+    private readonly ConfirmedLimitNotice _spO2Notice = new(MonitorNumeric.SpO2);
+    internal AlarmConfirmationEditor HeartRateConfirmation { get; } = new(MeasuredLimitNotice.HeartRateDescriptor);
+    internal AlarmConfirmationEditor SpO2Confirmation { get; } = new(MeasuredLimitNotice.SpO2Descriptor);
     internal CheckBox HeartRateEnabled { get; } = new() { Content = "启用实测 HR 上下限提示", IsChecked = false };
     internal NumericUpDown WarningLowHeartRate { get; } = Number(50, 1, 299);
     internal NumericUpDown CriticalLowHeartRate { get; } = Number(40, 1, 298);
@@ -35,29 +40,48 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown CriticalInterval { get; } = Number(1.5m, .25m, 2);
     internal MonitorAlertSettings()
     {
+        HeartRateEnabled.IsCheckedChanged += (_, _) => _heartRateNotice.Reset();
+        SpO2Enabled.IsCheckedChanged += (_, _) => _spO2Notice.Reset();
+        foreach (var field in new[] { CriticalLowHeartRate, WarningLowHeartRate, WarningHeartRate, CriticalHeartRate }.Concat(HeartRateConfirmation.Fields))
+        { field.ValueChanged += (_, _) => _heartRateNotice.Reset(); }
+        foreach (var field in new[] { CriticalSpO2, WarningSpO2 }.Concat(SpO2Confirmation.Fields))
+        { field.ValueChanged += (_, _) => _spO2Notice.Reset(); }
         Margin = new Thickness(20); Spacing = 12;
-        Children.Add(Text("提示与声音 · 本地教学设置"));
-        Children.Add(DesktopInformationPages.Help("topic-11"));
         Children.Add(HeartRateEnabled);
-        Row("Critical HR 下限（bpm）", CriticalLowHeartRate); Row("Warning HR 下限（bpm）", WarningLowHeartRate);
-        Row("Warning HR 上限（bpm）", WarningHeartRate); Row("Critical HR 上限（bpm）", CriticalHeartRate);
+        var heartRateThresholds = AlarmConfirmationEditor.CreateFieldsPanel();
+        Row("Critical HR 下限（bpm）", CriticalLowHeartRate, heartRateThresholds);
+        Row("Warning HR 下限（bpm）", WarningLowHeartRate, heartRateThresholds);
+        Row("Warning HR 上限（bpm）", WarningHeartRate, heartRateThresholds);
+        Row("Critical HR 上限（bpm）", CriticalHeartRate, heartRateThresholds);
+        HeartRateConfirmation.SetThresholdContent(heartRateThresholds);
+        Children.Add(HeartRateConfirmation);
         Children.Add(DesktopInformationPages.Help("topic-12"));
         Children.Add(SpO2Enabled);
-        Row("Critical SpO₂ 下限（%）", CriticalSpO2); Row("Warning SpO₂ 下限（%）", WarningSpO2);
+        var saturationThresholds = AlarmConfirmationEditor.CreateFieldsPanel();
+        Row("Critical SpO₂ 下限（%）", CriticalSpO2, saturationThresholds);
+        Row("Warning SpO₂ 下限（%）", WarningSpO2, saturationThresholds);
+        SpO2Confirmation.SetThresholdContent(saturationThresholds);
+        Children.Add(SpO2Confirmation);
         Children.Add(DesktopInformationPages.Help("topic-13"));
         foreach (var descriptor in MeasuredLimitNotice.Descriptors)
         {
             Children.Add(AdditionalLimits.Editors[descriptor.Numeric]);
             if (descriptor.Numeric == MonitorNumeric.EtCo2)
-            { Children.Add(NoExpirationEnabled); Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds); }
+            {
+                var absence = new StackPanel { Spacing = 6 };
+                absence.Children.Add(NoExpirationEnabled);
+                Row("CO₂ 未检出呼吸时限（秒）", NoExpirationSeconds, absence);
+                absence.Children.Add(DesktopInformationPages.Help("topic-14"));
+                AdditionalLimits.Editors[descriptor.Numeric].Confirmation.AddPage("未检出呼吸", absence);
+            }
         }
-        Children.Add(DesktopInformationPages.Help("topic-14"));
         if (ProductIdentity.DevelopmentFeatures)
         {
             Row("提示与声音联调（明确标为测试）", TestLevel);
             Row("联调闪烁数值", TestNumeric);
         }
         Children.Add(NoticeColorEnabled);
+        Children.Add(DesktopInformationPages.Help("topic-11"));
         Children.Add(DesktopInformationPages.Help("settings-detail-10"));
         if (ProductIdentity.DevelopmentFeatures) { Children.Add(DesktopInformationPages.Help("settings-detail-11")); }
         Children.Add(InfoTone);
@@ -81,13 +105,26 @@ internal sealed class MonitorAlertSettings : StackPanel
                 var editor = AdditionalLimits.Editors[d.Numeric];
                 return new MeasurementLimits(editor.Enabled.IsChecked == true, Read(editor.CriticalLow, d.Divisor),
                     Read(editor.WarningLow, d.Divisor), Read(editor.WarningHigh, d.Divisor), Read(editor.CriticalHigh, d.Divisor));
-            }), NoticeColorEnabled.IsChecked == true);
+            }), NoticeColorEnabled.IsChecked == true)
+        {
+            ConfirmationTimings = MeasuredLimitNotice.Descriptors
+                .Select(d => (d.Numeric, Timing: AdditionalLimits.Editors[d.Numeric].Confirmation.Read()))
+                .Concat(new[]
+                {
+                    (Numeric: MonitorNumeric.HeartRate, Timing: HeartRateConfirmation.Read()),
+                    (Numeric: MonitorNumeric.SpO2, Timing: SpO2Confirmation.Read())
+                })
+                .Where(entry => entry.Timing != MeasurementConfirmationTiming.DefaultFor(entry.Numeric))
+                .ToDictionary(entry => entry.Numeric, entry => entry.Timing)
+        };
         result.Validate(); return result;
     }
     internal void RestorePreferences(MonitorAlarmPreferences preferences)
     {
         preferences.Validate();
-        AdditionalLimits.Reset();
+        Reset();
+        HeartRateConfirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.HeartRate));
+        SpO2Confirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.SpO2));
         HeartRateEnabled.IsChecked = preferences.HeartRate.Enabled;
         CriticalLowHeartRate.Value = preferences.HeartRate.CriticalLow / 1000m;
         WarningLowHeartRate.Value = preferences.HeartRate.WarningLow / 1000m;
@@ -100,30 +137,17 @@ internal sealed class MonitorAlertSettings : StackPanel
         foreach (var d in MeasuredLimitNotice.Descriptors)
         {
             var saved = preferences.Additional[d.Numeric]; var editor = AdditionalLimits.Editors[d.Numeric];
+            editor.Confirmation.Restore(preferences.ConfirmationFor(d.Numeric));
             editor.Enabled.IsChecked = saved.Enabled;
             editor.CriticalLow.Value = saved.CriticalLow / (decimal)d.Divisor; editor.WarningLow.Value = saved.WarningLow / (decimal)d.Divisor;
             editor.WarningHigh.Value = saved.WarningHigh / (decimal)d.Divisor; editor.CriticalHigh.Value = saved.CriticalHigh / (decimal)d.Divisor;
         }
     }
     internal MonitorSoundTiming Timing => new(InfoTone.IsChecked == true, Milliseconds(InfoInterval), Milliseconds(NoticeInterval), Milliseconds(WarningInterval), Milliseconds(CriticalInterval));
-    internal IEnumerable<MonitorNotice> Notices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
+    internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
     {
-        if (HeartRateEnabled.IsChecked == true)
-        {
-            if (WarningHeartRate.Value is not { } warning || CriticalHeartRate.Value is not { } critical || WarningLowHeartRate.Value is not { } warningLow || CriticalLowHeartRate.Value is not { } criticalLow ||
-                criticalLow >= warningLow || warningLow >= warning || warning >= critical)
-            { yield return new("hr-settings", MonitorNoticeLevel.Info, "ECG HR 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限"); }
-            else if (snapshot.HeartRate.Status == Monitor.Application.Measurements.WaveformMeasurementStatus.Valid && snapshot.HeartRate.MilliBeatsPerMinute is { } rate)
-            {
-                if (rate < criticalLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Critical, "ECG HR 极低") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate < warningLow * 1000) { yield return new("hr-low", MonitorNoticeLevel.Warning, "ECG HR 低") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate > critical * 1000) { yield return new("hr-high", MonitorNoticeLevel.Critical, "ECG HR 极高") { Numeric = MonitorNumeric.HeartRate }; }
-                else if (rate > warning * 1000) { yield return new("hr-high", MonitorNoticeLevel.Warning, "ECG HR 高") { Numeric = MonitorNumeric.HeartRate }; }
-            }
-        }
-        var saturationNotice = SpO2LimitNotice.Evaluate(SpO2Enabled.IsChecked == true,
-            MilliPercent(WarningSpO2), MilliPercent(CriticalSpO2), snapshot.SpO2);
-        if (saturationNotice is not null) { yield return saturationNotice; }
+        if (EvaluatePrimary(MonitorNumeric.HeartRate, snapshot) is { } heartRate) { yield return heartRate; }
+        if (EvaluatePrimary(MonitorNumeric.SpO2, snapshot) is { } saturation) { yield return saturation; }
         foreach (var notice in AdditionalLimits.Notices(snapshot)) { yield return notice; }
         int? delay = NoExpirationSeconds.Value is { } seconds && seconds == decimal.Truncate(seconds) ? checked((int)seconds) : null;
         if (NoExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, delay, snapshot.SampleTimeNs, snapshot.Capnography.Activity) is { } absence)
@@ -134,11 +158,45 @@ internal sealed class MonitorAlertSettings : StackPanel
             { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null };
         }
     }
-    private static int Milliseconds(NumericUpDown number) => checked((int)((number.Value ?? number.Minimum) * 1000));
-    private static int? MilliPercent(NumericUpDown number) => number.Value is { } value ? checked((int)(value * 1000)) : null;
-    private void Row(string label, Control control)
+    internal void Reset()
     {
-        var row = new StackPanel { Spacing = 4 }; row.Children.Add(Text(label)); row.Children.Add(control); Children.Add(row);
+        _heartRateNotice.Reset();
+        _spO2Notice.Reset();
+        AdditionalLimits.Reset();
+    }
+
+    private MonitorNotice? EvaluatePrimary(MonitorNumeric numeric, LiveMeasurementSnapshot snapshot)
+    {
+        bool heartRate = numeric == MonitorNumeric.HeartRate;
+        var filter = heartRate ? _heartRateNotice : _spO2Notice;
+        var editor = heartRate ? HeartRateConfirmation : SpO2Confirmation;
+        MeasurementConfirmationTiming timing;
+        MeasurementLimits limits;
+        try
+        {
+            timing = editor.Read();
+            limits = heartRate
+                ? new(HeartRateEnabled.IsChecked == true, MilliUnits(CriticalLowHeartRate), MilliUnits(WarningLowHeartRate),
+                    MilliUnits(WarningHeartRate), MilliUnits(CriticalHeartRate))
+                : new(SpO2Enabled.IsChecked == true, MilliUnits(CriticalSpO2), MilliUnits(WarningSpO2), null, null);
+        }
+        catch (ArgumentException)
+        {
+            filter.Reset();
+            var descriptor = MeasuredLimitNotice.Describe(numeric);
+            return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：请检查阈值范围和精度，以及确认时间（0–600 秒，最多三位小数）");
+        }
+        return filter.Evaluate(limits, snapshot, timing);
+    }
+
+    private static int? MilliUnits(NumericUpDown field) => field.Value is null
+        ? null : DesignPreviewSettings.ReadVitalValue(field, 1000, "报警阈值");
+    private static int Milliseconds(NumericUpDown number) => checked((int)((number.Value ?? number.Minimum) * 1000));
+    private void Row(string label, Control control, Panel? owner = null)
+    {
+        var row = new StackPanel { Spacing = 4 };
+        if (owner is WrapPanel) { row.Width = 220; row.Margin = new Thickness(0, 0, 24, 12); }
+        row.Children.Add(Text(label)); row.Children.Add(control); (owner ?? this).Children.Add(row);
         AutomationProperties.SetName(control, label);
     }
     private static NumericUpDown Number(decimal value, decimal minimum, decimal maximum) => new()

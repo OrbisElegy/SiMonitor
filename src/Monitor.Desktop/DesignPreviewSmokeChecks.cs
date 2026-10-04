@@ -893,6 +893,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureAlarmSmokeChecks.Verify);
+        NativeSmokePartition.Run(PrimaryAlarmConfirmationSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgAlarmSmokeChecks.Verify);
         EcgTemplateDetectionSmokeChecks.Register();
         NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
@@ -1085,8 +1086,48 @@ internal static class DesignPreviewSmokeChecks
             string?[] alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
             Require(alarmLabels.Contains("EtCO₂") && alarmLabels.Contains("PR · PLETH") && alarmLabels.Contains("ABP 平均压") &&
                 !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries");
-            Require(ReferenceEquals(window.Settings.Alerts.NoExpirationEnabled.Parent,
-                window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].Parent), "CO2 absence controls share EtCO2 page");
+            window.Settings.Tabs.SelectedIndex = 3;
+            alarmGroups.Sections.SelectedIndex = 0;
+            var heartRateGroups = window.Settings.Alerts.HeartRateConfirmation;
+            var originalConfirmation = heartRateGroups.Read();
+            Require(string.Join(" / ", heartRateGroups.Groups.Items.Cast<TabItem>().Select(item => item.Header?.ToString())) ==
+                "阈值 / 触发确认 / 恢复确认", "alarm parameters use the existing advanced-page tab pattern");
+            heartRateGroups.Groups.SelectedIndex = 1;
+            heartRateGroups.Fields[0].Value = 1.25m;
+            Capture(window, "ui-preview-alarm-trigger-groups.png");
+            Require(heartRateGroups.Fields.Where((_, index) => index % 2 == 0).All(field => field.GetVisualAncestors().Contains(window.Settings)) &&
+                heartRateGroups.Fields.Where((_, index) => index % 2 == 1).All(field => !field.GetVisualAncestors().Contains(window.Settings)) &&
+                !window.Settings.Alerts.WarningHeartRate.GetVisualAncestors().Contains(window.Settings),
+                "trigger page only displays trigger inputs, without the threshold and recovery stack");
+            heartRateGroups.Groups.SelectedIndex = 2;
+            heartRateGroups.Fields[1].Value = .75m;
+            window.Width = 1000; window.Height = 720;
+            Capture(window, "ui-preview-alarm-recovery-compact.png");
+            Require(heartRateGroups.Fields[1].GetVisualAncestors().Contains(window.Settings) &&
+                window.Settings.Alerts.HeartRateEnabled.GetVisualAncestors().Contains(window.Settings),
+                "compact recovery page keeps its inputs and alarm switch accessible");
+            var alarmScroll = heartRateGroups.GetVisualAncestors().OfType<ScrollViewer>().First();
+            Require(alarmScroll.Extent.Width <= alarmScroll.Viewport.Width + 1 &&
+                alarmScroll.Extent.Height <= alarmScroll.Viewport.Height + 100,
+                $"grouped alarm pages avoid horizontal scrolling and a long vertical stack in compact layout: extent {alarmScroll.Extent}, viewport {alarmScroll.Viewport}");
+            alarmGroups.Sections.SelectedIndex = 1;
+            alarmGroups.Sections.SelectedIndex = 0;
+            Require(heartRateGroups.Groups.SelectedIndex == 2 && heartRateGroups.Read().CriticalLow == new BoundaryConfirmationTiming(1250, 750) &&
+                ReferenceEquals(settingsSession, window.Session), "alarm navigation preserves edited values, selected subgroup and running session");
+            heartRateGroups.Restore(originalConfirmation);
+            heartRateGroups.Groups.SelectedIndex = 0;
+            alarmGroups.Sections.SelectedIndex = Array.IndexOf(alarmLabels, "EtCO₂");
+            var co2Groups = window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].Confirmation.Groups;
+            co2Groups.SelectedIndex = 3;
+            Capture(window, "ui-preview-alarm-co2-absence-group.png");
+            Require(window.Settings.Alerts.NoExpirationEnabled.GetVisualAncestors().Contains(window.Settings) &&
+                window.Settings.Alerts.NoExpirationSeconds.GetVisualAncestors().Contains(window.Settings) &&
+                !window.Settings.Alerts.AdditionalLimits.Editors[MonitorNumeric.EtCo2].CriticalLow.GetVisualAncestors().Contains(window.Settings),
+                "CO2 absence has its own subgroup within EtCO2");
+            co2Groups.SelectedIndex = 0;
+            alarmGroups.Sections.SelectedIndex = 0;
+            window.Width = 1440; window.Height = 940;
+            window.Settings.Tabs.SelectedIndex = 2;
             var soundGroups = window.Settings.SectionPages[2];
             soundGroups.Sections.SelectedIndex = 1;
             window.Settings.Sound.HeartbeatVolume.Value = 62;

@@ -414,22 +414,22 @@ def main():
             'Monitor.Simulation.Physiology', 'StSegmentTables', st['tables']),
         root / 'src/Monitor.Simulation/Physiology/CvpComponentTables.cs':
             '// A/V adapted from Infirmary Integrated CVP seeds, Ibi Keller (Tanjera); C/X/Y/Resp are project-authored.\n'
-            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/legal/infirmary-source-notice.md.\n' + render(
                 'Monitor.Simulation.Physiology', 'CvpComponentTables', cvp_shapes(cvp)).replace(
                     'Project-authored reference illustration', 'Mixed adapted/project-authored reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PulmonaryArteryTables.cs':
             '// Adapted from Infirmary Integrated PA_Default, Ibi Keller (Tanjera).\n'
-            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/legal/infirmary-source-notice.md.\n' + render(
                 'Monitor.Simulation.Physiology', 'PulmonaryArteryTables', arterial_shape(pulmonary)).replace(
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/CapnogramTables.cs':
             '// Adapted from Infirmary Integrated ETCO2_Default, Ibi Keller (Tanjera).\n'
-            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/legal/infirmary-source-notice.md.\n' + render(
                 'Monitor.Simulation.Physiology', 'CapnogramTables', capnogram_shape(capnogram)).replace(
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/ArterialPulseTables.cs':
             '// Adapted from Infirmary Integrated ABP_Default, Ibi Keller (Tanjera).\n'
-            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/infirmary-source-notice.md.\n' + render(
+            '// Apache-2.0; see eng/licenses/infirmary-integrated-LICENSE.md and docs/legal/infirmary-source-notice.md.\n' + render(
                 'Monitor.Simulation.Physiology', 'ArterialPulseTables', arterial_shape(arterial)).replace(
                     'Project-authored reference illustration', 'Adapted upstream reference illustration'),
         root / 'src/Monitor.Simulation/Physiology/PlethPulseTables.cs': render(

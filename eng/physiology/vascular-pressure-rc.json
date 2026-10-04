@@ -1,7 +1,7 @@
 {
   "id": "VascularPressureRcIllustration@1",
   "source": "Project-authored finite-ejection RC illustration; no paper waveform points or source code copied",
-  "research": "docs/vascular-pressure-runoff-research.md",
+  "research": "docs/research/physiology/vascular-pressure-runoff-research.md",
   "qualification": "Unqualified teaching source; no valve notch, reflections, CVP mean response, independent right-heart source or pressure numerics",
   "optional_morphology": "eng/physiology/vascular-pressure-morphology.json; null preserves the raw RC source described here",
   "units": {

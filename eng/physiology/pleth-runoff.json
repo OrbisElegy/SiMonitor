@@ -27,7 +27,7 @@
   "horizonTau": 64,
   "decayArithmetic": "1us trapezoidal Q62 repeated squaring; fractional interpolation",
   "maximumHistoryEvents": 4096,
-  "investigation": "docs/pleth-runoff-research.md",
+  "investigation": "docs/research/physiology/pleth-runoff-research.md",
   "limitations": [
     "No optical DC, device filter or automatic gain model",
     "Not a numeric SpO2 decay",

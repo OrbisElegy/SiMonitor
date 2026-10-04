@@ -18,7 +18,7 @@ change the project's own AGPL-3.0-or-later license.
 
 The pinned miniaudio license is at
 `native/sim_audio_native/vendor/LICENSE.miniaudio`. The Infirmary attribution
-and license are at `docs/infirmary-source-notice.md` and
+and license are at `docs/legal/infirmary-source-notice.md` and
 `eng/licenses/infirmary-integrated-LICENSE.md`. Its `source_adaptations` ledger
 entry pins the upstream commit, source-file hash and bundled license hash, and
 registers all four waveform manifests. `tools/verify_dependency_ledger.py` checks

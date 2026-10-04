@@ -1,6 +1,6 @@
 {
   "id": "SvtPerfusionIllustration@3",
-  "source": "Filling-limited authored input with unchanged finite RC reservoir; docs/svt-perfusion.md",
+  "source": "Filling-limited authored input with unchanged finite RC reservoir; docs/research/physiology/svt-perfusion.md",
   "authored_choices": {
     "electrical_mechanical_ms": [
       0,

@@ -3,15 +3,15 @@
 日期：2026-10-03。模型版本：`OxygenTransportPrototype@1`。
 
 已实现可独立运行的成人有循环数值原型，完成氧量守恒、初值、步长收敛和参数敏感性
-核验。它输出模型内的 SaO₂，不输出监护 SpO₂；现已另有 [C# 实时移植](oxygenation-transport.md#桌面实时接入)，本文描述原始 Python 数值原型。
-第二步已通过[物理输入与原始采样时间接口](oxygenation-transport.md)将离线轨迹接到
+核验。它输出模型内的 SaO₂，不输出监护 SpO₂；现已另有 [C# 实时移植](../../interfaces/oxygenation/oxygenation-transport.md#桌面实时接入)，本文描述原始 Python 数值原型。
+第二步已通过[物理输入与原始采样时间接口](../../interfaces/oxygenation/oxygenation-transport.md)将离线轨迹接到
 C# 光学测量回放，报警仍消费测量结果。
 这里的“验证”指数学与实现核验，不是临床标定。尚无独立患者轨迹的拟合误差。
 
-- [模型实现](../tools/oxygenation_model.py)
-- [实验入口](../tools/run_oxygenation_prototype.py)
-- [参数、来源与作者假设](../eng/physiology/oxygenation-prototype.json)
-- [回归检查](../tools/test_oxygenation_model.py)
+- [模型实现](../../../tools/oxygenation_model.py)
+- [实验入口](../../../tools/run_oxygenation_prototype.py)
+- [参数、来源与作者假设](../../../eng/physiology/oxygenation-prototype.json)
+- [回归检查](../../../tools/test_oxygenation_model.py)
 - [前期研究与后续接入缺口](oxygenation-model-research.md)
 
 ## 血容量与患者资料
@@ -58,7 +58,7 @@ FRC、耗氧、Hb、心排量、分流和疾病状态；当前数值原型仍逐
 使用**同性别、同年龄段参考模型的 0 SD（z=0）位置**，默认不随机抽取个体偏移。
 这些高级参数不要求用户逐项填写；用户指定某一项时，只覆盖该项的自动默认。
 实时 C# 入口现已实现首版成人参考集，来源、适用人群、公式及验证见
-[成人氧合基线](oxygenation-defaults.md)。本文的原始 Python 实验仍使用显式研究基准。
+[成人氧合基线](../../interfaces/oxygenation/oxygenation-defaults.md)。本文的原始 Python 实验仍使用显式研究基准。
 
 本文中 0 SD 统一解释为所选参考模型的中心位置。普通正态 z 分数对应均值；
 采用 LMS 等偏态参考模型时，应由该模型求 z=0，不能一律当作算术均值，

@@ -83,7 +83,7 @@ def assemble(directory, source, rid, provenance):
             raise ValueError(f"Distribution metadata already exists: {reserved}")
     legal = directory / "legal"
     legal.mkdir()
-    for relative in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md", "docs/infirmary-source-notice.md"]:
+    for relative in ["LICENSE", "eng/dependencies.json", "docs/legal/license-scope.md", "docs/legal/infirmary-source-notice.md"]:
         target = legal / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / relative, target)

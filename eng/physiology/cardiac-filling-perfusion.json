@@ -1,7 +1,7 @@
 {
   "id": "CardiacFillingPerfusionIllustration@2",
   "implementation": "src/Monitor.Simulation/Physiology/CardiacFillingPerfusion.cs",
-  "documentation": "docs/cardiac-filling-perfusion.md",
+  "documentation": "docs/research/physiology/cardiac-filling-perfusion.md",
   "supporting_research": [
     "https://pubmed.ncbi.nlm.nih.gov/1595536/",
     "https://pubmed.ncbi.nlm.nih.gov/4032740/",

@@ -24,8 +24,8 @@ class DistributionTests(unittest.TestCase):
         assets = self.source / "src/Monitor.Desktop/obj/project.assets.json"
         assets.parent.mkdir(parents=True)
         assets.write_text(json.dumps({"packageFolders": {str(self.root / "packages"): {}}}), encoding="utf-8")
-        for name in ["LICENSE", "eng/dependencies.json", "docs/license-scope.md",
-                     "docs/infirmary-source-notice.md", "eng/licenses/vendor.txt",
+        for name in ["LICENSE", "eng/dependencies.json", "docs/legal/license-scope.md",
+                     "docs/legal/infirmary-source-notice.md", "eng/licenses/vendor.txt",
                      "native/sim_audio_native/vendor/LICENSE.miniaudio"]:
             path = self.source / name
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -35,7 +35,7 @@
     "initialization": "exact periodic orbit over 11 slots; rational calculation at plan creation",
     "quantization": "gain permille, ties to even; applied to original expiration cycleIndex",
     "bounds": "reject coupled physical peak above 327 mmHg; preserve inspired baseline",
-    "evidence": "../../docs/cheyne-stokes-co2-coupling.md",
+    "evidence": "../../docs/research/physiology/cheyne-stokes-co2-coupling.md",
     "status": "time constant, reference depth and discrete response are authored teaching choices, not clinically calibrated"
   }
 }

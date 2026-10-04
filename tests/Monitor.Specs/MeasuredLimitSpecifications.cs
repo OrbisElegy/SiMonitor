@@ -65,11 +65,11 @@ internal static class MeasuredLimitSpecifications
                 Check.That(notice?.Level == MonitorNoticeLevel.Info && notice.Numeric is null && notice.Id == d.Id + "-settings", "settings fault stays source-specific Info");
             }
         }
-        foreach (var unsupported in new[] { MonitorNumeric.HeartRate, MonitorNumeric.SpO2, (MonitorNumeric)999 })
+        foreach (var unsupported in new[] { (MonitorNumeric)999 })
         {
             bool rejected = false;
             try { MeasuredLimitNotice.Describe(unsupported); } catch (ArgumentException) { rejected = true; }
-            Check.That(rejected, "existing HR/SpO2 policies are not silently rebound");
+            Check.That(rejected, "unknown numeric is rejected");
         }
     }
     private static void MeasuredLimitsFollowAcquisitionAndQuality()

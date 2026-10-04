@@ -312,7 +312,7 @@ internal sealed class DesignPreviewWindow : Window
                 _pendingPresentation = null;
                 _ecg = ecg;
                 Settings.MarkParametersApplied(ecgConfig, physiology);
-                Settings.Alerts.AdditionalLimits.Reset();
+                Settings.Alerts.Reset();
                 Settings.Sound.ResetBeatSource();
                 Settings.Sound.ResetPitchState();
             }

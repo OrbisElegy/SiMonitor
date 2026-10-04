@@ -72,6 +72,7 @@ internal static class Program
             .. SeededCo2Specifications.All,
             .. MeasuredLimitSpecifications.All,
             .. PressureLimitSpecifications.All,
+            .. AlarmConfirmationSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

@@ -19,8 +19,15 @@ internal static class EcgAlarmSmokeChecks
             alerts.HeartRateEnabled.IsChecked = true;
             alerts.WarningLowHeartRate.Value = 50;
             alerts.CriticalLowHeartRate.Value = 40;
-            foreach (var expectedLevel in new[] { MonitorNoticeLevel.Warning, MonitorNoticeLevel.Critical })
+            foreach (var (expectedLevel, confirmationMilliseconds) in new[]
             {
+                (MonitorNoticeLevel.Warning, 0), (MonitorNoticeLevel.Critical, 0),
+                (MonitorNoticeLevel.Warning, 600), (MonitorNoticeLevel.Critical, 600)
+            })
+            {
+                alerts.Reset();
+                var boundaryTiming = new BoundaryConfirmationTiming(confirmationMilliseconds, 400);
+                alerts.HeartRateConfirmation.Restore(new(boundaryTiming, boundaryTiming, boundaryTiming, boundaryTiming));
                 window.Settings.Sound.ResetBeatSource();
                 window.Settings.Sound.ResetPitchState();
                 alerts.WarningHeartRate.Value = expectedLevel == MonitorNoticeLevel.Warning ? 140 : 120;
@@ -37,28 +44,37 @@ internal static class EcgAlarmSmokeChecks
                 float[] actualPcm = new float[480], referencePcm = new float[480];
                 int transitions = 0;
                 bool audible = false;
+                long? firstSampleTimeNs = null;
                 while (session.SimulationTimeNs < 140_000_000_000)
                 {
                     session.Advance(200_000_000);
                     var snapshot = session.Measurements;
                     if (snapshot is null || snapshot.SampleTimeNs < 20_000_000_000) { continue; }
+                    firstSampleTimeNs ??= snapshot.SampleTimeNs;
+                    bool confirmed = snapshot.SampleTimeNs - firstSampleTimeNs.Value >= confirmationMilliseconds * 1_000_000L;
+                    // This ECG-only fixture has no optical acquisition. Its existing
+                    // SpO2 NoData Info remains while physiological confirmation waits.
+                    var expectedRequest = confirmed ? referenceRequest : new MonitorAlarmSoundRequest(
+                        MonitorNoticeLevel.Info, (int)window.Settings.Sound.Volume.Value, alerts.Timing);
                     view.RefreshReadings(snapshot);
                     view.RefreshNumericHighlights(0);
                     window.Settings.Sound.UpdateAlarm(view.HighestNotice, alerts.Timing, measurement: snapshot);
                     var notice = view.ActiveNotices.SingleOrDefault(n => n.Numeric == MonitorNumeric.HeartRate);
                     var request = window.Settings.Sound.PublishedAlarm;
-                    Require(snapshot.HeartRate.Status == WaveformMeasurementStatus.Valid && notice?.Level == expectedLevel &&
-                        request == referenceRequest, "real rotating QRS drives a stable 140 bpm banner and audio priority");
-                    if (request != previous) { transitions++; }
+                    Require(snapshot.HeartRate.Status == WaveformMeasurementStatus.Valid && notice?.Level == (confirmed ? expectedLevel : null) &&
+                        request == expectedRequest,
+                        $"real rotating QRS confirmation: expected {expectedLevel}, delay {confirmationMilliseconds} ms, time {snapshot.SampleTimeNs}, first {firstSampleTimeNs}, HR {snapshot.HeartRate.MilliBeatsPerMinute}, notice {notice?.Level}, audio {request?.Level}, notices {string.Join("; ", view.ActiveNotices.Select(n => n.Id))}");
+                    if (request != previous && request?.Level == expectedLevel) { transitions++; }
                     previous = request;
                     for (int tick = 0; tick < 20; tick++)
                     {
                         actualSequencer.Update(request);
-                        referenceSequencer.Update(referenceRequest);
+                        referenceSequencer.Update(expectedRequest);
                         Require(actualAudio.TryProduce(480) && referenceAudio.TryProduce(480), "both sequencers produce the next audio slice");
                         actualAudio.Read(actualPcm);
                         referenceAudio.Read(referencePcm);
                         Require(actualPcm.SequenceEqual(referencePcm), "measurement refresh does not restart the continuing alarm sound pattern");
+                        if (!confirmed) { Require(actualPcm.All(sample => sample == 0), "default Info stays silent before physiological confirmation"); }
                         audible |= actualPcm.Any(sample => sample != 0);
                     }
                 }

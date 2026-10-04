@@ -48,6 +48,7 @@ public sealed record AlarmLifecycleTransition(ulong Sequence, long SampleTimeNs,
 public sealed class AlarmLifecycleJournal
 {
     public const int Capacity = 256;
+    public AlarmAttentionJournal Attention { get; }
     private readonly Dictionary<string, AlarmConditionSnapshot> _conditions = new(StringComparer.Ordinal);
     private readonly Queue<AlarmLifecycleTransition> _transitions = new();
     private readonly Dictionary<string, AlarmNotificationController> _notifications = new(StringComparer.Ordinal);
@@ -64,6 +65,7 @@ public sealed class AlarmLifecycleJournal
 
     internal AlarmLifecycleJournal(params string[] conditionIds)
     {
+        Attention = new(conditionIds);
         foreach (string id in conditionIds)
         {
             _conditions.Add(id, new(id, AlarmConditionState.Unobserved, null, null, 0, AlarmTransitionReason.None));
@@ -87,8 +89,9 @@ public sealed class AlarmLifecycleJournal
         return controller;
     }
 
-    private void RecordNotification(string id, long sampleTimeNs)
+    private void RecordObservation(string id, long sampleTimeNs)
     {
+        Attention.Observe(_conditions[id], sampleTimeNs);
         if (_notifications[id].Observe(_conditions[id], sampleTimeNs) is not { } decision) { return; }
         if (_notificationRecords.Count == Capacity)
         {
@@ -127,7 +130,7 @@ public sealed class AlarmLifecycleJournal
         if (previous.State == state && previous.Level == level &&
             (state != AlarmConditionState.Indeterminate || previous.Reason == reason))
         {
-            RecordNotification(id, sampleTimeNs);
+            RecordObservation(id, sampleTimeNs);
             return;
         }
         bool active = level is not null;
@@ -143,6 +146,6 @@ public sealed class AlarmLifecycleJournal
         }
         _transitions.Enqueue(new(++_eventSequence, sampleTimeNs, id, episode ?? previous.Episode, kind,
             previous.State, state, previous.Level, level, reason));
-        RecordNotification(id, sampleTimeNs);
+        RecordObservation(id, sampleTimeNs);
     }
 }

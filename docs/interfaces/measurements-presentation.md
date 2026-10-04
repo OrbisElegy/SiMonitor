@@ -241,6 +241,7 @@ void Reset();
 每个方向独立分配 owner 内身份，Warning/Critical 升降级保留身份，恢复与数据中断使用不同原因。
 记录由确认状态同步生成，不改变 `MonitorNotice` 相等性、横幅轮换或声音请求。详细状态、
 有界保留和连续性边界见[本地报警生命周期接口](alarms/alarm-lifecycle.md)。
+其 `Attention` 提供独立的用户确认、恢复保持和旧修订拒绝契约，见[确认与保持状态接口](alarms/alarm-attention.md)；当前不改变声光显示或偏好保存。
 `ConfigureNotifications` 可为已有条件配置独立重复抑制及持续提醒；`NotificationRecords`
 提供有界通知意图，`DroppedNotificationCount` 明确淘汰情况。首次及确认升级不额外延迟，
 同级重复只延后通知，持续提醒不改变事件。显式单组声音通道可消费这些意图，产品默认仍为原持续声音；详见[通知决策接口](alarms/alarm-notification-policy.md)及[声音执行接口](alarms/alarm-notification-sound.md)。

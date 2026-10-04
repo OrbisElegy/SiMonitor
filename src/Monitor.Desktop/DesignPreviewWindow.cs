@@ -129,9 +129,11 @@ internal sealed class DesignPreviewWindow : Window
     {
         void UpdateNotificationMode()
         {
-            Settings.Sound.UseNotificationPlayback(Settings.Alerts.NotificationSettings.RequiresNotificationPlayback ? Settings.Alerts.AlarmLifecycles : null);
-            Settings.Sound.RefreshAudioPause();
+            Settings.Sound.UseNotificationPlayback(Settings.Alerts.AlarmLifecycles);
+            MonitorView.RefreshAttention();
+            Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
         }
+        BindAlarmAttention();
         Settings.Alerts.NotificationSettings.ModeChanged += UpdateNotificationMode;
         UpdateNotificationMode();
         MonitorView.AdditionalNotices = CurrentNotices;
@@ -148,6 +150,23 @@ internal sealed class DesignPreviewWindow : Window
         Settings.ResetAll.Click += async (_, _) => await ConfirmResetAllSettings();
         Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
     }
+    private void BindAlarmAttention()
+    {
+        var journals = Settings.Alerts.AlarmLifecycles;
+        MonitorView.NoticeProjection = Settings.Alerts.ProjectAttention;
+        MonitorView.AttentionFor = id =>
+        {
+            string conditionId = id.StartsWith(MonitorAlertSettings.RetainedNoticePrefix, StringComparison.Ordinal)
+                ? id[MonitorAlertSettings.RetainedNoticePrefix.Length..] : id;
+            foreach (var journal in journals)
+            {
+                var state = journal.Attention.Conditions.SingleOrDefault(c => c.ConditionId == conditionId);
+                if (state is not null) { return state; }
+            }
+            return null;
+        };
+    }
+
     internal void UpdateOxygenationVentilation()
     {
         try
@@ -333,6 +352,7 @@ internal sealed class DesignPreviewWindow : Window
             }
             _monitor = new(_session);
             MonitorView = new(_monitor);
+            BindAlarmAttention();
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;

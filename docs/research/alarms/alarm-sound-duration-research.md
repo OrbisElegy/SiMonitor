@@ -8,4 +8,4 @@
 
 本项目采用独立的教学配置：每个已登记条件可跟随默认或显式选择短／长，独立于严重程度和生理触发／恢复确认。短警报采用本项目原有同级声音的一组，长警报在条件活动期间持续按组播放；不复制厂商波形、音长、患者适用范围或全部优先级链。现有条件中包括同一方向的 Warning/Critical 升降级，时长配置作用于整个条件，不把短警报自动降为较低颜色或等级。
 
-短警报的重复抑制与提醒保持独立。长警报不使用短警报的重复抑制和额外提醒，但保留这些配置供切回；其声音随已确认活动状态解除或中断，不包含尚未实现的用户确认、保持或全局报警链。完整接口见[通知配置](../../interfaces/alarms/alarm-notification-policy.md)与[声音路由](../../interfaces/alarms/alarm-notification-sound.md)。
+短警报的重复抑制与提醒保持独立。长警报不使用短警报的重复抑制和额外提醒，但保留这些配置供切回；其声音随已确认活动状态解除或中断，确认后的行为和恢复后视觉保持见[确认与保持接口](../../interfaces/alarms/alarm-attention.md)，全局报警链仍未实现。完整接口见[通知配置](../../interfaces/alarms/alarm-notification-policy.md)与[声音路由](../../interfaces/alarms/alarm-notification-sound.md)。

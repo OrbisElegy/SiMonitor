@@ -216,6 +216,12 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && confirmed is { } at && _source.Accept(_source.Current, at))
         { _alarms.SubmitHeartbeat(EffectiveHeartbeatVolume, BeatPitchPercent); }
     }
+    internal void RefreshAlarmNotices(IReadOnlyList<MonitorNotice> notices)
+    {
+        _activeNotices = Array.AsReadOnly(notices.ToArray());
+        _alarmLevel = notices.Where(n => n.Audible).Select(n => (MonitorNoticeLevel?)n.Level).Max();
+        Publish();
+    }
     private void UpdateBeatSource()
     {
         if (BeatSource.SelectedIndex is < 0 or > 2) { return; }
@@ -250,7 +256,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         bool enabled = _monitorRunning && remaining == 0;
         PublishedAlarm = _notificationSources is null
             ? enabled && _alarmLevel is { } active ? new(active, (int)Volume.Value, _timing) : null
-            : _notificationRouter.Update(_notificationSources, (int)Volume.Value, _timing, enabled, _activeNotices);
+            : _notificationRouter.Update(_notificationSources, (int)Volume.Value, _timing, enabled, _activeNotices, _alarms.RetiredNotificationSequence);
         _alarms.SetRequest(PublishedAlarm);
         _alarms.SetHeartbeatEnabled(_monitorRunning && AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true);
     }

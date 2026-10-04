@@ -23,8 +23,6 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
     internal TabControl Groups { get; } = new() { Padding = new Thickness(0) };
     internal IReadOnlyDictionary<string, ConditionEditor> Editors { get; }
     internal AlarmPlaybackMode EffectiveMode { get; private set; }
-    internal bool RequiresNotificationPlayback => EffectiveMode == AlarmPlaybackMode.Notifications ||
-        _effective.Values.Any(s => s.SoundMode != AlarmSoundMode.Inherit);
     internal event Action? ModeChanged;
     private readonly TextBlock _errors = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly string[] _ids;
@@ -87,6 +85,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
                 {
                     var settings = editor.Read();
                     journal.ConfigureNotifications(id, settings.ToPolicy(EffectiveMode));
+                    journal.Attention.Configure(id, settings.LatchingMode);
                     _effective[id] = settings;
                     ModeChanged?.Invoke();
                 }
@@ -148,6 +147,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             {
                 var settings = preferences.NotificationFor(id);
                 editor.Restore(settings);
+                journals.Single(j => j.Conditions.Any(c => c.ConditionId == id)).Attention.Configure(id, settings.LatchingMode);
                 _effective[id] = settings;
                 editor.SetDefaultMode(preferences.PlaybackMode);
                 journals.Single(j => j.Conditions.Any(c => c.ConditionId == id)).ConfigureNotifications(id, settings.ToPolicy(preferences.PlaybackMode));
@@ -189,6 +189,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         private readonly StackPanel _shortSettings = new() { Spacing = 8 };
         private readonly TextBlock _defaultDescription = new();
         internal NumericUpDown RepeatSeconds { get; } = Number(0, 0);
+        internal CheckBox LatchUntilAcknowledged { get; } = new() { Content = "恢复后保留未确认提示", IsChecked = false };
         internal CheckBox ReminderEnabled { get; } = new() { Content = "持续活动时提醒", IsChecked = false };
         internal NumericUpDown ReminderSeconds { get; } = Number(30, .001m);
         internal event Action? Changed;
@@ -228,6 +229,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             _shortSettings.Children.Add(ReminderEnabled);
             _shortSettings.Children.Add(fields);
             var advancedContent = new StackPanel { Spacing = 8 };
+            advancedContent.Children.Add(LatchUntilAcknowledged);
             advancedContent.Children.Add(_shortSettings);
             var reset = new Button { Content = "恢复此事件默认", MinHeight = 44 };
             AutomationProperties.SetName(reset, label + " 恢复默认通知策略");
@@ -246,6 +248,8 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
                 fields.Children.Add(row);
                 AutomationProperties.SetName(field, label + " " + text);
             }
+            AutomationProperties.SetName(LatchUntilAcknowledged, label + " 恢复后保留未确认提示");
+            LatchUntilAcknowledged.IsCheckedChanged += (_, _) => Edited();
             AutomationProperties.SetName(ReminderEnabled, label + " 持续活动时提醒");
             foreach (var choice in SoundChoices)
             {
@@ -273,7 +277,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
                 return checked((int)(seconds * 1000));
             }
             return new(Milliseconds(RepeatSeconds, 0), ReminderEnabled.IsChecked == true, Milliseconds(ReminderSeconds, .001m))
-            { SoundMode = (AlarmSoundMode)SelectedSoundMode };
+            { SoundMode = (AlarmSoundMode)SelectedSoundMode, LatchingMode = LatchUntilAcknowledged.IsChecked == true ? AlarmLatchingMode.UntilAcknowledged : AlarmLatchingMode.NonLatching };
         }
 
         internal void SetDefaultMode(AlarmPlaybackMode mode)
@@ -291,7 +295,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             _shortSettings.IsVisible = shortSound || invalid;
             RepeatSeconds.IsEnabled = ReminderEnabled.IsEnabled = shortSound || invalid;
             ReminderSeconds.IsEnabled = invalid || shortSound && ReminderEnabled.IsChecked == true;
-            Advanced.Header = shortSound || invalid ? "短警报高级参数" : "更多操作";
+            Advanced.Header = shortSound || invalid ? "短警报高级参数" : "保持与更多操作";
             if (invalid) { Advanced.IsExpanded = true; }
         }
 
@@ -310,6 +314,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
                 RepeatSeconds.Value = settings.RepeatSuppressionMilliseconds / 1000m;
                 ReminderSeconds.Value = settings.ReminderMilliseconds / 1000m;
                 ReminderEnabled.IsChecked = settings.ReminderEnabled;
+                LatchUntilAcknowledged.IsChecked = settings.LatchingMode == AlarmLatchingMode.UntilAcknowledged;
                 SelectedSoundMode = (int)settings.SoundMode;
             }
             finally { _restoring = false; }

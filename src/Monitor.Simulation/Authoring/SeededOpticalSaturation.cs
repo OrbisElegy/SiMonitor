@@ -7,7 +7,7 @@ namespace Monitor.Simulation.Authoring;
 // Preparation is deterministic; evaluation has no mutable cursor/random state.
 public sealed class SeededOpticalSaturation
 {
-    public const string PatternId = "SeededOpticalExcursions@3";
+    public const string PatternId = "SeededOpticalExcursions@4";
     public const long KnotPeriodNs = 30_000_000_000;
     public const int KnotCount = 64;
     private readonly int[] _offsets = new int[KnotCount];
@@ -17,7 +17,7 @@ public sealed class SeededOpticalSaturation
 
     public SeededOpticalSaturation(int targetMilliPercent, int amplitudeMilliPercent, string seedHex)
     {
-        if (targetMilliPercent is < 75000 or > 100000 || amplitudeMilliPercent is < 0 or > 2500)
+        if (targetMilliPercent is < 0 or > 100000 || amplitudeMilliPercent is < 0 or > 2500)
         { throw new ArgumentException("OpticalVariation.InvalidRange"); }
         using var factory = DeterministicStreamFactory.FromLowercaseHex(seedHex);
         var random = factory.CreateStream("physiology.optical.saturation");
@@ -34,7 +34,7 @@ public sealed class SeededOpticalSaturation
         }
         // Bound knots before interpolation, avoiding hard-clipped flat tops.
         for (int i = 0; i < KnotCount; i++)
-        { _offsets[i] = Math.Clamp(_offsets[i], 75000 - targetMilliPercent, 100000 - targetMilliPercent); }
+        { _offsets[i] = Math.Clamp(_offsets[i], -targetMilliPercent, 100000 - targetMilliPercent); }
         PreparedState = random.CaptureState();
     }
 

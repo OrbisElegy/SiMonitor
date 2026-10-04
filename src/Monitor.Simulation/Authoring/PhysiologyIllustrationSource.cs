@@ -17,6 +17,23 @@ public static class PhysiologyIllustrationSource
         _ => throw new ArgumentOutOfRangeException(nameof(row)),
     };
 
+    // Physical scale is supplied explicitly. Select the same authored per-beat
+    // response as the waveform source without reading amplitudes or measured PR.
+    public static PhysiologyTransportSource CreateTransport(PhysiologyIllustrationConfiguration configuration,
+        VentilationTransportPlan ventilation, int referenceStrokeVolumeMicroliters, long ejectionDurationNs = 240_000_000)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var plan = configuration.ResolvePlan();
+        StrokeVolumeResponse response = PrematureBeatPerfusion.IsPattern(plan.ConductionPattern) ? StrokeVolumeResponse.PrematureBeat :
+            AtrialFibrillationReference.IsPattern(plan.ConductionPattern) ? StrokeVolumeResponse.AtrialFibrillation :
+            ConductedFlutterPerfusion.Supports(plan) ? StrokeVolumeResponse.ConductedFlutter :
+            ResolveFixedPerfusion(configuration, plan)?.Arterial.UseCardiacFillingPerfusion == true ||
+                configuration.UseVascularReservoir && CardiacFillingPerfusion.Supports(plan) ? StrokeVolumeResponse.CardiacFilling :
+            plan.SeededRate is not null ? StrokeVolumeResponse.SeededRate : StrokeVolumeResponse.Constant;
+        return PhysiologyTransportSource.Create(plan, ventilation,
+            new(referenceStrokeVolumeMicroliters, ejectionDurationNs, response, configuration.IllustrateAfSystemicPulseDeficit));
+    }
+
     public static PhysiologyWaveformGroup Create(PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0)
     {
         configuration ??= PhysiologyIllustrationConfiguration.Default;

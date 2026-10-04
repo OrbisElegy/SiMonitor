@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Application.Measurements;
+using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 
@@ -13,11 +14,87 @@ internal static class PulseOximeterChainSpecifications
     [
         new(nameof(SeededOpticalVariationReproducesMeasuredSignals), SeededOpticalVariationReproducesMeasuredSignals),
         new(nameof(AcquiredPeripheralSourceProducesPulseAndSaturation), AcquiredPeripheralSourceProducesPulseAndSaturation),
+        new(nameof(MechanicalPerfusionLossClearsSaturationAndRecovers), MechanicalPerfusionLossClearsSaturationAndRecovers),
         new(nameof(OpticalStreamFencesIdentityQualityAndContinuity), OpticalStreamFencesIdentityQualityAndContinuity),
         new(nameof(OximeterRestoreAndFailureAreAtomic), OximeterRestoreAndFailureAreAtomic),
     ];
     private static PulseOximeterIllustrationSource Source(int saturation = 98000, Guid? sensor = null) => new(Pleth, Pleth, sensor ?? Sensor, saturation);
     private static PulseOximeterMeasurement Measurement() => PulseOximeterMeasurement.CreateIllustration(Pleth);
+
+    private static void MechanicalPerfusionLossClearsSaturationAndRecovers()
+    {
+        // Exercise the actual mechanical schedule and runoff through the preview's
+        // acquired red/IR samples. Do not replace the waveform or inject a reading.
+        foreach (int target in new[] { 98000, 80000 })
+            foreach (var (afterCycles, durationCycles) in new (int?, int?)[] { (null, null), (10, null), (10, 15) })
+            {
+                var configuration = PhysiologyIllustrationConfiguration.Default with
+                {
+                    VentricularMechanicalEnabled = false,
+                    MechanicalAfterCycles = afterCycles,
+                    MechanicalDurationCycles = durationCycles
+                };
+                var session = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default(), true,
+                    target, opticalVariation: new(target, 2500, new string('1', 64)));
+                bool measuredBeforeStop = false, lost = false, flat = false, recovered = false;
+                for (int step = 1; step <= 160; step++)
+                {
+                    session.Advance(200_000_000);
+                    var snapshot = session.Measurements!;
+                    var reading = snapshot.SpO2;
+                    var notice = SpO2LimitNotice.Evaluate(true, 92000, 85000, reading);
+                    long timeNs = session.SimulationTimeNs;
+                    bool beforeStop = afterCycles is not null && timeNs is >= 6_000_000_000 and < 10_000_000_000;
+                    bool afterRecovery = durationCycles is not null && timeNs >= 26_000_000_000;
+                    if (beforeStop || afterRecovery)
+                    {
+                        Check.That(reading.Status == WaveformMeasurementStatus.Valid &&
+                            reading.SaturationMilliPercent is { } value && Math.Abs(value - target) <= 3000 &&
+                            reading.PerfusionMilliPercent > 0,
+                            "actual peripheral pulses support measured saturation before loss and after recovery");
+                        Check.That(target == 80000
+                            ? notice is { Id: "spo2-low", Level: MonitorNoticeLevel.Critical }
+                            : notice is null,
+                            "only valid measured low saturation activates or reactivates its physiological notice");
+                        measuredBeforeStop |= beforeStop;
+                        recovered |= afterRecovery;
+                    }
+                    // Ten 800ms cycles stop at source time8s, resuming at20s when
+                    // requested. Allow the2s acquisition delay and4s optical window.
+                    bool withoutPulses = afterCycles is null ? timeNs >= 6_000_000_000
+                        : timeNs >= 14_000_000_000 && (durationCycles is null || timeNs < 22_000_000_000);
+                    if (withoutPulses)
+                    {
+                        Check.That(reading.Status == WaveformMeasurementStatus.PoorSignal &&
+                            reading.SaturationMilliPercent is null && reading.RatioPpm is null && !reading.IsQuestionable,
+                            "continued sample delivery without effective ejections cannot retain an old saturation");
+                        var display = MeasurementDisplay.Resolve(MeasurementSource.SpO2, reading.Status, null);
+                        Check.That(display.NumericText == "---" && display.TopNotice == "SpO₂信号质量不足" && notice is null,
+                            "no pulsation clears the low-saturation notice and displays unavailable without inventing sensor disconnection");
+                        Check.That(snapshot.HeartRate.Status == WaveformMeasurementStatus.Valid,
+                            "ongoing electrical activity cannot stand in for peripheral perfusion");
+                        if (timeNs >= 18_000_000_000)
+                        {
+                            Check.That(reading.PerfusionMilliPercent == 0 && snapshot.PulseRate.MilliBeatsPerMinute is null,
+                                "fully settled optical signal has zero PI and no retained pulse rate");
+                            flat = true;
+                        }
+                        lost = true;
+                    }
+                    if (reading.Status != WaveformMeasurementStatus.Valid || target == 98000)
+                    { Check.That(notice is null, "signal transitions never manufacture a low-saturation alarm"); }
+                }
+                Check.That(lost && flat && measuredBeforeStop == (afterCycles is not null) && recovered == (durationCycles is not null),
+                    "startup without ejection, permanent arrest and resumption all exercise their complete measurement lifecycle");
+                if (afterCycles is not null)
+                {
+                    double[] tail = session.Samples(2, 8_000_000_000, 14_000_000_000).Select(sample => sample.Value).ToArray();
+                    Check.That(tail.Length == 750 && tail[0] > 0 && tail[^1] == 0 &&
+                        tail.Zip(tail.Skip(1)).All(pair => pair.First >= pair.Second),
+                        "the acquired final pulse naturally decays to baseline while electrical activity continues");
+                }
+            }
+    }
 
     private static void SeededOpticalVariationReproducesMeasuredSignals()
     {
@@ -36,13 +113,13 @@ internal static class PulseOximeterChainSpecifications
             differs |= value != other.At(t);
         }
         Check.That(differs && plan.At(long.MaxValue) is >= 93000 and <= 97000, "different seeds differ; late lookup is bounded and overflow-safe");
-        foreach (int target in new[] { 75000, 97500, 98000, 100000 })
+        foreach (int target in new[] { 0, 1000, 40000, 70000, 75000, 97500, 98000, 100000 })
         {
             var bounded = new SeededOpticalSaturation(target, 2500, seed);
             for (long t = 0; t < loop; t += 8_000_000)
             {
                 int value = bounded.At(t);
-                Check.That(value >= Math.Max(75000, target - 2500) && value <= Math.Min(100000, target + 2500), "bounded2.5pp excursions");
+                Check.That(value >= Math.Max(0, target - 2500) && value <= Math.Min(100000, target + 2500), "bounded2.5pp excursions");
                 Check.That(Math.Abs(value - bounded.At(t + 8_000_000)) <= 2, "bounded knots retain smooth transitions");
             }
         }

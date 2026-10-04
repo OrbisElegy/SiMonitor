@@ -4,7 +4,7 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Application.Measurements;
 
-public enum WaveformMeasurementStatus { WarmingUp, Valid, Stale, NoData, PoorSignal, Uncountable }
+public enum WaveformMeasurementStatus { WarmingUp, Valid, Stale, NoData, PoorSignal, Uncountable, OutOfRange }
 public sealed record CapnographyReading(WaveformMeasurementStatus Status, int? Value, long? MeasuredAtNs);
 public sealed record CapnographyActivity(WaveformMeasurementStatus Status, long? ContinuousUsableSinceNs, long? LastExpirationNs, long? LastSampleNs);
 public sealed record CapnographyResult(CapnographyReading EndTidalCentiMmHg, CapnographyReading RespirationsMilliPerMinute)

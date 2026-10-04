@@ -12,10 +12,14 @@ public sealed class LocalMonitorPreviewSession
 {
     public const long PresentationLatencyNs = 2_200_000_000;
     public const int RetainedBlockCount = 202;
-    private readonly PhysiologyWaveformGroup _source;
+    private PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
     private readonly LiveWaveformMeasurements? _measurements;
-    private readonly PulseOximeterIllustrationSource? _opticalSource;
+    private PulseOximeterIllustrationSource? _opticalSource;
+    private RealtimeOxygenationSource? _realtimeOxygenation;
+    private readonly Guid _opticalInstanceId = Guid.NewGuid();
+    private readonly int _opticalModulationPermille;
+    private readonly bool _usesOxygenation;
     private long _measurementFrontier;
     private static readonly long AcquisitionLatencyNs = FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs;
     public LiveMeasurementSnapshot? Measurements => _measurements?.Read(Math.Max(_measurementFrontier,
@@ -28,23 +32,49 @@ public sealed class LocalMonitorPreviewSession
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
     public MonitorDisplayConfiguration Display { get; }
     public MonitorSweepRanges Ranges { get; }
+    public RealtimeOxygenationSnapshot? Oxygenation => _realtimeOxygenation?.Snapshot;
+    public OxygenReservoirParameters? OxygenationParameters { get; }
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
-        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null)
+        bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
+        SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
+        RealtimeOxygenationConfiguration? realtimeOxygenation = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _source = PhysiologyIllustrationSource.Create(configuration);
+        _opticalModulationPermille = opticalModulationPermille;
+        if (realtimeOxygenation is not null)
+        {
+            if (oxygenation is not null) { throw new ArgumentException("Preview.ExclusiveOxygenationSources"); }
+            var transport = PhysiologyIllustrationSource.CreateTransport(configuration, realtimeOxygenation.Ventilation,
+                realtimeOxygenation.ReferenceStrokeVolumeMicroliters);
+            _realtimeOxygenation = new(transport, realtimeOxygenation.Parameters, realtimeOxygenation.OxygenDemandMultiplier);
+            OxygenationParameters = realtimeOxygenation.Parameters;
+            oxygenation = _realtimeOxygenation;
+        }
         if (opticalSaturationMilliPercent.HasValue && !enableMeasurements)
         { throw new ArgumentException("Preview.OpticsRequireMeasurements", nameof(opticalSaturationMilliPercent)); }
         if (opticalVariation is not null && opticalSaturationMilliPercent is null)
         { throw new ArgumentException("Preview.VariationRequiresOptics"); }
+        if (oxygenation is not null && (!enableMeasurements || opticalSaturationMilliPercent is not null || opticalVariation is not null))
+        { throw new ArgumentException("Preview.OxygenationRequiresExclusiveMeasuredOptics", nameof(oxygenation)); }
+        _usesOxygenation = oxygenation is not null;
         if (enableMeasurements) { _measurements = LiveWaveformMeasurements.CreateIllustration(); }
         if (opticalSaturationMilliPercent is { } target)
         {
             _opticalSource = new(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
-                Guid.NewGuid(), target, opticalModulationPermille, opticalVariation);
+                _opticalInstanceId, target, opticalModulationPermille, opticalVariation);
+        }
+        else if (oxygenation is not null)
+        {
+            _opticalSource = new(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+                _opticalInstanceId, oxygenation, opticalModulationPermille);
         }
         Display = display; Ranges = new(display);
     }
+    public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null) =>
+        (_realtimeOxygenation ?? throw new InvalidOperationException("Preview.RealtimeOxygenationNotEnabled"))
+            .ChangeVentilation(ventilation, SimulationTimeNs, oxygenDemandMultiplier);
+
     public void Advance(long deltaNs)
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
@@ -56,16 +86,29 @@ public sealed class LocalMonitorPreviewSession
         {
             long chunk = Math.Min(deltaNs, 50_000_000);
             long next = checked(SimulationTimeNs + chunk);
-            var wires = _source.AdvanceTo(next, 50, 1, 100);
+            var oxygenation = _realtimeOxygenation?.Fork();
+            oxygenation?.AdvanceTo(next);
+            var optics = oxygenation is null ? _opticalSource : new PulseOximeterIllustrationSource(
+                PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+                _opticalInstanceId, oxygenation, _opticalModulationPermille);
+            // Resolve all optical source-time reads before publishing the chunk.
+            // Missing history/range errors leave acquisition and clocks retryable.
+            PhysiologyWaveformGroup source = _usesOxygenation ? _source.Fork() : _source;
+            var wires = source.AdvanceTo(next, 50, 1, 100);
+            byte[][]? opticalWires = optics is null ? null : wires.Select(wire => optics.ConvertAcquiredPulse(wire)).ToArray();
+            _source = source;
+            _realtimeOxygenation = oxygenation;
+            _opticalSource = optics;
             if (wires.Count > 0)
             {
-                foreach (byte[] wire in wires)
+                for (int index = 0; index < wires.Count; index++)
                 {
+                    byte[] wire = wires[index];
                     if (_measurements is null) { break; }
                     byte[] measurementWire = wire;
                     if (_opticalSource is not null)
                     {
-                        var optical = WaveformEnvelopeCodec.Decode(_opticalSource.ConvertAcquiredPulse(wire));
+                        var optical = WaveformEnvelopeCodec.Decode(opticalWires![index]);
                         var original = WaveformEnvelopeCodec.Decode(wire);
                         measurementWire = WaveformEnvelopeCodec.EncodeRaw(original with
                         {

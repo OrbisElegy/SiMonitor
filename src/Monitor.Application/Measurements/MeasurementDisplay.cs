@@ -38,6 +38,7 @@ public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
             WaveformMeasurementStatus.Valid => throw new ArgumentException("MeasurementDisplay.MissingValue", nameof(validNumericText)),
             WaveformMeasurementStatus.Uncountable => new(source == MeasurementSource.Ecg ? "-?-" : "---", label + "无法可靠计数"),
             WaveformMeasurementStatus.PoorSignal => new("---", label + "信号质量不足"),
+            WaveformMeasurementStatus.OutOfRange => new("---", label + "超出测量范围"),
             WaveformMeasurementStatus.NoData => new("---", label + "无数据"),
             WaveformMeasurementStatus.Stale => new("---", label + "测量值已过期"),
             _ => new("---", label + "等待测量")

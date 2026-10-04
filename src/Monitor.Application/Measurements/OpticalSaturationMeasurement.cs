@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Numerics;
+using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Determinism;
 
 namespace Monitor.Application.Measurements;
@@ -25,9 +26,20 @@ public sealed class OpticalSaturationMeasurement
     public const int WindowSamples = 500;
     public const long SampleStepNs = 8_000_000;
     private readonly SaturationCalibrationPoint[] _calibration;
+    private readonly bool _clipPhysicalEndpoints;
     public string CalibrationId { get; }
 
     public OpticalSaturationMeasurement(string calibrationId, IReadOnlyList<SaturationCalibrationPoint> calibration)
+        : this(calibrationId, calibration, false) { }
+
+    // Explicit teaching transfer over0-100%, not an accuracy claim below70%
+    // (or a clinical calibration anywhere). Finite DC/ADC bias at the two
+    // physical endpoints is bounded to0/100 only in this opt-in illustration.
+    public static OpticalSaturationMeasurement CreateIllustration() => new(PulseOximeterIllustrationSource.ModelId,
+        [new(400000, 100000), new(4400000, 0)], true);
+
+    private OpticalSaturationMeasurement(string calibrationId, IReadOnlyList<SaturationCalibrationPoint> calibration,
+        bool clipPhysicalEndpoints)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(calibrationId);
         ArgumentNullException.ThrowIfNull(calibration);
@@ -42,6 +54,7 @@ public sealed class OpticalSaturationMeasurement
             { throw new ArgumentException("Optical.InvalidCalibration", nameof(calibration)); }
         }
         CalibrationId = calibrationId;
+        _clipPhysicalEndpoints = clipPhysicalEndpoints;
     }
 
     public OpticalSaturationReading Estimate(IReadOnlyList<OpticalSample> samples, long asOfSampleTimeNs)
@@ -99,9 +112,15 @@ public sealed class OpticalSaturationMeasurement
         BigInteger squaredPpm = redVariance * infrared * infrared * 1_000_000_000_000L /
             (infraredVariance * red * red);
         BigInteger root = SquareRoot(squaredPpm);
-        if (root < _calibration[0].RatioPpm || root > _calibration[^1].RatioPpm)
-        { return Reading(WaveformMeasurementStatus.PoorSignal, null, null); }
+        if (root > 10_000_000)
+        { return Reading(WaveformMeasurementStatus.OutOfRange, null, null); }
         int ratio = (int)root;
+        if (ratio < _calibration[0].RatioPpm || ratio > _calibration[^1].RatioPpm)
+        {
+            if (_clipPhysicalEndpoints)
+            { return Reading(WaveformMeasurementStatus.Valid, ratio < _calibration[0].RatioPpm ? 100000 : 0, ratio); }
+            return Reading(WaveformMeasurementStatus.OutOfRange, null, ratio);
+        }
         for (int i = 1; i < _calibration.Length; i++)
         {
             var a = _calibration[i - 1]; var b = _calibration[i];

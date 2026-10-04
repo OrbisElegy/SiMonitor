@@ -7,7 +7,10 @@ namespace Monitor.Application.Measurements;
 public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateReading HeartRate,
     ImpedanceRespirationReading ImpedanceRespiration, PlethPulseRateReading PulseRate,
     CapnographyResult Capnography, OpticalSaturationReading SpO2, MeanPressureReading AbpMean,
-    MeanPressureReading PaMean, MeanPressureReading CvpMean);
+    MeanPressureReading PaMean, MeanPressureReading CvpMean)
+{
+    public EcgRhythmReading EcgRhythm { get; init; } = new(WaveformMeasurementStatus.NoData, null, null, null);
+}
 
 // Serialized acquired-packet owner for the local illustration channel binding.
 // Presentation/review never feeds this class. No generator target enters it.
@@ -40,9 +43,13 @@ public sealed class LiveWaveformMeasurements
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats)
         => Consume(wire, out detectedBeats, out _);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses)
+        => Consume(wire, out detectedBeats, out detectedPulses, out _);
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats,
+        out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents)
     {
         detectedBeats = [];
         detectedPulses = [];
+        rhythmEvents = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         if (block.DurationNs != 200_000_000) { throw new ArgumentException("LiveMeasurement.BlockDuration", nameof(wire)); }
         long sampleTime = checked(block.StartSimTimeNs + block.DurationNs - 1);
@@ -63,7 +70,7 @@ public sealed class LiveWaveformMeasurements
         var pa = MeanPressureMeasurement.Restore(_pa.Capture());
         var cvp = MeanPressureMeasurement.Restore(_cvp.Capture());
         var optical = red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
-        var beats = ecg.Consume(wire);
+        var beats = ecg.Consume(wire, out var transitions);
         resp.Consume(wire);
         var pulses = pleth.Consume(wire);
         co2.Consume(wire);
@@ -72,7 +79,8 @@ public sealed class LiveWaveformMeasurements
         pa.Consume(wire);
         cvp.Consume(wire);
         var snapshot = new LiveMeasurementSnapshot(sampleTime, ecg.Read(sampleTime), resp.Read(sampleTime),
-            pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime));
+            pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime))
+        { EcgRhythm = ecg.ReadRhythm(sampleTime) };
         _ecg = ecg;
         _resp = resp;
         _pleth = pleth;
@@ -84,6 +92,7 @@ public sealed class LiveWaveformMeasurements
         _cvp = cvp;
         detectedBeats = beats;
         detectedPulses = pulses;
+        rhythmEvents = transitions;
         return snapshot;
     }
 
@@ -93,7 +102,8 @@ public sealed class LiveWaveformMeasurements
         { throw new ArgumentException("LiveMeasurement.TimeBeforeFrontier", nameof(asOfSampleTimeNs)); }
         return new(asOfSampleTimeNs, _ecg.Read(asOfSampleTimeNs), _resp.Read(asOfSampleTimeNs),
             _pleth.Read(asOfSampleTimeNs), _co2.Read(asOfSampleTimeNs), _optical.Read(asOfSampleTimeNs),
-            _abp.Read(asOfSampleTimeNs), _pa.Read(asOfSampleTimeNs), _cvp.Read(asOfSampleTimeNs));
+            _abp.Read(asOfSampleTimeNs), _pa.Read(asOfSampleTimeNs), _cvp.Read(asOfSampleTimeNs))
+        { EcgRhythm = _ecg.ReadRhythm(asOfSampleTimeNs) };
     }
 
     public Checkpoint Capture() => new(_calibration, _ecg.Capture(), _resp.Capture(), _pleth.Capture(), _co2.Capture(), _optical.Capture(),

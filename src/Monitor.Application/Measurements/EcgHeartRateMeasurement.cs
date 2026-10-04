@@ -7,7 +7,7 @@ namespace Monitor.Application.Measurements;
 public sealed record DetectedEcgBeat(long PeakTimeNs, long ConfirmedAtNs);
 public sealed record EcgHeartRateReading(WaveformMeasurementStatus Status, int? MilliBeatsPerMinute, long? LastBeatTimeNs);
 
-// Initial single-channel engineering detector, input physical unit microvolts.
+// Single-channel teaching detector, input physical unit microvolts.
 // No source settings/events, rhythm labels or display state enter this class.
 public sealed class EcgHeartRateMeasurement
 {
@@ -23,7 +23,11 @@ public sealed class EcgHeartRateMeasurement
         ChannelId = channelId;
     }
     public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire)
+        => Consume(wire, out _);
+
+    public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents)
     {
+        rhythmEvents = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         var plane = block.Planes.SingleOrDefault(p => p.ChannelId == ChannelId)
             ?? throw new ArgumentException("EcgMeasurement.ChannelMissing", nameof(wire));
@@ -48,6 +52,12 @@ public sealed class EcgHeartRateMeasurement
         var next = same && block.StartSimTimeNs == _state.NextTime && plane.FirstSampleIndex == _state.NextIndex &&
             _state.Sequence != ulong.MaxValue && block.BlockSequence == _state.Sequence + 1 ? Copy(_state) : new State();
         List<DetectedEcgBeat> events = [];
+        List<DetectedEcgRhythmEvent> transitions = [];
+        if (next.Identity is null && _state.Identity is not null)
+        {
+            var interrupted = _state.Rhythm.Copy();
+            interrupted.Interrupt(_state.NextTime, EcgRhythmInterruption.StreamDiscontinuity, transitions);
+        }
         for (int i = 0; i < plane.Samples.Count; i++)
         {
             Int128 numerator = ((Int128)plane.Samples[i] * plane.ScaleNumerator * plane.OffsetDenominator +
@@ -56,10 +66,17 @@ public sealed class EcgHeartRateMeasurement
                 (Int128)plane.ScaleDenominator * plane.OffsetDenominator));
             bool usable = plane.Samples[i] is not (short.MinValue or short.MaxValue) && value is >= -10000 and <= 10000 &&
                 !plane.QualityRanges.Any(r => (uint)i >= r.FirstSampleOffset && (ulong)i < (ulong)r.FirstSampleOffset + r.Count && r.QualityFlags != 0);
-            Sample(next, block.StartSimTimeNs + i * StepNs, value, usable, events);
+            long timeNs = block.StartSimTimeNs + i * StepNs;
+            int before = events.Count;
+            Sample(next, timeNs, value, usable, events);
+            bool analyzable = usable && !next.Poor && !next.Uncountable &&
+                timeNs - (next.LastBeat ?? next.FirstSample!.Value) < ExpiryNs;
+            next.Rhythm.Sample(timeNs, value, analyzable, transitions);
+            if (analyzable && events.Count > before) { next.Rhythm.Beat(events[^1], transitions); }
         }
         next.Identity = identity; next.NextTime = end; next.NextIndex = nextIndex; next.Sequence = block.BlockSequence;
         _state = next;
+        rhythmEvents = transitions.AsReadOnly();
         return events.AsReadOnly();
     }
 
@@ -82,6 +99,8 @@ public sealed class EcgHeartRateMeasurement
         return new(rate.HasValue ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.WarmingUp, rate, _state.LastBeat);
     }
 
+    public EcgRhythmReading ReadRhythm(long asOfSampleTimeNs) => _state.Rhythm.Read(Read(asOfSampleTimeNs).Status);
+
     public Checkpoint Capture() => new(ChannelId, Copy(_state));
     public static EcgHeartRateMeasurement Restore(Checkpoint checkpoint)
     {
@@ -94,7 +113,7 @@ public sealed class EcgHeartRateMeasurement
         internal State Value { get; }
         internal Checkpoint(Guid channel, State value) { Channel = channel; Value = value; }
     }
-    private static State Copy(State s) => s with { History = (int[])s.History.Clone() };
+    private static State Copy(State s) => s with { History = (int[])s.History.Clone(), Rhythm = s.Rhythm.Copy() };
 
     private static void Sample(State s, long time, int raw, bool usable, List<DetectedEcgBeat> events)
     {
@@ -134,7 +153,12 @@ public sealed class EcgHeartRateMeasurement
         s.Min = Math.Min(s.Min, value); s.Max = Math.Max(s.Max, value); s.MaxSlope = Math.Max(s.MaxSlope, slope);
         int distance = Math.Abs(value - s.Baseline);
         if (distance > s.PeakDistance) { s.PeakDistance = distance; s.PeakTime = time; }
-        if (slope >= Math.Max(threshold / 2, s.MaxSlope / 4)) { s.LastActive = time; }
+        // After recent fast, discrete beats, follow the steeper QRS contour so
+        // a slower following wave cannot prolong it into a rejected complex.
+        // Without that evidence retain the conservative activity threshold:
+        // continuous disorganization must not be split into apparent beats.
+        int activeThreshold = Math.Max(threshold / 2, s.MaxSlope / (HasRecentFastRhythm(s, time) ? 2 : 4));
+        if (slope >= activeThreshold) { s.LastActive = time; }
         if (time - s.Start > 240_000_000)
         {
             // A merged wide complex is not evidence of an uncountable rhythm.
@@ -151,9 +175,14 @@ public sealed class EcgHeartRateMeasurement
         long interval = s.LastBeat is { } previous ? s.PeakTime - previous : long.MaxValue;
         // Suppress a secondary lobe and slower T-like slopes near a prior QRS.
         // This is a detector heuristic, not a physiological refractory model.
-        if (interval < 200_000_000 || interval < 360_000_000 && (long)s.MaxSlope * 3 < (long)s.LastSlope * 2) { return; }
+        // Compare candidate starts for T-like slope suppression: a changing
+        // dominant lobe can move the peak within a wide QRS without moving the
+        // next QRS onset. Peak spacing alone would discard that weaker beat.
+        if (interval < 200_000_000 || s.Start - s.LastQrsStartNs < 360_000_000 && (long)s.MaxSlope * 3 < (long)s.LastSlope * 2) { return; }
         s.Peaks = interval <= ExpiryNs ? s.Peaks.Append(s.PeakTime).TakeLast(MaximumRateIntervals + 1).ToArray() : [s.PeakTime];
-        s.LastBeat = s.PeakTime; s.LastSlope = s.MaxSlope;
+        s.LastBeat = s.PeakTime;
+        s.LastSlope = s.MaxSlope;
+        s.LastQrsStartNs = s.Start;
         if (s.Peaks.Length >= 2) { s.Uncountable = false; }
         events.Add(new(s.PeakTime, time));
     }
@@ -163,11 +192,17 @@ public sealed class EcgHeartRateMeasurement
     private static bool IsCompactLowAmplitudeQrs(State s) => s.Max - s.Min >= 200 &&
         s.LastActive - s.Start <= 80_000_000 && (long)s.MaxSlope * 4 >= (long)(s.Max - s.Min) * 3;
 
+    // Teaching segmentation context, not a rhythm classification or predicted RR.
+    private static bool HasRecentFastRhythm(State s, long time) => s.Peaks.Length >= 3 &&
+        time - s.Peaks[^1] < 800_000_000 &&
+        s.Peaks[^1] - s.Peaks[^2] <= 600_000_000 && s.Peaks[^2] - s.Peaks[^3] <= 600_000_000;
+
     internal sealed record Identity(Guid Session, Guid Instance, ulong Timebase, ulong Stream, ulong Revision);
     internal sealed record State
     {
+        internal EcgRhythmAnalysis Rhythm = new();
         internal Identity? Identity;
-        internal long NextTime, Start, LastActive, PeakTime;
+        internal long NextTime, Start, LastActive, PeakTime, LastQrsStartNs;
         internal ulong NextIndex, Sequence;
         internal long? FirstSample, LastSample, LastBeat;
         internal long[] Peaks = [];

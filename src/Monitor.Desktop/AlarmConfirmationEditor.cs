@@ -10,14 +10,17 @@ namespace Monitor.Desktop;
 
 internal sealed class AlarmConfirmationEditor : UserControl
 {
+    internal const string InvalidTimingReason = "AlarmConfirmation.InvalidTiming";
+    private readonly DesktopLocalization _localization;
     private readonly TextBlock _error = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly MeasurementConfirmationTiming _defaults;
     private readonly MonitorNumeric _numeric;
     internal NumericUpDown[] Fields { get; }
     internal TabControl Groups { get; } = new() { Padding = new Thickness(0) };
 
-    internal AlarmConfirmationEditor(MeasurementLimitDescriptor descriptor)
+    internal AlarmConfirmationEditor(MeasurementLimitDescriptor descriptor, DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
         _numeric = descriptor.Numeric;
         _defaults = MeasurementConfirmationTiming.DefaultFor(descriptor.Numeric);
         var trigger = CreateFieldsPanel();
@@ -25,49 +28,52 @@ internal sealed class AlarmConfirmationEditor : UserControl
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Groups);
         Content = panel;
-        AutomationProperties.SetName(Groups, descriptor.Label + "报警参数分组");
+        _localization.Bind(Groups, AutomationProperties.NameProperty, text => text.Format("alarm.groupsName", text.GetString(descriptor.LabelKey)));
         var fields = new List<NumericUpDown>();
-        string[] boundaryLabels = _numeric == MonitorNumeric.SpO2
-            ? ["Critical 下限", "Warning 下限"]
-            : ["Critical 下限", "Warning 下限", "Warning 上限", "Critical 上限"];
-        foreach (string boundary in boundaryLabels)
+        string[] boundaryKeys = _numeric == MonitorNumeric.SpO2 ? AlarmText.BoundaryKeys[..2] : AlarmText.BoundaryKeys;
+        foreach (string boundary in boundaryKeys)
         {
-            foreach (string operation in new[] { "触发", "恢复" })
+            foreach (string operation in new[] { "alarm.operationTrigger", "alarm.operationRecovery" })
             {
-                string label = boundary + " " + operation + "（秒）";
+                string Label(Monitor.Application.Localization.ITextLocalizer text) =>
+                    text.Format("alarm.timingField", text.GetString(boundary), text.GetString(operation));
                 var field = CreateTimingField();
-                AutomationProperties.SetName(field, descriptor.Label + " " + label);
-                var page = operation == "触发" ? trigger : recovery;
+                _localization.Bind(field, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", text.GetString(descriptor.LabelKey), Label(text)));
+                var page = operation == "alarm.operationTrigger" ? trigger : recovery;
                 var row = new StackPanel { Spacing = 4, Width = 220, Margin = new Thickness(0, 0, 24, 8) };
-                row.Children.Add(new TextBlock { Text = label });
+                var caption = new TextBlock();
+                _localization.Bind(caption, TextBlock.TextProperty, Label);
+                row.Children.Add(caption);
                 row.Children.Add(field);
                 page.Children.Add(row);
                 fields.Add(field);
             }
         }
         Fields = fields.ToArray();
-        AddPage("触发确认", trigger);
-        AddPage("恢复确认", recovery);
+        var triggerPage = AddPage("alarm.pageTrigger", trigger);
+        var recoveryPage = AddPage("alarm.pageRecovery", recovery);
         Groups.SelectedIndex = 0;
-        var reset = new Button { Content = "恢复此参数默认确认时间" };
+        var reset = new Button();
+        _localization.Bind(reset, ContentControl.ContentProperty, "alarm.resetParameterConfirmation");
         reset.Click += (_, _) => Restore(_defaults);
         var timingActions = new WrapPanel { Orientation = Orientation.Horizontal };
         timingActions.Children.Add(reset);
-        timingActions.Children.Add(new TextBlock
+        var effect = new TextBlock
         {
-            Text = "修改立即生效，并重新确认此参数。",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 260,
             Margin = new Thickness(12, 4, 0, 4),
             VerticalAlignment = VerticalAlignment.Center
-        });
+        };
+        _localization.Bind(effect, TextBlock.TextProperty, "alarm.parameterChangeEffect");
+        timingActions.Children.Add(effect);
         timingActions.Children.Add(DesktopInformationPages.Help("alarm-confirmation-timing"));
         panel.Children.Add(timingActions);
         panel.Children.Add(_error);
         Groups.SelectionChanged += (_, args) =>
         {
             if (ReferenceEquals(args.Source, Groups))
-            { timingActions.IsVisible = Groups.SelectedItem is TabItem { Header: "触发确认" or "恢复确认" }; }
+            { timingActions.IsVisible = ReferenceEquals(Groups.SelectedItem, triggerPage) || ReferenceEquals(Groups.SelectedItem, recoveryPage); }
         };
         Restore(_defaults);
         foreach (var field in Fields)
@@ -75,7 +81,11 @@ internal sealed class AlarmConfirmationEditor : UserControl
             field.ValueChanged += (_, _) =>
             {
                 try { _ = Read(); _error.Text = null; _error.IsVisible = false; }
-                catch (ArgumentException) { _error.Text = "触发／恢复时间须为 0–600 秒，最多三位小数；0 表示立即确认。"; _error.IsVisible = true; }
+                catch (ArgumentException)
+                {
+                    _localization.Bind(_error, TextBlock.TextProperty, "alarm.timingInvalid");
+                    _error.IsVisible = true;
+                }
             };
         }
     }
@@ -89,7 +99,7 @@ internal sealed class AlarmConfirmationEditor : UserControl
 
     internal void SetThresholdContent(Control content)
     {
-        Groups.Items.Insert(0, Page("阈值", content));
+        Groups.Items.Insert(0, Page("alarm.pageThreshold", content));
         Groups.SelectedIndex = 0;
     }
 
@@ -100,15 +110,20 @@ internal sealed class AlarmConfirmationEditor : UserControl
         return page;
     }
 
-    private static TabItem Page(string title, Control content) => new()
+    // title is a catalog key or verbatim text.
+    private TabItem Page(string title, Control content)
     {
-        Header = title,
-        Content = content,
-        Padding = new Thickness(0),
-        Margin = new Thickness(0, 0, 20, 0),
-        FontSize = 14,
-        MinHeight = 44
-    };
+        var page = new TabItem
+        {
+            Content = content,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 20, 0),
+            FontSize = 14,
+            MinHeight = 44
+        };
+        _localization.BindLabel(page, TabItem.HeaderProperty, title);
+        return page;
+    }
 
     internal MeasurementConfirmationTiming Read()
     {
@@ -132,7 +147,7 @@ internal sealed class AlarmConfirmationEditor : UserControl
     {
         if (field.Value is not { } seconds || seconds < 0 || seconds > 600 ||
             seconds * 1000 != decimal.Truncate(seconds * 1000))
-        { throw new ArgumentException("确认时间须为 0–600 秒，最多三位小数。"); }
+        { throw new ArgumentException(InvalidTimingReason, nameof(field)); }
         return checked((int)(seconds * 1000));
     }
 

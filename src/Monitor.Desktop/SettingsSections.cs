@@ -63,6 +63,7 @@ internal sealed class SettingsSections : UserControl
             localization.LocaleChanged += () =>
             {
                 for (int section = 0; section < _states.Length; section++) { ApplyDetail(section); }
+                RefreshHeaders();
             };
         }
         for (int index = 0; index < sections.Length; index++)
@@ -98,8 +99,8 @@ internal sealed class SettingsSections : UserControl
             var entry = _entries[args.Index];
             container.IsEnabled = !entry.IsHeader;
             container.Focusable = !entry.IsHeader;
-            if (localization is not null && DesktopLocalization.IsKey(entry.Title)) { localization.Bind(container, AutomationProperties.NameProperty, entry.Title); }
-            else { container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry }); }
+            // AccessibleName is already resolved in the selected language, including section state.
+            container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry });
         };
         _compact.ItemsSource = _entries;
         AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
@@ -138,6 +139,8 @@ internal sealed class SettingsSections : UserControl
             }
             Sections.SelectedIndex = _compact.SelectedIndex;
         };
+        for (int section = 0; section < sections.Length; section++) { ApplyDetail(section); }
+        RefreshHeaders();
         _adaptNavigation = width =>
         {
             bool compact = width < 760; Sections.IsVisible = !compact; _compact.IsVisible = compact;
@@ -172,6 +175,10 @@ internal sealed class SettingsSections : UserControl
         else if (_localization is not null) { _localization.BindLabel(item, AutomationProperties.NameProperty, _titles[section]); }
         else { AutomationProperties.SetName(item, name); }
         _entries[_itemOfSection[section]].Update(detail, name);
+    }
+    private void RefreshHeaders()
+    {
+        foreach (var entry in _entries.Where(entry => entry.IsHeader)) { entry.Update(null, Resolve(entry.Title)); }
     }
     private string Resolve(string keyOrText) =>
         _localization is not null && DesktopLocalization.IsKey(keyOrText) ? _localization.Get(keyOrText) : keyOrText;

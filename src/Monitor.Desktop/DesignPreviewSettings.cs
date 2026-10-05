@@ -184,7 +184,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal bool CompactNavigation => _compactCategory.IsVisible;
     internal SoundSettingsPanel Sound { get; }
-    internal MonitorAlertSettings Alerts { get; } = new();
+    internal MonitorAlertSettings Alerts { get; }
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; } = new();
     internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1 下传）", IsChecked = false };
@@ -244,6 +244,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     {
         Localization = localization ?? new DesktopLocalization();
         Sound = new SoundSettingsPanel(localization: Localization);
+        Alerts = new MonitorAlertSettings(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -287,9 +288,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
         { (Alerts.Parameters[0].Title, Alerts.Children[0]), (Alerts.Parameters[1].Title, Alerts.SpO2Enabled) };
         alertGroups.AddRange(Alerts.Parameters.Skip(2).Select(p => (p.Title, (Control)Alerts.AdditionalLimits.Editors[p.Numeric])));
         int alertSettings = alertGroups.Count;
-        alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
-        alertGroups.Add(("通知策略", Alerts.NotificationSettings));
-        var alarmSections = SettingsSections.Split(Localization, "settings.alarms", Alerts, new Dictionary<int, string> { [0] = "测量参数", [alertSettings] = "提示与声音" }, alertGroups.ToArray());
+        alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "alarm.sectionDisplayTest" : "alarm.sectionDisplay", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("alarm.sectionRhythm", Alerts.InfoTone));
+        alertGroups.Add(("alarm.sectionNotifications", Alerts.NotificationSettings));
+        var alarmSections = SettingsSections.Split(Localization, "settings.alarms", Alerts, new Dictionary<int, string> { [0] = "alarm.headerMeasurements", [alertSettings] = "alarm.headerNotices" }, alertGroups.ToArray());
         SectionPages[4] = alarmSections;
         for (int section = 0; section < Alerts.Parameters.Count; section++)
         {
@@ -636,7 +637,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             var channel = new ComboBox { MinWidth = 155 };
             Localization.SetChoices(channel, LiveMonitorTrace.Names.Select((name, index) =>
                 (Func<Monitor.Application.Localization.ITextLocalizer, string>)(text => text.Format("display.channelUnit", name,
-                    index is 1 or 2 ? text.GetString("display.relative") : LiveMonitorTrace.Units[index]))));
+                    LiveMonitorTrace.Unit(text, index)))));
             channel.SelectedIndex = slot.Channel;
             var automatic = new CheckBox { IsChecked = true };
             Localization.Bind(automatic, ContentControl.ContentProperty, "display.automatic");

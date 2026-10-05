@@ -94,7 +94,7 @@ internal sealed class DesignPreviewWindow : Window
                 rejected = true;
             }
         }
-        _monitor = new(_session); MonitorView = new(_monitor);
+        _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization);
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         if (preferences.Sound is { } sound) { Settings.Sound.RestorePreferences(sound, Settings.Alerts); }
         PreferenceNotice.IsVisible = rejected;
@@ -406,8 +406,8 @@ internal sealed class DesignPreviewWindow : Window
                     Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
                 _session.UpdateDisplay(next.Display);
             }
-            _monitor = new(_session);
-            MonitorView = new(_monitor);
+            _monitor = new(_session, Localization);
+            MonitorView = new(_monitor, Localization);
             BindAlarmAttention();
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;

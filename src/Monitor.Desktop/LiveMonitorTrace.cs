@@ -7,41 +7,53 @@ using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
 
-internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Control
+internal sealed class LiveMonitorTrace : Control
 {
     internal static readonly string[] Names = ["ECG · II", "RESP", "PLETH", "ABP", "CO₂", "PA", "CVP"];
-    internal static readonly string[] Units = ["μV", "相对量", "相对量", "mmHg", "mmHg", "mmHg", "mmHg"];
+    private static readonly string[] UnitSymbols = ["μV", "", "", "mmHg", "mmHg", "mmHg", "mmHg"];
+    // RESP and PLETH carry relative units; the others are symbols that need no translation.
+    internal static string Unit(Monitor.Application.Localization.ITextLocalizer text, int channel) =>
+        channel is 1 or 2 ? text.GetString("display.relative") : UnitSymbols[channel];
+    private readonly LocalMonitorPreviewSession _session;
+    private readonly DesktopLocalization _localization;
+
+    internal LiveMonitorTrace(LocalMonitorPreviewSession session, DesktopLocalization? localization = null)
+    {
+        _session = session;
+        _localization = localization ?? new DesktopLocalization();
+        _localization.LocaleChanged += InvalidateVisual;
+    }
     internal static readonly string[] Colors = ["#71E9AF", "#F0D68A", "#8ADAE5", "#F39199", "#E7ECF2", "#CAA7EA", "#F2B67D"];
     private ulong _revision = ulong.MaxValue;
     private long _cycle = -1;
     private StreamGeometry?[,] _paths = new StreamGeometry?[0, 0];
     private Point[]?[,] _contours = new Point[]?[0, 0];
-    internal LocalMonitorPreviewSession Session => session;
+    internal LocalMonitorPreviewSession Session => _session;
     private void Build()
     {
-        if (_revision == session.DataRevision && _cycle == session.Ranges.Cycle) { return; }
-        _revision = session.DataRevision; _cycle = session.Ranges.Cycle;
-        _paths = new StreamGeometry?[session.Display.Slots.Count, 2];
-        _contours = new Point[]?[session.Display.Slots.Count, 2];
-        for (int row = 0; row < session.Display.Slots.Count; row++)
+        if (_revision == _session.DataRevision && _cycle == _session.Ranges.Cycle) { return; }
+        _revision = _session.DataRevision; _cycle = _session.Ranges.Cycle;
+        _paths = new StreamGeometry?[_session.Display.Slots.Count, 2];
+        _contours = new Point[]?[_session.Display.Slots.Count, 2];
+        for (int row = 0; row < _session.Display.Slots.Count; row++)
             for (int age = 0; age < 2; age++)
             {
-                long cycle = session.Ranges.RowCycle(row) - age;
-                long duration = session.Display.Slots[row].DurationNs;
-                if (cycle < 0 || (age == 1 && !session.Ranges.ShowPrevious(row))) { continue; }
+                long cycle = _session.Ranges.RowCycle(row) - age;
+                long duration = _session.Display.Slots[row].DurationNs;
+                if (cycle < 0 || (age == 1 && !_session.Ranges.ShowPrevious(row))) { continue; }
                 long from = cycle * duration;
                 List<Point> stablePoints = [];
                 var path = new StreamGeometry();
                 using (var geometry = path.Open())
                 {
                     bool started = false;
-                    int channel = session.Display.Slots[row].Channel;
-                    var samples = session.Samples(channel, from, from + duration).ToArray();
+                    int channel = _session.Display.Slots[row].Channel;
+                    var samples = _session.Samples(channel, from, from + duration).ToArray();
                     var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
                         Point point = new((sample.TimeNs - from) / (double)duration,
-                            1 - (age == 0 ? session.Ranges.Range(row) : session.Ranges.PreviousRange(row)).Normalize(sample.Value));
+                            1 - (age == 0 ? _session.Ranges.Range(row) : _session.Ranges.PreviousRange(row)).Normalize(sample.Value));
                         if (channel != 0) { stablePoints.Add(point); continue; }
                         if (!started) { geometry.BeginFigure(point, false); started = true; }
                         else { geometry.LineTo(point); }
@@ -58,21 +70,22 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
         context.FillRectangle(Brush.Parse("#101B25"), new Rect(Bounds.Size));
         if (Bounds.Width < 200 || Bounds.Height < 60) { return; }
         Build();
-        int rows = session.Display.Slots.Count;
+        int rows = _session.Display.Slots.Count;
         double rowHeight = Bounds.Height / rows;
         double left = 132, width = Math.Max(1, Bounds.Width - left - 18);
         for (int row = 0; row < rows; row++)
         {
-            long duration = session.Display.Slots[row].DurationNs;
-            double phase = (session.FrontierNs % duration) / (double)duration;
-            int channel = session.Display.Slots[row].Channel;
+            long duration = _session.Display.Slots[row].DurationNs;
+            double phase = (_session.FrontierNs % duration) / (double)duration;
+            int channel = _session.Display.Slots[row].Channel;
             var color = Brush.Parse(Colors[channel]);
-            var range = session.Ranges.Range(row);
+            var range = _session.Ranges.Range(row);
             double top = row * rowHeight;
             context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1));
             Label(context, Names[channel], 12, top + 10, color, 14);
             Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
-            Label(context, Units[channel] + (session.Display.Slots[row].Automatic ? " · 自动" : " · 固定"), 12, top + 49, color, 11);
+            string unit = Unit(_localization.Current, channel);
+            Label(context, _localization.Format(_session.Display.Slots[row].Automatic ? "monitor.rangeAutomatic" : "monitor.rangeFixed", unit), 12, top + 49, color, 11);
             Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
             if (channel == 0)
             {
@@ -83,7 +96,7 @@ internal sealed class LiveMonitorTrace(LocalMonitorPreviewSession session) : Con
                         new(x, plot.Bottom - range.Normalize(500) * plot.Height));
                     Label(context, "1 mV", 12, top + 66, color, 11);
                 }
-                else { Label(context, "1 mV 超量程", 12, top + 66, color, 11); }
+                else { Label(context, _localization.Get("monitor.calibrationOffScale"), 12, top + 66, color, 11); }
             }
             for (int age = 1; age >= 0; age--)
             {

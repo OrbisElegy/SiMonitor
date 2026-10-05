@@ -13,51 +13,54 @@ namespace Monitor.Desktop;
 // realtime-only tabs stay disabled until the source and realtime model are enabled.
 internal sealed class OxygenationSettingsPanel : TabControl
 {
-    internal CheckBox Realtime { get; } = new() { Content = "使用实时氧合模型" };
-    internal OxygenationPatientPanel Patient { get; } = new();
+    internal CheckBox Realtime { get; } = new();
+    internal OxygenationPatientPanel Patient { get; }
     internal NumericUpDown DemandMultiplier { get; } = Field(1, 4, 1, .1m);
     internal NumericUpDown TidalVolume { get; } = Field(0, 1500, 450, 10);
     internal NumericUpDown DeadSpace { get; } = Field(0, 500, 150, 10);
     internal NumericUpDown InspiredOxygen { get; } = Field(10, 100, 21, 1);
-    internal CheckBox AirwayOpen { get; } = new() { Content = "气道开放", IsChecked = true };
+    internal CheckBox AirwayOpen { get; } = new() { IsChecked = true };
     internal Button UpdateVentilation { get; } = new()
     {
-        Content = "更新通气／耗氧，保留当前氧储备",
         MinHeight = 44,
         HorizontalAlignment = HorizontalAlignment.Left
     };
     internal TabItem PatientPage { get; }
     internal TabItem VentilationPage { get; }
     private readonly StackPanel _ventilation = new() { Spacing = 10 };
+    private readonly DesktopLocalization _localization;
     private bool _sourceEnabled = true;
     protected override Type StyleKeyOverride => typeof(TabControl);
 
-    internal OxygenationSettingsPanel()
+    internal OxygenationSettingsPanel(DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
+        Patient = new OxygenationPatientPanel(_localization);
         Padding = new Thickness(0);
-        Add("潮气量 VT（mL，BTPS）", TidalVolume);
-        Add("死腔量 VD（mL，BTPS）", DeadSpace);
-        Add("吸入氧浓度 FiO₂（%）", InspiredOxygen);
+        _localization.Bind(Realtime, ContentControl.ContentProperty, "oxygenation.realtime");
+        _localization.Bind(AirwayOpen, ContentControl.ContentProperty, "oxygenation.airwayOpen");
+        _localization.Bind(UpdateVentilation, ContentControl.ContentProperty, "oxygenation.updateVentilation");
+        Add("oxygenation.tidalVolume", TidalVolume);
+        Add("oxygenation.deadSpace", DeadSpace);
+        Add("oxygenation.inspiredOxygen", InspiredOxygen);
         _ventilation.Children.Add(AirwayOpen);
-        Add("教师耗氧倍增器（1–4 倍）", DemandMultiplier);
-        _ventilation.Children.Add(new TextBlock
-        {
-            Text = "首次启用需从头开始；通气更新同步作用于 RESP 和 CO₂ 波形。",
-            TextWrapping = TextWrapping.Wrap
-        });
+        Add("oxygenation.demandMultiplier", DemandMultiplier);
+        var note = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        _localization.Bind(note, TextBlock.TextProperty, "oxygenation.ventilationNote");
+        _ventilation.Children.Add(note);
         _ventilation.Children.Add(UpdateVentilation);
-        PatientPage = Page("患者基线", Patient);
-        VentilationPage = Page("通气与耗氧", _ventilation);
+        PatientPage = Page("oxygenation.patientPage", Patient);
+        VentilationPage = Page("oxygenation.ventilationPage", _ventilation);
         Items.Add(PatientPage);
         Items.Add(VentilationPage);
-        AutomationProperties.SetName(this, "指脉氧参数分组");
+        _localization.Bind(this, AutomationProperties.NameProperty, "oxygenation.groupName");
         Realtime.IsCheckedChanged += (_, _) => RefreshPages();
         RefreshPages();
     }
 
     internal void SetSourceContent(Control content)
     {
-        Items.Insert(0, Page("信号源", content));
+        Items.Insert(0, Page("oxygenation.sourcePage", content));
         SelectedIndex = 0;
     }
 
@@ -76,22 +79,28 @@ internal sealed class OxygenationSettingsPanel : TabControl
         if (!editable && SelectedItem is TabItem selected && (selected == PatientPage || selected == VentilationPage)) { SelectedIndex = 0; }
     }
 
-    private void Add(string label, Control control)
+    private void Add(string key, Control control)
     {
-        _ventilation.Children.Add(new TextBlock { Text = label });
+        var label = new TextBlock();
+        _localization.Bind(label, TextBlock.TextProperty, key);
+        _ventilation.Children.Add(label);
         _ventilation.Children.Add(control);
-        AutomationProperties.SetName(control, label);
+        _localization.Bind(control, AutomationProperties.NameProperty, key);
     }
 
-    private static TabItem Page(string title, Control content) => new()
+    private TabItem Page(string key, Control content)
     {
-        Header = title,
-        Content = content,
-        Padding = new Thickness(0),
-        Margin = new Thickness(0, 0, 20, 0),
-        FontSize = 14,
-        MinHeight = 44
-    };
+        var page = new TabItem
+        {
+            Content = content,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 20, 0),
+            FontSize = 14,
+            MinHeight = 44
+        };
+        _localization.Bind(page, TabItem.HeaderProperty, key);
+        return page;
+    }
 
     private static NumericUpDown Field(decimal minimum, decimal maximum, decimal value, decimal increment) =>
         new()
@@ -105,11 +114,11 @@ internal sealed class OxygenationSettingsPanel : TabControl
         };
 
     internal VentilationTransportPlan ReadVentilation() => new(
-        DesignPreviewSettings.ReadVitalValue(TidalVolume, 1000, "潮气量 VT"),
-        DesignPreviewSettings.ReadVitalValue(DeadSpace, 1000, "死腔量 VD"),
-        DesignPreviewSettings.ReadVitalValue(InspiredOxygen, 10000, "吸入氧浓度 FiO₂"), AirwayOpen.IsChecked == true);
+        DesignPreviewSettings.ReadVitalValue(TidalVolume, 1000, "oxygenation.tidalVolumeField"),
+        DesignPreviewSettings.ReadVitalValue(DeadSpace, 1000, "oxygenation.deadSpaceField"),
+        DesignPreviewSettings.ReadVitalValue(InspiredOxygen, 10000, "oxygenation.inspiredOxygenField"), AirwayOpen.IsChecked == true);
 
-    internal decimal ReadDemandMultiplier() => DesignPreviewSettings.ReadVitalValue(DemandMultiplier, 100, "耗氧倍增器") / 100m;
+    internal decimal ReadDemandMultiplier() => DesignPreviewSettings.ReadVitalValue(DemandMultiplier, 100, "oxygenation.demandMultiplierField") / 100m;
     internal RealtimeOxygenationConfiguration ReadConfiguration() => Capture(true)!.CreateConfiguration();
 
     internal OxygenationEditorPreferences? Capture(bool opticalEnabled)

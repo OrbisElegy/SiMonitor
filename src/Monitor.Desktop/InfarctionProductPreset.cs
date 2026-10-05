@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Localization;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -15,6 +16,15 @@ internal static class InfarctionProductPreset
         InfarctionTerritory.ExtensiveAnterior => "广泛前壁",
         _ => throw new ArgumentOutOfRangeException(nameof(territory))
     };
+    internal static string TerritoryName(ITextLocalizer text, InfarctionTerritory territory) => text.GetString(territory switch
+    {
+        InfarctionTerritory.Inferior => "infarction.territoryInferior",
+        InfarctionTerritory.Lateral => "infarction.territoryLateral",
+        InfarctionTerritory.Anteroseptal => "infarction.territoryAnteroseptal",
+        InfarctionTerritory.Anterior => "infarction.territoryAnterior",
+        InfarctionTerritory.ExtensiveAnterior => "infarction.territoryExtensiveAnterior",
+        _ => throw new ArgumentOutOfRangeException(nameof(territory))
+    });
     internal static EcgChestInfarctionPlan Create(int index, InfarctionTerritory territory = InfarctionTerritory.Inferior)
     {
         if (index is < 0 or > 9) { throw new ArgumentOutOfRangeException(nameof(index)); }

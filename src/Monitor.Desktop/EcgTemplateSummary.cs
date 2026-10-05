@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Globalization;
+using Monitor.Application.Localization;
+using Monitor.Infrastructure.Localization;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -7,94 +9,104 @@ namespace Monitor.Desktop;
 // Describes authored waveform supports, never measured intervals or live values.
 internal static class EcgTemplateSummary
 {
-    internal static string Describe(ProjectedEcgDemoConfiguration config)
+    private static readonly ITextLocalizer Chinese = BuiltInLocalizations.Create("zh-CN");
+
+    // The default wording, in Chinese.
+    internal static string Describe(ProjectedEcgDemoConfiguration config) => Describe(Chinese, config);
+
+    internal static string Describe(ITextLocalizer text, ProjectedEcgDemoConfiguration config)
     {
         var pattern = config.ConductionPattern;
-        if (config.CardiacActivity == CardiacActivity.Absent)
-        { return "无心房或心室电活动；P、PR、QRS、QT 不适用。"; }
-        if (VentricularDisorganizationReference.IsPattern(pattern))
-        { return "无可独立标注的 P、PR、QRS、QT；采用室扑／室颤复合波形。"; }
-        if (config.HyperkalemiaFusion)
-        { return "无 P 波；QRS–T 融合，PR、独立 QRS／T／QT 不适用；复合轮廓 720 ms"; }
+        if (config.CardiacActivity == CardiacActivity.Absent) { return text.GetString("summary.noActivity"); }
+        if (VentricularDisorganizationReference.IsPattern(pattern)) { return text.GetString("summary.disorganized"); }
+        if (config.HyperkalemiaFusion) { return text.GetString("summary.hyperkalemiaFusion"); }
         var timing = config.ResolveTiming();
-        string Ms(long ns) => (ns / 1_000_000m).ToString("0.###", CultureInfo.InvariantCulture);
-        if (config.CardiacActivity == CardiacActivity.AtrialOnly)
-        { return $"P {Ms(timing.PDurationNs)} ms；无心室电活动，PR、QRS、QT 不适用。"; }
-        string ventricular = $"QRS {Ms(timing.QrsDurationNs)} ms · QT {Ms(timing.QtIntervalNs)} ms · T {Ms(timing.TDurationNs)} ms";
+        if (config.CardiacActivity == CardiacActivity.AtrialOnly) { return text.Format("summary.atrialOnly", Ms(timing.PDurationNs)); }
+        string ventricular = text.Format("summary.ventricular", Ms(timing.QrsDurationNs), Ms(timing.QtIntervalNs), Ms(timing.TDurationNs));
         if (config.Zones is { } zones)
         {
-            string Region(EcgInfarctionRegion region) => InfarctionZoneSelection.Names[InfarctionZoneSelection.Index(region)];
-            return DescribeComponents(zones.Components, $"缺血：{Region(zones.Ischemia)}；损伤：{Region(zones.Injury)}；坏死：{Region(zones.Necrosis)}",
+            string Region(EcgInfarctionRegion region) => InfarctionZoneSelection.Name(text, InfarctionZoneSelection.Index(region));
+            return DescribeComponents(text, zones.Components, text.Format("summary.zones", Region(zones.Ischemia), Region(zones.Injury), Region(zones.Necrosis)),
                 timing.QtIntervalNs + (zones.Ischemia.Territory == InfarctionTerritory.CustomChest && zones.Ischemia.ChestMask == 0 ? 0 : zones.RepolarizationDelayNs));
         }
         if (config.Infarction is { } infarction)
         {
             string local = infarction.Stage is InfarctionIllustrationStage.HyperacuteInjury or InfarctionIllustrationStage.AcuteMonophasic
-                ? $"ST–T 融合，T 时限不单独标注；局部 QT {Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs)} ms · 局部 QRS {Ms(infarction.Stage == InfarctionIllustrationStage.HyperacuteInjury ? timing.QrsDurationNs * 6 / 5 : timing.QrsDurationNs)} ms"
-                : $"QRS {Ms(timing.QrsDurationNs)} ms · 局部 QT {Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs)} ms · T {Ms(timing.TDurationNs + infarction.RepolarizationDelayNs)} ms";
+                ? text.Format("summary.fusedSt", Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs),
+                    Ms(infarction.Stage == InfarctionIllustrationStage.HyperacuteInjury ? timing.QrsDurationNs * 6 / 5 : timing.QrsDurationNs))
+                : text.Format("summary.regional", Ms(timing.QrsDurationNs), Ms(timing.QtIntervalNs + infarction.RepolarizationDelayNs),
+                    Ms(timing.TDurationNs + infarction.RepolarizationDelayNs));
             string region = infarction.Territory == InfarctionTerritory.CustomChest
-                ? string.Join("、", Enumerable.Range(0, 6).Where(i => (infarction.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))
-                : InfarctionProductPreset.TerritoryName(infarction.Territory);
+                ? ChestLeads(text, infarction.ChestMask)
+                : InfarctionProductPreset.TerritoryName(text, infarction.Territory);
             if (infarction.Components is { } parts)
             {
-                return DescribeComponents(parts, region, timing.QtIntervalNs + infarction.RepolarizationDelayNs);
+                return DescribeComponents(text, parts, region, timing.QtIntervalNs + infarction.RepolarizationDelayNs);
             }
-            return $"{region}独立快照 · P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + local + "；不随模拟时间演变";
+            return text.Format("summary.infarctionSnapshot", region, Ms(timing.PDurationNs), Ms(timing.PrIntervalNs), local);
         }
         if (config.TContour is { } contour)
         {
             string crossing = contour.Shape is EcgTContourShape.PositiveNegative or EcgTContourShape.NegativePositive
-                ? $"；过零 {(contour.CrossingPositionPermille ?? 500) / 10m:0.#}% · 第二瓣 {contour.SecondPeakMicrovolts ?? contour.PeakMicrovolts} μV" : "";
-            string target = contour.Target == EcgTContourTarget.Chest
-                ? string.Join("、", Enumerable.Range(0, 6).Where(i => (contour.ChestMask & (1 << i)) != 0).Select(i => $"V{i + 1}"))
-                : contour.Target.ToString();
-            return $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular +
-                $"；T 目标 {target} · 峰幅 {contour.PeakMicrovolts} μV" + crossing;
+                ? text.Format("summary.tContourCrossing", ((contour.CrossingPositionPermille ?? 500) / 10m).ToString("0.#", CultureInfo.InvariantCulture),
+                    Number(contour.SecondPeakMicrovolts ?? contour.PeakMicrovolts))
+                : "";
+            string target = contour.Target == EcgTContourTarget.Chest ? ChestLeads(text, contour.ChestMask) : contour.Target.ToString();
+            return text.Format("summary.tContour", Ms(timing.PDurationNs), Ms(timing.PrIntervalNs), ventricular, target, Number(contour.PeakMicrovolts), crossing);
         }
         if (config.Quinidine != QuinidineIllustration.Reference)
-        { return $"P {Ms(timing.PDurationNs)} ms{(config.QuinidineNotchedP ? "（切迹）" : "")} · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular + $"；QU {Ms(QuinidineEffectReference.ResolveQuIntervalNs(config.Quinidine))} ms"; }
-        if (config.DigitalisEffect)
-        { return $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · QT {Ms(timing.QtIntervalNs)} ms；QRS 末段与 ST–T 连续，T 时限不单独标注"; }
+        {
+            return text.Format("summary.quinidine", Ms(timing.PDurationNs), config.QuinidineNotchedP ? text.GetString("summary.notched") : "",
+                Ms(timing.PrIntervalNs), ventricular, Ms(QuinidineEffectReference.ResolveQuIntervalNs(config.Quinidine)));
+        }
+        if (config.DigitalisEffect) { return text.Format("summary.digitalis", Ms(timing.PDurationNs), Ms(timing.PrIntervalNs), Ms(timing.QtIntervalNs)); }
         if (config.HypokalemiaRepolarization)
         {
-            string atrialTiming = $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · QRS {Ms(timing.QrsDurationNs)} ms";
             return config.HypokalemiaTuFusion
-                ? atrialTiming + $"；T–U 融合，QT 不单独标注；QU {Ms(HypokalemiaRepolarizationReference.QuIntervalNs)} ms"
-                : $"P {Ms(timing.PDurationNs)} ms · PR {Ms(timing.PrIntervalNs)} ms · " + ventricular +
-                    $"；U 波增高，QU {Ms(HypokalemiaRepolarizationReference.QuIntervalNs)} ms";
+                ? text.Format("summary.tuFusion", text.Format("summary.atrialTiming", Ms(timing.PDurationNs), Ms(timing.PrIntervalNs), Ms(timing.QrsDurationNs)),
+                    Ms(HypokalemiaRepolarizationReference.QuIntervalNs))
+                : text.Format("summary.tallU", Ms(timing.PDurationNs), Ms(timing.PrIntervalNs), ventricular, Ms(HypokalemiaRepolarizationReference.QuIntervalNs));
         }
-        if (config.HyperkalemiaAbsentP)
-        { return "无 P 波；PR 不适用；" + ventricular; }
+        if (config.HyperkalemiaAbsentP) { return text.Format("summary.absentP", ventricular); }
         if (AtrialFibrillationReference.IsPattern(pattern))
         {
             string aberrancy = config.IllustrateAfAberrancy
-                ? $"；差异传导搏动 QRS {Ms(RightBundleBlockReference.Timing.QrsDurationNs)} ms · QT {Ms(RightBundleBlockReference.Timing.QtIntervalNs)} ms" : "";
-            return "无正常 P 波；PR 不适用；普通搏动 " + ventricular + aberrancy;
+                ? text.Format("summary.aberrancy", Ms(RightBundleBlockReference.Timing.QrsDurationNs), Ms(RightBundleBlockReference.Timing.QtIntervalNs)) : "";
+            return text.Format("summary.fibrillation", ventricular, aberrancy);
         }
-        if (AtrialFlutterReference.IsPattern(pattern))
-        { return "连续 F 波；无正常 P 波，PR 不适用；" + ventricular; }
-        if (config.Svt)
-        { return "逆行 P′与 QRS 重叠；PR 不可单独测量；" + ventricular; }
+        if (AtrialFlutterReference.IsPattern(pattern)) { return text.Format("summary.flutter", ventricular); }
+        if (config.Svt) { return text.Format("summary.svt", ventricular); }
         if (config.Vt || config.Aivr || config.Ajr || config.IndependentVentricularPeriodMilliseconds is not null)
         {
             string variants = config.VtFusion || config.VtCapture || config.AivrFusion || config.AivrCapture
-                ? "；融合／夺获搏动采用独立形态，以上为普通搏动时限" : "";
-            return $"独立 P {Ms(timing.PDurationNs)} ms；无固定 PR；" + ventricular + variants;
+                ? text.GetString("summary.independentVariants") : "";
+            return text.Format("summary.independent", Ms(timing.PDurationNs), ventricular, variants);
         }
         bool premature = PrematureVentricularReference.IsPattern(pattern) ||
             PrematureAtrialReference.IsPattern(pattern) || PrematureJunctionalReference.IsPattern(pattern);
         bool wenckebach = pattern is AvConductionPattern.WenckebachThreeToTwoIllustration or
             AvConductionPattern.WenckebachFourToThreeIllustration or AvConductionPattern.WenckebachFiveToFourIllustration;
-        string pr = wenckebach ? "PR 逐搏延长至脱漏" : $"PR {Ms(timing.PrIntervalNs)} ms（下传搏动）";
+        string pr = wenckebach ? text.GetString("summary.wenckebach") : text.Format("summary.conductedPr", Ms(timing.PrIntervalNs));
         string atrial = config.Aar || config.AtrialEscape ? "P′" : "P";
-        return (premature ? "窦性搏动：" : "") + $"{atrial} {Ms(timing.PDurationNs)} ms · {pr} · " + ventricular +
-            (premature ? "；早搏及相关搏动采用独立时序／形态" : "");
-    }
-    private static string DescribeComponents(EcgInfarctionComponents parts, string region, long qtNs)
-    {
-        string qrs = parts.Necrosis switch { NecrosisIllustrationShape.QWithReducedR => "异常 Q／低 R", NecrosisIllustrationShape.QS => "QS", _ => "参考 QRS" };
-        string t = parts.TPeakMicrovolts is { } peak ? $"T {peak} μV" : "参考 T";
-        return $"{region}独立分量 · {qrs}（模板混合 {parts.QrsTemplatePermille / 10m:0.#}%）· J {parts.JMicrovolts} / ST末端 {parts.StEndMicrovolts} / 弓形 {parts.StArchMicrovolts} μV · {t} · 局部 QT {(qtNs / 1_000_000m).ToString("0.###", CultureInfo.InvariantCulture)} ms；非阶段融合模板";
+        return text.Format("summary.default", premature ? text.GetString("summary.sinusPrefix") : "", atrial, Ms(timing.PDurationNs), pr, ventricular,
+            premature ? text.GetString("summary.prematureSuffix") : "");
     }
 
+    private static string DescribeComponents(ITextLocalizer text, EcgInfarctionComponents parts, string region, long qtNs)
+    {
+        string qrs = parts.Necrosis switch
+        {
+            NecrosisIllustrationShape.QWithReducedR => text.GetString("summary.necrosisQ"),
+            NecrosisIllustrationShape.QS => "QS",
+            _ => text.GetString("summary.referenceQrs"),
+        };
+        string t = parts.TPeakMicrovolts is { } peak ? text.Format("summary.tPeak", Number(peak)) : text.GetString("summary.referenceT");
+        return text.Format("summary.components", region, qrs, (parts.QrsTemplatePermille / 10m).ToString("0.#", CultureInfo.InvariantCulture),
+            Number(parts.JMicrovolts), Number(parts.StEndMicrovolts), Number(parts.StArchMicrovolts), t, Ms(qtNs));
+    }
+
+    private static string Ms(long ns) => (ns / 1_000_000m).ToString("0.###", CultureInfo.InvariantCulture);
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+    private static string ChestLeads(ITextLocalizer text, int mask) =>
+        string.Join(text.GetString("summary.leadSeparator"), Enumerable.Range(0, 6).Where(i => (mask & (1 << i)) != 0).Select(i => $"V{i + 1}"));
 }

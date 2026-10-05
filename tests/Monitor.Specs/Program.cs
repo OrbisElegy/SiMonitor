@@ -259,14 +259,32 @@ internal static class Program
             .. WaveformSubscriberQueueSpecifications.All,
         ];
 
+        int executed = 0;
+        int failed = 0;
         for (int index = 0; index < specifications.Length; index++)
         {
             if (index % shards != shard) { continue; }
-            specifications[index].Body();
-            Console.WriteLine($"ok {index + 1} - {specifications[index].Name}");
+            executed++;
+            // Runner boundary: report every failing specification instead of stopping at the first.
+            try
+            {
+                specifications[index].Body();
+                Console.WriteLine($"ok {index + 1} - {specifications[index].Name}");
+            }
+            catch (Exception exception)
+            {
+                failed++;
+                Console.WriteLine($"not ok {index + 1} - {specifications[index].Name}");
+                Console.Error.WriteLine($"{specifications[index].Name}: {exception}");
+            }
         }
 
-        Console.WriteLine($"ok: {Enumerable.Range(0, specifications.Length).Count(i => i % shards == shard)} executable specifications passed (shard {shard + 1}/{shards}; total {specifications.Length})");
+        if (failed != 0)
+        {
+            Console.WriteLine($"failed: {failed} of {executed} executable specifications (shard {shard + 1}/{shards}; total {specifications.Length})");
+            return 1;
+        }
+        Console.WriteLine($"ok: {executed} executable specifications passed (shard {shard + 1}/{shards}; total {specifications.Length})");
         return 0;
     }
 }

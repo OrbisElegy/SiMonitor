@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Run already-built specs/native checks in isolated processes, up to 32 workers.
-On Linux use xvfb-run -a python3 tools/run_parallel_checks.py for native checks.
+Desktop checks open native windows and require a graphical session.
+On Linux without a display, use xvfb-run -a python3 tools/run_parallel_checks.py.
 """
 import argparse
 import concurrent.futures
@@ -17,8 +18,8 @@ def main():
     parser.add_argument('--jobs', type=int, default=min(32, os.cpu_count() or 1))
     parser.add_argument('--configuration', choices=['Debug', 'Release'], default='Debug')
     choice = parser.add_mutually_exclusive_group()
-    choice.add_argument('--specs-only', action='store_true')
-    choice.add_argument('--native-only', action='store_true')
+    choice.add_argument('--specs-only', action='store_true', help='Run core specifications without desktop windows')
+    choice.add_argument('--native-only', action='store_true', help='Run desktop checks using native windows')
     args = parser.parse_args()
     if not 1 <= args.jobs <= 32:
         parser.error('--jobs must be between 1 and 32')

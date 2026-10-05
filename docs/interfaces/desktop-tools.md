@@ -96,12 +96,14 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 | 入口 | 参数和契约 |
 |---|---|
-| [run_parallel_checks.py](../../tools/run_parallel_checks.py) | `--jobs N`（1–32）、`--configuration Debug\|Release`（默认 Debug）、互斥的 `--specs-only`／`--native-only`；使用已构建产物，不负责构建，日志位于 `artifacts/parallel-checks/`。Linux 桌面运行可用 `xvfb-run -a python3 tools/run_parallel_checks.py ...` |
+| [run_parallel_checks.py](../../tools/run_parallel_checks.py) | `--jobs N`（1–32）、`--configuration Debug\|Release`（默认 Debug）、互斥的 `--specs-only`／`--native-only`；使用已构建产物，不负责构建，日志位于 `artifacts/parallel-checks/`。桌面检查打开原生窗口，需要图形会话；Linux 无显示环境时用 `xvfb-run -a python3 tools/run_parallel_checks.py ...` |
 | [check_desktop_launch.py](../../tools/check_desktop_launch.py) | `ASSEMBLY`；面向 Linux 开发版默认入口及 `--ui-preview`，需可用的图形显示和 `xwininfo`；运行目录隔离为临时目录 |
 | [check_native_audio_binding.py](../../tools/check_native_audio_binding.py) | 无自定义参数；使用 Debug `Monitor.Specs.dll` 和隔离测试音频库，同时确认生产试听入口拒绝测试后端 |
 | [native ABI 检查](../../native/sim_audio_native/tests/check_abi.py) | `LIBRARY [--production-unavailable]`；详见[原生音频说明](../../native/sim_audio_native/README.md) |
 | [spdx_headers.py](../../tools/spdx_headers.py) | `--check` 只检查；省略时会补写许可头，范围见贡献指南 |
 | [check_commit_message.py](../../tools/check_commit_message.py) | `MESSAGE_FILE`；读取当前 Git author 与消息，检查仓库提交格式，返回 0 或 1 |
+
+CI 在 Windows 图形会话和 Linux Xvfb 显示环境中运行 `--native-only`，两者均使用 `Monitor.Desktop` 的原生窗口入口。没有单独的无头桌面运行器；`--specs-only` 保留用于不依赖窗口的核心规格。桌面检查的启动截图输出到 `artifacts/desktop-startup.png`，CI 失败时与分片日志一起保留。
 
 `tests/Monitor.Specs/Program.cs` 是开发用可执行规格与夹具入口：
 

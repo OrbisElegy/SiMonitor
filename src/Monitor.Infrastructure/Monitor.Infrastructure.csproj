@@ -5,6 +5,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Monitor.Specs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Monitor.Application/Monitor.Application.csproj" />
     <ProjectReference Include="../Monitor.Domain/Monitor.Domain.csproj" />
   </ItemGroup>

@@ -199,6 +199,7 @@ internal static class Program
             .. AudioOutputLifecycleSpecifications.All,
             .. SoundPreviewSpecifications.All,
             .. NativeAudioCommandSpecifications.All,
+            .. EndpointAudioOutputSpecifications.All,
             .. NativeAudioClockSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,

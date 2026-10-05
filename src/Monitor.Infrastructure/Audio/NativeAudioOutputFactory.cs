@@ -14,7 +14,7 @@ public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint D
 public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 {
     public const int DefaultQueueTargetMilliseconds = 20;
-    private const int FramesPerMillisecond = ToneVoice.SampleRate / 1000;
+    private const int FramesPerMillisecond = AudioQueueTarget.FramesPerMillisecond;
     private nint _library;
     private readonly OpenCall _open;
     private readonly SubmitCall _submit;
@@ -113,17 +113,10 @@ public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 
     private T Export<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(_library, name));
 
-    // Without event pacing the legacy full queue is kept. Otherwise at least two
-    // device periods stay queued so one late wake-up cannot underrun the callback.
-    private int ResolveQueueTargetFrames(nint handle, int capacityFrames)
-    {
-        if (_wait is null) { return capacityFrames; }
-        uint sampleRate = _info(handle, 1);
-        uint periodFrames = _info(handle, 4);
-        long periodFrames48k = sampleRate == 0 ? 0 : ((long)periodFrames * ToneVoice.SampleRate + sampleRate - 1) / sampleRate;
-        long targetFrames = Math.Max((long)_queueTargetMilliseconds * FramesPerMillisecond, 2 * periodFrames48k);
-        return (int)Math.Min(targetFrames, capacityFrames);
-    }
+    // Without event pacing the legacy full queue is kept.
+    private int ResolveQueueTargetFrames(nint handle, int capacityFrames) => _wait is null
+        ? capacityFrames
+        : AudioQueueTarget.Frames(_queueTargetMilliseconds, AudioQueueTarget.PeriodFrames48k(_info(handle, 4), _info(handle, 1)), capacityFrames);
 
     private sealed class Device(NativeAudioOutputFactory owner, nint handle, AudioRenderSession session, int queueTargetFrames) : IAudioOutputDevice
     {

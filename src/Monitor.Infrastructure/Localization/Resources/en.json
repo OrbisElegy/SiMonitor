@@ -870,5 +870,10 @@
   "vitalChanges.reasonPressure": "These pressure targets cannot be produced with the current rhythm and heart rate.",
   "vitalChanges.reasonPressureTemplate": "The current waveform template does not support pressure targets.",
   "vitalChanges.reasonOther": "The generator rejected these values; check the vital sign settings.",
-  "ecg12.placing": "First point placed on {0}; click a second point on the same lead to finish."
+  "ecg12.placing": "First point placed on {0}; click a second point on the same lead to finish.",
+  "vitals.abpVariation": "ABP random drift (±mmHg at the mean, 0–20; 0 off)",
+  "vitals.paVariation": "PA random drift (±mmHg at the mean, 0–5; 0 off)",
+  "vitals.abpVariationField": "ABP random drift",
+  "vitals.paVariationField": "PA random drift",
+  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged."
 }

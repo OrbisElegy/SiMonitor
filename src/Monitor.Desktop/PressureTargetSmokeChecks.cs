@@ -41,10 +41,30 @@ internal static class PressureTargetSmokeChecks
                 "unreachable targets for the selected rhythm are reported without applying");
             settings.EcgSelection = 0;
 
+            settings.AbpVariation.Value = 10;
+            window.RestartSettings();
+            var diastolic = new List<int>();
+            for (int i = 0; i < 1200; i++)
+            {
+                window.Pulse(window.ActiveTimer, 50_000_000);
+                if (i % 40 == 39 && window.Session.Measurements!.AbpMean.Pulse is { DiastolicCentiMmHg: { } value }) { diastolic.Add(value); }
+            }
+            Require(diastolic.Count > 20 && diastolic.Max() - diastolic.Min() >= 400, "a random drift moves the measured ABP around its targets");
+            settings.AbpVariation.Value = 20;
+            settings.AbpSystolic.Value = 55;
+            settings.AbpDiastolic.Value = 21;
+            session = window.Session;
+            window.ApplySettings();
+            Require(ReferenceEquals(session, window.Session) && settings.Status.Text == window.Localization.Get("validation.pressureVariation"),
+                "a drift too large for the pressure level is reported without applying");
+            settings.AbpSystolic.Value = 130;
+            settings.AbpDiastolic.Value = 85;
+            settings.AbpVariation.Value = 10;
+
             var saved = settings.CaptureGenerator();
-            Require(saved.Flags["AbpTargetEnabled"] && saved.Numbers["AbpSystolic"] == 130 && saved.Numbers["PaDiastolic"] == 12,
-                "targets are part of the saved generator preferences");
-            string[] later = ["AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled"];
+            Require(saved.Flags["AbpTargetEnabled"] && saved.Numbers["AbpSystolic"] == 130 && saved.Numbers["PaDiastolic"] == 12 && saved.Numbers["AbpVariation"] == 10,
+                "targets and drift are part of the saved generator preferences");
+            string[] later = ["AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"];
             var older = saved with
             {
                 Numbers = saved.Numbers.Where(pair => !later.Contains(pair.Key)).ToDictionary(),
@@ -54,7 +74,8 @@ internal static class PressureTargetSmokeChecks
             try
             {
                 fresh.Settings.RestoreGenerator(older);
-                Require(fresh.Settings.AbpTargetEnabled.IsChecked == false && fresh.Settings.AbpSystolic.Value == 120 && fresh.Settings.PaDiastolic.Value == 10,
+                Require(fresh.Settings.AbpTargetEnabled.IsChecked == false && fresh.Settings.AbpSystolic.Value == 120 && fresh.Settings.PaDiastolic.Value == 10 &&
+                    fresh.Settings.AbpVariation.Value == 0,
                     "preferences saved before targets existed restore with targets off at their defaults");
                 bool rejected = false;
                 try { fresh.Settings.RestoreGenerator(older with { Numbers = older.Numbers.Where(pair => pair.Key != "CvpBaseline").ToDictionary() }); }

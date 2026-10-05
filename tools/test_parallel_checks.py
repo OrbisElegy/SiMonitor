@@ -41,6 +41,30 @@ class ParallelCheckLogTests(unittest.TestCase):
                     self.assertEqual((output / 'specs-00.log').read_bytes(), logs['--shard'])
                     self.assertEqual((output / 'native-00.log').read_bytes(), logs['--smoke-shard'])
 
+    def test_headless_runner_selects_the_smoke_project(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for folder, name in (('tests', 'Monitor.Specs'), ('tests', 'Monitor.Desktop.Smoke')):
+                assembly = root / folder / name / 'bin/Debug/net10.0' / (name + '.dll')
+                assembly.parent.mkdir(parents=True)
+                assembly.write_bytes(b'fixture')
+            commands = []
+
+            def run(command, **kwargs):
+                commands.append(command)
+                marker = b'ok 1 - a\n(1 passed; total 1)\n' if command[2] == '--shard' else \
+                    b'ok: native scenario 0 a\nnative scenarios total: 1\n'
+                os.write(kwargs['stdout'].fileno(), marker)
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch.object(runner, '__file__', str(root / 'tools/run_parallel_checks.py')), \
+                    patch('sys.argv', ['run_parallel_checks.py', '--jobs', '1', '--desktop-runner', 'headless']), \
+                    patch.object(runner.subprocess, 'run', side_effect=run), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.main(), 0)
+            desktop = [command[1] for command in commands if command[2] == '--smoke-shard']
+            self.assertEqual(desktop, [str(root / 'tests/Monitor.Desktop.Smoke/bin/Debug/net10.0/Monitor.Desktop.Smoke.dll')])
+
 
 if __name__ == '__main__':
     unittest.main()

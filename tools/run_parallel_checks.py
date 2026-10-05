@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Run already-built specs/native checks in isolated processes, up to 32 workers.
-On Linux use xvfb-run -a python3 tools/run_parallel_checks.py for native checks.
+Native desktop checks open real windows: on Linux use xvfb-run -a, or pass
+--desktop-runner headless to run them through Avalonia's headless platform.
 """
 import argparse
 import concurrent.futures
@@ -19,6 +20,8 @@ def main():
     choice = parser.add_mutually_exclusive_group()
     choice.add_argument('--specs-only', action='store_true')
     choice.add_argument('--native-only', action='store_true')
+    parser.add_argument('--desktop-runner', choices=['native', 'headless'], default='native',
+                        help='native runs Monitor.Desktop; headless runs tests/Monitor.Desktop.Smoke')
     args = parser.parse_args()
     if not 1 <= args.jobs <= 32:
         parser.error('--jobs must be between 1 and 32')
@@ -26,9 +29,10 @@ def main():
     output = root / 'artifacts' / 'parallel-checks'
     output.mkdir(parents=True, exist_ok=True)
     tasks = []
+    desktop = ('tests', 'Monitor.Desktop.Smoke') if args.desktop_runner == 'headless' else ('src', 'Monitor.Desktop')
     for kind, folder, name, flag in [
         ('specs', 'tests', 'Monitor.Specs', '--shard'),
-        ('native', 'src', 'Monitor.Desktop', '--smoke-shard'),
+        ('native', *desktop, '--smoke-shard'),
     ]:
         if (kind == 'native' and args.specs_only) or (kind == 'specs' and args.native_only):
             continue

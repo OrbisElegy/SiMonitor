@@ -94,7 +94,7 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 | 入口 | 参数和契约 |
 |---|---|
-| [run_parallel_checks.py](../../tools/run_parallel_checks.py) | `--jobs N`（1–32）、`--configuration Debug\|Release`（默认 Debug）、互斥的 `--specs-only`／`--native-only`；使用已构建产物，不负责构建，日志位于 `artifacts/parallel-checks/`。Linux 桌面运行可用 `xvfb-run -a python3 tools/run_parallel_checks.py ...` |
+| [run_parallel_checks.py](../../tools/run_parallel_checks.py) | `--jobs N`（1–32）、`--configuration Debug\|Release`（默认 Debug）、互斥的 `--specs-only`／`--native-only`、`--desktop-runner native\|headless`（默认 native）；使用已构建产物，不负责构建，日志位于 `artifacts/parallel-checks/`。native 打开真实窗口，Linux 可用 `xvfb-run -a`；headless 改用 `tests/Monitor.Desktop.Smoke`，在 Avalonia 无界面平台上以 Skia 渲染运行同一套桌面检查，不需要显示环境 |
 | [check_desktop_launch.py](../../tools/check_desktop_launch.py) | `ASSEMBLY`；面向 Linux 开发版默认入口及 `--ui-preview`，需可用的图形显示和 `xwininfo`；运行目录隔离为临时目录 |
 | [check_native_audio_binding.py](../../tools/check_native_audio_binding.py) | 无自定义参数；使用 Debug `Monitor.Specs.dll` 和隔离测试音频库，同时确认生产试听入口拒绝测试后端 |
 | [native ABI 检查](../../native/sim_audio_native/tests/check_abi.py) | `LIBRARY [--production-unavailable]`；详见[原生音频说明](../../native/sim_audio_native/README.md) |

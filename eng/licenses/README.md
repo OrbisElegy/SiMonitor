@@ -9,6 +9,7 @@ change the project's own AGPL-3.0-or-later license.
 | --- | --- |
 | Microsoft.Data.Sqlite, Microsoft.Data.Sqlite.Core 10.0.11 | [dotnet/efcore v10.0.11](https://github.com/dotnet/efcore/blob/v10.0.11/LICENSE.txt) |
 | Avalonia 12.1.2 family | [Avalonia package source commit](https://github.com/AvaloniaUI/Avalonia/tree/d3c867a9e2de379249b03dbeb3495bd7f076a81a): `licence.md`, `NOTICE.md` |
+| Avalonia.Headless and Avalonia.Fonts.Inter 12.1.2 (test-only, `tests/Monitor.Desktop.Smoke`) | Avalonia family `licence.md` and `NOTICE.md` above; package metadata declares MIT. Avalonia.Fonts.Inter embeds Inter font files whose upstream license is SIL OFL 1.1. Neither package is copied into product or distribution outputs |
 | Avalonia.BuildServices 11.3.2 (excluded build assets) | [BuildServices package source commit](https://github.com/AvaloniaUI/Avalonia.BuildServices/tree/777f975b0a0cecf0311273711d56697212c558c0): `LICENSE` |
 | Avalonia.Angle.Windows.Natives 2.1.27548.20260419 | `LICENSE` in the locked NuGet package |
 | SQLitePCLRaw 2.1.12 family, including e_sqlite3 | [SQLitePCLRaw v2.1.12](https://github.com/ericsink/SQLitePCL.raw/tree/v2.1.12): `LICENSE.TXT`, `NOTICE.TXT` |

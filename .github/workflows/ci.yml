@@ -74,6 +74,9 @@ jobs:
       - name: Run executable specifications
         run: python tools/run_parallel_checks.py --specs-only --configuration Release --jobs 4
 
+      - name: Run desktop checks headlessly
+        run: python tools/run_parallel_checks.py --native-only --desktop-runner headless --configuration Release --jobs 4
+
       - name: Build solution (Debug) for native binding check
         run: dotnet build Monitor.slnx --no-restore --configuration Debug
 

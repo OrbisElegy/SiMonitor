@@ -22,6 +22,9 @@
   <ItemGroup>
     <ProjectReference Include="../Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup Condition="'$(ProductRelease)' != 'true'">
+    <InternalsVisibleTo Include="Monitor.Desktop.Smoke" />
+  </ItemGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <NativeAudioBinary Condition="Exists('../../artifacts/native-audio/Release/sim_audio_native.dll')">../../artifacts/native-audio/Release/sim_audio_native.dll</NativeAudioBinary>
     <NativeAudioBinary Condition="'$(NativeAudioBinary)' == '' And Exists('../../artifacts/native-audio/sim_audio_native.dll')">../../artifacts/native-audio/sim_audio_native.dll</NativeAudioBinary>

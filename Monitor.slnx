@@ -8,6 +8,7 @@
     <Project Path="src/Monitor.Simulation/Monitor.Simulation.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Monitor.Desktop.Smoke/Monitor.Desktop.Smoke.csproj" />
     <Project Path="tests/Monitor.Specs/Monitor.Specs.csproj" />
   </Folder>
 </Solution>

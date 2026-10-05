@@ -47,6 +47,16 @@
       "content_hash_sha512_base64": "qHDToxto1e3hci5YqbG9n0Ty8mlp3zBUN5wT66wKqaDVzXyQ0do3EnRILd4Ke9jpvsktaPpgE0YjEk7hornryQ==",
       "purpose": "ExcludeAssets=all, PrivateAssets=all: optional build telemetry targets are not imported",
       "license_file": "eng/licenses/avalonia-buildservices-LICENSE.txt"
+    },
+    {
+      "id": "Avalonia.Headless",
+      "version": "12.1.2",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "yKOcUtIOWuGLtGRo0/6KvQYSEKQpii0CGTJqelAwip6C/UAlzAWp/LE/YvKFhUYMyjJSunyyBu/qrLddqZQ0tw==",
+      "purpose": "Test-only: tests/Monitor.Desktop.Smoke runs desktop checks without a display; never part of product or distribution outputs",
+      "license_file": "eng/licenses/avalonia-LICENSE.md",
+      "notice_file": "eng/licenses/avalonia-NOTICE.md"
     }
   ],
   "transitive_packages": [
@@ -105,6 +115,16 @@
       "source": "https://api.nuget.org/v3/index.json",
       "content_hash_sha512_base64": "l17nI3XVDN3oMnpjf2pnmJg0YTwK4m6NLsn/itAjDMdObTFxN77D5F1M9sRMSfViSY3KKcse1ROczwgoWLJsnA==",
       "license_file": "eng/licenses/avalonia-angle-LICENSE.txt"
+    },
+    {
+      "id": "Avalonia.Fonts.Inter",
+      "version": "12.1.2",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "pFkrNWecSX3wP9kTsMyLKyP29/8T7cYywKuE+DC9HN+BstmcIx5iOi6ZZLYAK1HkNTAGjF+oQf5wpTj3gnkWXA==",
+      "purpose": "Test-only dependency of Avalonia.Headless; the package metadata declares MIT and it embeds Inter font files whose upstream license is SIL OFL 1.1; never part of product or distribution outputs",
+      "license_file": "eng/licenses/avalonia-LICENSE.md",
+      "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.FreeDesktop",

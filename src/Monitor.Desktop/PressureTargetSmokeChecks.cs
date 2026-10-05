@@ -8,6 +8,83 @@ namespace Monitor.Desktop;
 
 internal static class PressureTargetSmokeChecks
 {
+    internal static void VerifyDriftApply()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "pressure-drift-" + Guid.NewGuid().ToString("N") + ".json");
+        var window = new DesignPreviewWindow(path);
+        var control = new DesignPreviewWindow();
+        window.Show();
+        control.Show();
+        try
+        {
+            var session = window.Session;
+            foreach (var current in new[] { window, control })
+            {
+                current.SelectPage(2);
+                current.Settings.Tabs.SelectedIndex = 5;
+                current.Settings.SectionPages[5].SelectedSection = 3;
+                current.Settings.RateSeed.Text = new string('a', 64);
+                current.Settings.AbpVariation.Value = 10;
+                current.Settings.PaVariation.Value = 3;
+                current.Settings.ApplyDelaySeconds.Value = 0;
+                current.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                for (int i = 0; i < 600; i++) { current.Pulse(current.ActiveTimer, 50_000_000); }
+            }
+            Require(ReferenceEquals(session, window.Session), "enabling both drifts through Apply continues the same session");
+            var settings = window.Settings;
+            long boundary = session.SimulationTimeNs;
+            window.Pause();
+            settings.AbpVariation.Value = 5;
+            settings.ApplyDelaySeconds.Value = 3;
+            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Pulse(window.ActiveTimer, 250_000_000);
+            Require(session.SimulationTimeNs == boundary && session.PendingSourceTimeNs == boundary + 3_000_000_000,
+                "drift changes preserve pause and wait on simulation time");
+            settings.AbpVariation.Value = 10;
+            settings.ApplyDelaySeconds.Value = 0;
+            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            settings.AbpVariation.Value = null;
+            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(session.PendingSourceTimeNs == boundary && settings.Status.Text!.Contains("未应用", StringComparison.Ordinal),
+                "an empty amplitude cannot replace the accepted pending source");
+            settings.AbpVariation.Value = 10;
+            window.Start();
+            for (int i = 0; i < 240; i++)
+            {
+                window.Pulse(window.ActiveTimer, 50_000_000);
+                control.Pulse(control.ActiveTimer, 50_000_000);
+            }
+            for (int channel = 0; channel < 7; channel++)
+            {
+                var actual = session.Samples(channel, boundary, boundary + 10_000_000_000).ToArray();
+                var expected = control.Session.Samples(channel, boundary, boundary + 10_000_000_000).ToArray();
+                Require(actual.Length > 0 && actual.SequenceEqual(expected),
+                    "repeated Apply of the same drift leaves every channel identical to uninterrupted playback");
+            }
+            var reopened = new DesignPreviewWindow(path);
+            try
+            {
+                Require(reopened.Settings.AbpVariation.Value == 10 && reopened.Settings.PaVariation.Value == 3 &&
+                    reopened.Settings.RateSeed.Text == new string('a', 64), "reopening retains accepted amplitudes and seed, not an invalid draft");
+            }
+            finally { reopened.Close(); }
+            settings.AbpVariation.Value = 0;
+            settings.PaVariation.Value = 0;
+            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            for (int i = 0; i < 600; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(ReferenceEquals(session, window.Session) && Near(session.Measurements!.AbpMean.Pulse, 12000, 8000) &&
+                Near(session.Measurements.PaMean.Pulse, 2500, 1000), "zero amplitudes disable drift without restarting");
+            window.ResetAllSettings();
+            Require(window.Settings.AbpVariation.Value == 0 && window.Settings.PaVariation.Value == 0, "reset leaves both drifts off");
+        }
+        finally
+        {
+            window.Close();
+            control.Close();
+            File.Delete(path);
+        }
+    }
+
     internal static void Verify()
     {
         string directory = Path.Combine(Path.GetTempPath(), "pressure-target-" + Guid.NewGuid().ToString("N"));
@@ -71,10 +148,30 @@ internal static class PressureTargetSmokeChecks
                     Near(reopened.Session.Measurements.PaMean.Pulse, 3000, 1200), "saved targets configure the reopened sampling source");
             }
             finally { reopened.Close(); }
+            settings.AbpVariation.Value = 10;
+            window.RestartSettings();
+            var diastolic = new List<int>();
+            for (int i = 0; i < 1200; i++)
+            {
+                window.Pulse(window.ActiveTimer, 50_000_000);
+                if (i % 40 == 39 && window.Session.Measurements!.AbpMean.Pulse is { DiastolicCentiMmHg: { } value }) { diastolic.Add(value); }
+            }
+            Require(diastolic.Count > 20 && diastolic.Max() - diastolic.Min() >= 400, "a random drift moves the measured ABP around its targets");
+            settings.AbpVariation.Value = 20;
+            settings.AbpSystolic.Value = 55;
+            settings.AbpDiastolic.Value = 21;
+            session = window.Session;
+            window.ApplySettings();
+            Require(ReferenceEquals(session, window.Session) && settings.Status.Text == window.Localization.Get("validation.pressureVariation"),
+                "a drift too large for the pressure level is reported without applying");
+            settings.AbpSystolic.Value = 130;
+            settings.AbpDiastolic.Value = 85;
+            settings.AbpVariation.Value = 10;
+
             var saved = settings.CaptureGenerator();
-            Require(saved.Flags["AbpTargetEnabled"] && saved.Numbers["AbpSystolic"] == 130 && saved.Numbers["PaDiastolic"] == 12,
-                "targets are part of the saved generator preferences");
-            string[] later = ["AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled"];
+            Require(saved.Flags["AbpTargetEnabled"] && saved.Numbers["AbpSystolic"] == 130 && saved.Numbers["PaDiastolic"] == 12 && saved.Numbers["AbpVariation"] == 10,
+                "targets and drift are part of the saved generator preferences");
+            string[] later = ["AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"];
             var older = saved with
             {
                 Numbers = saved.Numbers.Where(pair => !later.Contains(pair.Key)).ToDictionary(),
@@ -84,7 +181,8 @@ internal static class PressureTargetSmokeChecks
             try
             {
                 fresh.Settings.RestoreGenerator(older);
-                Require(fresh.Settings.AbpTargetEnabled.IsChecked == false && fresh.Settings.AbpSystolic.Value == 120 && fresh.Settings.PaDiastolic.Value == 10,
+                Require(fresh.Settings.AbpTargetEnabled.IsChecked == false && fresh.Settings.AbpSystolic.Value == 120 && fresh.Settings.PaDiastolic.Value == 10 &&
+                    fresh.Settings.AbpVariation.Value == 0,
                     "preferences saved before targets existed restore with targets off at their defaults");
                 bool rejected = false;
                 try { fresh.Settings.RestoreGenerator(older with { Numbers = older.Numbers.Where(pair => pair.Key != "CvpBaseline").ToDictionary() }); }

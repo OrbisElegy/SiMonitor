@@ -807,5 +807,10 @@
   "vitals.paDiastolicField": "PA diastolic target",
   "validation.pressureTargetPulse": "Not applied: the systolic target must be at least 5 mmHg above the diastolic target. The simulation and display are unchanged.",
   "validation.pressureTargetUnreachable": "Not applied: the pressure targets cannot be produced with the current rhythm and heart rate. Lower the targets, change the heart rate, or use the pulse factor instead. The simulation and display are unchanged.",
-  "validation.pressureTargetUnsupported": "Not applied: the current waveform template does not support pressure targets. Turn the targets off or use the pulse factor instead. The simulation and display are unchanged."
+  "validation.pressureTargetUnsupported": "Not applied: the current waveform template does not support pressure targets. Turn the targets off or use the pulse factor instead. The simulation and display are unchanged.",
+  "vitals.abpVariation": "ABP random drift (about ±mmHg, 0–20; 0 off)",
+  "vitals.paVariation": "PA random drift (about ±mmHg, 0–5; 0 off)",
+  "vitals.abpVariationField": "ABP random drift",
+  "vitals.paVariationField": "PA random drift",
+  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged."
 }

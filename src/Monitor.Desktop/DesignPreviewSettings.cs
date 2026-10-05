@@ -223,6 +223,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal CheckBox PaTargetEnabled { get; } = new() { IsChecked = true };
     internal NumericUpDown PaSystolic { get; } = PressureField(VascularPressureTarget.PulmonarySystolicRange, 25);
     internal NumericUpDown PaDiastolic { get; } = PressureField(VascularPressureTarget.PulmonaryDiastolicRange, 10);
+    internal NumericUpDown AbpVariation { get; } = VariationField(VascularPressureVariation.AbpAmplitudeRange);
+    internal NumericUpDown PaVariation { get; } = VariationField(VascularPressureVariation.PaAmplitudeRange);
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
@@ -510,8 +512,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
         RefreshOpticalControls();
         Add("vitals.abpPulseGain", AbpPulseGain);
         AddTarget(AbpTargetEnabled, "vitals.abpTargetEnabled", AbpSystolic, "vitals.abpSystolic", AbpDiastolic, "vitals.abpDiastolic", AbpPulseGain);
+        Add("vitals.abpVariation", AbpVariation);
         Add("vitals.paPulseGain", PaPulseGain);
         AddTarget(PaTargetEnabled, "vitals.paTargetEnabled", PaSystolic, "vitals.paSystolic", PaDiastolic, "vitals.paDiastolic", PaPulseGain);
+        Add("vitals.paVariation", PaVariation);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
         panel.Children.Add(DesktopInformationPages.Help("pressure-targets"));
         Add("vitals.cvpBaseline", CvpBaseline);
@@ -549,7 +553,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             (CardiacRateEnabled, () => Filled(HeartRate, RateVariation)),
             (null, BreathingValid),
             (OpticalEnabled, OxygenationValid),
-            (null, () => Filled(CvpBaseline) &&
+            (null, () => Filled(CvpBaseline, AbpVariation, PaVariation) &&
                 (AbpTargetEnabled.IsChecked == true ? PressureTargetValid(AbpSystolic, AbpDiastolic) : Filled(AbpPulseGain)) &&
                 (PaTargetEnabled.IsChecked == true ? PressureTargetValid(PaSystolic, PaDiastolic) : Filled(PaPulseGain))),
             (null, () => IsSeedFormatValid(RateSeed.Text))
@@ -571,6 +575,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var patient = Oxygenation.Patient;
         var vitalFields = new[] { HeartRate, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
             OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, AbpSystolic, AbpDiastolic, PaSystolic, PaDiastolic,
+            AbpVariation, PaVariation,
             Co2DeadSpace, Co2Rise, Co2Fall,
             Oxygenation.TidalVolume, Oxygenation.DeadSpace, Oxygenation.InspiredOxygen, Oxygenation.DemandMultiplier,
             patient.Age, patient.PatientHeight, patient.Weight, patient.BloodVolume, patient.Frc, patient.Hemoglobin, patient.BasalDemand };
@@ -590,6 +595,21 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Increment = 1,
         Width = 180
     };
+    private static NumericUpDown VariationField((int MinimumCentiMmHg, int MaximumCentiMmHg) range) => new()
+    {
+        Minimum = range.MinimumCentiMmHg / 100m,
+        Maximum = range.MaximumCentiMmHg / 100m,
+        Value = 0,
+        Increment = .5m,
+        Width = 180
+    };
+    // A seeded drift for ABP and PA, or null when both amplitudes are zero.
+    internal VascularPressureVariation? ReadPressureVariation()
+    {
+        int arterial = ReadVitalValue(AbpVariation, 100, "vitals.abpVariationField");
+        int pulmonary = ReadVitalValue(PaVariation, 100, "vitals.paVariationField");
+        return arterial == 0 && pulmonary == 0 ? null : new(arterial, pulmonary, RateSeed.Text ?? "");
+    }
     private static bool PressureTargetValid(NumericUpDown systolic, NumericUpDown diastolic) =>
         systolic.Value is { } high && diastolic.Value is { } low && high - low >= VascularPressureTarget.MinimumPulseCentiMmHg / 100m;
     // Reads an enabled target; whole-mmHg bounds come from the simulation contract.

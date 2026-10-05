@@ -34,7 +34,7 @@ internal static class CardiacActivitySpecifications
             short[] a = Samples(atrial, id);
             short[] v = Samples(ventricular, id);
             Check.That(a.Any(value => value != 0) && v.Any(value => value != 0) &&
-                all.Select((value, index) => value - a[index]).SequenceEqual(v.Select(value => (int)value)),
+                all.Select((value, index) => value - a[index] + (id == Cvp ? 600 : 0)).SequenceEqual(v.Select(value => (int)value)),
                 "only P or CVP a is removed; ventricular components retain original amplitude and timing");
         }
         foreach (var id in new[] { Pleth, Resp })
@@ -134,9 +134,9 @@ internal static class CardiacActivitySpecifications
             Check.That(Samples(blocks, Pleth).All(value => value == 0), "no ventricular mechanical event produces no Pleth excursion");
             Check.That(Samples(blocks, Resp).SequenceEqual(Samples(normal, Resp)), "breathing remains and ventricular cardiac artifact stops");
             short[] cvp = Samples(blocks, Cvp);
-            Check.That(cvp.Where((_, index) => index % 100 < 10 || index % 100 >= 25).All(value => value == 0) &&
-                (activity == CardiacActivity.AtrialOnly ? cvp.Any(value => value > 0) : cvp.All(value => value == 0)),
-                "CVP retains only the atrial a component or no cardiac component, with baseline held separately");
+            Check.That(cvp.Where((_, index) => index % 100 < 10 || index % 100 >= 25).All(value => value == 600) &&
+                (activity == CardiacActivity.AtrialOnly ? cvp.Any(value => value > 600) : cvp.All(value => value == 600)),
+                "CVP retains only the atrial a component or no cardiac component, above its retained 6 mmHg baseline");
         }
     }
 

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Preferences;
+using Monitor.Simulation.Authoring;
 
 namespace Monitor.Desktop;
 
@@ -63,6 +64,76 @@ internal static class MonitorContinuationSmokeChecks
             Require(window.Session.SimulationTimeNs == 0, "old timer cannot advance the restarted session");
         }
         finally { window.Close(); File.Delete(path); }
+    }
+
+    internal static void VerifyCvpApply()
+    {
+        var window = new DesignPreviewWindow();
+        window.Show();
+        try
+        {
+            window.SelectPage(2);
+            window.Settings.Tabs.SelectedIndex = 5;
+            window.Settings.SectionPages[5].SelectedSection = 3;
+            var timer = window.ActiveTimer;
+            for (int i = 0; i < 300; i++) { window.Pulse(timer, 50_000_000); }
+            var session = window.Session;
+            var blocks = session.Blocks.ToArray();
+            var readings = session.Measurements;
+            long time = session.SimulationTimeNs;
+            long frontier = session.FrontierNs;
+            var cvpHistory = session.Samples(6, 0, frontier).ToArray();
+            window.Settings.CvpBaseline.Value = 12;
+            window.Settings.ApplyDelaySeconds.Value = 3;
+            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
+                session.SimulationTimeNs == time && session.FrontierNs == frontier && session.Blocks.SequenceEqual(blocks) &&
+                session.Measurements == readings && session.PendingSourceTimeNs == time + 3_000_000_000,
+                "CVP Apply schedules a valid baseline change without clearing time, samples or readings");
+            window.Pause();
+            window.Pulse(timer, 250_000_000);
+            Require(session.SimulationTimeNs == time && session.PendingSourceTimeNs == time + 3_000_000_000,
+                "CVP pending change respects pause");
+            window.Settings.CvpBaseline.Value = null;
+            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(session.PendingSourceTimeNs == time + 3_000_000_000 &&
+                window.Settings.Status.Text!.Contains("未应用", StringComparison.Ordinal),
+                "empty CVP input rejects without discarding the accepted pending change");
+            window.Settings.CvpBaseline.Value = 30; // A draft must not change the queued value of 12.
+            window.Start();
+            for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(ReferenceEquals(session, window.Session) && session.PendingSourceTimeNs is null &&
+                session.Measurements!.CvpMean.MeanCentiMmHg == ReferenceCvpMeanCentiMmHg(session.SimulationTimeNs) + 600 &&
+                session.Samples(6, 0, frontier).SequenceEqual(cvpHistory),
+                "accepted CVP shifts the sampled mean while retaining history and ignoring the newer draft");
+            window.Pause();
+            window.Settings.ApplyDelaySeconds.Value = 0;
+            window.Settings.CvpBaseline.Value = 20;
+            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Settings.CvpBaseline.Value = -5;
+            window.Settings.AbpPulseGain.Value = 1.5m;
+            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(window.ActiveTimer is null && session.PendingSourceTimeNs == session.SimulationTimeNs,
+                "repeated CVP Apply replaces pending values without resuming playback");
+            int? oldAbp = session.Measurements!.AbpMean.MeanCentiMmHg;
+            window.Start();
+            for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(ReferenceEquals(session, window.Session) && session.PendingSourceTimeNs is null &&
+                session.Measurements!.CvpMean.MeanCentiMmHg == ReferenceCvpMeanCentiMmHg(session.SimulationTimeNs) - 1100 &&
+                session.Measurements.AbpMean.MeanCentiMmHg > oldAbp,
+                "newest negative CVP baseline and simultaneous ABP edit both apply to the existing session");
+        }
+        finally { window.Close(); }
+    }
+
+    private static int ReferenceCvpMeanCentiMmHg(long timeNs)
+    {
+        var reference = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
+            MonitorDisplayConfiguration.Default(), enableMeasurements: true);
+        reference.DiscardStartup();
+        while (reference.SimulationTimeNs < timeNs)
+        { reference.Advance(Math.Min(50_000_000, timeNs - reference.SimulationTimeNs)); }
+        return reference.Measurements!.CvpMean.MeanCentiMmHg!.Value;
     }
 
     private static void Require(bool condition, string message)

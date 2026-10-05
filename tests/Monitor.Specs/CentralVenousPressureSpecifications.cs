@@ -59,6 +59,7 @@ internal static class CentralVenousPressureSpecifications
         var bounded = Plan with
         {
             MaximumComponentOverlap = 2,
+            BaselineCentiMmHg = 0,
             A = Plan.A with { MagnitudeCentiMmHg = 0 },
             C = Plan.C with { MagnitudeCentiMmHg = 0 },
             X = Plan.X with { MagnitudeCentiMmHg = 0 },
@@ -149,18 +150,20 @@ internal static class CentralVenousPressureSpecifications
             "cardiac components and active respiratory pressure survive native acquisition and group restore");
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Cvp)).ToArray();
         var channel = (Plan with { RespiratoryDeltaCentiMmHg = -100 }).CreateChannel(Timeline, Cvp, 0);
-        var samples = PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands).GenerateBefore(3_800_000_000, 475, 100);
-        Check.That(planes.All(plane => plane.ScaleNumerator == 1 && plane.ScaleDenominator == 100 && plane.OffsetNumerator == 600 &&
-            plane.OffsetDenominator == 100 && plane.SampleRateNumerator == 125) &&
+        var samples = PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands,
+            pressureBaselineCentiMmHg: channel.PressureBaselineCentiMmHg).GenerateBefore(3_800_000_000, 475, 100);
+        Check.That(planes.All(plane => plane.ScaleNumerator == 1 && plane.ScaleDenominator == 100 && plane.OffsetNumerator == 0 &&
+            plane.OffsetDenominator == 1 && plane.SampleRateNumerator == 125) &&
             planes.SelectMany(plane => plane.Samples).SequenceEqual(samples.Select(sample => sample.NormalizedValue)),
-            "signed increments and fractional baseline preserve hundredth-mmHg pressure through wire encoding");
+            "absolute samples include the baseline at hundredth-mmHg precision with fixed wire calibration");
     }
 
     private static void CvpRejectsInvalidSupportAndAmplitudeBudget()
     {
         foreach (var invalid in new[] { Plan with { A = null! }, Plan with { X = Plan.X with { DelayNs = long.MaxValue } },
             Plan with { C = Plan.C with { DurationNs = 0 } }, Plan with { V = Plan.V with { DurationNs = 800_000_001 } },
-            Plan with { BaselineCentiMmHg = 32768 }, Plan with { Y = Plan.Y with { MagnitudeCentiMmHg = -1 } },
+            Plan with { BaselineCentiMmHg = 32768 }, Plan with { BaselineCentiMmHg = 32700 },
+            Plan with { BaselineCentiMmHg = -32700 }, Plan with { Y = Plan.Y with { MagnitudeCentiMmHg = -1 } },
             Plan with { A = Plan.A with { MagnitudeCentiMmHg = 32767 } }, Plan with { RespiratoryDeltaCentiMmHg = int.MinValue } })
         {
             bool rejected = false;

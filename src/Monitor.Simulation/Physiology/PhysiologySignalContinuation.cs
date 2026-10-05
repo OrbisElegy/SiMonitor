@@ -5,7 +5,7 @@ namespace Monitor.Simulation.Physiology;
 
 public sealed record PhysiologySignalSegment(RegularPhysiologyPlan Plan, IReadOnlyList<EventWaveformBand> Bands,
     VascularPressurePlan? Pressure, PlethRunoffPlan? Pleth, long FromEventTimeNs,
-    long ToExclusiveEventTimeNs, bool IncludeInitialPressure);
+    long ToExclusiveEventTimeNs, bool IncludeInitialPressure, int PressureBaselineCentiMmHg = 0);
 
 // Retain only responses already triggered by the old source. New events use the
 // new definition, on the existing clock; no second waveform is precomputed.
@@ -20,7 +20,9 @@ internal sealed class PhysiologySignalContinuation
     {
         ArgumentNullException.ThrowIfNull(segment);
         _ = RegularPhysiologyTimeline.Start(segment.Plan);
-        if (segment.Pressure is not null && segment.Pleth is not null ||
+        if (segment.PressureBaselineCentiMmHg is < short.MinValue or > short.MaxValue ||
+            segment.PressureBaselineCentiMmHg != 0 && (segment.Pressure is not null || segment.Pleth is not null) ||
+            segment.Pressure is not null && segment.Pleth is not null ||
             segment.IncludeInitialPressure && segment.FromEventTimeNs != segment.Plan.EpochAnchorSimTimeNs)
         { throw new ArgumentException("PhysiologySignal.InvalidSegment"); }
         if (segment.FromEventTimeNs < segment.Plan.EpochAnchorSimTimeNs ||
@@ -58,9 +60,10 @@ internal sealed class PhysiologySignalContinuation
         { return _pleth.EvaluateIntervalAt(timeNs, Segment.FromEventTimeNs, Segment.ToExclusiveEventTimeNs, cancellationToken); }
         long from = Math.Max(Segment.FromEventTimeNs, timeNs - SupportNs);
         long to = Math.Min(checked(timeNs + 1), Segment.ToExclusiveEventTimeNs);
-        if (from >= to) { return 0; }
+        long baseline = includeBaseline ? (long)Segment.PressureBaselineCentiMmHg * FixedPointMath.Q32One : 0;
+        if (from >= to) { return baseline; }
         var timeline = RegularPhysiologyTimeline.Restore(new(Segment.Plan, from));
         var events = timeline.AdvanceBefore(to, EventWaveformComposition.MaximumEventCount, cancellationToken);
-        return EventWaveformComposition.Restore(new(Segment.Bands, events)).EvaluateAt(timeNs, cancellationToken);
+        return checked(baseline + EventWaveformComposition.Restore(new(Segment.Bands, events)).EvaluateAt(timeNs, cancellationToken));
     }
 }

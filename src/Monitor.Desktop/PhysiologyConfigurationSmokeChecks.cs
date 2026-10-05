@@ -215,7 +215,7 @@ internal static class PhysiologyConfigurationSmokeChecks
             if ((row == 1 && raw != expectedResp) || invalidCo2)
             { throw new InvalidOperationException("Configured Resp turn or CO2 plateau/peak/response tail is absent from native data."); }
             int x = (int)Math.Round(time / 8_000_000.0);
-            int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - (raw / 100.0 + config.Co2BaselineMmHg) * 1.25 : 775 - raw * 0.05);
+            int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - (raw / 100.0 + config.Co2BaselineMmHg) * 1.25 : 775 - (raw - config.CvpBaselineCentiMmHg) * 0.05);
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
             {
                 int offset = line * buffer.RowBytes + column * 4;

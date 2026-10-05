@@ -168,7 +168,9 @@ internal static class MeanPressureMeasurementSpecifications
                     foreach (var plane in old.Planes)
                     {
                         var next = changed.Planes.Single(p => p.ChannelId == plane.ChannelId);
-                        Check.That(plane.Samples.SequenceEqual(next.Samples), "baseline adjustment preserves pulsatile components");
+                        int delta = plane.ChannelId == PhysiologyIllustrationSource.ChannelId(6) ? -1100 : 0;
+                        Check.That(plane.Samples.Select(value => value + delta).SequenceEqual(next.Samples.Select(value => (int)value)),
+                            "baseline adjustment shifts only CVP samples, preserving every pulsatile component");
                         if (plane.ChannelId != PhysiologyIllustrationSource.ChannelId(6))
                         { Check.That(plane.OffsetNumerator == next.OffsetNumerator && plane.OffsetDenominator == next.OffsetDenominator, "other channels retain physical pressure/voltage"); }
                     }

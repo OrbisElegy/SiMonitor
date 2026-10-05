@@ -12,7 +12,7 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 
 public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology,
     WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, int DelayCapacity, uint QualityFlags,
-    VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0);
+    VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0);
 public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator,
     SignalAcquisitionDelayState Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0);
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels,
@@ -99,7 +99,8 @@ public sealed class PhysiologyWaveformGroup
                 long value = source.ActiveFromEventTimeNs is not null ? generator.EvaluateAt(sample.SourceSimTimeNs) : generator.VascularPressure is { } pressure
                     ? pressure.EvaluateAt(sample.SourceSimTimeNs)
                     : generator.PlethRunoff is { } runoff ? runoff.EvaluateAt(sample.SourceSimTimeNs)
-                    : composition!.EvaluateAt(sample.SourceSimTimeNs);
+                    : checked(composition!.EvaluateAt(sample.SourceSimTimeNs) +
+                        (long)source.PressureBaselineCentiMmHg * FixedPointMath.Q32One);
                 short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(checked(value + (long)item.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), FixedPointMath.Q32One));
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
@@ -123,7 +124,7 @@ public sealed class PhysiologyWaveformGroup
         }
         plans = plans.OrderBy(plan => plan.Plane.ChannelId.ToString("N"), StringComparer.Ordinal).ToArray();
         PhysiologyWaveformChannelState[] sources = plans.Select(plan => new PhysiologyWaveformChannelState(plan.Plane.ChannelId,
-            PhysiologySignalGenerator.Start(plan.Physiology, plan.Plane.ProfileId, streamEpoch, plan.Bands, plan.VascularPressure, plan.PlethRunoff).CaptureState(),
+            PhysiologySignalGenerator.Start(plan.Physiology, plan.Plane.ProfileId, streamEpoch, plan.Bands, plan.VascularPressure, plan.PlethRunoff, plan.PressureBaselineCentiMmHg).CaptureState(),
             SignalAcquisitionDelayLine.Start(plan.Plane.ProfileId, streamEpoch,
                 plan.Physiology.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags, plan.PressureZeroOffsetCentiMmHg)).ToArray();
         var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,

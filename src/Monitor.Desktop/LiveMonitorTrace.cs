@@ -21,7 +21,8 @@ internal sealed class LiveMonitorTrace : Control
     {
         _session = session;
         _localization = localization ?? new DesktopLocalization();
-        _localization.LocaleChanged += InvalidateVisual;
+        AttachedToVisualTree += (_, _) => _localization.LocaleChanged += InvalidateVisual;
+        DetachedFromVisualTree += (_, _) => _localization.LocaleChanged -= InvalidateVisual;
     }
     internal static readonly string[] Colors = ["#71E9AF", "#F0D68A", "#8ADAE5", "#F39199", "#E7ECF2", "#CAA7EA", "#F2B67D"];
     private ulong _revision = ulong.MaxValue;

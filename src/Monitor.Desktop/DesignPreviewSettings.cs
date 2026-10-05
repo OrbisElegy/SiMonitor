@@ -183,7 +183,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return base.MeasureOverride(availableSize);
     }
     internal bool CompactNavigation => _compactCategory.IsVisible;
-    internal SoundSettingsPanel Sound { get; } = new();
+    internal SoundSettingsPanel Sound { get; }
     internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; } = new();
@@ -243,6 +243,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced, DesktopLocalization? localization = null)
     {
         Localization = localization ?? new DesktopLocalization();
+        Sound = new SoundSettingsPanel(localization: Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -280,8 +281,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         display.Margin = new Thickness(0);
         SectionPages[2] = new SettingsSections(Localization, "settings.display", ("shell.monitor", display), ("display.paper", paper));
         SectionPages[3] = SettingsSections.Split(Localization, "settings.sound", Sound,
-            ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
-            ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
+            ("sound.sectionOutput", Sound.Children[0]), ("sound.sectionHeartbeat", Sound.HeartbeatEnabled),
+            ("sound.sectionPause", Before(Sound, Sound.PauseSeconds)));
         var alertGroups = new List<(string Title, Control Start)>
         { (Alerts.Parameters[0].Title, Alerts.Children[0]), (Alerts.Parameters[1].Title, Alerts.SpO2Enabled) };
         alertGroups.AddRange(Alerts.Parameters.Skip(2).Select(p => (p.Title, (Control)Alerts.AdditionalLimits.Editors[p.Numeric])));
@@ -297,7 +298,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             void RefreshState()
             {
                 bool enabled = switches.Any(s => s.IsChecked == true);
-                alarmSections.SetDetail(index, enabled ? "开" : "关", enabled ? "已启用" : "已关闭");
+                alarmSections.SetDetail(index, enabled ? "settings.stateOn" : "settings.stateOff", enabled ? "settings.stateEnabled" : "settings.stateDisabled");
             }
             foreach (var toggle in switches) { toggle.IsCheckedChanged += (_, _) => RefreshState(); }
             RefreshState();
@@ -375,13 +376,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
         if (_previews.Count >= 24) { _previews.Clear(); }
         _previews.Add(key, result); return result;
     }
+    // name is a catalog key (or a verbatim title) for the field shown in validation text.
     internal static int ReadVitalValue(NumericUpDown field, int scale, string name)
     {
         if (field.Value is not { } value || value < field.Minimum || value > field.Maximum ||
             value * scale != decimal.Truncate(value * scale))
         {
-            throw new ArgumentException("Preview.InvalidVitalValue",
-                $"{name}（{field.Minimum}–{field.Maximum}，最小单位 {1m / scale}）");
+            throw new VitalValueException(name, field.Minimum, field.Maximum, 1m / scale);
         }
         return checked((int)(value * scale));
     }
@@ -501,12 +502,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
             for (int section = 0; section < states.Length; section++)
             {
                 var (toggle, valid) = states[section];
-                if (!valid()) { sections.SetDetail(section, "待修正", "待修正"); }
+                if (!valid()) { sections.SetDetail(section, "settings.stateNeedsFix", "settings.stateNeedsFix"); }
                 else if (toggle is null) { sections.SetDetail(section, null); }
                 else
                 {
                     bool enabled = toggle.IsChecked == true;
-                    sections.SetDetail(section, enabled ? "开" : "关", enabled ? "已启用" : "已关闭");
+                    sections.SetDetail(section, enabled ? "settings.stateOn" : "settings.stateOff", enabled ? "settings.stateEnabled" : "settings.stateDisabled");
                 }
             }
         }
@@ -570,7 +571,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null;
         if (!ecgEditable)
         { _advancedEcg.Children.Add(Text("此模板暂无可编辑的心电图高级参数。")); }
-        SectionPages[6].SetDetail(0, ecgEditable ? null : "无参数", ecgEditable ? null : "当前模板无可编辑参数");
+        SectionPages[6].SetDetail(0, ecgEditable ? null : "advanced.noParameters", ecgEditable ? null : "advanced.noParametersName");
         _advancedEcg.Children.Add(ShapeEditStatus);
         ToolTip.SetTip(RespirationGroups, "当前呼吸模板：" + RespirationChoices[RespirationSelection]);
         _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
@@ -613,12 +614,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
                 Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
             _advancedEjection.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
-            SectionPages[6].SetDetail(2, "无参数", "当前模板无可编辑参数");
+            SectionPages[6].SetDetail(2, "advanced.noParameters", "advanced.noParametersName");
         }
         catch (ArgumentException error)
         {
             _advancedEjection.Children.Add(Text("当前组合不兼容：" + error.Message));
-            SectionPages[6].SetDetail(2, "不兼容", "当前组合不兼容");
+            SectionPages[6].SetDetail(2, "advanced.incompatible", "advanced.incompatibleName");
         }
         _advancedTools.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
         _advancedTools.Children.Add(developer);
@@ -731,4 +732,15 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (_geometry is not null) { context.DrawGeometry(null, new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2), _geometry); }
         }
     }
+}
+
+// An invalid draft field. ParamName is the field's label; the window formats the
+// range and step in the selected language instead of baking them into the message.
+internal sealed class VitalValueException(string fieldName, decimal minimum, decimal maximum, decimal step)
+    : ArgumentException("Preview.InvalidVitalValue", fieldName)
+{
+    internal string FieldName { get; } = fieldName;
+    internal decimal Minimum { get; } = minimum;
+    internal decimal Maximum { get; } = maximum;
+    internal decimal Step { get; } = step;
 }

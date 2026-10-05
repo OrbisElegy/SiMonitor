@@ -415,8 +415,11 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.co2Range"); }
         catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
         { SetStatus("validation.co2Regular"); }
-        catch (ArgumentException exception) when (exception.Message.StartsWith("Preview.InvalidVitalValue", StringComparison.Ordinal))
-        { SetStatus("validation.vitalValue", exception.ParamName); }
+        catch (VitalValueException exception)
+        {
+            Localization.Bind(Settings.Status, TextBlock.TextProperty, text => text.Format("validation.vitalValue",
+                text.Format("validation.vitalField", DesktopLocalization.Label(text, exception.FieldName), exception.Minimum, exception.Maximum, exception.Step)));
+        }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidCo2Levels")
         { SetStatus("validation.co2Levels"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.Co2BaselineVariationConflict")

@@ -14,7 +14,9 @@ namespace Monitor.Desktop;
 
 internal sealed class SoundSettingsPanel : StackPanel
 {
+    private readonly DesktopLocalization _localization;
     private readonly Func<int, CancellationToken, Task<SoundPreviewResult>> _play;
+    private SoundPreviewResult? _outputResult;
     private CancellationTokenSource? _cancellation;
     private bool _closed;
     private readonly MonitorAlarmPlayback _alarms = new(() => AudioOutputSelection.Create(AudioOutputSelection.Current));
@@ -27,16 +29,22 @@ internal sealed class SoundSettingsPanel : StackPanel
     private bool _monitorRunning;
     private readonly MonitorBeatSource _source = new();
     private LiveMeasurementSnapshot? _sourceMeasurement;
-    private readonly TextBlock _sourceStatus = Text("当前心搏音源：ECG");
-    private readonly TextBlock _sourceHistory = Text("");
+    private readonly TextBlock _sourceStatus = Text();
+    private readonly TextBlock _sourceHistory = Text();
     internal event Action? BeatSourceChanged;
-    internal string BeatSourceLabel => $"心搏音源：{OriginName(_source.Current)}{(BeatSource.SelectedIndex == 2 ? " · 自动" : "")}";
-    private static string OriginName(MonitorBeatOrigin source) => source switch { MonitorBeatOrigin.Ecg => "ECG", MonitorBeatOrigin.Pleth => "PLETH", _ => "等待有效信号" };
+    internal string BeatSourceLabel => _localization.Format("sound.beatSourceLabel", OriginName(_source.Current), AutoSuffix);
+    private string AutoSuffix => BeatSource.SelectedIndex == 2 ? _localization.Get("sound.autoSuffix") : "";
+    private string OriginName(MonitorBeatOrigin source) => source switch
+    {
+        MonitorBeatOrigin.Ecg => "ECG",
+        MonitorBeatOrigin.Pleth => "PLETH",
+        _ => _localization.Get("sound.originWaiting"),
+    };
     private readonly MonitorBeatPitch _pitch = new();
     internal int BeatPitchPercent => PitchSource.SelectedIndex == 1 ? _pitch.SaturationPercent : 97;
     internal MonitorNotice? PitchNotice => AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && PitchSource.SelectedIndex == 1 && _pitch.Unavailable
-        ? new("beat-pitch-unavailable", MonitorNoticeLevel.Info, "SpO₂ 音高不可用 · 固定音高") { Audible = false } : null;
-    internal ComboBox PitchSource { get; } = new() { ItemsSource = new[] { "固定音高", "SpO₂ · A 曲线" }, SelectedIndex = 1, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        ? new("beat-pitch-unavailable", MonitorNoticeLevel.Info, _localization.Get("sound.pitchUnavailable")) { Audible = false } : null;
+    internal ComboBox PitchSource { get; } = new() { SelectedIndex = 1, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly MonitorAudioPause _audioPause = new();
     private readonly Func<long> _authorityNow;
     private readonly DispatcherTimer _pauseTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
@@ -44,38 +52,56 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal string AudioPauseText { get; private set; } = "";
     internal MonitorAlarmSoundRequest? PublishedAlarm { get; private set; }
     internal NumericUpDown PauseSeconds { get; } = new() { Minimum = 1, Maximum = 3600, Value = 120, Increment = 1, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal Button PauseAlarmAudio { get; } = Button("暂停报警声音");
-    internal Button ResumeAlarmAudio { get; } = Button("立即恢复报警声音");
-    internal TextBlock PauseStatus { get; } = Text("报警声音未定时暂停");
+    internal Button PauseAlarmAudio { get; } = Button();
+    internal Button ResumeAlarmAudio { get; } = Button();
+    internal TextBlock PauseStatus { get; } = Text();
     internal MonitorNotice? OutputNotice { get; private set; }
     internal event Action? OutputNoticeChanged;
-    internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
-    internal CheckBox HeartbeatEnabled { get; } = new() { Content = "心搏提示音（与报警声独立重叠）", IsChecked = true };
-    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏", "自动 · ECG 优先" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
+    internal CheckBox AlarmEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox HeartbeatEnabled { get; } = new() { IsChecked = true };
+    internal ComboBox BeatSource { get; } = new() { SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider HeartbeatVolume { get; } = new() { Minimum = 0, Maximum = 100, Value = 100, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal int EffectiveHeartbeatVolume => (int)(Volume.Value * HeartbeatVolume.Value / 100);
-    internal Button Audition { get; } = Button("试听三声");
-    internal Button Stop { get; } = Button("停止试听");
-    internal TextBlock Status { get; } = Text("未播放");
+    internal Button Audition { get; } = Button();
+    internal Button Stop { get; } = Button();
+    internal TextBlock Status { get; } = Text();
 
-    internal SoundSettingsPanel(Func<int, CancellationToken, Task<SoundPreviewResult>>? play = null, Func<long>? authorityNow = null)
+    internal SoundSettingsPanel(Func<int, CancellationToken, Task<SoundPreviewResult>>? play = null, Func<long>? authorityNow = null,
+        DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
+        Show(Status, "sound.statusIdle");
+        _localization.Bind(Audition, ContentControl.ContentProperty, "sound.audition");
+        _localization.Bind(Stop, ContentControl.ContentProperty, "sound.stopAudition");
+        _localization.Bind(AlarmEnabled, ContentControl.ContentProperty, "sound.alarmEnabled");
+        _localization.Bind(HeartbeatEnabled, ContentControl.ContentProperty, "sound.heartbeatEnabled");
+        _localization.Bind(PauseAlarmAudio, ContentControl.ContentProperty, "sound.pause");
+        _localization.Bind(ResumeAlarmAudio, ContentControl.ContentProperty, "sound.resume");
+        _localization.SetChoices(BeatSource, "sound.beatSourceEcg", "sound.beatSourcePleth", "sound.beatSourceAuto");
+        _localization.SetChoices(PitchSource, "sound.pitchFixed", "sound.pitchSpO2");
+        // Text computed outside bindings (source labels, notices) follows the selected language.
+        _localization.LocaleChanged += () =>
+        {
+            RefreshSourceText();
+            if (_outputResult is { } result) { RecordOutputResult(result); }
+            Publish();
+        };
         long origin = Stopwatch.GetTimestamp();
         _authorityNow = authorityNow ?? (() => checked(Stopwatch.GetElapsedTime(origin).Ticks * 100));
         _pauseTimer.Tick += (_, _) => RefreshAudioPause();
         var playback = new SoundPreviewPlayback(() => AudioOutputSelection.Create(AudioOutputSelection.Current));
         _play = play ?? playback.PlayAsync;
         Margin = new Thickness(20); Spacing = 16;
-        Children.Add(Text("声音输出"));
+        Children.Add(Label("sound.output"));
         Children.Add(DesktopInformationPages.Help("settings-detail-7"));
-        var volumeLabel = Text("声音音量：50%"); Children.Add(volumeLabel); Children.Add(Volume);
-        AutomationProperties.SetName(Volume, "声音音量，百分比");
+        var volumeLabel = Label("sound.volume", 50); Children.Add(volumeLabel); Children.Add(Volume);
+        _localization.Bind(Volume, AutomationProperties.NameProperty, "sound.volumeName");
         Volume.PropertyChanged += (_, args) =>
         {
             if (args.Property == Slider.ValueProperty)
             {
-                volumeLabel.Text = $"声音音量：{Volume.Value:0}%";
+                Show(volumeLabel, "sound.volume", Volume.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
                 if (_notificationSources is not null) { Publish(); }
             }
         };
@@ -84,24 +110,27 @@ internal sealed class SoundSettingsPanel : StackPanel
         Stop.IsEnabled = false; Children.Add(Status);
         Children.Add(AlarmEnabled);
         Children.Add(HeartbeatEnabled);
-        var beatVolumeLabel = Text("心搏相对音量：100%"); Children.Add(beatVolumeLabel); Children.Add(HeartbeatVolume);
-        AutomationProperties.SetName(HeartbeatVolume, "心搏相对音量，百分比");
+        var beatVolumeLabel = Label("sound.heartbeatVolume", 100); Children.Add(beatVolumeLabel); Children.Add(HeartbeatVolume);
+        _localization.Bind(HeartbeatVolume, AutomationProperties.NameProperty, "sound.heartbeatVolumeName");
         HeartbeatVolume.PropertyChanged += (_, args) =>
         {
-            if (args.Property == Slider.ValueProperty) { beatVolumeLabel.Text = $"心搏相对音量：{HeartbeatVolume.Value:0}%"; }
+            if (args.Property == Slider.ValueProperty)
+            { Show(beatVolumeLabel, "sound.heartbeatVolume", HeartbeatVolume.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture)); }
         };
         Children.Add(DesktopInformationPages.Help("settings-detail-8"));
-        Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
-        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG、PLETH 或自动");
+        Children.Add(Label("sound.beatSource")); Children.Add(BeatSource);
+        _localization.Bind(BeatSource, AutomationProperties.NameProperty, "sound.beatSourceName");
         BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); UpdateBeatSource(); Publish(); };
         Children.Add(_sourceStatus);
-        Children.Add(new Expander { Header = "本次模拟音源切换记录（最近 64 条）", Content = _sourceHistory });
+        var history = new Expander { Content = _sourceHistory };
+        _localization.Bind(history, Expander.HeaderProperty, "sound.history");
+        Children.Add(history);
         Children.Add(DesktopInformationPages.Help("settings-detail-9"));
-        Children.Add(Text("心搏音高来源")); Children.Add(PitchSource);
-        AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或 SpO₂ A 曲线");
+        Children.Add(Label("sound.pitchSource")); Children.Add(PitchSource);
+        _localization.Bind(PitchSource, AutomationProperties.NameProperty, "sound.pitchSourceName");
         PitchSource.SelectionChanged += (_, _) => { ResetPitchState(); OutputNoticeChanged?.Invoke(); };
-        Children.Add(Text("报警声音暂停时长（秒，1–3600）")); Children.Add(PauseSeconds);
-        AutomationProperties.SetName(PauseSeconds, "报警声音暂停时长，秒");
+        Children.Add(Label("sound.pauseDuration")); Children.Add(PauseSeconds);
+        _localization.Bind(PauseSeconds, AutomationProperties.NameProperty, "sound.pauseDurationName");
         var pauseButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         pauseButtons.Children.Add(PauseAlarmAudio); pauseButtons.Children.Add(ResumeAlarmAudio); Children.Add(pauseButtons);
         ResumeAlarmAudio.IsEnabled = false; Children.Add(PauseStatus);
@@ -109,7 +138,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         PauseAlarmAudio.Click += (_, _) =>
         {
             if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds))
-            { PauseStatus.Text = "请输入 1–3600 的整数秒数；原声音状态保持不变。"; return; }
+            { Show(PauseStatus, "sound.pauseInvalid"); return; }
             StartAudioPause(checked((int)seconds));
         };
         ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
@@ -134,13 +163,13 @@ internal sealed class SoundSettingsPanel : StackPanel
             return (int)value;
         }
         var timing = new MonitorSoundTiming(alerts.InfoTone.IsChecked == true,
-            DesignPreviewSettings.ReadVitalValue(alerts.InfoInterval, 1000, "Info 声音间隔"),
-            DesignPreviewSettings.ReadVitalValue(alerts.NoticeInterval, 1000, "Notice 声音间隔"),
-            DesignPreviewSettings.ReadVitalValue(alerts.WarningInterval, 1000, "Warning 声音间隔"),
-            DesignPreviewSettings.ReadVitalValue(alerts.CriticalInterval, 1000, "Critical 声音间隔"));
+            DesignPreviewSettings.ReadVitalValue(alerts.InfoInterval, 1000, "sound.infoIntervalField"),
+            DesignPreviewSettings.ReadVitalValue(alerts.NoticeInterval, 1000, "sound.noticeIntervalField"),
+            DesignPreviewSettings.ReadVitalValue(alerts.WarningInterval, 1000, "sound.warningIntervalField"),
+            DesignPreviewSettings.ReadVitalValue(alerts.CriticalInterval, 1000, "sound.criticalIntervalField"));
         var result = new MonitorSoundPreferences(Percent(Volume.Value), Percent(HeartbeatVolume.Value),
             HeartbeatEnabled.IsChecked == true, BeatSource.SelectedIndex, PitchSource.SelectedIndex,
-            DesignPreviewSettings.ReadVitalValue(PauseSeconds, 1, "声音暂停时长"), timing);
+            DesignPreviewSettings.ReadVitalValue(PauseSeconds, 1, "sound.pauseField"), timing);
         result.Validate(); return result;
     }
     internal void RestorePreferences(MonitorSoundPreferences preferences, MonitorAlertSettings alerts)
@@ -162,7 +191,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (_closed || _cancellation is not null || !Audition.IsEnabled) { return; }
         using var cancellation = new CancellationTokenSource(); _cancellation = cancellation;
         Audition.IsEnabled = false; Volume.IsEnabled = false; AlarmEnabled.IsEnabled = false; Stop.IsEnabled = true;
-        Status.Text = "正在试听…";
+        Show(Status, "sound.previewing");
         var result = await _play((int)Volume.Value, cancellation.Token);
         _cancellation = null;
         if (_closed) { return; }
@@ -170,20 +199,20 @@ internal sealed class SoundSettingsPanel : StackPanel
         Volume.IsEnabled = true; Stop.IsEnabled = false;
         Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
         AlarmEnabled.IsEnabled = result != SoundPreviewResult.StopFailed;
-        Status.Text = result switch
+        Show(Status, result switch
         {
-            SoundPreviewResult.Completed => "试听已结束",
-            SoundPreviewResult.Stopped => "试听已停止",
-            SoundPreviewResult.Interrupted => "音频输出中断。请检查设备后重新试听。",
-            SoundPreviewResult.StopFailed => "音频设备未能释放，请关闭并重新启动客户端。",
-            _ => "声音不可用。请确认已安装 Windows 音频组件且默认输出设备可用。"
-        };
+            SoundPreviewResult.Completed => "sound.previewDone",
+            SoundPreviewResult.Stopped => "sound.previewStopped",
+            SoundPreviewResult.Interrupted => "sound.previewInterrupted",
+            SoundPreviewResult.StopFailed => "sound.stopFailed",
+            _ => "sound.unavailable",
+        });
     }
 
     internal void StopPreview()
     {
         _cancellation?.Cancel(); Stop.IsEnabled = false;
-        if (_cancellation is not null) { Status.Text = "正在停止…"; }
+        if (_cancellation is not null) { Show(Status, "sound.stopping"); }
     }
     internal void UseNotificationPlayback(IReadOnlyList<AlarmLifecycleJournal>? journals)
     {
@@ -229,9 +258,14 @@ internal sealed class SoundSettingsPanel : StackPanel
             _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
             _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData, _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
         _alarms.SetHeartbeatEnabled(false);
-        _sourceStatus.Text = "当前" + BeatSourceLabel;
-        _sourceHistory.Text = string.Join("\n", _source.Changes.Select(c => $"{c.TimeNs / 1_000_000_000}s · {(c.Mode == MonitorBeatMode.Auto ? "自动" : "手动")} · {OriginName(c.From)} → {OriginName(c.To)}"));
+        RefreshSourceText();
         BeatSourceChanged?.Invoke();
+    }
+    private void RefreshSourceText()
+    {
+        _sourceStatus.Text = _localization.Format("sound.currentBeatSource", OriginName(_source.Current), AutoSuffix);
+        _sourceHistory.Text = string.Join("\n", _source.Changes.Select(c => _localization.Format("sound.historyEntry", c.TimeNs / 1_000_000_000,
+            _localization.Get(c.Mode == MonitorBeatMode.Auto ? "sound.modeAuto" : "sound.modeManual"), OriginName(c.From), OriginName(c.To))));
     }
     internal void ResetBeatSource() { _source.Reset(); _sourceMeasurement = null; UpdateBeatSource(); }
     internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }
@@ -249,8 +283,8 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         int remaining = _audioPause.RemainingSeconds(_authorityNow());
         if (remaining == 0) { _pauseTimer.Stop(); }
-        string text = remaining == 0 ? "" : $"报警声音暂停 · {remaining}s";
-        PauseStatus.Text = remaining == 0 ? "报警声音未定时暂停" : text;
+        string text = remaining == 0 ? "" : _localization.Format("sound.pauseRemaining", remaining);
+        PauseStatus.Text = remaining == 0 ? _localization.Get("sound.pauseIdle") : text;
         ResumeAlarmAudio.IsEnabled = remaining > 0;
         if (text != AudioPauseText) { AudioPauseText = text; AudioPauseChanged?.Invoke(); }
         bool enabled = _monitorRunning && remaining == 0;
@@ -264,31 +298,36 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         if (_closed || _alarmCancellation is not null || _cancellation is not null) { return; }
         using var cancellation = new CancellationTokenSource(); _alarmCancellation = cancellation;
-        Audition.IsEnabled = false; Publish(); Status.Text = "监护提示声音已启用";
+        Audition.IsEnabled = false; Publish(); Show(Status, "sound.alarmsOn");
         var result = await _alarms.RunAsync(cancellation.Token);
         _alarmCancellation = null;
         if (_closed) { return; }
         RecordOutputResult(result);
         AlarmEnabled.IsChecked = false;
         AlarmEnabled.IsEnabled = Audition.IsEnabled = result != SoundPreviewResult.StopFailed;
-        Status.Text = result switch
+        Show(Status, result switch
         {
-            SoundPreviewResult.Stopped => "监护提示声音已关闭",
-            SoundPreviewResult.StopFailed => "音频设备未能释放，请关闭并重新启动客户端。",
-            _ => "监护声音输出不可用或中断，请检查设备后重新启用。"
-        };
+            SoundPreviewResult.Stopped => "sound.alarmsOff",
+            SoundPreviewResult.StopFailed => "sound.stopFailed",
+            _ => "sound.alarmsUnavailable",
+        });
     }
     private void RecordOutputResult(SoundPreviewResult result)
     {
-        if (result == SoundPreviewResult.Completed) { SetOutputNotice(null); }
+        if (result == SoundPreviewResult.Completed)
+        {
+            _outputResult = null;
+            SetOutputNotice(null);
+        }
         else if (result is SoundPreviewResult.Unavailable or SoundPreviewResult.Interrupted or SoundPreviewResult.StopFailed)
         {
-            string text = result switch
+            _outputResult = result;
+            string text = _localization.Get(result switch
             {
-                SoundPreviewResult.Interrupted => "监护声音输出已中断，请检查设备并重新启用",
-                SoundPreviewResult.StopFailed => "音频设备未能释放，请重新启动客户端",
-                _ => "声音输出不可用，请检查音频组件与输出设备"
-            };
+                SoundPreviewResult.Interrupted => "sound.noticeInterrupted",
+                SoundPreviewResult.StopFailed => "sound.noticeStopFailed",
+                _ => "sound.noticeUnavailable",
+            });
             SetOutputNotice(new("audio-output", MonitorNoticeLevel.Notice, text) { Audible = false });
         }
         // A cancelled attempt does not prove that output has recovered.
@@ -299,12 +338,19 @@ internal sealed class SoundSettingsPanel : StackPanel
         OutputNotice = notice; OutputNoticeChanged?.Invoke();
     }
     internal void Close() { _closed = true; _pauseTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
-    private static Button Button(string content) => new()
+    private static Button Button() => new()
     {
-        Content = content,
         MinHeight = 44,
         HorizontalContentAlignment = HorizontalAlignment.Center,
         VerticalContentAlignment = VerticalAlignment.Center
     };
-    private static TextBlock Text(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap };
+    private static TextBlock Text() => new() { TextWrapping = TextWrapping.Wrap };
+    private TextBlock Label(string key, params object?[] arguments)
+    {
+        var text = Text();
+        Show(text, key, arguments);
+        return text;
+    }
+    private void Show(TextBlock target, string key, params object?[] arguments) =>
+        _localization.Bind(target, TextBlock.TextProperty, key, arguments);
 }

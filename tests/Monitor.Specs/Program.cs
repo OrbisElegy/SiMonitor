@@ -101,6 +101,8 @@ internal static class Program
             .. VascularPressureTargetSpecifications.All,
             .. VascularPressureVariationSpecifications.All,
             .. VitalChangeSchedulerSpecifications.All,
+            .. ExamSpecifications.All,
+            .. ClassroomSpecifications.All,
             .. PhysiologyForkSpecifications.All,
             .. EcgLimbPlacementSpecifications.All,
             .. CapnogramSpecifications.All,

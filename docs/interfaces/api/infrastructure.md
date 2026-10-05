@@ -378,6 +378,108 @@ public enum WasapiStreamPath
 }
 ```
 
+## Classroom/ClassroomClient.cs
+
+源码：[ClassroomClient.cs](../../../src/Monitor.Infrastructure/Classroom/ClassroomClient.cs) · 命名空间：`Monitor.Infrastructure.Classroom`
+
+```csharp
+public sealed class ClassroomJoinException(string reasonCode) : Exception
+{
+    public string ReasonCode { get; }
+}
+public sealed class ClassroomClient : IAsyncDisposable
+{
+    public string StudentId { get; }
+    public event Action<ClassroomMessage>? MessageReceived;
+    public event Action<Exception?>? Disconnected;
+    public static Task<ClassroomClient> ConnectAsync(string host, int port, string joinCode, string studentName, CancellationToken cancellationToken);
+    public void Start();
+    public Task SubmitAsync(SubmitAnswersMessage answers, CancellationToken cancellationToken);
+    public ValueTask DisposeAsync();
+}
+```
+
+## Classroom/ClassroomHost.cs
+
+源码：[ClassroomHost.cs](../../../src/Monitor.Infrastructure/Classroom/ClassroomHost.cs) · 命名空间：`Monitor.Infrastructure.Classroom`
+
+```csharp
+public sealed record ClassroomStudent(string StudentId, string Name, string Endpoint)
+{
+}
+public sealed class ClassroomHost : IAsyncDisposable
+{
+    public const int MaximumStudents = 100;
+    public const int MaximumNameLength = 40;
+    public const int MaximumLogEvents = 20_000;
+    public ClassroomHost(IPAddress address, int port, string joinCode);
+    public string JoinCode { get; }
+    public int Port { get; }
+    public event Action? StudentsChanged;
+    public event Action<ClassroomStudent, SubmitAnswersMessage>? AnswersReceived;
+    public IReadOnlyList<ClassroomStudent> Students { get; }
+    public static string CreateJoinCode();
+    public void Start(IEnumerable<ClassroomEvent> log, ClockMessage clock);
+    public void Publish(ClassroomEvent item);
+    public void UpdateClock(ClockMessage clock);
+    public void OpenExam(ExamDefinition exam);
+    public void CloseExam(Guid examId, Func<ClassroomStudent, ExamClosedMessage> resultFor);
+    public void Send(string studentId, ClassroomMessage message);
+    public ValueTask DisposeAsync();
+}
+```
+
+## Classroom/ClassroomProtocol.cs
+
+源码：[ClassroomProtocol.cs](../../../src/Monitor.Infrastructure/Classroom/ClassroomProtocol.cs) · 命名空间：`Monitor.Infrastructure.Classroom`
+
+```csharp
+public enum ClassroomEventKind { Restart, Apply, VitalStep, Ventilation }
+public sealed record ClassroomEvent(ClassroomEventKind Kind, long Generation, long AtSimulationTimeNs, string? PreferencesJson = null, IReadOnlyDictionary<VitalSign, int>? VitalValues = null, VentilationTransportPlan? Ventilation = null, decimal? OxygenDemandMultiplier = null)
+{
+    public void Validate();
+}
+public abstract record ClassroomMessage
+{
+}
+public sealed record HelloMessage(int Protocol, string JoinCode, string StudentName) : ClassroomMessage
+{
+}
+public sealed record WelcomeMessage(string StudentId) : ClassroomMessage
+{
+}
+public sealed record RejectedMessage(string ReasonCode) : ClassroomMessage
+{
+}
+public sealed record ClockMessage(long Generation, long SimulationTimeNs, bool Running) : ClassroomMessage
+{
+}
+public sealed record EventMessage(ClassroomEvent Event) : ClassroomMessage
+{
+}
+public sealed record ExamOpenedMessage(ExamDefinition Exam) : ClassroomMessage
+{
+}
+public sealed record ExamClosedMessage(Guid ExamId, ExamDefinition? Revealed, ExamScore? Score) : ClassroomMessage
+{
+}
+public sealed record SubmitAnswersMessage(Guid ExamId, IReadOnlyList<ExamAnswer> Answers) : ClassroomMessage
+{
+}
+public sealed record SubmissionReceiptMessage(Guid ExamId, bool Accepted, string? ReasonCode) : ClassroomMessage
+{
+}
+public static class ClassroomFraming
+{
+    public const int ProtocolVersion = 1;
+    public const int MaximumFrameBytes = 512 * 1024;
+    public static byte[] Encode(ClassroomMessage message);
+    public static ClassroomMessage Decode(ReadOnlySpan<byte> json);
+    public static Task WriteAsync(Stream stream, ClassroomMessage message, CancellationToken cancellationToken);
+    public static Task<ClassroomMessage?> ReadAsync(Stream stream, CancellationToken cancellationToken);
+}
+```
+
 ## Continuity/RecoveryWireCodec.cs
 
 源码：[RecoveryWireCodec.cs](../../../src/Monitor.Infrastructure/Continuity/RecoveryWireCodec.cs) · 命名空间：`Monitor.Infrastructure.Continuity`
@@ -605,6 +707,8 @@ public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int
 public sealed class DisplayPreferenceStore(string path)
 {
     public DisplayPreferences Load(out bool rejected);
+    public static DisplayPreferences Deserialize(ReadOnlySpan<byte> json);
+    public static byte[] Serialize(DisplayPreferences preferences);
     public bool Save(DisplayPreferences preferences);
 }
 ```

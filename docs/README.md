@@ -21,6 +21,7 @@
 - [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
 - [桌面与命令行入口](interfaces/desktop-tools.md)
 - [本地化接口 / Localization API](interfaces/localization.md)
+- [课堂与考试 / Classroom and exams](interfaces/classroom.md)
 - [测量、通知与波形呈现接口](interfaces/measurements-presentation.md)
 - [成人氧合基线与教师耗氧倍增器](interfaces/oxygenation/oxygenation-defaults.md)
 - [氧合第三步：深低数值、测量恢复与报警验证](interfaces/oxygenation/oxygenation-reporting.md)

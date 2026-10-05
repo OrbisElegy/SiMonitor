@@ -10,6 +10,7 @@
 | 测量、质量、报警通知、扫线、记录、12 导联与手工测量 | [测量与呈现](measurements-presentation.md) | [Monitor.Application](api/application.md)、[Monitor.Domain](api/domain.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 会话权威、治疗、评分、身份、断线续算与恢复 | [权威、身份与恢复](authority-identity-recovery.md) | [Domain](api/domain.md)、[Application](api/application.md)、[Infrastructure](api/infrastructure.md) |
 | 声音输出、原生 ABI、偏好文件与存储 | [音频与持久化](audio-persistence.md) | [Monitor.Infrastructure](api/infrastructure.md) |
+| 课堂事件同步、加入与帧格式、考试评分 | [课堂与考试](classroom.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 本地化端口、中英文资源、格式校验与翻译协作 | [本地化](localization.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 桌面装配、控件、命令行、构建及开发工具 | [桌面与命令行入口](desktop-tools.md) | [Monitor.Desktop](api/desktop.md) |
 
@@ -38,7 +39,7 @@ flowchart LR
 | `Monitor.Infrastructure` | SQLite、负载保护、签名验签、wire codec、偏好、SVG／worker、PCM 和原生音频 | 持有文件、数据库、线程与设备资源；调用方负责生命周期 |
 | `Monitor.Desktop` | Avalonia 控件、输入转换、设置、定时推进、资源装配 | UI 线程串行操作；默认打开本地监护界面 |
 
-目前仓库没有 HTTP 路由表、REST/OpenAPI 服务、gRPC 服务或教师端／学生端 WebSocket 监听实现。`ConnectionHealth` 中的 `WebSocketClose` 是状态机输入原因；`RecoveryWireCodec` 和 `WaveformEnvelopeCodec` 是编解码器，不会自行建立网络连接。
+目前仓库没有 HTTP 路由表、REST/OpenAPI 服务或 gRPC 服务；教师端与学生端通过[课堂](classroom.md)中的 TCP 帧协议连接。`ConnectionHealth` 中的 `WebSocketClose` 是状态机输入原因；`RecoveryWireCodec` 和 `WaveformEnvelopeCodec` 是编解码器，不会自行建立网络连接。
 
 ## 常用接入路径
 

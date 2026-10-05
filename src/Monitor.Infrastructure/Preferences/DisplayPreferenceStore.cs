@@ -42,32 +42,41 @@ public sealed class DisplayPreferenceStore(string path)
             int count = 0, read;
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
-            var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
-            { throw new ArgumentException("Preferences.InvalidDocument"); }
-            if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
-            data.Alarms?.Validate();
-            if (data.Version >= 3 && data.Sound is null) { throw new ArgumentException("Preferences.MissingSound"); }
-            data.Sound?.Validate();
-            if (data.Version >= 5 && !data.HasGenerator) { throw new ArgumentException("Preferences.MissingGenerator"); }
-            if (data.Version == 4 && data.Generator is null) { throw new ArgumentException("Preferences.MissingGenerator"); }
-            data.Generator?.Validate();
-            return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator);
+            return Deserialize(bytes.AsSpan(0, count));
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         { rejected = true; }
         return new(MonitorDisplayConfiguration.Default(), 0);
     }
-    public bool Save(DisplayPreferences preferences)
+
+    // The validated document format, shared with classroom sessions. Throws
+    // JsonException or ArgumentException for documents Load would reject.
+    public static DisplayPreferences Deserialize(ReadOnlySpan<byte> json)
+    {
+        if (json.Length > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
+        var data = JsonSerializer.Deserialize<Document>(json, Options);
+        if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+        { throw new ArgumentException("Preferences.InvalidDocument"); }
+        if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
+        data.Alarms?.Validate();
+        if (data.Version >= 3 && data.Sound is null) { throw new ArgumentException("Preferences.MissingSound"); }
+        data.Sound?.Validate();
+        if (data.Version >= 5 && !data.HasGenerator) { throw new ArgumentException("Preferences.MissingGenerator"); }
+        if (data.Version == 4 && data.Generator is null) { throw new ArgumentException("Preferences.MissingGenerator"); }
+        data.Generator?.Validate();
+        return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
+            new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator);
+    }
+
+    private static Document CreateDocument(DisplayPreferences preferences)
     {
         if (preferences.PaperLayout is < 0 or > 1) { throw new ArgumentException("Preferences.InvalidPaperLayout"); }
         var alarms = preferences.Alarms ?? MonitorAlarmPreferences.Default;
         alarms.Validate();
         var sound = preferences.Sound ?? MonitorSoundPreferences.Default; sound.Validate();
         preferences.Generator?.Validate();
-        var data = new Document
+        return new Document
         {
             Version = 10,
             Generator = preferences.Generator,
@@ -77,6 +86,17 @@ public sealed class DisplayPreferenceStore(string path)
             PaperLayout = preferences.PaperLayout,
             Slots = preferences.Display.Slots.Select(s => new Slot(s.Channel, s.Automatic, s.Range.Minimum, s.Range.Maximum, s.SpeedTenthsMmPerSecond)).ToArray()
         };
+    }
+
+    public static byte[] Serialize(DisplayPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        return JsonSerializer.SerializeToUtf8Bytes(CreateDocument(preferences), Options);
+    }
+
+    public bool Save(DisplayPreferences preferences)
+    {
+        var data = CreateDocument(preferences);
         string fullPath = Path.GetFullPath(path);
         string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

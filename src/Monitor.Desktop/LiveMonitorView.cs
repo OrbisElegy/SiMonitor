@@ -58,11 +58,12 @@ internal sealed class LiveMonitorView : UserControl
     {
         _trace = trace;
         _localization = localization ?? new DesktopLocalization();
-        _localization.LocaleChanged += () =>
+        AttachedToVisualTree += (_, _) =>
         {
-            Refresh();
-            RefreshNotice();
+            _localization.LocaleChanged += RefreshLanguage;
+            RefreshLanguage();
         };
+        DetachedFromVisualTree += (_, _) => _localization.LocaleChanged -= RefreshLanguage;
         var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
         var header = new Grid { ColumnDefinitions = new("*,2*,*"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
@@ -138,6 +139,12 @@ internal sealed class LiveMonitorView : UserControl
     private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(0), Child = text };
     internal static IBrush? NumericBackground(TextBlock text) => ((Border)text.Parent!).Background;
 
+    private void RefreshLanguage()
+    {
+        Refresh();
+        RefreshNotice();
+    }
+
     internal void Refresh()
     {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
@@ -197,7 +204,9 @@ internal sealed class LiveMonitorView : UserControl
                     secondary.Text = "PR  " + Value(MeasurementSource.Pleth, snapshot.PulseRate.Status, snapshot.PulseRate.MilliBeatsPerMinute, 1000, "PR") + " bpm"; break;
                 case 4:
                     primary.Text = Value(MeasurementSource.Co2, snapshot.Capnography.EndTidalCentiMmHg.Status, snapshot.Capnography.EndTidalCentiMmHg.Value, 100, "EtCO₂");
-                    secondary.Text = _localization.Format("monitor.co2RateValue", Value(MeasurementSource.Co2, snapshot.Capnography.RespirationsMilliPerMinute.Status, snapshot.Capnography.RespirationsMilliPerMinute.Value, 1000, "RR-CO₂")); break;
+                    // Keep the measured value while bindings translate its unit, even when paused.
+                    _localization.Bind(secondary, TextBlock.TextProperty, "monitor.co2RateValue",
+                        Value(MeasurementSource.Co2, snapshot.Capnography.RespirationsMilliPerMinute.Status, snapshot.Capnography.RespirationsMilliPerMinute.Value, 1000, "RR-CO₂")); break;
                 default:
                     var pressure = channel == 3 ? snapshot.AbpMean : channel == 5 ? snapshot.PaMean : snapshot.CvpMean;
                     primary.Text = Value(MeasurementSource.Pressure, pressure.Status, pressure.MeanCentiMmHg, 100, LiveMonitorTrace.Names[channel]);

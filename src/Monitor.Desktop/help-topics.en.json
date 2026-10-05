@@ -144,12 +144,6 @@
     "Title": "12-lead paper"
   },
   {
-    "Id": "ecg12-calipers",
-    "Category": "Waveforms and display",
-    "Text": "On the 12-lead ECG page, turn on Manual calipers, then press and drag along any lead. Both ends snap to samples actually acquired for that lead; the moving end stays within the same lead and stops at the lead's first or last sample when dragged beyond it. In the reading, Δt is the time between the ends in milliseconds, ΔV is the later end's voltage minus the earlier end's in millivolts (it can be negative), and the rate is 60000 ÷ Δt, marked with “≈” and one decimal when not exact. Each arrow key press moves the moving end by one sample, or ten samples with Shift; Esc or Clear calipers removes the calipers. The long II at the bottom is the rhythm strip and measures lead II. The calipers do not detect wave onsets or ends; results depend on where you place them. Calipers remain when you switch pages and start over after new parameters are applied or the paper layout changes. When a course locks or disables measurement, the calipers are removed and cannot be placed.",
-    "Title": "Manual 12-lead measurement"
-  },
-  {
     "Id": "settings-detail-4",
     "Category": "Vital signs",
     "Text": "Open Settings → Vital signs → Random seed and click “Generate random seed” to create a new value from the system's cryptographic random source, instead of typing 64 hexadecimal characters. The new seed takes effect after Apply. Keeping the same seed and related parameters reproduces the teaching variations of heart rate, saturation and CO₂; each kind of variation uses its own sequence.",

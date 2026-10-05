@@ -860,6 +860,8 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(LocalizationSmokeChecks.Verify);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyTemplateCatalog);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyHelpCatalog);
+        NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyPausedMonitorLanguage);
+        NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyRetiredMonitorCollection);
         NativeSmokePartition.Run(VerifyVisibleVariation);
         NativeSmokePartition.Run(VerifyStableSlowContours);
         NativeSmokePartition.Run(VerifyRespirationOverview);

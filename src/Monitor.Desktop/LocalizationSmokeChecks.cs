@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -12,6 +13,86 @@ namespace Monitor.Desktop;
 
 internal static class LocalizationSmokeChecks
 {
+    internal static void VerifyPausedMonitorLanguage()
+    {
+        var window = new DesignPreviewWindow();
+        window.Show();
+        try
+        {
+            for (int i = 0; i < 100; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            window.Pause();
+            var session = window.Session;
+            long time = session.SimulationTimeNs;
+            var snapshot = session.Measurements;
+            var view = window.MonitorView;
+            string[] readings = view.NumericTexts.ToArray();
+            var transitions = window.Settings.Alerts.AlarmLifecycles.SelectMany(journal => journal.Transitions).ToArray();
+            var rate = view.NumericBlocks.Single(block => block.Text?.StartsWith("RR  ", StringComparison.Ordinal) == true);
+            string chinese = rate.Text!;
+            Require(chinese.EndsWith("次/分", StringComparison.Ordinal), "monitor starts with a Chinese respiratory-rate unit");
+            window.Settings.Language.SelectedIndex = 0;
+            Require(rate.Text == chinese.Replace("次/分", "/min", StringComparison.Ordinal),
+                "paused respiratory rate switches to English without another measurement");
+            Require(view.Clock.Text!.Contains("Heartbeat source", StringComparison.Ordinal), "visible monitor clock changes language");
+            for (int i = 0; i < 3; i++)
+            {
+                window.SelectPage(2);
+                window.Settings.Language.SelectedIndex = 1;
+                window.SelectPage(0);
+                Require(rate.Text == chinese && view.Clock.Text!.Contains("心搏音源", StringComparison.Ordinal),
+                    "reattached monitor renders the language selected while hidden");
+                window.Settings.Language.SelectedIndex = 0;
+                Require(rate.Text == chinese.Replace("次/分", "/min", StringComparison.Ordinal),
+                    "reattached monitor continues following language changes");
+            }
+            Require(ReferenceEquals(session, window.Session) && ReferenceEquals(view, window.MonitorView) &&
+                Equals(snapshot, session.Measurements) && time == session.SimulationTimeNs && window.ActiveTimer is null &&
+                readings.SequenceEqual(view.NumericTexts) && transitions.SequenceEqual(window.Settings.Alerts.AlarmLifecycles.SelectMany(journal => journal.Transitions)),
+                "translation preserves paused measurements, monitor identity and alarm lifecycle");
+        }
+        finally { window.Close(); }
+    }
+
+    internal static void VerifyRetiredMonitorCollection()
+    {
+        var window = new DesignPreviewWindow();
+        window.Show();
+        window.Pause();
+        try
+        {
+            var retired = new List<WeakReference>();
+            for (int i = 0; i < 3; i++) { retired.AddRange(ReplaceMonitor(window)); }
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Require(retired.All(reference => !reference.IsAlive),
+                "applying and restarting release old monitor views, traces and sessions while the window remains alive");
+            window.Settings.Language.SelectedIndex = 0;
+            Require(window.MonitorView.Clock.Text!.Contains("Heartbeat source", StringComparison.Ordinal),
+                "the current monitor still follows language changes after replacements");
+        }
+        finally { window.Close(); }
+    }
+
+    // Avoid test-stack roots keeping the retired controls alive across collection.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference[] ReplaceMonitor(DesignPreviewWindow window)
+    {
+        window.UpdateLayout();
+        var view = window.MonitorView;
+        var trace = view.GetVisualDescendants().OfType<LiveMonitorTrace>().Single();
+        var session = window.Session;
+        window.ApplySettings();
+        Require(!ReferenceEquals(view, window.MonitorView), "apply replaces the monitor before checking collection");
+        var applied = window.MonitorView;
+        window.RestartSettings();
+        window.Pause();
+        Require(!ReferenceEquals(session, window.Session), "restart replaces the session before checking collection");
+        return [new(view), new(trace), new(session), new(applied)];
+    }
+
     internal static void Verify()
     {
         string directory = Path.Combine(Path.GetTempPath(), "monitor-language-ui-" + Guid.NewGuid().ToString("N"));

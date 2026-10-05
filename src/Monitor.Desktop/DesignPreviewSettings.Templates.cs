@@ -254,7 +254,7 @@ internal sealed partial class DesignPreviewSettings
                 BorderBrush = selected ? Brush.Parse("#60CDFF") : Brushes.Black,
                 BorderThickness = new Thickness(selected ? 3 : 1)
             };
-            AutomationProperties.SetName(candidate, _choices[index] + (selected ? "，已选择" : "，选择此样式"));
+            AutomationProperties.SetName(candidate, _choices[index] + (selected ? "，已选择" : "，选择此模板"));
             try
             {
                 var owner = _owner;
@@ -264,7 +264,7 @@ internal sealed partial class DesignPreviewSettings
                 candidate.Click += (_, _) =>
                 {
                     _write(index);
-                    owner.Status.Text = "已选择 " + _choices[index] + "；预览已更新，运行数据须应用后改变。";
+                    owner.Localization.Bind(owner.Status, TextBlock.TextProperty, "settings.templateSelected", _choices[index]);
                     Refresh();
                     if (CardButtons.FirstOrDefault(button => AutomationProperties.GetName(button) == _choices[index] + "，已选择") is { } chosen)
                     { RestoreFocus(chosen); }

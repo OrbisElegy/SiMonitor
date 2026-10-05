@@ -87,7 +87,7 @@ internal sealed class LiveMonitorView : UserControl
             var primary = new TextBlock { Text = "---", FontSize = 52, FontWeight = FontWeight.SemiBold, Foreground = color };
             var secondary = new TextBlock { FontSize = 17, Foreground = color, IsVisible = slot.Channel is 2 or 3 or 4 or 5 };
             AutomationProperties.SetName(primary, label);
-            AutomationProperties.SetName(secondary, slot.Channel switch { 2 => "PR · PLETH，bpm", 3 => "ABP收缩压/舒张压，mmHg", 5 => "PA收缩压/舒张压，mmHg", _ => "RR · CO₂，次/分" });
+            AutomationProperties.SetName(secondary, slot.Channel switch { 2 => "PR · PLETH，bpm", 3 => "ABP 收缩压/舒张压，mmHg", 5 => "PA 收缩压/舒张压，mmHg", _ => "RR · CO₂，次/分" });
             var content = new StackPanel { Width = 166, Spacing = 2 };
             content.Children.Add(new TextBlock { Text = label, Foreground = color, FontSize = 13 });
             if (slot.Channel == 2)

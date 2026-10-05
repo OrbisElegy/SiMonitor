@@ -187,7 +187,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal MonitorAlertSettings Alerts { get; } = new();
     internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; } = new();
-    internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1下传）", IsChecked = false };
+    internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1 下传）", IsChecked = false };
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal Button GenerateSeed { get; } = new() { Content = "生成随机种子", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -211,6 +211,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("应用后接续当前波形；从头开始会清空扫描历史。");
+    private const string DisplayColumns = "40,165,80,*,*,115";
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
     private readonly StackPanel _slotRows = new() { Spacing = 12 };
@@ -257,10 +258,15 @@ internal sealed partial class DesignPreviewSettings : UserControl
         display.Children.Add(Skin);
         display.Children.Add(LocalizedText("display.paperLayout")); display.Children.Add(PaperLayout);
         display.Children.Add(DesktopInformationPages.Help("topic-1"));
-        var headings = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
+        // Headings share the row columns and right margins so translated labels stay aligned.
+        var headings = new Grid { ColumnDefinitions = new(DisplayColumns) };
         string[] labels = ["display.row", "display.channel", "display.range", "display.minimum", "display.maximum", "display.speed"];
         for (int column = 0; column < labels.Length; column++)
-        { var label = LocalizedText(labels[column]); Grid.SetColumn(label, column); headings.Children.Add(label); }
+        {
+            var label = LocalizedText(labels[column]);
+            label.Margin = new Thickness(0, 0, 10, 0);
+            Grid.SetColumn(label, column); headings.Children.Add(label);
+        }
         display.Children.Add(headings);
         display.Children.Add(_slotRows);
         display.Children.Add(DesktopInformationPages.Help("topic-2"));
@@ -273,7 +279,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         foreach (var control in new[] { paperLabel, PaperLayout, paperHelp }) { display.Children.Remove(control); paper.Children.Add(control); }
         display.Margin = new Thickness(0);
         SectionPages[2] = new SettingsSections(Localization, "settings.display", ("shell.monitor", display), ("display.paper", paper));
-        SectionPages[3] = SettingsSections.Split("声音", Sound,
+        SectionPages[3] = SettingsSections.Split(Localization, "settings.sound", Sound,
             ("输出与主音量", Sound.Children[0]), ("心搏提示音", Sound.HeartbeatEnabled),
             ("报警声音暂停", Before(Sound, Sound.PauseSeconds)));
         var alertGroups = new List<(string Title, Control Start)>
@@ -282,7 +288,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         int alertSettings = alertGroups.Count;
         alertGroups.Add((ProductIdentity.DevelopmentFeatures ? "显示与联调" : "显示", ProductIdentity.DevelopmentFeatures ? (Control)Alerts.TestLevel.Parent! : Alerts.NoticeColorEnabled)); alertGroups.Add(("声音节奏", Alerts.InfoTone));
         alertGroups.Add(("通知策略", Alerts.NotificationSettings));
-        var alarmSections = SettingsSections.Split("报警", Alerts, new Dictionary<int, string> { [0] = "测量参数", [alertSettings] = "提示与声音" }, alertGroups.ToArray());
+        var alarmSections = SettingsSections.Split(Localization, "settings.alarms", Alerts, new Dictionary<int, string> { [0] = "测量参数", [alertSettings] = "提示与声音" }, alertGroups.ToArray());
         SectionPages[4] = alarmSections;
         for (int section = 0; section < Alerts.Parameters.Count; section++)
         {
@@ -301,7 +307,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             Alerts.ShowSoundPage(numeric);
             alarmSections.SelectedSection = Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(numeric);
         };
-        SectionPages[5] = SettingsSections.Split("生命体征", vitals,
+        SectionPages[5] = SettingsSections.Split(Localization, "settings.vitals", vitals,
             ("心率", vitals.Children[0]), ("呼吸与 CO₂", Before(vitals, RespiratoryRate)),
             ("指脉氧", Oxygenation), ("压力", Before(vitals, AbpPulseGain)),
             ("随机种子", Before(vitals, RateSeed)));
@@ -316,7 +322,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         advancedGroups.Add(("当前已应用参数", appliedParameters));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
         var advancedHeaders = new Dictionary<int, string> { [0] = "当前波形", [3] = ProductIdentity.DevelopmentFeatures ? "概览与工具" : "概览" };
-        SectionPages[6] = new SettingsSections(null, "高级参数", advancedHeaders, advancedGroups.ToArray());
+        SectionPages[6] = new SettingsSections(Localization, "settings.advanced", advancedHeaders, advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[]
         {
             new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
@@ -412,7 +418,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Add("心率目标（bpm，30–180）", HeartRate);
         Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
-        Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
+        Add("吸气占周期比例（%，10–90；50 表示吸呼 1:1）", InspirationPercent);
         panel.Children.Add(BreathingTiming);
         RespiratoryRate.ValueChanged += (_, _) => RefreshBreathingTiming();
         InspirationPercent.ValueChanged += (_, _) => RefreshBreathingTiming();
@@ -420,8 +426,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Co2Rise.ValueChanged += (_, _) => RefreshBreathingTiming();
         Co2Fall.ValueChanged += (_, _) => RefreshBreathingTiming();
         RefreshBreathingTiming();
-        Add("EtCO₂目标（mmHg，5–80）", EtCo2Target);
-        Add("EtCO₂逐呼吸波动（±mmHg，0–5；0关闭）", EtCo2Variation);
+        Add("EtCO₂ 目标（mmHg，5–80）", EtCo2Target);
+        Add("EtCO₂ 逐呼吸波动（±mmHg，0–5；0 关闭）", EtCo2Variation);
         panel.Children.Add(DesktopInformationPages.Help("topic-3"));
         panel.Children.Add(DesktopInformationPages.Help("topic-4"));
         void Add(string label, Control control)
@@ -430,11 +436,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
         source.Children.Add(OpticalEnabled);
         source.Children.Add(Oxygenation.Realtime);
         source.Children.Add(Text("SpO₂ 教学目标（0–100%）")); source.Children.Add(OpticalTarget);
-        source.Children.Add(Text("SpO₂波动幅度（±百分点，0–2.5；0关闭）")); source.Children.Add(OpticalVariation);
+        source.Children.Add(Text("SpO₂ 波动幅度（±百分点，0–2.5；0 关闭）")); source.Children.Add(OpticalVariation);
         source.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); source.Children.Add(OpticalModulation);
-        AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
-        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，0至100");
-        AutomationProperties.SetName(OpticalVariation, "SpO₂波动幅度（±百分点，0–2.5；0关闭）");
+        AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1 至 2");
+        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，0 至 100");
+        AutomationProperties.SetName(OpticalVariation, "SpO₂ 波动幅度（±百分点，0–2.5；0 关闭）");
         source.Children.Add(DesktopInformationPages.Help("topic-5"));
         source.Children.Add(DesktopInformationPages.Help("topic-6"));
         Oxygenation.SetSourceContent(source);
@@ -449,10 +455,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
         OpticalEnabled.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         Oxygenation.Realtime.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         RefreshOpticalControls();
-        Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
-        Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);
+        Add("ABP 脉搏分量倍率（0.5–2）", AbpPulseGain);
+        Add("PA 脉搏分量倍率（0.5–2）", PaPulseGain);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
-        Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
+        Add("CVP 基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
         Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
         panel.Children.Add(SeedError);
@@ -549,7 +555,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 break;
             default: return;
         }
-        Status.Text = $"已恢复 {page} 默认参数，尚未应用；当前运行保持不变。";
+        Localization.Bind(Status, TextBlock.TextProperty, "settings.pageDefaultsRestored", page);
     }
     private void RefreshAdvanced(Button developer)
     {
@@ -645,11 +651,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
             Localization.Bind(channel, AutomationProperties.NameProperty, "display.rowChannel", i + 1);
             Localization.Bind(minimum, AutomationProperties.NameProperty, "display.rowMinimum", i + 1);
             Localization.Bind(maximum, AutomationProperties.NameProperty, "display.rowMaximum", i + 1);
-            var row = new Grid { ColumnDefinitions = new("30,160,70,*,*,115") };
+            var row = new Grid { ColumnDefinitions = new(DisplayColumns) };
             var speed = new ComboBox { ItemsSource = new[] { "12.5", "25", "50" }, SelectedIndex = 1 };
             Localization.Bind(automatic, AutomationProperties.NameProperty, "display.rowAutomatic", i + 1);
             Localization.Bind(speed, AutomationProperties.NameProperty, "display.rowSpeed", i + 1);
-            Control[] children = [Text((i + 1).ToString(CultureInfo.InvariantCulture)), channel, automatic, minimum, maximum, speed];
+            var number = Text((i + 1).ToString(CultureInfo.InvariantCulture));
+            number.VerticalAlignment = VerticalAlignment.Center;
+            Control[] children = [number, channel, automatic, minimum, maximum, speed];
             for (int column = 0; column < children.Length; column++) { children[column].Margin = new Thickness(0, 0, 10, 0); Grid.SetColumn(children[column], column); row.Children.Add(children[column]); }
             _slotRows.Children.Add(row); Slots.Add(new(channel, automatic, minimum, maximum, speed));
         }

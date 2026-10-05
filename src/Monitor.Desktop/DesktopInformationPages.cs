@@ -57,7 +57,7 @@ internal static class DesktopInformationPages
         search.TextChanged += (_, _) => Refresh(); category.SelectionChanged += (_, _) => Refresh(); Refresh();
         return root;
     }
-    internal static Control CreateAbout() => new SettingsSections("关于", ("Seele's SiMonitor", CreateLegalPage(false)), ("开源组件", CreateLegalPage(true)));
+    internal static Control CreateAbout(DesktopLocalization? localization = null) => new SettingsSections(localization, "navigation.about", ("Seele's SiMonitor", CreateLegalPage(false)), ("开源组件", CreateLegalPage(true)));
     private static Grid CreateLegalPage(bool thirdParty)
     {
         var assembly = typeof(DesktopInformationPages).Assembly;

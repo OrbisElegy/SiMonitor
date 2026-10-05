@@ -35,8 +35,8 @@ internal sealed class SoundSettingsPanel : StackPanel
     private readonly MonitorBeatPitch _pitch = new();
     internal int BeatPitchPercent => PitchSource.SelectedIndex == 1 ? _pitch.SaturationPercent : 97;
     internal MonitorNotice? PitchNotice => AlarmEnabled.IsChecked == true && HeartbeatEnabled.IsChecked == true && PitchSource.SelectedIndex == 1 && _pitch.Unavailable
-        ? new("beat-pitch-unavailable", MonitorNoticeLevel.Info, "SpO₂音高不可用 · 固定音高") { Audible = false } : null;
-    internal ComboBox PitchSource { get; } = new() { ItemsSource = new[] { "固定音高", "SpO₂ · A曲线" }, SelectedIndex = 1, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        ? new("beat-pitch-unavailable", MonitorNoticeLevel.Info, "SpO₂ 音高不可用 · 固定音高") { Audible = false } : null;
+    internal ComboBox PitchSource { get; } = new() { ItemsSource = new[] { "固定音高", "SpO₂ · A 曲线" }, SelectedIndex = 1, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly MonitorAudioPause _audioPause = new();
     private readonly Func<long> _authorityNow;
     private readonly DispatcherTimer _pauseTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
@@ -51,7 +51,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal event Action? OutputNoticeChanged;
     internal CheckBox AlarmEnabled { get; } = new() { Content = "启用监护提示声音", IsChecked = false };
     internal CheckBox HeartbeatEnabled { get; } = new() { Content = "心搏提示音（与报警声独立重叠）", IsChecked = true };
-    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏", "自动 · ECG优先" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
+    internal ComboBox BeatSource { get; } = new() { ItemsSource = new[] { "ECG · 已检测 QRS", "PLETH · 已检测脉搏", "自动 · ECG 优先" }, SelectedIndex = 0, MinWidth = 240, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider Volume { get; } = new() { Minimum = 0, Maximum = 100, Value = 50, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal Slider HeartbeatVolume { get; } = new() { Minimum = 0, Maximum = 100, Value = 100, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
     internal int EffectiveHeartbeatVolume => (int)(Volume.Value * HeartbeatVolume.Value / 100);
@@ -92,13 +92,13 @@ internal sealed class SoundSettingsPanel : StackPanel
         };
         Children.Add(DesktopInformationPages.Help("settings-detail-8"));
         Children.Add(Text("心搏提示音来源")); Children.Add(BeatSource);
-        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG、PLETH或自动");
+        AutomationProperties.SetName(BeatSource, "心搏提示音来源，ECG、PLETH 或自动");
         BeatSource.SelectionChanged += (_, _) => { _alarms.SetHeartbeatEnabled(false); UpdateBeatSource(); Publish(); };
         Children.Add(_sourceStatus);
-        Children.Add(new Expander { Header = "本次模拟音源切换记录（最近64条）", Content = _sourceHistory });
+        Children.Add(new Expander { Header = "本次模拟音源切换记录（最近 64 条）", Content = _sourceHistory });
         Children.Add(DesktopInformationPages.Help("settings-detail-9"));
         Children.Add(Text("心搏音高来源")); Children.Add(PitchSource);
-        AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或SpO2 A曲线");
+        AutomationProperties.SetName(PitchSource, "心搏音高来源，固定或 SpO₂ A 曲线");
         PitchSource.SelectionChanged += (_, _) => { ResetPitchState(); OutputNoticeChanged?.Invoke(); };
         Children.Add(Text("报警声音暂停时长（秒，1–3600）")); Children.Add(PauseSeconds);
         AutomationProperties.SetName(PauseSeconds, "报警声音暂停时长，秒");
@@ -109,7 +109,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         PauseAlarmAudio.Click += (_, _) =>
         {
             if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds))
-            { PauseStatus.Text = "请输入1–3600的整数秒数；原声音状态保持不变。"; return; }
+            { PauseStatus.Text = "请输入 1–3600 的整数秒数；原声音状态保持不变。"; return; }
             StartAudioPause(checked((int)seconds));
         };
         ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };

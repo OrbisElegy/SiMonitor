@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -55,6 +56,14 @@ internal sealed class DesktopLocalization(string? locale = null)
 
     internal void Bind(AvaloniaObject target, AvaloniaProperty property, string key, params object?[] arguments) =>
         Bind(target, property, text => text.Format(key, arguments));
+
+    // Settings navigation mixes catalog keys with titles that are not translated yet.
+    // Only dotted catalog keys are looked up; other titles are shown verbatim.
+    internal static bool IsKey(string value) => KeyPattern.IsMatch(value);
+    internal static string Label(ITextLocalizer text, string keyOrTitle) => IsKey(keyOrTitle) ? text.GetString(keyOrTitle) : keyOrTitle;
+    internal void BindLabel(AvaloniaObject target, AvaloniaProperty property, string keyOrTitle) =>
+        Bind(target, property, text => Label(text, keyOrTitle));
+    private static readonly Regex KeyPattern = new(@"^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9]+)+$", RegexOptions.CultureInvariant);
 
     internal void Bind(AvaloniaObject target, AvaloniaProperty property, Func<ITextLocalizer, string> format)
     {

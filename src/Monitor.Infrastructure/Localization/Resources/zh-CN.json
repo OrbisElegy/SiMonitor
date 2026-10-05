@@ -105,7 +105,7 @@
   "validation.repolarization": "未应用：局部复极延长须为 0–500 ms 的整数，并满足当前心搏周期约束。原运行与画面保持不变。",
   "validation.waveLead": "未应用：T 波目标须至少选择一个胸导联。原运行与画面保持不变。",
   "validation.oxygenFlow": "未应用：当前吸气时程下流量超出氧合原型范围，请减小 VT 或增加吸气时长。原运行保持不变。",
-  "validation.configuration": "未应用：检查样式、生命体征、种子或量程。心率调整需窦性参考及1:1下传，CO₂波动需规则呼吸。原运行与画面保持不变。",
+  "validation.configuration": "未应用：检查波形模板、生命体征、种子或量程。心率调整需窦性参考及 1:1 下传，CO₂ 波动需规则呼吸。原运行与画面保持不变。",
   "validation.oxygenDisabled": "请先启用双波长指脉氧教学源及实时氧合模型，并应用设置。",
   "validation.ventilationFlow": "通气未更新：当前吸气时程下流量超出原型范围，请减小 VT 或增加吸气时长。",
   "validation.ventilationParameters": "通气／耗氧参数无效，当前运行未改变。请检查 VT、VD、FiO₂ 和耗氧倍增器。",
@@ -115,5 +115,8 @@
   "validation.patientDetail": "未应用：{0}原运行保持不变。",
   "display.relative": "相对量",
   "display.channelUnit": "{0} / {1}",
-  "settings.general": "通用"
+  "settings.general": "通用",
+  "settings.statusIdle": "应用后接续当前波形；从头开始会清空扫描历史。",
+  "settings.templateSelected": "已选择 {0}；预览已更新，运行数据须应用后改变。",
+  "settings.pageDefaultsRestored": "已恢复 {0} 默认参数，尚未应用；当前运行保持不变。"
 }

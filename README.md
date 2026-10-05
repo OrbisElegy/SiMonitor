@@ -105,5 +105,3 @@ python3 tools/clean.py dirclean
 
 ## Todo
 - 监护仪皮肤接口
-- 独立教师端、学生端
-- 教学与考试功能

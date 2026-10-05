@@ -108,5 +108,3 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 
 ## To-Do
 - Monitor skin interface
-- Separate teacher and student interfaces
-- Teaching and Exam features

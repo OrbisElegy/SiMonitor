@@ -680,6 +680,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
         { throw new ArgumentException("Preview.PressureTargetPulseTooSmall"); }
         return target;
     }
+    // While joined as a student the teacher controls the simulation: actions that
+    // would change it are disabled; drafts may still be browsed.
+    internal bool ClassroomStudent { get; private set; }
+    internal void SetClassroomStudent(bool student)
+    {
+        ClassroomStudent = student;
+        foreach (Control control in new Control[] { Apply, Restart, Run, ResetAll, Oxygenation.UpdateVentilation, VitalChanges })
+        { control.IsEnabled = !student; }
+        if (student) { Localization.Bind(Status, TextBlock.TextProperty, "classroom.settingsLocked"); }
+    }
     internal void OpenAdvanced(int channel)
     {
         Tabs.SelectedIndex = 6;

@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Monitor.Application.Presentation;
 using Monitor.Application.Scenarios;
 using Monitor.Domain.Presentation;
+using Monitor.Infrastructure.Classroom;
 using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
 using Monitor.Simulation.Acquisition;
@@ -19,7 +20,7 @@ using Monitor.Simulation.Physiology;
 namespace Monitor.Desktop;
 
 // Local preview with sample-derived numerics; alarm/audio scheduling remains separate.
-internal sealed class DesignPreviewWindow : Window
+internal sealed partial class DesignPreviewWindow : Window
 {
     internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
     private readonly ContentControl _workspace = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
@@ -59,7 +60,7 @@ internal sealed class DesignPreviewWindow : Window
     private readonly LanguagePreferenceStore? _languagePreferences;
     internal DesktopLocalization Localization { get; }
     internal TextBlock LanguageNotice { get; } = Text("", 12);
-    private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
+    private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about", "navigation.classroom"];
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
     internal DesignPreviewWindow(string? preferencesPath = null)
     {
@@ -70,6 +71,7 @@ internal sealed class DesignPreviewWindow : Window
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _preferences = preferencesPath is null ? null : new(preferencesPath);
         _languagePreferences = preferencesPath is null ? null : new(Path.ChangeExtension(preferencesPath, ".language.json"));
+        ExamLibrary = preferencesPath is null ? null : new(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(preferencesPath))!, "exams.json"));
         bool languageRejected = false;
         Localization = new(_languagePreferences?.Load(out languageRejected));
         if (ProductIdentity.DevelopmentFeatures)
@@ -157,7 +159,7 @@ internal sealed class DesignPreviewWindow : Window
             Child = _workspace
         };
         Grid.SetRow(card, 1); main.Children.Add(card); Content = root;
-        Opened += (_, _) => Start(); Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
+        Opened += (_, _) => Start(); Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); EndClassroom(); };
         SelectPage(0); UpdateState();
     }
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
@@ -222,7 +224,10 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             decimal multiplier = Settings.Oxygenation.ReadDemandMultiplier();
-            long effectiveNs = _session.UpdateOxygenationVentilation(Settings.Oxygenation.ReadVentilation(), multiplier);
+            var ventilation = Settings.Oxygenation.ReadVentilation();
+            long requestedAtNs = _session.SimulationTimeNs;
+            long effectiveNs = _session.UpdateOxygenationVentilation(ventilation, multiplier);
+            RecordClassroomEvent(new(ClassroomEventKind.Ventilation, _classroomGeneration, requestedAtNs, Ventilation: ventilation, OxygenDemandMultiplier: multiplier));
             decimal baseline = _session.OxygenationParameters!.OxygenDemandMlStpdPerMinute;
             SetStatus("settings.ventilationScheduled", effectiveNs / 1_000_000_000m, baseline, multiplier, baseline * multiplier);
         }
@@ -288,14 +293,14 @@ internal sealed class DesignPreviewWindow : Window
     }
     internal void SelectPage(int page)
     {
-        if (page is < 0 or > 4) { throw new ArgumentOutOfRangeException(nameof(page)); }
+        if (page is < 0 or > 5) { throw new ArgumentOutOfRangeException(nameof(page)); }
         Page = page;
         _navigation.SelectedIndex = page;
         Localization.Bind(_title, TextBlock.TextProperty, PageKeys[page]);
         if (page == 0) { Localization.Bind(_subtitle, TextBlock.TextProperty, "shell.monitorSubtitle", _session.Display.Slots.Count); }
         else
         {
-            string key = page switch { 1 => "shell.ecgSubtitle", 2 => "shell.settingsSubtitle", 3 => "shell.helpSubtitle", _ => "shell.aboutSubtitle" };
+            string key = page switch { 1 => "shell.ecgSubtitle", 2 => "shell.settingsSubtitle", 3 => "shell.helpSubtitle", 4 => "shell.aboutSubtitle", _ => "shell.classroomSubtitle" };
             Localization.Bind(_subtitle, TextBlock.TextProperty, key);
         }
         _workspace.Content = page switch
@@ -304,6 +309,7 @@ internal sealed class DesignPreviewWindow : Window
             1 => CreateEcgPage(),
             2 => Settings,
             3 => DesktopInformationPages.CreateHelp(Localization),
+            5 => Classroom,
             _ => DesktopInformationPages.CreateAbout(Localization)
         };
     }
@@ -365,8 +371,10 @@ internal sealed class DesignPreviewWindow : Window
             }
             try
             {
-                var inputs = VitalChangeSources.Apply(_appliedInputs, pending.Where(pair => changed.Contains(pair.Key)).ToDictionary());
+                var changedValues = pending.Where(pair => changed.Contains(pair.Key)).ToDictionary();
+                var inputs = VitalChangeSources.Apply(_appliedInputs, changedValues);
                 _ = _session.ScheduleSource(inputs.CreateSession(), 0);
+                RecordClassroomEvent(new(ClassroomEventKind.VitalStep, _classroomGeneration, _session.SimulationTimeNs, VitalValues: changedValues));
             }
             catch (Exception exception) when (exception is ArgumentException or OverflowException)
             {
@@ -454,6 +462,7 @@ internal sealed class DesignPreviewWindow : Window
     internal void RestartSettings() => ApplySettings(restart: true);
     private void ApplySettings(bool restart)
     {
+        LastApplySucceeded = false;
         try
         {
             _ = Settings.Alerts.NotificationSettings.Read();
@@ -462,6 +471,7 @@ internal sealed class DesignPreviewWindow : Window
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
             var (next, ecgConfig, ecg, physiology, inputs) = BuildConfiguredSources();
+            long appliedAtNs = _session.SimulationTimeNs;
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             long delayNs = Settings.ReadApplyDelayNs();
             long? effective = null;
@@ -497,7 +507,10 @@ internal sealed class DesignPreviewWindow : Window
             if (restart) { SetStatus("settings.restarted"); }
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
-            if (_preferences is not null)
+            LastApplySucceeded = true;
+            RecordClassroomSettings(restart, appliedAtNs);
+            // A student mirrors the teacher; its own saved preferences stay untouched.
+            if (_preferences is not null && !IsClassroomStudent)
             {
                 bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator));
                 PreferenceNotice.IsVisible = !saved;
@@ -578,10 +591,12 @@ internal sealed class DesignPreviewWindow : Window
     }
     internal void Start()
     {
-        if (_closed || _timer is not null) { return; }
+        // A student follows the teacher's clock instead of its own timer.
+        if (_closed || _timer is not null || IsClassroomStudent) { return; }
         _lastTick = Stopwatch.GetTimestamp();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _timer.Tick += OnTick; _timer.Start(); UpdateState();
+        PublishClassroomClock(force: true);
     }
     internal void Pause()
     {
@@ -589,6 +604,7 @@ internal sealed class DesignPreviewWindow : Window
         if (old is not null) { old.Stop(); old.Tick -= OnTick; }
         Settings?.Sound.PauseMonitor();
         UpdateState();
+        PublishClassroomClock(force: true);
     }
     private void OnTick(object? sender, EventArgs args)
     {
@@ -602,25 +618,37 @@ internal sealed class DesignPreviewWindow : Window
         if (_closed || _timer is null || !ReferenceEquals(timer, _timer)) { return; }
         try
         {
-            _session.Advance(deltaNs);
-            AdvanceVitalChanges();
-            if (_pendingPresentation is { } applied && _session.PendingSourceTimeNs is null)
-            {
-                _ecg = applied.Paper;
-                Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
-                    applied.RespirationSelection, applied.EjectionSelection);
-                _pendingPresentation = null;
-                SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
-                if (Page == 1) { SelectPage(Page); }
-            }
-            _monitor.InvalidateVisual();
-            MonitorView.Refresh();
-            Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
-                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices);
-            UpdateState();
+            AdvanceCore(deltaNs);
+            RefreshAfterAdvance();
+            PublishClassroomClock(force: false);
+            AdvanceClassroomExam();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Pause(); SetStatus("settings.generationFailed"); }
+    }
+
+    private void AdvanceCore(long deltaNs)
+    {
+        _session.Advance(deltaNs);
+        if (!IsClassroomStudent) { AdvanceVitalChanges(); }
+        if (_pendingPresentation is { } applied && _session.PendingSourceTimeNs is null)
+        {
+            _ecg = applied.Paper;
+            Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
+                applied.RespirationSelection, applied.EjectionSelection);
+            _pendingPresentation = null;
+            SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
+            if (Page == 1) { SelectPage(Page); }
+        }
+    }
+
+    private void RefreshAfterAdvance()
+    {
+        _monitor.InvalidateVisual();
+        MonitorView.Refresh();
+        Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
+            _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices);
+        UpdateState();
     }
     private void UpdateState()
     {

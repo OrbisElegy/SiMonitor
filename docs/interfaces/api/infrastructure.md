@@ -480,6 +480,20 @@ public static class ClassroomFraming
 }
 ```
 
+## Classroom/ExamLibraryStore.cs
+
+源码：[ExamLibraryStore.cs](../../../src/Monitor.Infrastructure/Classroom/ExamLibraryStore.cs) · 命名空间：`Monitor.Infrastructure.Classroom`
+
+```csharp
+public sealed class ExamLibraryStore(string path)
+{
+    public const int MaximumBytes = 4 * 1024 * 1024;
+    public const int MaximumExams = 200;
+    public IReadOnlyList<ExamDefinition> Load(out bool rejected);
+    public bool Save(IReadOnlyList<ExamDefinition> exams);
+}
+```
+
 ## Continuity/RecoveryWireCodec.cs
 
 源码：[RecoveryWireCodec.cs](../../../src/Monitor.Infrastructure/Continuity/RecoveryWireCodec.cs) · 命名空间：`Monitor.Infrastructure.Continuity`

@@ -22,7 +22,8 @@ public sealed record ClassroomEvent(ClassroomEventKind Kind, long Generation, lo
         bool valid = Enum.IsDefined(Kind) && Generation >= 0 && AtSimulationTimeNs >= 0 && Kind switch
         {
             ClassroomEventKind.Restart or ClassroomEventKind.Apply => PreferencesJson is { Length: > 0 } && VitalValues is null && Ventilation is null,
-            ClassroomEventKind.VitalStep => PreferencesJson is null && VitalValues is { Count: > 0 } && Ventilation is null &&
+            // An empty step returns every sign to its applied value.
+            ClassroomEventKind.VitalStep => PreferencesJson is null && VitalValues is not null && Ventilation is null &&
                 VitalValues.All(pair => Enum.IsDefined(pair.Key)),
             _ => PreferencesJson is null && VitalValues is null && Ventilation is not null,
         };

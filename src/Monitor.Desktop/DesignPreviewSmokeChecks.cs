@@ -52,7 +52,9 @@ internal static class DesignPreviewSmokeChecks
         {
             window.SelectPage(2); Capture(window, "ui-refine-home.png");
             VerifyActionFooter(window);
-            Require(window.Title == ProductIdentity.WindowTitle, "formal product name used in title");
+            Require(window.Title == (ProductIdentity.DevelopmentFeatures
+                ? window.Localization.Format("shell.developmentTitle", ProductIdentity.Name, ProductIdentity.Version)
+                : ProductIdentity.WindowTitle), "formal product name used in title");
             void Click(Button button) => button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             var ecg = window.Settings.TemplatePages[0];
             Require(window.Settings.TemplateSignals.SelectedIndex == 0 && ecg.ActiveGroup == "窦性心律" && ecg.Compact &&
@@ -857,6 +859,7 @@ internal static class DesignPreviewSmokeChecks
         // Each registration runs on its process-owned Avalonia dispatcher.
         NativeSmokePartition.Run(LocalizationSmokeChecks.Verify);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyTemplateCatalog);
+        NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyHelpCatalog);
         NativeSmokePartition.Run(VerifyVisibleVariation);
         NativeSmokePartition.Run(VerifyStableSlowContours);
         NativeSmokePartition.Run(VerifyRespirationOverview);

@@ -23,7 +23,7 @@ internal sealed class SettingsSections : UserControl
     private readonly TextBlock[] _details;
     private readonly string[] _titles;
     private readonly CompactEntry[] _entries;
-    private readonly DesktopLocalization? _localization;
+    private readonly DesktopLocalization _localization;
     // Detail and accessible state per section: catalog keys or verbatim text.
     private readonly (string? Detail, string? Accessible)[] _states;
     private int _selected;
@@ -34,12 +34,10 @@ internal sealed class SettingsSections : UserControl
         return base.MeasureOverride(availableSize);
     }
     internal bool Compact => _compact.IsVisible;
-    internal SettingsSections(string category, params (string Title, Control Content)[] sections)
-        : this(null, category, sections) { }
-    internal SettingsSections(DesktopLocalization? localization, string category, params (string Title, Control Content)[] sections)
+    internal SettingsSections(DesktopLocalization localization, string category, params (string Title, Control Content)[] sections)
         : this(localization, category, new Dictionary<int, string>(), sections) { }
     // Headers are inert list rows; section indices stay independent of item indices.
-    internal SettingsSections(DesktopLocalization? localization, string category, IReadOnlyDictionary<int, string> headers, (string Title, Control Content)[] sections)
+    internal SettingsSections(DesktopLocalization localization, string category, IReadOnlyDictionary<int, string> headers, (string Title, Control Content)[] sections)
     {
         var pages = sections.Select(section => SettingsScroll.Create(new Border
         {
@@ -58,14 +56,13 @@ internal sealed class SettingsSections : UserControl
         _titles = sections.Select(section => section.Title).ToArray();
         _localization = localization;
         _states = new (string?, string?)[sections.Length];
-        if (localization is not null)
+        // Subscribed only while shown, so recreated pages do not stay reachable from the localization.
+        AttachedToVisualTree += (_, _) =>
         {
-            localization.LocaleChanged += () =>
-            {
-                for (int section = 0; section < _states.Length; section++) { ApplyDetail(section); }
-                RefreshHeaders();
-            };
-        }
+            localization.LocaleChanged += RefreshLanguage;
+            RefreshLanguage();
+        };
+        DetachedFromVisualTree += (_, _) => localization.LocaleChanged -= RefreshLanguage;
         for (int index = 0; index < sections.Length; index++)
         {
             if (headers.TryGetValue(index, out string? header))
@@ -103,12 +100,8 @@ internal sealed class SettingsSections : UserControl
             container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry });
         };
         _compact.ItemsSource = _entries;
-        AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
-        if (localization is not null)
-        {
-            localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
-            localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
-        }
+        localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
+        localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
         var heading = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 12) }; top.Children.Add(heading); top.Children.Add(_compact);
         var root = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(16) };
@@ -125,8 +118,8 @@ internal sealed class SettingsSections : UserControl
             }
             _selected = selected;
             _compact.SelectedIndex = Sections.SelectedIndex;
-            heading.Text = category + " / " + sections[selected].Title; _detail.Content = pages[selected];
-            localization?.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading",
+            _detail.Content = pages[selected];
+            localization.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading",
                 DesktopLocalization.Label(text, category), DesktopLocalization.Label(text, sections[selected].Title)));
         };
         _compact.SelectionChanged += (_, args) =>
@@ -165,24 +158,25 @@ internal sealed class SettingsSections : UserControl
         var (detailKey, accessibleKey) = _states[section];
         string? detail = detailKey is null ? null : Resolve(detailKey);
         string title = Resolve(_titles[section]);
-        string name = accessibleKey is null ? title : _localization is null
-            ? title + "，" + accessibleKey
-            : _localization.Format("settings.sectionState", title, Resolve(accessibleKey));
+        string name = accessibleKey is null ? title : _localization.Format("settings.sectionState", title, Resolve(accessibleKey));
         _details[section].Text = detail;
         var item = (ListBoxItem)Sections.Items[_itemOfSection[section]]!;
         // The default binding keeps the localized title; a state replaces it until cleared.
         if (accessibleKey is not null) { AutomationProperties.SetName(item, name); }
-        else if (_localization is not null) { _localization.BindLabel(item, AutomationProperties.NameProperty, _titles[section]); }
-        else { AutomationProperties.SetName(item, name); }
+        else { _localization.BindLabel(item, AutomationProperties.NameProperty, _titles[section]); }
         _entries[_itemOfSection[section]].Update(detail, name);
+    }
+    private void RefreshLanguage()
+    {
+        for (int section = 0; section < _states.Length; section++) { ApplyDetail(section); }
+        RefreshHeaders();
     }
     private void RefreshHeaders()
     {
         foreach (var entry in _entries.Where(entry => entry.IsHeader)) { entry.Update(null, Resolve(entry.Title)); }
     }
-    private string Resolve(string keyOrText) =>
-        _localization is not null && DesktopLocalization.IsKey(keyOrText) ? _localization.Get(keyOrText) : keyOrText;
-    private static Grid CompactRow(CompactEntry entry, DesktopLocalization? localization)
+    private string Resolve(string keyOrText) => DesktopLocalization.Label(_localization.Current, keyOrText);
+    private static Grid CompactRow(CompactEntry entry, DesktopLocalization localization)
     {
         var title = new TextBlock { Text = entry.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         if (entry.IsHeader)
@@ -191,7 +185,7 @@ internal sealed class SettingsSections : UserControl
             title.FontWeight = FontWeight.SemiBold;
             title.Foreground = DesktopFluentStyle.SecondaryText;
         }
-        localization?.BindLabel(title, TextBlock.TextProperty, entry.Title);
+        localization.BindLabel(title, TextBlock.TextProperty, entry.Title);
         var detail = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = DesktopFluentStyle.SecondaryText, Margin = new Thickness(12, 0, 0, 0) };
         detail.Bind(TextBlock.TextProperty, new Binding(nameof(CompactEntry.Detail)) { Source = entry });
         var row = new Grid { ColumnDefinitions = new("*,Auto") };
@@ -258,9 +252,9 @@ internal sealed class SettingsSections : UserControl
         };
         return item;
     }
-    internal static SettingsSections Split(DesktopLocalization? localization, string category, StackPanel owner, params (string Title, Control Start)[] groups)
+    internal static SettingsSections Split(DesktopLocalization localization, string category, StackPanel owner, params (string Title, Control Start)[] groups)
         => Split(localization, category, owner, new Dictionary<int, string>(), groups);
-    internal static SettingsSections Split(DesktopLocalization? localization, string category, StackPanel owner, IReadOnlyDictionary<int, string> headers, (string Title, Control Start)[] groups)
+    internal static SettingsSections Split(DesktopLocalization localization, string category, StackPanel owner, IReadOnlyDictionary<int, string> headers, (string Title, Control Start)[] groups)
     {
         var children = owner.Children.ToArray();
         int[] indices = groups.Select(g => Array.IndexOf(children, g.Start)).ToArray();

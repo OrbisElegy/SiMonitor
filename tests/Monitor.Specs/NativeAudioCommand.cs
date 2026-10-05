@@ -61,7 +61,7 @@ internal static class NativeAudioCommand
                 if (!factory.Pump() || !lifecycle.CheckHealth())
                 { error.WriteLine($"Clock probe stopped: {factory.Status}"); return 1; }
                 if (Stopwatch.GetElapsedTime(start).TotalMilliseconds >= i * 50) { break; }
-                Thread.Sleep(1);
+                factory.WaitForQueueSpace(10);
             } while (true);
             long before = Stopwatch.GetTimestamp();
             var clock = factory.ReadClock();
@@ -69,6 +69,7 @@ internal static class NativeAudioCommand
             samples[i] = new(before, after, lifecycle.Session!.RenderedThroughFrame, clock);
         }
         var native = factory.Status; var periods = factory.PeriodSnapshot;
+        int? queueTargetFrames = factory.QueueTargetFrames;
         if (!lifecycle.Stop()) { error.WriteLine("Clock probe stop failed."); return 1; }
         // Serialize only after stop so console/file I/O cannot starve playback.
         output.WriteLine(JsonSerializer.Serialize(new
@@ -77,7 +78,7 @@ internal static class NativeAudioCommand
             LibrarySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[1]))),
             PlaybackStarted = true,
             GeneratedTone = false,
-            EngineQueueMilliseconds = 40,
+            EngineQueueMilliseconds = queueTargetFrames / 48.0,
             RawStopwatchFrequency = Stopwatch.Frequency,
             DeviceQpcUnitsPerSecond = 10_000_000,
             Native = native,
@@ -107,7 +108,7 @@ internal static class NativeAudioCommand
                     LibrarySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(args[1]))),
                     RequestedDevice = args.Length == 3 ? args[2] : "system-default",
                     PlaybackStarted = false,
-                    EngineQueueMilliseconds = 40,
+                    EngineQueueMilliseconds = factory.QueueTargetFrames / 48.0,
                     Native = factory.Status,
                     PeriodSnapshot = factory.PeriodSnapshot,
                     PhysicalLatencyAssessment = "NotAssessed",
@@ -143,8 +144,8 @@ internal static class NativeAudioCommand
             cancellation.ThrowIfCancellationRequested();
             if (!factory.Pump() || !lifecycle.CheckHealth())
             { error.WriteLine($"Audio stopped; native status: {factory.Status}"); return 1; }
-            // Diagnostic producer pacing only; onset is sample-indexed.
-            Thread.Sleep(1);
+            // Same event-driven pacing as product playback; onset is sample-indexed.
+            factory.WaitForQueueSpace(10);
         }
         return 0;
     }
@@ -172,6 +173,25 @@ internal static class NativeAudioCommand
             var open = Marshal.GetDelegateForFunctionPointer<TestOpen>(NativeLibrary.GetExport(library, "sa_open"));
             var close = Marshal.GetDelegateForFunctionPointer<TestClose>(NativeLibrary.GetExport(library, "sa_close"));
             Check.That(open(0, 40, out nint probe) == 0 && close(probe) == 0, "cdecl opaque-handle ABI opens and closes");
+            using (var primedFactory = new NativeAudioOutputFactory(path, allowTestBackend: true))
+            {
+                var primed = new AudioRenderSession();
+                Check.That(primed.TryProduce(primed.CapacityFrames), "prime one managed queue capacity");
+                var primedDevice = primedFactory.Open(null, primed, 1)!;
+                try
+                {
+                    Check.That(primedFactory.Pump() && primed.BufferedFrames == 0 && primed.RenderedThroughFrame == primed.CapacityFrames,
+                        "staged PCM drains past the queue target instead of forming a second queue");
+                }
+                finally { Check.That(primedDevice.StopAndClose(), "primed device joins before unload"); }
+            }
+            foreach ((int requestedMilliseconds, int expectedFrames) in new[] { (5, 960), (30, 1440), (100, 1920) })
+            {
+                using var tuned = new NativeAudioOutputFactory(path, allowTestBackend: true, queueTargetMilliseconds: requestedMilliseconds);
+                var tunedDevice = tuned.Open(null, new AudioRenderSession(), 1)!;
+                try { Check.That(tuned.QueueTargetFrames == expectedFrames, "queue target keeps two device periods and never exceeds capacity"); }
+                finally { Check.That(tunedDevice.StopAndClose(), "tuned device joins before unload"); }
+            }
             using var factory = new NativeAudioOutputFactory(path, allowTestBackend: true);
             var session = new AudioRenderSession();
             session.Schedule(1, TonePreset.BeatAudition, 0, 12000);
@@ -180,9 +200,10 @@ internal static class NativeAudioCommand
             {
                 Check.That(factory.ReadClock() is { Result: -2, DevicePosition: 0, DeviceFrequency: 0 } &&
                     factory.ReadClock().Nominal48kElapsedFrames is null, "null backend does not invent hardware clock readings");
-                Check.That(factory.Pump() && session.RenderedThroughFrame == 1920 && session.BufferedFrames == 0,
-                    "single40ms native queue; managed staging is drained");
-                Check.That(factory.Pump() && session.RenderedThroughFrame == 1920, "native full leaves tone phase untouched");
+                Check.That(factory.QueueTargetFrames == 960 && factory.Pump() && session.RenderedThroughFrame == 960 && session.BufferedFrames == 0,
+                    "single native queue tops up to its 20 ms target; managed staging is drained");
+                Check.That(factory.Pump() && session.RenderedThroughFrame == 960, "native queue at target leaves tone phase untouched");
+                Check.That(factory.Status!.Value.PeriodFrames == 480, "null backend reports the 10 ms period behind the target floor");
                 rejected = false;
                 try { factory.Dispose(); } catch (InvalidOperationException) { rejected = true; }
                 Check.That(rejected, "live handle prevents library unload");
@@ -190,7 +211,7 @@ internal static class NativeAudioCommand
                 // Exercise its real null worker, then observe underrun propagation.
                 Check.That(device.Start(), "native start consumes primed PCM");
                 long start = Stopwatch.GetTimestamp();
-                while (factory.Status!.Value.RetiredReason == 0 && Stopwatch.GetElapsedTime(start) < TimeSpan.FromSeconds(3)) { Thread.Sleep(5); }
+                while (factory.Status!.Value.RetiredReason == 0 && Stopwatch.GetElapsedTime(start) < TimeSpan.FromSeconds(3)) { factory.WaitForQueueSpace(5); }
                 Check.That(!factory.Pump() && session.RequiresReplacement && session.UnderrunFrames > 0,
                     "native underrun retires managed session without late refill");
             }

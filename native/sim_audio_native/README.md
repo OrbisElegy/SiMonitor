@@ -89,6 +89,12 @@ The .NET AudioPcmBuffer and native ring must not become two independent 40 ms
 queues: the managed producer must account for staging frames when maintaining
 the native queue target.
 
+The optional ABI1 export sa_wait_writable lets the producer block until the
+consumer has run, the stream retires or a 1-1000 ms timeout elapses. On Windows
+the callback only calls SetEvent on an auto-reset event; a wake-up raised before
+the wait is kept until the next wait consumes it. The non-Windows test backend
+polls an atomic flag in 1 ms steps and says nothing about wake-up latency.
+
 Official references:
 
 - https://github.com/mackron/miniaudio/tree/0.11.23
@@ -142,12 +148,15 @@ default. Ctrl+C stops and joins output before unloading. Missing/wrong ABI/test
 libraries and unavailable devices fail visibly; nothing auto-plays at startup.
 NativeAudioOutputFactory binds ABI1 through cdecl delegates and keeps library
 ownership until successful close. No managed reverse callback is registered.
-Its bounded producer pump drains initial/staged managed PCM immediately;
-native queue is the only 40 ms target. Full native buffers do not advance tone
-phase. Pumping is single-owner and must run independently of UI in product use.
-This command uses a 1 ms producer sleep for engineering audition only, not a
-latency guarantee or a production scheduler. Physical audio latency requires
-separate target-platform qualification.
+Its bounded producer pump drains initial/staged managed PCM immediately; the
+native queue is the only latency target. With sa_wait_writable the target is
+20 ms or two device periods, whichever is larger, capped by the 40 ms ring;
+older libraries keep the full 40 ms target and a 1 ms producer sleep. A queue
+at its target does not advance tone phase. Pumping is single-owner and must run
+independently of UI in product use. This command paces with the same
+event-driven wait as product playback, which is not a latency guarantee.
+Physical audio latency and underrun margin require separate target-platform
+qualification.
 
 ## Open-time period diagnostics
 

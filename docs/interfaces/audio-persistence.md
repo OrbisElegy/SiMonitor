@@ -111,6 +111,7 @@ interface IAudioOutputFactory {
 }
 interface IPumpedAudioOutput : IAudioOutputFactory, IDisposable {
     bool Pump();
+    void WaitForQueueSpace(int timeoutMilliseconds);
 }
 ```
 
@@ -130,13 +131,20 @@ State 为 Stopped/Running/DeviceLost/StopFailed；Failure 区分 None/Open/Start
 源码：[NativeAudioOutputFactory](../../src/Monitor.Infrastructure/Audio/NativeAudioOutputFactory.cs)、
 [NativeAudioClockSample](../../src/Monitor.Infrastructure/Audio/NativeAudioClockSample.cs)。
 
-NativeAudioOutputFactory(string libraryPath, bool allowTestBackend=false) 实现 IPumpedAudioOutput。
-libraryPath 必须 fully qualified，显式加载，无 DLL search-path fallback；ABI 版本必须为 1。
+NativeAudioOutputFactory(string libraryPath, bool allowTestBackend=false, int queueTargetMilliseconds=20)
+实现 IPumpedAudioOutput。libraryPath 必须 fully qualified，显式加载，无 DLL search-path fallback；ABI 版本必须为 1。
 `DefaultLibraryPath` 是应用目录下按当前平台命名的生产库（Windows `sim_audio_native.dll`）。
+queueTargetMilliseconds 为 5–100，越界在加载前抛 ArgumentOutOfRangeException。
 默认拒绝导出 sa_test_render 的测试库；只可同时拥有一个 device，重复 Open 抛 DeviceStillOwned。
 设备 ID 按 UTF-8 传递，禁止内嵌 NUL；原生 open 失败映射 null。
 `Pump()` 每次最多搬运一队列容量，先 drain managed staging，再填 native queue；每次生产最多 240 frames。
-native queue 是排队容量目标；native underrun 映射 session 缺帧，其他退役原因令 session 退役。
+managed staging 总是完整 drain；新 PCM 只把 native queue 补到 `QueueTargetFrames`，不再填满容量。
+库导出 sa_wait_writable 时，目标取 queueTargetMilliseconds 与两个设备 period（按 48 kHz 向上换算）的较大者，
+并以 session 容量为上限；旧 ABI1 库没有该符号时目标等于容量，保持原 40 ms 行为。
+`QueueTargetFrames` 在无 device 时为 null。native underrun 映射 session 缺帧，其他退役原因令 session 退役。
+`WaitForQueueSpace(int timeoutMilliseconds)` 只在 owner 线程调用，范围 1–1000：有 sa_wait_writable 时
+阻塞到 consumer 运行一次、流退役或超时；旧库或无 device 时退回 1 ms sleep。它不读写 PCM，
+返回后由下一次 Pump 观察队列和退役状态。目标值未经过 Windows 实机延迟或欠载鉴定。
 Status / PeriodSnapshot 在无 device 时为 null；Open 后的诊断字段见下文 sa_info。
 `ReadClock()` 在无 device 或旧库无该可选 symbol 时返回 Result=-2 的零值采样。
 `Dispose()` 要求先成功关闭 device，否则抛 CloseBeforeUnload；成功后卸载动态库。
@@ -157,6 +165,8 @@ SetRequest(MonitorAlarmSoundRequest?)、RunAsync(CancellationToken)。
 请求包含 Level、VolumePercent、MonitorSoundTiming；null 清除报警音请求。
 新增 NotificationSequence：0 沿用持续播放，正值指定 owner 内的一次声音组身份。
 RunAsync 仅允许一个 worker；SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
+两个入口的专用 owner 线程以 Highest 优先级运行，每次 Pump 后调用 `WaitForQueueSpace(10)` 等待下一次 consumer
+运行，而不是固定 sleep；请求和心搏 cue 最迟在下一次唤醒时进入排程。
 OutputActive 只表示曾成功 pumping 且 worker 尚活动，不保证物理出声或已达到延迟目标。
 返回 SoundPreviewResult：Completed（试听正常结束）、Stopped（取消）、Unavailable（打开/加载不可用）、
 Interrupted（Pump/健康失败）、StopFailed（关闭失败，优先保留资源所有权）。
@@ -190,6 +200,7 @@ int32_t sa_close(sa_output* output);
 uint32_t sa_info(sa_output* output, uint32_t key);
 int32_t sa_clock_sample(sa_output* output, uint64_t* position,
     uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult);
+int32_t sa_wait_writable(sa_output* output, uint32_t timeout_ms);
 /* SIM_AUDIO_TEST only */
 void sa_test_render(sa_output* output, float* pcm, uint32_t frames);
 ```
@@ -201,7 +212,7 @@ void sa_test_render(sa_output* output, float* pcm, uint32_t frames);
 | -2 | 后端、设备、分配、启动或时钟不可用；sa_close 停止失败时也为 -2 |
 | -3 | sa_submit 空间不足，整次输入不写入 |
 | -4 | 流已退役，不能继续 submit/start/clock |
-| 1 | 仅 sa_clock_sample：S_FALSE 降低精度，不能用于调度校准 |
+| 1 | sa_clock_sample：S_FALSE 降低精度，不能用于调度校准；sa_wait_writable：超时 |
 
 sa_open 的 out 非空；验证后先置 *out=NULL。capacity_ms 为 20–100，设备 ID 可 NULL 但不可空字符串。
 Windows ID 需有效 UTF-8 并能转换到后端的 64-wide-char ID 容器；不支持时返回 -1/-2。
@@ -233,6 +244,11 @@ sa_clock_sample 是可选 ABI1 扩展，只允许 owner thread。有效输出指
 设备 position 必须除以 frequency 才是秒，QPC 已为 100 ns 单位，不是 QueryPerformanceCounter ticks。
 Windows 从当前流拥有的 IAudioClock 读取；失败可在 hresult 保留 HRESULT，其余数值为零。
 生产 qualification、声音实际到达扬声器的延迟仍无此 API 的直接证据。
+sa_wait_writable 也是可选 ABI1 扩展，只允许 producer/owner thread，timeout_ms 为 1–1000。
+consumer 每次运行（含 underrun 退役）以及 stop/reroute/interruption 通知都会置位一次唤醒；
+已置位的唤醒在下一次等待时立即返回并被消费，不会丢失。返回 0 表示 consumer 已运行，1 超时，
+-4 已退役，-2 等待机制不可用。Windows 使用 auto-reset event，callback 中只调用非阻塞的 SetEvent；
+SIM_AUDIO_TEST 的非 Windows 构建以 1 ms 轮询原子标志实现，不代表唤醒延迟。
 
 ## 本地偏好文件与失败语义
 

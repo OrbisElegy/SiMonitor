@@ -52,7 +52,8 @@ internal static class SoundPreviewSpecifications
             Check.That(playback.PlayAsync(volume, cancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped,
                 "explicit stop ends preview");
             Check.That(output.Threads.Count == 1 && !output.Threads.Contains(caller) && output.Closed && output.Disposed,
-                "open/pump/close/dispose share background owner and join before unload");
+                "open/pump/wait/close/dispose share background owner and join before unload");
+            Check.That(output.Waits > 0, "preview paces pumping through the output wait");
             return output.Peak;
         }
         float full = Measure(100), half = Measure(50), zero = Measure(0);
@@ -162,6 +163,7 @@ internal static class SoundPreviewSpecifications
         public bool CanClose { get; set; } = true;
         public bool FailPump { get; set; }
         public float Peak { get; private set; }
+        public int Waits { get; private set; }
         public Action<int>? BeforePump { get; set; }
         public IAudioOutputDevice Open(string? deviceId, AudioRenderSession session, long generation)
         { Touch(); _session = session; return this; }
@@ -175,6 +177,13 @@ internal static class SoundPreviewSpecifications
             foreach (float sample in _pcm) { Peak = Math.Max(Peak, Math.Abs(sample)); }
             if (++_pumps == 12) { cancel.Cancel(); }
             return !FailPump;
+        }
+        public void WaitForQueueSpace(int timeoutMilliseconds)
+        {
+            Touch();
+            Check.That(timeoutMilliseconds is >= 1 and <= 1000 && _pumps > 0, "owner paces only after pumping, with a bounded wait");
+            Waits++;
+            Thread.Sleep(1);
         }
         public bool StopAndClose() { Touch(); Closed = CanClose; return CanClose; }
         public void Dispose() { Touch(); Check.That(Closed, "join before dispose"); Disposed = true; }

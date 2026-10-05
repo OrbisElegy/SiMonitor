@@ -6,6 +6,8 @@ namespace Monitor.Infrastructure.Audio;
 public interface IPumpedAudioOutput : IAudioOutputFactory, IDisposable
 {
     public bool Pump();
+    // Paces the owner thread between pumps; returns early once the device consumes PCM.
+    public void WaitForQueueSpace(int timeoutMilliseconds);
 }
 
 public enum SoundPreviewResult { Completed, Stopped, Unavailable, Interrupted, StopFailed }
@@ -14,6 +16,7 @@ public enum SoundPreviewResult { Completed, Stopped, Unavailable, Interrupted, S
 // run on the dedicated owner thread; the UI only requests cancellation.
 public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
 {
+    private const int PumpWaitMilliseconds = 10;
     private int _busy;
     private IPumpedAudioOutput? _output;
     private AudioOutputLifecycle? _owner;
@@ -31,6 +34,8 @@ public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
     private SoundPreviewResult Play(int volume, CancellationToken cancellationToken)
     {
         var result = SoundPreviewResult.Unavailable;
+        // Dedicated LongRunning producer: a short native queue tolerates little scheduling delay.
+        Thread.CurrentThread.Priority = ThreadPriority.Highest;
         try
         {
             // Retain ownership after a failed join. Never unload that library
@@ -50,7 +55,7 @@ public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
                 {
                     if (cancellationToken.IsCancellationRequested) { result = SoundPreviewResult.Stopped; break; }
                     if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
-                    Thread.Sleep(1);
+                    _output.WaitForQueueSpace(PumpWaitMilliseconds);
                 }
             }
         }

@@ -184,12 +184,15 @@ public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint D
 }
 public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 {
+    public const int DefaultQueueTargetMilliseconds = 20;
     public static string DefaultLibraryPath { get; }
-    public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false);
+    public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false, int queueTargetMilliseconds = DefaultQueueTargetMilliseconds);
     public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public int? QueueTargetFrames { get; }
     public NativeAudioStatus? Status { get; }
     public NativeAudioPeriodSnapshot? PeriodSnapshot { get; }
     public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
     public NativeAudioClockSample ReadClock();
     public void Dispose();
 }
@@ -248,6 +251,7 @@ public static class SelectedMonitorTones
 public interface IPumpedAudioOutput : IAudioOutputFactory, IDisposable
 {
     public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
 }
 public enum SoundPreviewResult
 {

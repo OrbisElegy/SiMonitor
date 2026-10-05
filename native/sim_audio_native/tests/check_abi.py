@@ -16,9 +16,11 @@ lib.sa_close.argtypes = [c.c_void_p]
 lib.sa_info.argtypes = [c.c_void_p, c.c_uint32]
 lib.sa_info.restype = c.c_uint32
 lib.sa_clock_sample.argtypes = [c.c_void_p, c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint32)]
+lib.sa_wait_writable.argtypes = [c.c_void_p, c.c_uint32]
 assert lib.sa_abi_version() == 1
 h = c.c_void_p()
 assert lib.sa_open(None, 19, c.byref(h)) == -1 and not h.value
+assert lib.sa_wait_writable(None, 1) == -1
 if '--production-unavailable' in sys.argv:
     assert lib.sa_open(None, 40, c.byref(h)) == -2 and not h.value
     assert not hasattr(lib, 'sa_test_render')
@@ -28,6 +30,8 @@ lib.sa_test_render.argtypes = [c.c_void_p, c.POINTER(c.c_float), c.c_uint32]
 assert lib.sa_open(None, 40, c.byref(h)) == 0
 try:
     assert lib.sa_info(h, 8) == 1920 and lib.sa_info(h, 9) == 0
+    assert lib.sa_wait_writable(h, 0) == -1 and lib.sa_wait_writable(h, 1001) == -1
+    assert lib.sa_wait_writable(h, 1) == 1
     assert all(lib.sa_info(h, key) == 0 for key in range(10, 19))
     position, frequency, qpc, hr = c.c_uint64(9), c.c_uint64(9), c.c_uint64(9), c.c_uint32(9)
     assert lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -2
@@ -38,6 +42,7 @@ try:
     first = (c.c_float * 1000)()
     lib.sa_test_render(h, first, 1000)
     assert list(first) == list(source)[:1000]
+    assert lib.sa_wait_writable(h, 1000) == 0 and lib.sa_wait_writable(h, 1) == 1
     invalid = (c.c_float * 2)(0, math.nan)
     assert lib.sa_submit(h, invalid, 2) == -1
     assert lib.sa_submit(h, source, 1000) == 0
@@ -45,6 +50,7 @@ try:
     lib.sa_test_render(h, tail, 2000)
     assert list(tail) == list(source)[1000:] + list(source)[:1000] + [0] * 500
     assert lib.sa_info(h, 6) == 1 and lib.sa_info(h, 7) == 500
+    assert lib.sa_wait_writable(h, 1000) == -4
     assert lib.sa_submit(h, source, 1) == -4 and lib.sa_start(h) == -4
     assert lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -4
     lib.sa_test_render(h, tail, 2000)
@@ -58,10 +64,13 @@ try:
     silence = (c.c_float * 1920)()
     assert lib.sa_submit(h, silence, 1920) == 0
     assert lib.sa_start(h) == 0
+    # The worker's consumer pass wakes this thread; a slow host may already see underrun.
+    assert lib.sa_wait_writable(h, 1000) in (0, -4)
     deadline = time.monotonic() + 3
     while lib.sa_info(h, 6) == 0 and time.monotonic() < deadline:
-        time.sleep(0.005)
+        lib.sa_wait_writable(h, 5)
     assert lib.sa_info(h, 6) == 1 and lib.sa_info(h, 7) > 0
+    assert lib.sa_wait_writable(h, 1000) == -4
 finally:
     assert lib.sa_close(h) == 0
-print('PASS native ABI, ring wrap, rejection, underrun fencing, fresh handle and worker join')
+print('PASS native ABI, ring wrap, rejection, underrun fencing, consumer wake-up, fresh handle and worker join')

@@ -161,8 +161,15 @@ Status / PeriodSnapshot 在无 device 时为 null；Open 后的诊断字段见�
 padding 为 0 即已播放静音，按 underrun 退役（缺帧数只记下限 1）。默认设备切换、设备移除或停用、流失效时退役，
 不自动重连。Start 为 owner 线程申请 MMCSS "Pro Audio"，Stop 撤销；Dispose 会先关闭仍打开的流而不抛异常。
 该实现尚未在 Windows 实机上验证延迟与欠载余量。
+`AlsaAudioOutput(int queueTargetMilliseconds=20)` 是 Linux 的托管输出：通过系统 `libasound.so.2` 打开 48 kHz 单声道 float
+流，PCM 名称默认 `default`（也经由 PipeWire、PulseAudio 的 ALSA 插件），缺少库、设备或格式时 Open 返回 null。
+xrun 视为 padding 0 并按 underrun 退役，其他 ALSA 错误按设备丢失退役。PipeWire 插件按图量子成块取数，
+并按软件参数自行推算缓冲，因此 owner 线程不依赖 avail_min 唤醒，而是按当前排队量睡到目标一半再补数据。
+该路径在 Fedora + PipeWire 上做过静音长测，未做发声延迟测量；无时钟采样，ReadClock 返回不可用。
+
 `AudioOutputSelection.Create(AudioOutputSelection.Current)` 是桌面声音设置使用的唯一选择点：
-环境变量 `SIMONITOR_AUDIO_OUTPUT=wasapi` 选择托管输出，其余情况使用 `NativeAudioOutputFactory.DefaultLibraryPath`。
+环境变量 `SIMONITOR_AUDIO_OUTPUT` 为 `native`、`wasapi` 或 `alsa` 时按其选择，否则 Linux 用 ALSA、其他平台用
+`NativeAudioOutputFactory.DefaultLibraryPath`。
 
 NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequency、Qpc100Nanoseconds。
 `Nominal48kElapsedFrames` 只有 Result=0、HResult=0、frequency 非零且转换不溢出时才非空，

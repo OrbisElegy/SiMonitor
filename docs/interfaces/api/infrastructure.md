@@ -6,6 +6,25 @@
 
 位置 record 的参数也定义其同名属性；编译器合成的构造器、相等性方法以及继承成员不重复展开。`internal` 类型即使有 `public` 成员也不属于本索引。按开发构建的预处理分支读取；桌面产品构建差异见[桌面与命令行入口](../desktop-tools.md)。行为约束和集成顺序见总览中的分模块文档。
 
+## Audio/AlsaAudioOutput.cs
+
+源码：[AlsaAudioOutput.cs](../../../src/Monitor.Infrastructure/Audio/AlsaAudioOutput.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed class AlsaAudioOutput : IPumpedAudioOutput
+{
+    public AlsaAudioOutput(int queueTargetMilliseconds = NativeAudioOutputFactory.DefaultQueueTargetMilliseconds);
+    public int? QueueTargetFrames { get; }
+    public int? BufferFrames { get; }
+    public int? PeriodFrames { get; }
+    public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
+    public NativeAudioClockSample ReadClock();
+    public void Dispose();
+}
+```
+
 ## Audio/AudioClockBridge.cs
 
 源码：[AudioClockBridge.cs](../../../src/Monitor.Infrastructure/Audio/AudioClockBridge.cs) · 命名空间：`Monitor.Infrastructure.Audio`
@@ -27,13 +46,14 @@ public sealed class AudioClockBridge
 public enum AudioOutputBackend
 {
     Native,
-    Wasapi
+    Wasapi,
+    Alsa
 }
 public static class AudioOutputSelection
 {
     public const string EnvironmentVariable = "SIMONITOR_AUDIO_OUTPUT";
     public static AudioOutputBackend Current { get; }
-    public static AudioOutputBackend Parse(string? value);
+    public static AudioOutputBackend Resolve(string? value);
     public static IPumpedAudioOutput Create(AudioOutputBackend backend);
 }
 ```

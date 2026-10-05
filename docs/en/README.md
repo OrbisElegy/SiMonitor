@@ -68,7 +68,7 @@ Create a local product candidate:
 python3 tools/build_release.py --jobs 32
 ```
 
-Product output is in `artifacts/release/`. The current native audio backend targets Windows WASAPI; builds or checks on other platforms do not replace validation on a Windows device.
+Product output is in `artifacts/release/`. Sound uses the native WASAPI audio library by default on Windows; Linux plays directly through the system ALSA library (which also reaches PipeWire and PulseAudio) without the native library; macOS has no sound output yet. Builds or checks on one platform do not replace validation on another platform's device.
 
 Build scripts create the generated files under `artifacts/`, which Git ignores. The project's native audio wrapper source is in `native/sim_audio_native/`. The dependency script downloads a pinned `vendor/miniaudio.h` into that directory and verifies its SHA-256 hash before the build uses it. Run dependency preparation before reviewing that upstream header. See the [native audio guide](../../native/sim_audio_native/README.md) for source locations, output layout, and native diagnostics.
 

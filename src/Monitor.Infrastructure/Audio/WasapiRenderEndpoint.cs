@@ -181,6 +181,11 @@ internal sealed unsafe partial class WasapiRenderEndpoint : IRenderEndpoint
         return true;
     }
 
+    // The shared-mode event already fires once per engine period.
+    public void SetWakeThreshold(int queuedFrames)
+    {
+    }
+
     public void Wait(int timeoutMilliseconds) => _consumed.WaitOne(timeoutMilliseconds);
 
     public NativeAudioClockSample ReadClock()

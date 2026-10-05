@@ -35,7 +35,10 @@ internal sealed class EndpointAudioOutput : IPumpedAudioOutput
         var endpoint = _openEndpoint(deviceId, session.CapacityFrames);
         if (endpoint is null) { return null; }
         int limitFrames = Math.Min(session.CapacityFrames, endpoint.BufferFrames);
-        _device = new Device(this, endpoint, session, AudioQueueTarget.Frames(_queueTargetMilliseconds, endpoint.PeriodFrames, limitFrames));
+        int queueTargetFrames = AudioQueueTarget.Frames(_queueTargetMilliseconds, endpoint.PeriodFrames, limitFrames);
+        // Refill once half the target has played; the target keeps at least a period beyond that.
+        endpoint.SetWakeThreshold(queueTargetFrames / 2);
+        _device = new Device(this, endpoint, session, queueTargetFrames);
         return _device;
     }
 

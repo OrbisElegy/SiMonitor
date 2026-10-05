@@ -65,7 +65,7 @@ python3 tools/build.py --offline --jobs 32
 python3 tools/build_release.py --jobs 32
 ```
 
-产品输出位于 `artifacts/release/`。目前原生音频后端面向 Windows WASAPI；其他平台上的构建或检查不能代替 Windows 设备的实际验证。
+产品输出位于 `artifacts/release/`。Windows 声音默认使用原生 WASAPI 音频库，Linux 通过系统 ALSA 库（也覆盖 PipeWire、PulseAudio）直接出声，不需要原生音频库；macOS 暂无声音输出。一个平台上的构建或检查不能代替另一平台设备的实际验证。
 
 `artifacts/` 中的生成结果由构建脚本创建，且被 Git 忽略。项目的原生音频包装源码位于 `native/sim_audio_native/`；依赖脚本将固定版本的 `vendor/miniaudio.h` 下载到该目录，核对其 SHA-256 后才用于构建。审阅这份上游头文件前，先运行依赖准备命令。源码位置、输出布局及原生诊断方法见 [原生音频指南](native/sim_audio_native/README.md)。
 

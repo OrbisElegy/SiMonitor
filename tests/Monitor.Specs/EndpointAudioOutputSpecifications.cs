@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.InteropServices;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Specs;
@@ -17,8 +18,9 @@ internal static class EndpointAudioOutputSpecifications
         new(nameof(OpenValidatesInputsAndReportsUnavailableDevices), OpenValidatesInputsAndReportsUnavailableDevices),
         new(nameof(MonoFramesFillTheFrontPairOnly), MonoFramesFillTheFrontPairOnly),
         new(nameof(WasapiOutputValidatesTargetAndIsUnavailableOffWindows), WasapiOutputValidatesTargetAndIsUnavailableOffWindows),
-        new(nameof(OnlyExplicitWasapiSelectionReplacesNativeOutput), OnlyExplicitWasapiSelectionReplacesNativeOutput),
-        new(nameof(WasapiCommandRejectsBadArgumentsWithoutOpening), WasapiCommandRejectsBadArgumentsWithoutOpening),
+        new(nameof(ExplicitSelectionOverridesPlatformDefaultOutput), ExplicitSelectionOverridesPlatformDefaultOutput),
+        new(nameof(ManagedAudioCommandRejectsBadArgumentsWithoutOpening), ManagedAudioCommandRejectsBadArgumentsWithoutOpening),
+        new(nameof(AlsaNullDeviceDrivesTheEndpointPump), AlsaNullDeviceDrivesTheEndpointPump),
     ];
 
     private static void QueueTargetKeepsTwoPeriodsWithinTheStreamBuffer()
@@ -37,7 +39,8 @@ internal static class EndpointAudioOutputSpecifications
             var endpoint = new FakeEndpoint(bufferFrames, periodFrames);
             using var output = new EndpointAudioOutput((_, _) => endpoint, targetMilliseconds);
             var device = output.Open(null, new AudioRenderSession(), 1)!;
-            Check.That(output.QueueTargetFrames == expectedFrames, "target keeps two periods, the requested time and the stream buffer limit");
+            Check.That(output.QueueTargetFrames == expectedFrames && endpoint.WakeThreshold == expectedFrames / 2,
+                "target keeps two periods, the requested time and the stream buffer limit; the owner wakes at half the target");
             Check.That(device.StopAndClose() && output.QueueTargetFrames is null, "closed stream detaches its target");
         }
         Check.That(AudioQueueTarget.PeriodFrames48k(441, 44_100) == 480 && AudioQueueTarget.PeriodFrames48k(128, 44_100) == 140 &&
@@ -214,28 +217,43 @@ internal static class EndpointAudioOutputSpecifications
             "other platforms report an unavailable output instead of throwing");
     }
 
-    private static void OnlyExplicitWasapiSelectionReplacesNativeOutput()
+    private static void ExplicitSelectionOverridesPlatformDefaultOutput()
     {
-        Check.That(AudioOutputSelection.Parse("wasapi") == AudioOutputBackend.Wasapi && AudioOutputSelection.Parse(" WASAPI ") == AudioOutputBackend.Wasapi,
-            "wasapi selection ignores case and surrounding spaces");
-        Check.That(new string?[] { null, "", "native", "wasapi2", "pulse" }.All(value => AudioOutputSelection.Parse(value) == AudioOutputBackend.Native),
-            "unset or unknown selections keep the native output");
+        var platformDefault = OperatingSystem.IsLinux() ? AudioOutputBackend.Alsa : AudioOutputBackend.Native;
+        Check.That(AudioOutputSelection.Resolve("wasapi") == AudioOutputBackend.Wasapi && AudioOutputSelection.Resolve(" ALSA ") == AudioOutputBackend.Alsa &&
+            AudioOutputSelection.Resolve("Native") == AudioOutputBackend.Native, "explicit selections ignore case and surrounding spaces");
+        Check.That(new string?[] { null, "", "wasapi2", "pulse" }.All(value => AudioOutputSelection.Resolve(value) == platformDefault),
+            "unset or unknown selections use ALSA on Linux and the native library elsewhere");
         using var managed = AudioOutputSelection.Create(AudioOutputBackend.Wasapi);
-        Check.That(managed is WasapiAudioOutput, "wasapi selection creates the managed output without loading a library");
+        using var alsa = AudioOutputSelection.Create(AudioOutputBackend.Alsa);
+        Check.That(managed is WasapiAudioOutput && alsa is AlsaAudioOutput, "managed selections create outputs without loading a library");
     }
 
-    private static void WasapiCommandRejectsBadArgumentsWithoutOpening()
+    private static void ManagedAudioCommandRejectsBadArgumentsWithoutOpening()
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-unknown"], output, error, default) == 2 &&
-            WasapiAudioCommand.Execute(["--audio-wasapi-audition", "a", "b"], output, error, default) == 2,
+        Check.That(ManagedAudioCommand.Execute(["--audio-wasapi-unknown"], output, error, default) == 2 &&
+            ManagedAudioCommand.Execute(["--audio-alsa-audition", "a", "b"], output, error, default) == 2,
             "unknown commands and extra arguments are usage errors");
-        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-audition"], output, error, new CancellationToken(true)) == 130 && output.ToString().Length == 0,
+        Check.That(ManagedAudioCommand.Execute(["--audio-wasapi-audition"], output, error, new CancellationToken(true)) == 130 && output.ToString().Length == 0,
             "cancelled audition opens no device");
         if (OperatingSystem.IsWindows()) { return; }
-        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-diagnostics"], output, error, default) == 1 && error.ToString().Contains("unavailable", StringComparison.Ordinal),
-            "other platforms report diagnostics as unavailable");
+        Check.That(ManagedAudioCommand.Execute(["--audio-wasapi-diagnostics"], output, error, default) == 1 && error.ToString().Contains("unavailable", StringComparison.Ordinal),
+            "WASAPI diagnostics are unavailable off Windows");
+    }
+
+    // ALSA's null PCM discards audio, so this exercises the real library without sound.
+    private static void AlsaNullDeviceDrivesTheEndpointPump()
+    {
+        if (!OperatingSystem.IsLinux() || !NativeLibrary.TryLoad("libasound.so.2", out nint library)) { return; }
+        NativeLibrary.Free(library);
+        using var output = new AlsaAudioOutput();
+        var lifecycle = new AudioOutputLifecycle(output);
+        // The null PCM consumes instantly, so steady-state pacing needs a real device.
+        Check.That(lifecycle.Replace("null", 0) && output.BufferFrames > 0 && output.QueueTargetFrames > 0 && lifecycle.Stop(),
+            "ALSA null device opens a 48 kHz mono float stream, starts and stops");
+        Check.That(new AlsaAudioOutput().Open("no-such-alsa-pcm", new AudioRenderSession(), 1) is null, "unknown PCM names are unavailable");
     }
 
     private sealed class FakeEndpoint(int bufferFrames = 1920, int periodFrames = 480) : IRenderEndpoint
@@ -252,6 +270,8 @@ internal static class EndpointAudioOutputSpecifications
         public int QueuedFrames => _queuedFrames;
         public long WrittenFrames { get; private set; }
         public List<int> Waits { get; } = [];
+        public int? WakeThreshold { get; private set; }
+        public void SetWakeThreshold(int queuedFrames) => WakeThreshold = queuedFrames;
 
         public bool TryGetPadding(out int queuedFrames)
         {

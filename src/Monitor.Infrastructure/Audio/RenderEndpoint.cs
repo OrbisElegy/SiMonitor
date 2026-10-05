@@ -18,6 +18,9 @@ internal interface IRenderEndpoint : IDisposable
     public bool Start();
     // True once the stream no longer plays; false keeps ownership for retry.
     public bool Stop();
+    // Wait may return early once no more than queuedFrames remain queued.
+    // Event-driven endpoints that already wake every device period ignore it.
+    public void SetWakeThreshold(int queuedFrames);
     // Returns when the device consumed frames, the stream retired, or on timeout.
     public void Wait(int timeoutMilliseconds);
     public NativeAudioClockSample ReadClock();

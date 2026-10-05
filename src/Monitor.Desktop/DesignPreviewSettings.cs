@@ -217,7 +217,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal const long RespirationPreviewDurationNs = 41_250_000_000;
     private readonly Dictionary<int, (long TimeNs, double Value)[]> _respirationPreviews = [];
     private readonly Func<int, (long TimeNs, double Value)[]> _respirationPreview;
-    private readonly ContentControl _generation = new();
     private readonly Dictionary<(int, int, int), StylePreviewData> _previews = [];
     private readonly Func<int, int, int, StylePreviewData> _preview;
     private readonly StackPanel _advancedEcg = new() { Spacing = 16 };
@@ -239,8 +238,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
     internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
     private readonly List<Action> _refreshSignalRows = [];
-    private Control? _home;
-    private Button? _returnFocus;
     internal int PreviewCacheCount => _previews.Count;
     internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced, DesktopLocalization? localization = null)
     {
@@ -249,21 +246,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
         InfarctionParameters.Changed += RefreshShapeSummary;
-        var generation = new StackPanel { Spacing = 12, Margin = new Thickness(20) };
-        var instruction = Text("选择生理信号，再选择分组与具体波形；应用后更新监护和十二导联。");
-        instruction.Height = 44; generation.Children.Add(instruction);
-        var cards = new StackPanel { Spacing = 12 };
-        cards.Children.Add(SignalRow("心电图", 0, EcgChoices,
-            () => EcgSelection, x => EcgSelection = x));
-        cards.Children.Add(SignalRow("呼吸", 1, RespirationChoices,
-            () => RespirationSelection, x => RespirationSelection = x));
-        cards.Children.Add(SignalRow("射血", 3, EjectionChoices,
-            () => EjectionSelection, x => EjectionSelection = x));
-        generation.Children.Add(cards);
+        var generation = new Grid { RowDefinitions = new("Auto,*") };
+        generation.Children.Add(DesktopInformationPages.Help("settings-detail-1"));
+        var templates = BuildTemplatePages();
+        Grid.SetRow(templates, 1); generation.Children.Add(templates);
         var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
         more.Click += (_, _) => advanced();
-        generation.Children.Add(DesktopInformationPages.Help("settings-detail-1"));
-        _home = Scroll(generation); _generation.Content = _home;
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(DesktopInformationPages.Help("settings-detail-2"));
         display.Children.Add(Skin);
@@ -341,7 +329,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced"];
-        Control[] pages = [BuildGeneralPage(), _generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
+        Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
@@ -355,7 +343,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         {
             if (!ReferenceEquals(args.Source, Tabs) || Tabs.SelectedIndex < 0) { return; }
             int selected = Tabs.SelectedIndex; _compactCategory.SelectedIndex = selected;
-            if (selected == 1) { _generation.Content = _home; }
+            if (selected == 1) { foreach (var page in _templatePages) { page.Refresh(); } }
             if (selected == 6) { RefreshAdvanced(more); }
             detail.Content = pages[selected];
             controls.IsVisible = selected != 0;
@@ -367,10 +355,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
             bool compact = width < 1040; Tabs.IsVisible = !compact; _compactCategory.IsVisible = compact;
             navigation.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 160);
         };
-        Tabs.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, args) =>
-        {
-            if (Tabs.SelectedIndex == 1) { _generation.Content = _home; }
-        }, handledEventsToo: true);
         Tabs.SelectedIndex = 1;
         var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
         _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);
@@ -384,115 +368,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var result = _preview(ecg, resp, ejection);
         if (_previews.Count >= 24) { _previews.Clear(); }
         _previews.Add(key, result); return result;
-    }
-    private Button SignalRow(string title, int channel, string[] choices, Func<int> read, Action<int> write)
-    {
-        var caption = Text(title + " · " + choices[read()] + "  ›");
-        var card = new Button
-        {
-            Content = caption,
-            MinHeight = 64,
-            Padding = new Thickness(16),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            CornerRadius = new CornerRadius(4)
-        };
-        _refreshSignalRows.Add(() =>
-        {
-            caption.Text = title + " · " + choices[read()] + "  ›";
-            AutomationProperties.SetName(card, title + "样式，" + choices[read()]);
-        });
-        AutomationProperties.SetName(card, title + "样式，" + choices[read()]);
-        card.Click += (_, _) =>
-        {
-            _returnFocus = card;
-            OpenChooser(title, channel, choices, read, selected =>
-            {
-                write(selected); caption.Text = title + " · " + choices[selected] + "  ›";
-                AutomationProperties.SetName(card, title + "样式，" + choices[selected]);
-            });
-        };
-        return card;
-    }
-    private void OpenChooser(string title, int channel, string[] choices, Func<int> read, Action<int> write, string? activeGroup = null, bool focusSelection = false)
-    {
-        string Group(int i) => channel == 0 ? EcgChooserGroups.For(i)
-            : channel == 1 ? i == 0 ? "规则呼吸" : "异常呼吸示意" : i == 0 ? "节律相关" : "异常射血示意";
-        var shell = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(20) };
-        var header = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 0, 12) };
-        shell.Children.Add(header);
-        var body = new StackPanel { Spacing = 12 };
-        var scroll = SettingsScroll.Create(body);
-        Grid.SetRow(scroll, 1); shell.Children.Add(scroll);
-
-        var navigation = new WrapPanel { Orientation = Orientation.Horizontal };
-        var back = new Button { Content = "返回波形设置", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
-        back.Click += (_, _) => { _generation.Content = _home; if (_returnFocus is { } origin) { RestoreFocus(origin); } };
-        navigation.Children.Add(back);
-        Button focusTarget = back;
-        if (activeGroup is not null)
-        {
-            var parent = new Button { Content = "返回" + title + "分组", Margin = new Thickness(0, 0, 12, 0), MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-            parent.Click += (_, _) => OpenChooser(title, channel, choices, read, write);
-            navigation.Children.Add(parent);
-        }
-        header.Children.Add(navigation);
-        header.Children.Add(new TextBlock { Text = "波形生成 / " + title + (activeGroup is null ? "" : " / " + activeGroup), FontSize = 20, FontWeight = FontWeight.SemiBold });
-        header.Children.Add(Text("当前选择：" + choices[read()] + " · 应用后生效"));
-        if (activeGroup is null)
-        {
-            foreach (string group in channel == 0 ? EcgChooserGroups.Ordered : Enumerable.Range(0, choices.Length).Select(Group).Distinct())
-            {
-                bool current = group == Group(read());
-                var button = new Button
-                {
-                    Content = group + "  ›",
-                    MinHeight = 56,
-                    Padding = new Thickness(16),
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    VerticalContentAlignment = VerticalAlignment.Center,
-                    FontWeight = current ? FontWeight.SemiBold : FontWeight.Normal
-                };
-                AutomationProperties.SetName(button, group + (current ? "，当前分组" : "，选择分组"));
-                button.Click += (_, _) => OpenChooser(title, channel, choices, read, write, group);
-                body.Children.Add(button);
-                if (current) { focusTarget = button; }
-            }
-            _generation.Content = shell; RestoreFocus(focusTarget); return;
-        }
-        var parameters = new Button { Content = "当前波形高级参数", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-        parameters.Click += (_, _) => OpenAdvanced(channel);
-        navigation.Children.Add(parameters);
-        var candidates = new WrapPanel { Orientation = Orientation.Horizontal };
-        for (int i = 0; i < choices.Length; i++)
-        {
-            if (Group(i) != activeGroup) { continue; }
-            int value = i; var panel = new StackPanel { Spacing = 8 };
-            panel.Children.Add(new TextBlock { Height = 40, Text = choices[i] + (read() == i ? " ✓" : ""), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
-            var candidate = new Button { Content = panel, Width = 238, Height = 162, CornerRadius = new CornerRadius(8), VerticalContentAlignment = VerticalAlignment.Top, Padding = new Thickness(12), Margin = new Thickness(0, 0, 10, 10), Background = Brushes.Black };
-            AutomationProperties.SetName(candidate, choices[i] + (read() == i ? "，已选择" : "，选择此样式"));
-            if (focusSelection && read() == i) { focusTarget = candidate; }
-            try
-            {
-                var source = Preview(channel == 0 ? i : EcgSelection, channel == 1 ? i : RespirationSelection, channel == 3 ? i : EjectionSelection);
-                panel.Children.Add(Thumbnail(() => source, channel, channel == 1 ? i : null));
-                candidate.Click += (_, _) =>
-                {
-                    write(value); Status.Text = "已选择 " + choices[value] + "；预览已更新，运行数据须应用后改变。";
-                    OpenChooser(title, channel, choices, read, write, activeGroup, focusSelection: true);
-                };
-            }
-            catch (ArgumentException)
-            {
-                candidate.IsEnabled = false;
-                panel.Children.Add(new TextBlock { Text = "与当前其他参数不兼容", Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
-                AutomationProperties.SetHelpText(candidate, "请先调整其他波形设置，此组合当前不可用。");
-            }
-            candidates.Children.Add(candidate);
-        }
-        body.Children.Add(candidates); _generation.Content = shell; RestoreFocus(focusTarget);
     }
     internal static int ReadVitalValue(NumericUpDown field, int scale, string name)
     {
@@ -801,7 +676,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return new MonitorDisplaySlot(slot.Channel.SelectedIndex, slot.Auto.IsChecked == true, new(minimum, maximum), slot.Speed.SelectedIndex switch { 0 => 125, 1 => 250, 2 => 500, _ => 0 });
     }).ToArray());
     private static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap };
-    private static ScrollViewer Scroll(Control content) => SettingsScroll.Create(content);
     private static StackPanel Note(string title, string body)
     {
         var panel = new StackPanel { Spacing = 18, Margin = new Thickness(32) };

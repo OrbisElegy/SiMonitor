@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Localization;
+
 namespace Monitor.Application.Measurements;
 
 public enum MeasurementSource { Ecg, Pleth, ImpedanceRespiration, Co2, Pressure, SpO2 }
 public enum MeasurementTechnicalFault { None, ExcessiveInterference, SensorDisconnected, LeadsDisconnected }
 public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
 {
+    // TopNotice rendered in the reader's language; null exactly when TopNotice is null.
+    // Only the pressure source label is translated.
+    public TextMessage? TopNoticeMessage { get; init; }
+
     // Presentation contract only. Faults must come from an explicit acquisition
     // or connection assessment, not from source presets or a flat waveform.
     // The monitor's future time-adjacent technical notice uses white text.
@@ -22,26 +28,28 @@ public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
             MeasurementSource.SpO2 => "SpO₂",
             _ => "CO2"
         };
+        object labelArgument = source == MeasurementSource.Pressure ? new TextMessage("measurement.sourcePressure") : label;
+        MeasurementDisplay Notice(string numeric, string suffix, string key) =>
+            new(numeric, label + suffix) { TopNoticeMessage = new(key, labelArgument) };
         if (fault != MeasurementTechnicalFault.None)
         {
-            string notice = fault switch
+            return fault switch
             {
-                MeasurementTechnicalFault.ExcessiveInterference => label + "干扰过大",
-                MeasurementTechnicalFault.LeadsDisconnected => label + "导联脱落",
-                _ => label + "传感器脱落"
+                MeasurementTechnicalFault.ExcessiveInterference => Notice("---", "干扰过大", "measurement.faultInterference"),
+                MeasurementTechnicalFault.LeadsDisconnected => Notice("---", "导联脱落", "measurement.faultLeadsOff"),
+                _ => Notice("---", "传感器脱落", "measurement.faultSensorOff")
             };
-            return new("---", notice);
         }
         return status switch
         {
             WaveformMeasurementStatus.Valid when !string.IsNullOrWhiteSpace(validNumericText) => new(validNumericText, null),
             WaveformMeasurementStatus.Valid => throw new ArgumentException("MeasurementDisplay.MissingValue", nameof(validNumericText)),
-            WaveformMeasurementStatus.Uncountable => new(source == MeasurementSource.Ecg ? "-?-" : "---", label + "无法可靠计数"),
-            WaveformMeasurementStatus.PoorSignal => new("---", label + "信号质量不足"),
-            WaveformMeasurementStatus.OutOfRange => new("---", label + "超出测量范围"),
-            WaveformMeasurementStatus.NoData => new("---", label + "无数据"),
-            WaveformMeasurementStatus.Stale => new("---", label + "测量值已过期"),
-            _ => new("---", label + "等待测量")
+            WaveformMeasurementStatus.Uncountable => Notice(source == MeasurementSource.Ecg ? "-?-" : "---", "无法可靠计数", "measurement.uncountable"),
+            WaveformMeasurementStatus.PoorSignal => Notice("---", "信号质量不足", "measurement.poorSignal"),
+            WaveformMeasurementStatus.OutOfRange => Notice("---", "超出测量范围", "measurement.outOfRange"),
+            WaveformMeasurementStatus.NoData => Notice("---", "无数据", "measurement.noData"),
+            WaveformMeasurementStatus.Stale => Notice("---", "测量值已过期", "measurement.stale"),
+            _ => Notice("---", "等待测量", "measurement.waiting")
         };
     }
 }

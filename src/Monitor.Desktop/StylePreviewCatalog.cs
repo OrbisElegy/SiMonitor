@@ -121,7 +121,7 @@ internal sealed class StylePreviewCatalog
         }
         _ = Load(temporary); // Refuse incomplete/malformed output before publishing.
         File.Move(temporary, destination, true);
-        Console.WriteLine($"Generated {keys.Count} style combinations and4 full respiration previews: {destination}");
+        Console.WriteLine($"Generated {keys.Count} style combinations and 4 full respiration previews: {destination}");
         return 0;
     }
 }

@@ -44,6 +44,9 @@ internal sealed class DesktopLocalization(string? locale = null)
         control.SelectedIndex = selected;
     }
 
+    // Raised after bound values refresh, so owners can rebuild text computed outside bindings.
+    internal event Action? LocaleChanged;
+
     internal void Select(string locale)
     {
         _text = BuiltInLocalizations.Create(locale);
@@ -52,6 +55,7 @@ internal sealed class DesktopLocalization(string? locale = null)
             if (reference.TryGetTarget(out var value)) { value.Refresh(); }
         }
         _values.RemoveAll(reference => !reference.TryGetTarget(out _));
+        LocaleChanged?.Invoke();
     }
 
     internal void Bind(AvaloniaObject target, AvaloniaProperty property, string key, params object?[] arguments) =>

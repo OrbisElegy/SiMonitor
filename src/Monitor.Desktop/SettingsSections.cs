@@ -23,6 +23,9 @@ internal sealed class SettingsSections : UserControl
     private readonly TextBlock[] _details;
     private readonly string[] _titles;
     private readonly CompactEntry[] _entries;
+    private readonly DesktopLocalization? _localization;
+    // Detail and accessible state per section: catalog keys or verbatim text.
+    private readonly (string? Detail, string? Accessible)[] _states;
     private int _selected;
     private Action<double>? _adaptNavigation;
     protected override Size MeasureOverride(Size availableSize)
@@ -53,6 +56,15 @@ internal sealed class SettingsSections : UserControl
         var sectionOfItem = new List<int>();
         _details = new TextBlock[sections.Length];
         _titles = sections.Select(section => section.Title).ToArray();
+        _localization = localization;
+        _states = new (string?, string?)[sections.Length];
+        if (localization is not null)
+        {
+            localization.LocaleChanged += () =>
+            {
+                for (int section = 0; section < _states.Length; section++) { ApplyDetail(section); }
+            };
+        }
         for (int index = 0; index < sections.Length; index++)
         {
             if (headers.TryGetValue(index, out string? header))
@@ -139,14 +151,30 @@ internal sealed class SettingsSections : UserControl
         set => Sections.SelectedIndex = _itemOfSection[value];
     }
     internal string? DetailFor(int section) => _details[section].Text;
+    // text and accessibleText are catalog keys or verbatim text, resolved in the selected language.
     internal void SetDetail(int section, string? text, string? accessibleText = null)
     {
-        _details[section].Text = text;
-        var item = (ListBoxItem)Sections.Items[_itemOfSection[section]]!;
-        string name = accessibleText is null ? _titles[section] : _titles[section] + "，" + accessibleText;
-        AutomationProperties.SetName(item, name);
-        _entries[_itemOfSection[section]].Update(text, name);
+        _states[section] = (text, accessibleText);
+        ApplyDetail(section);
     }
+    private void ApplyDetail(int section)
+    {
+        var (detailKey, accessibleKey) = _states[section];
+        string? detail = detailKey is null ? null : Resolve(detailKey);
+        string title = Resolve(_titles[section]);
+        string name = accessibleKey is null ? title : _localization is null
+            ? title + "，" + accessibleKey
+            : _localization.Format("settings.sectionState", title, Resolve(accessibleKey));
+        _details[section].Text = detail;
+        var item = (ListBoxItem)Sections.Items[_itemOfSection[section]]!;
+        // The default binding keeps the localized title; a state replaces it until cleared.
+        if (accessibleKey is not null) { AutomationProperties.SetName(item, name); }
+        else if (_localization is not null) { _localization.BindLabel(item, AutomationProperties.NameProperty, _titles[section]); }
+        else { AutomationProperties.SetName(item, name); }
+        _entries[_itemOfSection[section]].Update(detail, name);
+    }
+    private string Resolve(string keyOrText) =>
+        _localization is not null && DesktopLocalization.IsKey(keyOrText) ? _localization.Get(keyOrText) : keyOrText;
     private static Grid CompactRow(CompactEntry entry, DesktopLocalization? localization)
     {
         var title = new TextBlock { Text = entry.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };

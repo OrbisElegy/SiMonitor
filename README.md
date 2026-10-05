@@ -1,6 +1,6 @@
 # Seele's SiMonitor
 
-<img src="src/Monitor.Desktop/Assets/app-icon.png" alt="Seele's SiMonitor 临时图标" width="128" height="128" />
+<img src="src/Monitor.Desktop/Assets/app-icon.png" alt="Seele's SiMonitor 图标" width="128" height="128" />
 
 **简体中文** | [English](docs/en/README.md)
 
@@ -105,7 +105,6 @@ python3 tools/clean.py dirclean
 
 ## Todo
 - i18n
-- 正式图标设计（当前为临时图标）
 - 生命体征逐项调整
 - 监护仪皮肤接口
 - 事件驱动的生命征连续变化

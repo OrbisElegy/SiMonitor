@@ -137,6 +137,7 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 | [generate_demo_morphology.py](../../tools/generate_demo_morphology.py) | `--check` | 校验／生成当前波形表 |
 | [generate_audio_tables.py](../../tools/generate_audio_tables.py) | `--check` | 校验／生成音频数值表 |
 | [generate_monitor_tones.py](../../tools/generate_monitor_tones.py) | `--check` | 校验／生成已选择监护音资源 |
+| [generate_app_icon.py](../../tools/generate_app_icon.py) | `--check` | 由 `Assets/app-icon.svg`（48 px 及以上）与 `app-icon-small.svg`（32 px 及以下）渲染 `app-icon.png`（512 px）和含 16–256 px 的 `app-icon.ico`；需要带 librsvg 的 ImageMagick 7，同一工具链下输出可重复 |
 | [generate_beat_pitch_bank.py](../../tools/generate_beat_pitch_bank.py) | `--check` | 校验／生成节拍音高资源 |
 | [generate_oxygenation_defaults.py](../../tools/generate_oxygenation_defaults.py) | `--check`、`--verify-workbook PATH` | 校验／生成患者氧合默认值；来源见[默认参数文档](oxygenation/oxygenation-defaults.md) |
 | [generate_beat_pitch_auditions.py](../../tools/generate_beat_pitch_auditions.py) | `--check`、`--output PATH` | 默认输出 `artifacts/beat-pitch-auditions/` |

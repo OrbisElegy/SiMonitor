@@ -1,6 +1,6 @@
 # Seele's SiMonitor
 
-<img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Temporary SiMonitor icon" width="128" height="128" />
+<img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Seele's SiMonitor icon" width="128" height="128" />
 
 [简体中文](../../README.md) | **English**
 
@@ -108,10 +108,8 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 
 ## To-Do
 - i18n
-- Final icon design (a temporary icon is in use)
 - Individual adjustment of vital signs
 - Monitor skin interface
-- Manual measurement tool for 12-lead ECG
 - Event-driven continuous vital sign changes
 - Separate teacher and student interfaces
 - Teaching and Exam features

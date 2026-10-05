@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Localization;
+
 namespace Monitor.Application.Presentation;
 
 public enum MonitorNoticeLevel { Info, Notice, Warning, Critical }
 public enum MonitorNumeric { HeartRate, RespirationRate, SpO2, PulseRate, EtCo2, Co2RespirationRate, AbpMean, PaMean, CvpMean }
+
+// Text is the producer's default wording; Message, when present, lets the
+// presentation render the same notice in the reader's language.
 public sealed record MonitorNotice(string Id, MonitorNoticeLevel Level, string Text)
 {
     public MonitorNumeric? Numeric { get; init; }
     public bool Audible { get; init; } = true;
+    public TextMessage? Message { get; init; }
 }
 
 // Local presentation arbitration, not patient alarm episode/acknowledgement state.

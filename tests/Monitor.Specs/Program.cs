@@ -56,6 +56,7 @@ internal static class Program
             .. MonitorContinuationSpecifications.All,
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
+            .. TextMessageSpecifications.All,
             .. EcgHeartRateMeasurementSpecifications.All,
             .. EcgDetectionRegressionSpecifications.All,
             .. EcgRhythmSpecifications.All,

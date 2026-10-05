@@ -15,7 +15,7 @@ public sealed class ConfirmedNoExpirationNotice
     private long? _lastObservationNs;
     private static readonly BoundaryConfirmationTiming DefaultTiming = new(0, 0);
     private static readonly MonitorNotice ActiveNotice = new("co2-no-expiration", MonitorNoticeLevel.Critical, "CO₂ 未检出呼吸")
-    { Numeric = MonitorNumeric.Co2RespirationRate };
+    { Numeric = MonitorNumeric.Co2RespirationRate, Message = new("alarm.noExpiration") };
 
     public AlarmLifecycleJournal Lifecycle { get; } = new("co2-no-expiration");
 

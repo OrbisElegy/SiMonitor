@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Localization;
 using Monitor.Application.Measurements;
 
 namespace Monitor.Specs;
@@ -24,9 +25,11 @@ internal static class MeasurementDisplaySpecifications
         Check.That(MeasurementDisplay.Resolve(MeasurementSource.Co2, WaveformMeasurementStatus.Uncountable, null).NumericText == "---",
             "ECG question placeholder does not leak to other measurements");
         Check.That(MeasurementDisplay.Resolve(MeasurementSource.Ecg, WaveformMeasurementStatus.Valid, "75", MeasurementTechnicalFault.ExcessiveInterference)
-            == new MeasurementDisplay("---", "ECG干扰过大"), "explicit interference overrides a previously valid number");
+            == new MeasurementDisplay("---", "ECG干扰过大") { TopNoticeMessage = new("measurement.faultInterference", "ECG") },
+            "explicit interference overrides a previously valid number");
         Check.That(MeasurementDisplay.Resolve(MeasurementSource.Co2, WaveformMeasurementStatus.NoData, null, MeasurementTechnicalFault.SensorDisconnected)
-            == new MeasurementDisplay("---", "CO2传感器脱落"), "confirmed sensor fault produces requested notice");
+            == new MeasurementDisplay("---", "CO2传感器脱落") { TopNoticeMessage = new("measurement.faultSensorOff", "CO2") },
+            "confirmed sensor fault produces requested notice");
         bool rejected = false;
         try { MeasurementDisplay.Resolve(MeasurementSource.Ecg, WaveformMeasurementStatus.Valid, null); } catch (ArgumentException) { rejected = true; }
         Check.That(rejected, "valid state cannot omit its numeric value");

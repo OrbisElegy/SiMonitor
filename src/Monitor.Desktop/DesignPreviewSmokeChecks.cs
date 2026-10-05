@@ -53,23 +53,27 @@ internal static class DesignPreviewSmokeChecks
             window.SelectPage(2); Capture(window, "ui-refine-home.png");
             VerifyActionFooter(window);
             Require(window.Title == ProductIdentity.WindowTitle, "formal product name used in title");
-            Button Named(string prefix) => window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith(prefix, StringComparison.Ordinal) == true);
             void Click(Button button) => button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Click(Named("心电图样式，")); Capture(window, "ui-refine-groups.png");
-            Click(Named("室性早搏，")); Capture(window, "ui-refine-pvc-top.png");
-            var viewer = window.Settings.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Content is StackPanel panel && panel.Children.OfType<WrapPanel>().Any());
-            var back = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回心电图分组");
-            var advanced = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "当前波形高级参数");
+            var ecg = window.Settings.TemplatePages[0];
+            Require(window.Settings.TemplateSignals.SelectedIndex == 0 && ecg.ActiveGroup == "窦性心律" && ecg.Compact &&
+                ecg.CompactGroups.IsEffectivelyVisible &&
+                !(ecg.Groups.GetVisualAncestors().Contains(window.Settings) && ecg.Groups.GetVisualAncestors().All(ancestor => ancestor.IsVisible)),
+                "generation opens on the ECG tab at the current group; narrow pages use the group selector");
+            ecg.CompactGroups.SelectedIndex = EcgChooserGroups.Ordered.ToList().IndexOf("室性早搏");
+            Capture(window, "ui-refine-pvc-top.png");
+            Require(ecg.ActiveGroup == "室性早搏" && ecg.CardButtons.Count() == 10, "compact group selector shows the chosen group's cards");
+            var viewer = ecg.CardButtons.First().GetVisualAncestors().OfType<ScrollViewer>().First();
+            var advanced = ecg.Advanced;
             var root = (Control)window.Content!;
-            var backPosition = back.TranslatePoint(default, root);
+            var toolsPosition = (advanced.TranslatePoint(default, root), ecg.CompactGroups.TranslatePoint(default, root));
             viewer.Offset = new Vector(0, viewer.Extent.Height);
             Capture(window, "ui-refine-pvc-scrolled.png");
-            Require(viewer.Offset.Y > 100 && back.TranslatePoint(default, root) == backPosition &&
-                advanced.TranslatePoint(default, root)!.Value.Y < 300, "navigation and advanced action stay fixed while cards scroll");
-            var first = viewer.GetVisualDescendants().OfType<Button>().First();
-            back.Focus(); first.Focus(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(viewer.Offset.Y > 100 && (advanced.TranslatePoint(default, root), ecg.CompactGroups.TranslatePoint(default, root)) == toolsPosition,
+                "group selector and advanced action stay fixed while cards scroll");
+            var first = ecg.CardButtons.First();
+            ecg.Search.Focus(); first.Focus(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Require(viewer.Offset.Y > 100, "programmatic focus restoration does not jump to first card");
-            back.Focus(); first.Focus(Avalonia.Input.NavigationMethod.Tab); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            ecg.Search.Focus(); first.Focus(Avalonia.Input.NavigationMethod.Tab); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Require(viewer.Offset.Y < 50, "keyboard navigation still reveals focused card");
             Click(advanced); window.Settings.SectionPages[6].SelectedSection = 1;
             Capture(window, "ui-refine-resp-compact.png");
@@ -80,8 +84,8 @@ internal static class DesignPreviewSmokeChecks
                 Math.Abs(selectors[0].TranslatePoint(default, root)!.Value.X - selectors[1].TranslatePoint(default, root)!.Value.X) < 1,
                 "compact navigation selectors align and share width");
             window.Settings.Tabs.SelectedIndex = 1; Capture(window, "ui-refine-return-generator-root.png");
-            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true),
-                "reentering generation starts at signal root");
+            Require(ecg.ActiveGroup == "室性早搏" && ecg.CardButtons.Count() == 10,
+                "reentering generation keeps the browsed group");
             window.Settings.Tabs.SelectedIndex = 6;
             window.Width = 1440; window.Height = 940; Capture(window, "ui-refine-resp-wide.png");
             string? initialEcg = window.Settings.AppliedEcgParameters.Text;
@@ -1044,45 +1048,75 @@ internal static class DesignPreviewSmokeChecks
             Require(window.GetVisualDescendants().OfType<ComboBox>().Single(t => AutomationProperties.GetName(t) == "开源许可与依赖文档").ItemCount >= 3,
                 "third party documents occupy a separate page");
             window.SelectPage(2); Capture(window, "ui-preview-settings.png");
-            var homeCard = window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("心电图样式，", StringComparison.Ordinal) == true);
-            int navigationCacheCount = window.Settings.PreviewCacheCount;
-            Require(!window.Settings.GetVisualDescendants().OfType<Button>().Any(b => b.Bounds.Size == new Size(238, 162)), "signal navigation has no preview cards");
-            homeCard.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Capture(window, "ui-preview-waveform-groups.png");
-            Require(window.Settings.PreviewCacheCount == navigationCacheCount, "group navigation defers preview loading to leaf choices");
-            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "窦性心律，当前分组")
-                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            var templates = window.Settings.TemplatePages[0];
+            Button Card(DesignPreviewSettings.TemplatePage page, string name) => page.CardButtons.Single(button => AutomationProperties.GetName(button)?.StartsWith(name + "，", StringComparison.Ordinal) == true);
+            Require(!templates.Compact && templates.Groups.IsEffectivelyVisible && templates.Groups.ItemCount == EcgChooserGroups.Ordered.Count &&
+                templates.CardButtons.Count() == 3 && AutomationProperties.GetName((ListBoxItem)templates.Groups.Items[0]!) == "窦性心律，含当前选择",
+                "wide ECG tab lists every group beside the current group's previews");
             Capture(window, "ui-preview-chooser.png");
             Require(window.Settings.PreviewCacheCount >= 3, "grouped choices own distinct cached source configurations");
-            var candidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
-                button.Content is StackPanel panel && panel.Children.OfType<TextBlock>().Any(text => text.Text == "窦性停搏（无逸搏）"));
+            int navigationCacheCount = window.Settings.PreviewCacheCount;
+            templates.Groups.SelectedIndex = EcgChooserGroups.Ordered.ToList().IndexOf("心房颤动");
+            Capture(window, "ui-preview-waveform-groups.png");
+            Require(templates.ActiveGroup == "心房颤动" && templates.CardButtons.Count() == 8 &&
+                window.Settings.PreviewCacheCount <= navigationCacheCount + 8, "group browsing only builds previews for visible cards");
+            templates.Groups.SelectedIndex = 0;
+            window.UpdateLayout();
+            var candidate = Card(templates, "窦性停搏（无逸搏）");
             var candidateSize = candidate.Bounds.Size;
             var unchanged = window.Session;
             candidate.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Capture(window, "ui-preview-chooser-selected.png");
             Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "candidate updates draft preview without replacing live source");
-            var selectedCandidate = window.Settings.GetVisualDescendants().OfType<Button>().Single(button =>
-                AutomationProperties.GetName(button) == "窦性停搏（无逸搏），已选择");
+            var selectedCandidate = templates.CardButtons.Single(button => AutomationProperties.GetName(button) == "窦性停搏（无逸搏），已选择");
             Require(selectedCandidate.Bounds.Size == candidateSize && candidateSize == new Size(238, 162), "candidate sizes stay equal before and after selection");
             Require(selectedCandidate.IsFocused, "keyboard focus follows rebuilt selected candidate");
+            Require(templates.Selection.Text == "当前选择：窦性停搏（无逸搏） · 应用后生效", "tab header row names the draft selection");
             window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-waveform-compact.png");
             Require(selectedCandidate.TranslatePoint(default, root)!.Value.X + selectedCandidate.Bounds.Width < window.Width, "leaf preview fits compact window");
             window.Width = 1440; window.Height = 940;
             Require(!window.Settings.GetVisualDescendants().OfType<Expander>().Any(), "redundant twelve-lead chooser expansion is removed");
-            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回心电图分组")
-                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Capture(window, "ui-preview-waveform-parent.png");
-            Require(window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "returning to group preserves draft and live session");
-            Require(window.Settings.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "窦性心律，当前分组" && b.IsFocused), "return restores focus to current group");
-            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => b.Content?.ToString() == "返回波形设置")
-                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Capture(window, "ui-preview-settings-return.png");
-            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b)?.StartsWith("呼吸样式，", StringComparison.Ordinal) == true)
-                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            templates.Search.Text = "下壁 陈旧";
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Capture(window, "ui-preview-template-search.png");
+            Require(templates.CardButtons.Count() == 3 && templates.Results.Text == "找到 3 个模板" && templates.Groups.SelectedIndex < 0,
+                "search matches every keyword across groups and clears the group highlight");
+            templates.Search.Text = "室";
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(templates.CardButtons.Count() == DesignPreviewSettings.TemplateSearchLimit &&
+                templates.Results.Text!.Contains("显示前 12 个", StringComparison.Ordinal), "broad searches stay bounded and ask for a narrower name");
+            templates.Search.Text = "不存在的模板";
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(!templates.CardButtons.Any() && templates.Results.Text == "没有匹配的模板，请更换关键词。", "empty search explains how to recover");
+            templates.Search.Text = "";
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(templates.ActiveGroup == "窦性心律" && templates.Groups.SelectedIndex == 0 && !templates.Results.IsVisible &&
+                window.Settings.EcgSelection == 1 && ReferenceEquals(unchanged, window.Session), "clearing search returns to the browsed group and keeps the draft");
+            window.Settings.TemplateSignals.SelectedIndex = 1;
             Capture(window, "ui-preview-respiration.png");
-            window.Settings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "异常呼吸示意，选择分组")
-                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            Capture(window, "ui-preview-respiration-patterns.png");
+            var respiration = window.Settings.TemplatePages[1];
+            Require(!respiration.Browsable && respiration.CardButtons.Count() == 4 && respiration.Search.Parent is null,
+                "short catalogues show every template under group headings");
+            Card(respiration, "潮式呼吸").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(window.Settings.RespirationSelection == 1 && ReferenceEquals(unchanged, window.Session), "respiration card changes only the draft");
+            window.Settings.RespirationSelection = 0;
+            window.Settings.TemplateSignals.SelectedIndex = 0;
+            templates.ShowGroup("室性早搏");
+            Card(templates, "单形室早").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            window.Settings.TemplateSignals.SelectedIndex = 2;
+            var ejection = window.Settings.TemplatePages[2];
+            Require(Card(ejection, "早搏弱射血（需室早）").IsEnabled && !Card(ejection, "2:1漏搏（需窦性参考）").IsEnabled,
+                "switching signal tabs refreshes ejection compatibility after changing the ECG draft");
+            Card(ejection, "早搏弱射血（需室早）").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            window.Settings.TemplateSignals.SelectedIndex = 0;
+            Require(templates.CardButtons.Count(button => button.IsEnabled) == 1 && Card(templates, "单形室早").IsEnabled,
+                "returning to ECG disables cards incompatible with the new ejection draft");
+            window.Settings.TemplateSignals.SelectedIndex = 2;
+            Card(ejection, "随当前节律").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            window.Settings.TemplateSignals.SelectedIndex = 0;
+            Require(templates.CardButtons.All(button => button.IsEnabled) && ReferenceEquals(unchanged, window.Session),
+                "restoring rhythm-dependent ejection re-enables ECG cards without applying drafts");
             window.Settings.EcgSelection = 0;
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-display.png");
             Require(AutomationProperties.GetName(window.Settings.Slots[0].Speed) == "第1行扫描速度，相对毫米每秒", "speed control has a contextual accessibility name");

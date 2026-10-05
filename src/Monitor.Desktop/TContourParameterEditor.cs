@@ -2,6 +2,7 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Monitor.Application.Localization;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -14,8 +15,6 @@ internal sealed class TContourParameterEditor : StackPanel
     internal NumericUpDown Crossing { get; } = Field(.1m, 99.9m, .1m);
     internal ComboBox Target { get; } = new()
     {
-        ItemsSource = new[] { "胸导联（多选）", "I", "II", "III", "aVR", "aVL", "aVF" },
-        SelectedIndex = 2,
         MinWidth = 180,
         HorizontalAlignment = HorizontalAlignment.Left
     };
@@ -25,32 +24,41 @@ internal sealed class TContourParameterEditor : StackPanel
     internal event Action? Changed;
     private EcgTContourPlan? _preset;
     private readonly StackPanel _biphasic = new() { Spacing = 8 };
-    internal TContourParameterEditor()
+    private readonly DesktopLocalization _localization;
+    // Indexed by EcgTContourTarget; lead names stay verbatim.
+    private static readonly string[] TargetChoices = ["tContour.chestLeads", "I", "II", "III", "aVR", "aVL", "aVF"];
+    internal TContourParameterEditor(DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
         Spacing = 8;
+        _localization.SetChoices(Target, TargetChoices.Select(choice => (Func<ITextLocalizer, string>)(text => DesktopLocalization.Label(text, choice))));
+        Target.SelectedIndex = 2;
         Peak.ValueChanged += (_, _) => Changed?.Invoke();
         SecondPeak.ValueChanged += (_, _) => Changed?.Invoke();
         Crossing.ValueChanged += (_, _) => Changed?.Invoke();
 
-        Add(this, "T 波目标导联", Target);
+        Add(this, "tContour.target", Target);
         foreach (var lead in ChestLeads)
         {
             lead.Margin = new Avalonia.Thickness(0, 0, 16, 0);
-            AutomationProperties.SetName(lead, $"T 波目标胸导联 {lead.Content}");
+            _localization.Bind(lead, AutomationProperties.NameProperty, "tContour.chestLeadName", lead.Content);
             lead.IsCheckedChanged += (_, _) => Changed?.Invoke();
             _chest.Children.Add(lead);
         }
         Children.Add(_chest); Children.Add(_targetNote);
         Target.SelectionChanged += (_, _) => { RefreshTarget(); Changed?.Invoke(); };
         RefreshTarget();
-        Add(this, "T 波幅度／第一瓣幅度（μV）", Peak);
-        Add(_biphasic, "第二瓣幅度（μV）", SecondPeak);
-        Add(_biphasic, "跨越基线位置（占 T 波时限 %）", Crossing);
+        Add(this, "tContour.peak", Peak);
+        Add(_biphasic, "tContour.secondPeak", SecondPeak);
+        Add(_biphasic, "tContour.crossing", Crossing);
         Children.Add(_biphasic);
-        var reset = new Button { Content = "恢复 T 波模板参数", MinHeight = 44 };
+        var reset = new Button { MinHeight = 44 };
+        _localization.Bind(reset, ContentControl.ContentProperty, "tContour.reset");
         reset.Click += (_, _) => Reset(_preset);
         Children.Add(reset);
-        Children.Add(new TextBlock { Text = "应用后同步监护与十二导联；波形卡片保留模板预览。", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        var note = new TextBlock { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+        _localization.Bind(note, TextBlock.TextProperty, "tContour.applyNote");
+        Children.Add(note);
     }
     internal void Reset(EcgTContourPlan? preset)
     {
@@ -88,9 +96,7 @@ internal sealed class TContourParameterEditor : StackPanel
     private void RefreshTarget()
     {
         _chest.IsVisible = Target.SelectedIndex == 0;
-        _targetNote.Text = _chest.IsVisible
-            ? "至少选择一个胸导联；未选胸导联及肢体导联保持原样。"
-            : "肢体导联按电极投影关系联动；胸导联保持原样。";
+        _localization.Bind(_targetNote, TextBlock.TextProperty, _chest.IsVisible ? "tContour.chestNote" : "tContour.limbNote");
     }
     private static int ReadInteger(NumericUpDown field, int scale)
     {
@@ -101,9 +107,12 @@ internal sealed class TContourParameterEditor : StackPanel
     }
     private static NumericUpDown Field(decimal minimum, decimal maximum, decimal increment) =>
         new() { Minimum = minimum, Maximum = maximum, Increment = increment, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    private static void Add(StackPanel host, string label, Control field)
+    private void Add(StackPanel host, string key, Control field)
     {
-        host.Children.Add(new TextBlock { Text = label }); host.Children.Add(field);
-        AutomationProperties.SetName(field, label);
+        var label = new TextBlock();
+        _localization.Bind(label, TextBlock.TextProperty, key);
+        host.Children.Add(label);
+        host.Children.Add(field);
+        _localization.Bind(field, AutomationProperties.NameProperty, key);
     }
 }

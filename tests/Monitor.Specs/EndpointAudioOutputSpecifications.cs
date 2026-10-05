@@ -17,6 +17,8 @@ internal static class EndpointAudioOutputSpecifications
         new(nameof(OpenValidatesInputsAndReportsUnavailableDevices), OpenValidatesInputsAndReportsUnavailableDevices),
         new(nameof(MonoFramesFillTheFrontPairOnly), MonoFramesFillTheFrontPairOnly),
         new(nameof(WasapiOutputValidatesTargetAndIsUnavailableOffWindows), WasapiOutputValidatesTargetAndIsUnavailableOffWindows),
+        new(nameof(OnlyExplicitWasapiSelectionReplacesNativeOutput), OnlyExplicitWasapiSelectionReplacesNativeOutput),
+        new(nameof(WasapiCommandRejectsBadArgumentsWithoutOpening), WasapiCommandRejectsBadArgumentsWithoutOpening),
     ];
 
     private static void QueueTargetKeepsTwoPeriodsWithinTheStreamBuffer()
@@ -210,6 +212,30 @@ internal static class EndpointAudioOutputSpecifications
         var lifecycle = new AudioOutputLifecycle(output);
         Check.That(!lifecycle.Replace(null, 0) && lifecycle.Failure == AudioOutputFailure.Open && output.StreamPath == WasapiStreamPath.None,
             "other platforms report an unavailable output instead of throwing");
+    }
+
+    private static void OnlyExplicitWasapiSelectionReplacesNativeOutput()
+    {
+        Check.That(AudioOutputSelection.Parse("wasapi") == AudioOutputBackend.Wasapi && AudioOutputSelection.Parse(" WASAPI ") == AudioOutputBackend.Wasapi,
+            "wasapi selection ignores case and surrounding spaces");
+        Check.That(new string?[] { null, "", "native", "wasapi2", "pulse" }.All(value => AudioOutputSelection.Parse(value) == AudioOutputBackend.Native),
+            "unset or unknown selections keep the native output");
+        using var managed = AudioOutputSelection.Create(AudioOutputBackend.Wasapi);
+        Check.That(managed is WasapiAudioOutput, "wasapi selection creates the managed output without loading a library");
+    }
+
+    private static void WasapiCommandRejectsBadArgumentsWithoutOpening()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-unknown"], output, error, default) == 2 &&
+            WasapiAudioCommand.Execute(["--audio-wasapi-audition", "a", "b"], output, error, default) == 2,
+            "unknown commands and extra arguments are usage errors");
+        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-audition"], output, error, new CancellationToken(true)) == 130 && output.ToString().Length == 0,
+            "cancelled audition opens no device");
+        if (OperatingSystem.IsWindows()) { return; }
+        Check.That(WasapiAudioCommand.Execute(["--audio-wasapi-diagnostics"], output, error, default) == 1 && error.ToString().Contains("unavailable", StringComparison.Ordinal),
+            "other platforms report diagnostics as unavailable");
     }
 
     private sealed class FakeEndpoint(int bufferFrames = 1920, int periodFrames = 480) : IRenderEndpoint

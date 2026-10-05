@@ -21,6 +21,8 @@ internal static class Program
             {
                 if (args[0] is "--audio-native-audition" or "--audio-native-check" or "--audio-native-diagnostics" or "--audio-native-clock-probe")
                 { return NativeAudioCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
+                if (args[0] is "--audio-wasapi-audition" or "--audio-wasapi-diagnostics")
+                { return WasapiAudioCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 if (args[0] == "--audio-tone-fixture")
                 { return AudioFixtureCommand.Execute(args, Console.OpenStandardOutput(), Console.Error, cancellation.Token); }
                 if (args[0] is "--oxygen-transport-fixture" or "--oxygenation-replay-check" or

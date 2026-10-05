@@ -17,7 +17,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     private readonly Func<int, CancellationToken, Task<SoundPreviewResult>> _play;
     private CancellationTokenSource? _cancellation;
     private bool _closed;
-    private readonly MonitorAlarmPlayback _alarms = new(() => new NativeAudioOutputFactory(NativeAudioOutputFactory.DefaultLibraryPath));
+    private readonly MonitorAlarmPlayback _alarms = new(() => AudioOutputSelection.Create(AudioOutputSelection.Current));
     private CancellationTokenSource? _alarmCancellation;
     private MonitorNoticeLevel? _alarmLevel;
     private readonly AlarmNotificationSoundRouter _notificationRouter = new();
@@ -64,7 +64,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         long origin = Stopwatch.GetTimestamp();
         _authorityNow = authorityNow ?? (() => checked(Stopwatch.GetElapsedTime(origin).Ticks * 100));
         _pauseTimer.Tick += (_, _) => RefreshAudioPause();
-        var playback = new SoundPreviewPlayback(() => new NativeAudioOutputFactory(NativeAudioOutputFactory.DefaultLibraryPath));
+        var playback = new SoundPreviewPlayback(() => AudioOutputSelection.Create(AudioOutputSelection.Current));
         _play = play ?? playback.PlayAsync;
         Margin = new Thickness(20); Spacing = 16;
         Children.Add(Text("声音输出"));

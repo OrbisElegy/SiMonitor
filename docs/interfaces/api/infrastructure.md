@@ -19,6 +19,25 @@ public sealed class AudioClockBridge
 }
 ```
 
+## Audio/AudioOutputSelection.cs
+
+源码：[AudioOutputSelection.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputSelection.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public enum AudioOutputBackend
+{
+    Native,
+    Wasapi
+}
+public static class AudioOutputSelection
+{
+    public const string EnvironmentVariable = "SIMONITOR_AUDIO_OUTPUT";
+    public static AudioOutputBackend Current { get; }
+    public static AudioOutputBackend Parse(string? value);
+    public static IPumpedAudioOutput Create(AudioOutputBackend backend);
+}
+```
+
 ## Audio/AudioOutputLifecycle.cs
 
 源码：[AudioOutputLifecycle.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputLifecycle.cs) · 命名空间：`Monitor.Infrastructure.Audio`

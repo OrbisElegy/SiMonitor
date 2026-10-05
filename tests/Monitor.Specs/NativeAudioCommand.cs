@@ -28,7 +28,7 @@ internal static class NativeAudioCommand
             {
                 result = args[0] == "--audio-native-clock-probe"
                     ? ClockProbe(args, output, error, factory, lifecycle, cancellation)
-                    : Audition(args, output, error, factory, lifecycle, cancellation);
+                    : Audition(args.Length == 3 ? args[2] : null, output, error, factory, lifecycle, () => $"{factory.Status}", cancellation);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { result = 130; }
             finally
@@ -124,10 +124,11 @@ internal static class NativeAudioCommand
         return result;
     }
 
-    private static int Audition(string[] args, TextWriter output, TextWriter error,
-        NativeAudioOutputFactory factory, AudioOutputLifecycle lifecycle, CancellationToken cancellation)
+    // Shared by the native and managed WASAPI auditions so both pace and schedule identically.
+    internal static int Audition(string? deviceId, TextWriter output, TextWriter error,
+        IPumpedAudioOutput factory, AudioOutputLifecycle lifecycle, Func<string> describe, CancellationToken cancellation)
     {
-        if (!lifecycle.Replace(args.Length == 3 ? args[2] : null, 0))
+        if (!lifecycle.Replace(deviceId, 0))
         { error.WriteLine($"Audio unavailable: {lifecycle.Failure}"); return 1; }
         var session = lifecycle.Session!;
         // Explicit engineering audition only; these are not detected QRS.
@@ -137,13 +138,13 @@ internal static class NativeAudioCommand
             if (session.Schedule(i, TonePreset.BeatAudition, target, target + 12000) != ToneScheduleResult.Accepted)
             { error.WriteLine("Could not schedule audition."); return 1; }
         }
-        output.WriteLine($"Engineering audition: five 75bpm tones. {factory.Status}. Physical latency NOT qualified.");
+        output.WriteLine($"Engineering audition: five 75bpm tones. {describe()}. Physical latency NOT qualified.");
         long start = Stopwatch.GetTimestamp();
         while (Stopwatch.GetElapsedTime(start) < TimeSpan.FromSeconds(4))
         {
             cancellation.ThrowIfCancellationRequested();
             if (!factory.Pump() || !lifecycle.CheckHealth())
-            { error.WriteLine($"Audio stopped; native status: {factory.Status}"); return 1; }
+            { error.WriteLine($"Audio stopped; status: {describe()}"); return 1; }
             // Same event-driven pacing as product playback; onset is sample-indexed.
             factory.WaitForQueueSpace(10);
         }

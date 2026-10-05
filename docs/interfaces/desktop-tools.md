@@ -29,6 +29,8 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 | `--product-check [ASSEMBLY_PATH]` | 检查产品程序集；可指定路径，入口仍由开发版承载 |
 | `--generate-style-previews OUTPUT_PATH` | 生成有限预览目录后退出，不启动 Avalonia 窗口 |
 
+声音输出默认使用原生音频库。启动前设置环境变量 `SIMONITOR_AUDIO_OUTPUT=wasapi`（不区分大小写）改用托管 WASAPI 输出，供与原生输出对比；未设置或其他值保持原生输出。
+
 未知组合／多余参数返回 `2`。`ProductRelease=true` 定义 `SIMONITOR_RELEASE`，产品程序只接受无参数启动；包括 `--ui-preview` 在内的开发参数均返回 `2`。普通 `Release` 编译配置本身不等于 `ProductRelease=true`。
 
 ## 本地监护装配与时间
@@ -116,6 +118,8 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 | `--audio-native-diagnostics ABSOLUTE_LIBRARY [DEVICE_ID]` | 设备／输出时钟诊断 |
 | `--audio-native-clock-probe ABSOLUTE_LIBRARY [DEVICE_ID]` | 原生音频时钟采样 |
 | `--audio-native-check ABSOLUTE_TEST_LIBRARY` | 显式检查隔离测试库绑定 |
+| `--audio-wasapi-audition [DEVICE_ID]` | 用托管 WASAPI 输出播放与原生试听相同的五声，供 Windows 实机对比；不加载原生库 |
+| `--audio-wasapi-diagnostics [DEVICE_ID]` | 打开托管 WASAPI 流但不播放，输出流路径、缓冲、周期和队列目标 JSON；设备不可用返回 `1` |
 | `--oxygen-transport-fixture OUTPUT.json` | 导出短暂停呼吸／恢复的输运输入 |
 | `--oxygen-deep-transport-fixture OUTPUT.json` | 导出较深去饱和输运输入 |
 | `--oxygenation-replay-check RESULT.json` | 将离线回放结果接入光学测量链 |

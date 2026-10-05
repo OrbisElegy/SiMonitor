@@ -1926,6 +1926,52 @@ public static class SweepRegionColumnEnvelopeReduction
 }
 ```
 
+## Scenarios/VitalChangeScheduler.cs
+
+源码：[VitalChangeScheduler.cs](../../../src/Monitor.Application/Scenarios/VitalChangeScheduler.cs) · 命名空间：`Monitor.Application.Scenarios`
+
+```csharp
+public enum VitalSign
+{
+    HeartRateBpm,
+    RespiratoryRatePerMinute,
+    SpO2MilliPercent,
+    EtCo2MmHg,
+    AbpSystolicCentiMmHg,
+    AbpDiastolicCentiMmHg,
+    PaSystolicCentiMmHg,
+    PaDiastolicCentiMmHg,
+    CvpCentiMmHg,
+}
+public enum VitalChangeTrigger { Manual, AfterDelay, AfterPrevious }
+public enum VitalChangeState { Waiting, Active, Done, Cancelled }
+public sealed record VitalChangeEvent(IReadOnlyDictionary<VitalSign, int> Targets, long DurationNs, VitalChangeTrigger Trigger, long DelayNs = 0)
+{
+}
+public sealed record VitalChangeEntry(int Id, VitalChangeEvent Event, VitalChangeState State, long QueuedSimTimeNs, long? StartSimTimeNs)
+{
+}
+public sealed class VitalChangeScheduler
+{
+    public const long StepNs = 2_000_000_000;
+    public const long MaximumDurationNs = 3_600_000_000_000;
+    public const long MaximumDelayNs = 3_600_000_000_000;
+    public const int MaximumEventCount = 32;
+    public VitalChangeScheduler(IReadOnlyDictionary<VitalSign, int> baseline, long simTimeNs);
+    public static (int Minimum, int Maximum) Range(VitalSign sign);
+    public IReadOnlyList<VitalChangeEntry> Events { get; }
+    public IReadOnlyCollection<VitalSign> Signs { get; }
+    public bool IsChanging { get; }
+    public IReadOnlyDictionary<VitalSign, int> ValuesAt(long simTimeNs);
+    public int Add(VitalChangeEvent change);
+    public void Trigger(int id);
+    public void Remove(int id);
+    public void Stop();
+    public void Rebase(IReadOnlyDictionary<VitalSign, int> baseline, long simTimeNs);
+    public IReadOnlyDictionary<VitalSign, int>? Advance(long simTimeNs);
+}
+```
+
 ## SessionAuthority.cs
 
 源码：[SessionAuthority.cs](../../../src/Monitor.Application/SessionAuthority.cs) · 命名空间：`Monitor.Application`

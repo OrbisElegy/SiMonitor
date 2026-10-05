@@ -103,6 +103,8 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 | [spdx_headers.py](../../tools/spdx_headers.py) | `--check` 只检查；省略时会补写许可头，范围见贡献指南 |
 | [check_commit_message.py](../../tools/check_commit_message.py) | `MESSAGE_FILE`；读取当前 Git author 与消息，检查仓库提交格式，返回 0 或 1 |
 
+CI 在 Windows 图形会话和 Linux Xvfb 显示环境中运行 `--desktop-only`，两者均使用 `Monitor.Desktop` 的原生窗口入口。没有单独的无头桌面运行器；`--specs-only` 保留用于不依赖窗口的核心规格。桌面检查的启动截图输出到 `artifacts/desktop-startup.png`，CI 失败时与分片日志一起保留。
+
 `tests/Monitor.Specs/Program.cs` 是开发用可执行规格与夹具入口：
 
 ```sh

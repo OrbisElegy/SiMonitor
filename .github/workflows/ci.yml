@@ -78,6 +78,20 @@ jobs:
       - name: Run executable specifications
         run: python tools/run_parallel_checks.py --specs-only --configuration Release --jobs 4
 
+      - name: Prepare Linux desktop display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb xauth
+
+      - name: Run native desktop checks (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 4
+
+      - name: Run native desktop checks (Windows)
+        if: runner.os == 'Windows'
+        run: python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 4
+
       - name: Build solution (Debug) for native binding check
         run: dotnet build Monitor.slnx --no-restore --configuration Debug
 
@@ -91,5 +105,6 @@ jobs:
           name: check-logs-${{ matrix.os }}
           path: |
             artifacts/parallel-checks/
+            artifacts/desktop-startup.png
             artifacts/native-audio/build-evidence.json
           if-no-files-found: ignore

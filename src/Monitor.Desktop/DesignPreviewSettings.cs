@@ -39,19 +39,24 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _appliedTContour = configuration.TContour;
         _appliedInfarction = configuration.Infarction;
         _appliedZones = configuration.Zones;
-        AppliedEcgParameters.Text = "心电图 · " + EcgChoices[ecgSelection ?? EcgSelection] + "\n" + EcgTemplateSummary.Describe(configuration);
-        string plateau = physiology.Co2PlateauStartCentiMmHg is { } value
-            ? (value / 100m).ToString("0.##", CultureInfo.InvariantCulture) + " mmHg" : "随模板";
-        AppliedRespirationParameters.Text = $"呼吸 · {RespirationChoices[respirationSelection ?? RespirationSelection]}\n" +
-            $"周期 {physiology.BreathPeriodMilliseconds} ms · 吸气 {physiology.InspirationMilliseconds} ms\n" +
-            $"RESP 相对信号幅度 {physiology.RespAmplitudeCounts} · 心源性干扰幅度 {physiology.RespCardiacArtifactCounts}\n" +
-            $"CO₂ 基线 {physiology.Co2BaselineMmHg} mmHg · 呼气末目标 {physiology.Co2EndExpiratoryMmHg} mmHg · 平台起始高度 {plateau}\n" +
-            $"死腔 {physiology.Co2DeadSpaceMilliseconds} ms · 上升 {physiology.Co2RiseMilliseconds} ms · 下降 {physiology.Co2FallMilliseconds} ms\n" +
-            $"管路延迟 {physiology.Co2TransportDelayMilliseconds} ms · 展宽步长 {physiology.Co2DispersionStepMilliseconds} ms";
+        int ecg = ecgSelection ?? EcgSelection;
+        int respiration = respirationSelection ?? RespirationSelection;
+        int ejection = ejectionSelection ?? EjectionSelection;
+        Localization.Bind(AppliedEcgParameters, TextBlock.TextProperty, text =>
+            text.Format("advanced.appliedEcg", text.GetString(EcgTemplateKey(ecg)), EcgTemplateSummary.Describe(text, configuration)));
+        Localization.Bind(AppliedRespirationParameters, TextBlock.TextProperty, text =>
+        {
+            string plateau = physiology.Co2PlateauStartCentiMmHg is { } value
+                ? (value / 100m).ToString("0.##", CultureInfo.InvariantCulture) + " mmHg" : text.GetString("advanced.plateauFromTemplate");
+            return text.Format("advanced.appliedRespiration", text.GetString(RespirationTemplateKey(respiration)),
+                physiology.BreathPeriodMilliseconds, physiology.InspirationMilliseconds, physiology.RespAmplitudeCounts, physiology.RespCardiacArtifactCounts,
+                physiology.Co2BaselineMmHg, physiology.Co2EndExpiratoryMmHg, plateau, physiology.Co2DeadSpaceMilliseconds, physiology.Co2RiseMilliseconds,
+                physiology.Co2FallMilliseconds, physiology.Co2TransportDelayMilliseconds, physiology.Co2DispersionStepMilliseconds);
+        });
         bool noEjection = !physiology.VentricularMechanicalEnabled || physiology.CardiacActivity is
             CardiacActivity.Absent or CardiacActivity.AtrialOnly || VentricularDisorganizationReference.IsPattern(physiology.ConductionPattern);
-        AppliedEjectionParameters.Text = "射血 · " + EjectionChoices[ejectionSelection ?? EjectionSelection] + "\n" +
-            (noEjection ? "无有效射血" : "按已应用节律与机械事件生成射血");
+        Localization.Bind(AppliedEjectionParameters, TextBlock.TextProperty, text => text.Format("advanced.appliedEjection",
+            text.GetString(EjectionTemplateKey(ejection)), text.GetString(noEjection ? "advanced.noEjection" : "advanced.ejectionFromRhythm")));
         RefreshShapeSummary();
     }
     private void RefreshShapeSummary()
@@ -68,16 +73,18 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 Infarction = zones is null ? InfarctionParameters.Read(config.Infarction) : null
             };
             bool applied = _appliedShapeSelection == EcgSelection && _appliedTContour == config.TContour && _appliedInfarction == config.Infarction && _appliedZones == config.Zones;
-            ShapeEditStatus.Text = !editable ? "模板默认参数（非运行值）" : applied ? "形态参数 · 已应用（非测量值）" : "形态参数 · 待应用（非测量值）";
-            ShapeEditSummary.Text = EcgTemplateSummary.Describe(config);
+            string status = !editable ? "advanced.shapeDefaults" : applied ? "advanced.shapeApplied" : "advanced.shapePending";
+            Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, status);
+            Localization.Bind(ShapeEditSummary, TextBlock.TextProperty, text => EcgTemplateSummary.Describe(text, config));
+            // Only drafts that still need Apply are called out.
+            ShapeEditStatus.IsVisible = status == "advanced.shapePending";
         }
         catch (ArgumentException)
         {
-            ShapeEditStatus.Text = "形态参数 · 输入不完整或无效，尚未应用";
-            ShapeEditSummary.Text = "请检查导联选择、幅度及时间参数；正在运行的波形保持不变。";
+            Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, "advanced.shapeInvalid");
+            Localization.Bind(ShapeEditSummary, TextBlock.TextProperty, "advanced.shapeInvalidHelp");
+            ShapeEditStatus.IsVisible = true;
         }
-        ShapeEditStatus.IsVisible = ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal) ||
-            ShapeEditStatus.Text.Contains("无效", StringComparison.Ordinal);
     }
     internal TContourParameterEditor TContourParameters { get; } = new();
     internal InfarctionParameterEditor InfarctionParameters { get; } = new();
@@ -143,10 +150,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal string BreathingConstraintDescription()
     {
         var timing = ReadCo2Timing();
-        return $"吸气须至少 {timing.FallMilliseconds} ms，呼气须大于 {timing.DeadSpaceMilliseconds + timing.RiseMilliseconds} ms；请调整 CO₂ 时长、呼吸频率或吸气占比。";
+        return Localization.Format("vitals.breathingConstraint", timing.FallMilliseconds, timing.DeadSpaceMilliseconds + timing.RiseMilliseconds);
     }
     internal NumericUpDown Co2Baseline { get; } = new() { Minimum = 0, Maximum = 80, Value = 0, Increment = 1, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal CheckBox Co2CustomPlateau { get; } = new() { Content = "自定义 CO₂ 平台起始高度" };
+    internal CheckBox Co2CustomPlateau { get; } = new();
     internal NumericUpDown Co2PlateauStart { get; } = new() { Minimum = 0, Maximum = 80, Value = 35, Increment = .25m, Width = 180, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = false };
     internal (int BaselineMmHg, int TargetMmHg, int? PlateauCentiMmHg) ReadCo2Levels()
     {
@@ -164,8 +171,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return (baselineMmHg, targetMmHg, plateauCentiMmHg);
     }
     internal int EjectionSelection { get; set; }
-    internal Button Apply { get; } = new() { Content = "应用", MinWidth = 88, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-    internal Button Restart { get; } = new() { Content = "从头开始", MinWidth = 104, MinHeight = 44 };
+    internal Button Apply { get; } = new() { MinWidth = 88, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button Restart { get; } = new() { MinWidth = 104, MinHeight = 44 };
     internal NumericUpDown ApplyDelaySeconds { get; } = new()
     { Minimum = 0, Maximum = 60, Increment = 0.1m, Value = 3, FormatString = "0.0", Width = 116, Height = 44, VerticalContentAlignment = VerticalAlignment.Center };
     internal long ReadApplyDelayNs()
@@ -174,9 +181,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
         { throw new ArgumentException("Preview.InvalidApplyDelay"); }
         return checked((long)(seconds * 1_000_000_000));
     }
-    internal Button ResetAll { get; } = new() { Content = "恢复默认设置…", MinHeight = 44, Padding = new Thickness(8, 0) };
-    internal Button Run { get; } = new() { Content = "暂停扫描", MinWidth = 104, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-    internal ComboBox Skin { get; } = new() { ItemsSource = new[] { "紧凑 · 固定 3 行", "标准 · 固定 5 行", "扩展 · 固定 7 行" }, SelectedIndex = 1, MinWidth = 220 };
+    internal Button ResetAll { get; } = new() { MinHeight = 44, Padding = new Thickness(8, 0) };
+    internal Button Run { get; } = new() { MinWidth = 104, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal ComboBox Skin { get; } = new() { SelectedIndex = 1, MinWidth = 220 };
     internal ListBox Tabs { get; } = new();
     internal Dictionary<int, SettingsSections> SectionPages { get; } = [];
     private readonly ComboBox _compactCategory = new() { MinHeight = 44, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -189,16 +196,15 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal bool CompactNavigation => _compactCategory.IsVisible;
     internal SoundSettingsPanel Sound { get; }
     internal MonitorAlertSettings Alerts { get; }
-    internal CheckBox OpticalEnabled { get; } = new() { Content = "启用双波长指脉氧教学源", IsChecked = false };
-    internal OxygenationSettingsPanel Oxygenation { get; } = new();
-    internal CheckBox CardiacRateEnabled { get; } = new() { Content = "调整窦性参考心率（1:1 下传）", IsChecked = false };
+    internal CheckBox OpticalEnabled { get; } = new() { IsChecked = false };
+    internal OxygenationSettingsPanel Oxygenation { get; }
+    internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
-    internal Button GenerateSeed { get; } = new() { Content = "生成随机种子", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+    internal Button GenerateSeed { get; } = new() { MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
     internal TextBlock SeedError { get; } = new()
     {
-        Text = "须为 64 个小写十六进制字符（0–9、a–f），否则无法应用随机波动。",
         Foreground = Brushes.OrangeRed,
         TextWrapping = TextWrapping.Wrap,
         IsVisible = false
@@ -214,7 +220,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal TextBlock Status { get; } = Text("应用后接续当前波形；从头开始会清空扫描历史。");
+    internal TextBlock Status { get; } = Text("");
     private const string DisplayColumns = "40,165,80,*,*,115";
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
@@ -229,7 +235,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal TabControl RespirationGroups { get; } = new();
     internal Button ResetRespirationPage { get; } = new()
     {
-        Content = "恢复本页默认参数",
         MinHeight = 44,
         HorizontalAlignment = HorizontalAlignment.Left,
         HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -241,7 +246,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
-    internal ComboBox PaperLayout { get; } = new() { ItemsSource = new[] { "3 × 4 ＋ 长Ⅱ", "6 × 2 ＋ 长Ⅱ" }, SelectedIndex = 0, MinWidth = 220 };
+    internal ComboBox PaperLayout { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     private readonly List<Action> _refreshSignalRows = [];
     internal int PreviewCacheCount => _previews.Count;
     internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced, DesktopLocalization? localization = null)
@@ -249,6 +254,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Localization = localization ?? new DesktopLocalization();
         Sound = new SoundSettingsPanel(localization: Localization);
         Alerts = new MonitorAlertSettings(Localization);
+        Oxygenation = new OxygenationSettingsPanel(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -257,7 +263,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         generation.Children.Add(DesktopInformationPages.Help("settings-detail-1"));
         var templates = BuildTemplatePages();
         Grid.SetRow(templates, 1); generation.Children.Add(templates);
-        var more = new Button { Content = "完整心电图参数（现有开发入口）", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+        var more = new Button { MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+        Localization.Bind(more, ContentControl.ContentProperty, "advanced.developerEcg");
         more.Click += (_, _) => advanced();
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         display.Children.Add(DesktopInformationPages.Help("settings-detail-2"));
@@ -314,31 +321,39 @@ internal sealed partial class DesignPreviewSettings : UserControl
             alarmSections.SelectedSection = Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(numeric);
         };
         SectionPages[5] = SettingsSections.Split(Localization, "settings.vitals", vitals,
-            ("心率", vitals.Children[0]), ("呼吸与 CO₂", Before(vitals, RespiratoryRate)),
-            ("指脉氧", Oxygenation), ("压力", Before(vitals, AbpPulseGain)),
-            ("随机种子", Before(vitals, RateSeed)));
+            ("vitals.sectionHeartRate", vitals.Children[0]), ("vitals.sectionBreathing", Before(vitals, RespiratoryRate)),
+            ("vitals.sectionOximetry", Oxygenation), ("vitals.sectionPressure", Before(vitals, AbpPulseGain)),
+            ("vitals.sectionSeed", Before(vitals, RateSeed)));
         TrackVitalSections(SectionPages[5]);
         var advancedGroups = new List<(string Title, Control Content)>
-        { ("心电图", _advancedEcg), ("呼吸", _advancedRespiration), ("射血", _advancedEjection) };
+        { ("generation.ecg", _advancedEcg), ("generation.respiration", _advancedRespiration), ("generation.ejection", _advancedEjection) };
         var appliedParameters = new StackPanel { Spacing = 20 };
-        appliedParameters.Children.Add(Text("当前运行采用的参数（非测量值）；成功应用后更新。"));
+        appliedParameters.Children.Add(LocalizedText("advanced.appliedIntro"));
         appliedParameters.Children.Add(AppliedEcgParameters);
         appliedParameters.Children.Add(AppliedRespirationParameters);
         appliedParameters.Children.Add(AppliedEjectionParameters);
-        advancedGroups.Add(("当前已应用参数", appliedParameters));
-        if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
-        var advancedHeaders = new Dictionary<int, string> { [0] = "当前波形", [3] = ProductIdentity.DevelopmentFeatures ? "概览与工具" : "概览" };
+        advancedGroups.Add(("advanced.sectionApplied", appliedParameters));
+        if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("advanced.sectionTools", _advancedTools)); }
+        var advancedHeaders = new Dictionary<int, string> { [0] = "advanced.headerWaveform", [3] = ProductIdentity.DevelopmentFeatures ? "advanced.headerOverviewTools" : "advanced.headerOverview" };
         SectionPages[6] = new SettingsSections(Localization, "settings.advanced", advancedHeaders, advancedGroups.ToArray());
-        RespirationGroups.ItemsSource = new[]
-        {
-            new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 形态", Content = _co2Shape, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
-            new TabItem { Header = "CO₂ 管路", Content = _co2Response, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 }
-        };
+        RespirationGroups.ItemsSource = new[] { ("advanced.respSignal", _respSignal), ("advanced.co2Shape", _co2Shape), ("advanced.co2Response", _co2Response) }
+            .Select(page =>
+            {
+                var tab = new TabItem { Content = page.Item2, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 };
+                Localization.Bind(tab, TabItem.HeaderProperty, page.Item1);
+                return tab;
+            }).ToArray();
         RespirationGroups.Padding = new Thickness(0);
         RespirationGroups.SelectedIndex = 0;
         ResetRespirationPage.Click += (_, _) => ResetRespirationDraft();
-        AutomationProperties.SetName(RespirationGroups, "呼吸高级参数分组");
+        Localization.Bind(RespirationGroups, AutomationProperties.NameProperty, "advanced.respirationGroupsName");
+        Localization.Bind(Co2CustomPlateau, ContentControl.ContentProperty, "advanced.customPlateau");
+        Localization.Bind(OpticalEnabled, ContentControl.ContentProperty, "vitals.opticalEnabled");
+        Localization.Bind(CardiacRateEnabled, ContentControl.ContentProperty, "vitals.cardiacRateEnabled");
+        Localization.Bind(GenerateSeed, ContentControl.ContentProperty, "vitals.generateSeed");
+        Localization.Bind(SeedError, TextBlock.TextProperty, "vitals.seedError");
+        Localization.Bind(ResetRespirationPage, ContentControl.ContentProperty, "advanced.resetPage");
+        Localization.LocaleChanged += RefreshBreathingTiming;
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
         string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced"];
         Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
@@ -392,7 +407,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return checked((int)(value * scale));
     }
     internal int? ReadOpticalTarget() => OpticalEnabled.IsChecked == true && Oxygenation.Realtime.IsChecked != true
-        ? ReadVitalValue(OpticalTarget, 1000, "SpO₂ 目标") : null;
+        ? ReadVitalValue(OpticalTarget, 1000, "vitals.opticalTargetField") : null;
     internal (int Period, int Inspiration) ReadBreathingTiming()
     {
         var timing = ReadCo2Timing();
@@ -410,21 +425,21 @@ internal sealed partial class DesignPreviewSettings : UserControl
         try
         {
             var timing = ReadBreathingTiming();
-            BreathingTiming.Text = $"吸气 {timing.Inspiration} ms · 呼气 {timing.Period - timing.Inspiration} ms · 周期 {timing.Period} ms（设置预览，非实测）";
+            BreathingTiming.Text = Localization.Format("vitals.breathingPreview", timing.Inspiration, timing.Period - timing.Inspiration, timing.Period);
         }
         catch (ArgumentException error) when (error.Message == "Preview.InvalidCo2Timing")
-        { BreathingTiming.Text = "当前 CO₂ 时长未填写完整或不是正整数。"; }
+        { BreathingTiming.Text = Localization.Get("vitals.co2TimingIncomplete"); }
         catch (ArgumentException)
-        { BreathingTiming.Text = "当前组合不可用：" + BreathingConstraintDescription(); }
+        { BreathingTiming.Text = Localization.Format("vitals.breathingUnavailable", BreathingConstraintDescription()); }
     }
     private StackPanel VitalSigns()
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         panel.Children.Add(CardiacRateEnabled);
-        Add("心率目标（bpm，30–180）", HeartRate);
-        Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
-        Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
-        Add("吸气占周期比例（%，10–90；50 表示吸呼 1:1）", InspirationPercent);
+        Add("vitals.heartRate", HeartRate);
+        Add("vitals.rateVariation", RateVariation);
+        Add("vitals.respiratoryRate", RespiratoryRate);
+        Add("vitals.inspirationPercent", InspirationPercent);
         panel.Children.Add(BreathingTiming);
         RespiratoryRate.ValueChanged += (_, _) => RefreshBreathingTiming();
         InspirationPercent.ValueChanged += (_, _) => RefreshBreathingTiming();
@@ -432,21 +447,26 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Co2Rise.ValueChanged += (_, _) => RefreshBreathingTiming();
         Co2Fall.ValueChanged += (_, _) => RefreshBreathingTiming();
         RefreshBreathingTiming();
-        Add("EtCO₂ 目标（mmHg，5–80）", EtCo2Target);
-        Add("EtCO₂ 逐呼吸波动（±mmHg，0–5；0 关闭）", EtCo2Variation);
+        Add("vitals.etco2Target", EtCo2Target);
+        Add("vitals.etco2Variation", EtCo2Variation);
         panel.Children.Add(DesktopInformationPages.Help("topic-3"));
         panel.Children.Add(DesktopInformationPages.Help("topic-4"));
-        void Add(string label, Control control)
-        { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
+        void Add(string key, Control control)
+        {
+            control.HorizontalAlignment = HorizontalAlignment.Left;
+            panel.Children.Add(LocalizedText(key));
+            panel.Children.Add(control);
+            Localization.Bind(control, AutomationProperties.NameProperty, key);
+        }
         var source = new StackPanel { Spacing = 16 };
         source.Children.Add(OpticalEnabled);
         source.Children.Add(Oxygenation.Realtime);
-        source.Children.Add(Text("SpO₂ 教学目标（0–100%）")); source.Children.Add(OpticalTarget);
-        source.Children.Add(Text("SpO₂ 波动幅度（±百分点，0–2.5；0 关闭）")); source.Children.Add(OpticalVariation);
-        source.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); source.Children.Add(OpticalModulation);
-        AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1 至 2");
-        AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，0 至 100");
-        AutomationProperties.SetName(OpticalVariation, "SpO₂ 波动幅度（±百分点，0–2.5；0 关闭）");
+        source.Children.Add(LocalizedText("vitals.opticalTarget")); source.Children.Add(OpticalTarget);
+        source.Children.Add(LocalizedText("vitals.opticalVariation")); source.Children.Add(OpticalVariation);
+        source.Children.Add(LocalizedText("vitals.opticalModulation")); source.Children.Add(OpticalModulation);
+        Localization.Bind(OpticalModulation, AutomationProperties.NameProperty, "vitals.opticalModulationName");
+        Localization.Bind(OpticalTarget, AutomationProperties.NameProperty, "vitals.opticalTargetName");
+        Localization.Bind(OpticalVariation, AutomationProperties.NameProperty, "vitals.opticalVariation");
         source.Children.Add(DesktopInformationPages.Help("topic-5"));
         source.Children.Add(DesktopInformationPages.Help("topic-6"));
         Oxygenation.SetSourceContent(source);
@@ -461,12 +481,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
         OpticalEnabled.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         Oxygenation.Realtime.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         RefreshOpticalControls();
-        Add("ABP 脉搏分量倍率（0.5–2）", AbpPulseGain);
-        Add("PA 脉搏分量倍率（0.5–2）", PaPulseGain);
+        Add("vitals.abpPulseGain", AbpPulseGain);
+        Add("vitals.paPulseGain", PaPulseGain);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
-        Add("CVP 基线压力（mmHg，−5–30）", CvpBaseline);
+        Add("vitals.cvpBaseline", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
-        Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
+        Add("vitals.seed", RateSeed);
         panel.Children.Add(SeedError);
         panel.Children.Add(GenerateSeed);
         GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
@@ -543,7 +563,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             case 0:
                 RespSignalAmplitude.Value = defaults.RespAmplitudeCounts;
                 RespCardiacArtifact.Value = defaults.RespCardiacArtifactCounts;
-                page = "RESP 信号";
+                page = "advanced.respSignal";
                 break;
             case 1:
                 Co2Baseline.Value = defaults.Co2BaselineMmHg;
@@ -552,16 +572,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 Co2DeadSpace.Value = defaults.Co2DeadSpaceMilliseconds;
                 Co2Rise.Value = defaults.Co2RiseMilliseconds;
                 Co2Fall.Value = defaults.Co2FallMilliseconds;
-                page = "CO₂ 形态";
+                page = "advanced.co2Shape";
                 break;
             case 2:
                 Co2TransportDelay.Value = defaults.Co2TransportDelayMilliseconds;
                 Co2DispersionStep.Value = defaults.Co2DispersionStepMilliseconds;
-                page = "CO₂ 管路";
+                page = "advanced.co2Response";
                 break;
             default: return;
         }
-        Localization.Bind(Status, TextBlock.TextProperty, "settings.pageDefaultsRestored", page);
+        Localization.Bind(Status, TextBlock.TextProperty, text => text.Format("settings.pageDefaultsRestored", text.GetString(page)));
     }
     private void RefreshAdvanced(Button developer)
     {
@@ -575,40 +595,41 @@ internal sealed partial class DesignPreviewSettings : UserControl
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
         bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null;
         if (!ecgEditable)
-        { _advancedEcg.Children.Add(Text("此模板暂无可编辑的心电图高级参数。")); }
+        { _advancedEcg.Children.Add(LocalizedText("advanced.ecgNoParameters")); }
         SectionPages[6].SetDetail(0, ecgEditable ? null : "advanced.noParameters", ecgEditable ? null : "advanced.noParametersName");
         _advancedEcg.Children.Add(ShapeEditStatus);
-        ToolTip.SetTip(RespirationGroups, "当前呼吸模板：" + RespirationChoices[RespirationSelection]);
-        _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
+        int respirationTemplate = RespirationSelection;
+        Localization.Bind(RespirationGroups, ToolTip.TipProperty, text => text.Format("advanced.currentRespiration", text.GetString(RespirationTemplateKey(respirationTemplate))));
+        _respSignal.Children.Add(LocalizedText("advanced.respAmplitude"));
         _respSignal.Children.Add(RespSignalAmplitude);
-        _respSignal.Children.Add(Text("心源性干扰幅度（−200–200；0 关闭）"));
+        _respSignal.Children.Add(LocalizedText("advanced.respArtifact"));
         _respSignal.Children.Add(RespCardiacArtifact);
-        AutomationProperties.SetName(RespSignalAmplitude, "RESP 相对信号幅度，负值反相，不代表通气量");
-        AutomationProperties.SetName(RespCardiacArtifact, "RESP 心源性干扰幅度，0 关闭");
-        if (RespirationSelection == 3) { _respSignal.Children.Add(Text("当前无呼吸分量")); }
-        _co2Shape.Children.Add(Text("CO₂ 基线（mmHg，0–80；不高于呼气末目标）"));
+        Localization.Bind(RespSignalAmplitude, AutomationProperties.NameProperty, "advanced.respAmplitudeName");
+        Localization.Bind(RespCardiacArtifact, AutomationProperties.NameProperty, "advanced.respArtifactName");
+        if (RespirationSelection == 3) { _respSignal.Children.Add(LocalizedText("advanced.noRespiration")); }
+        _co2Shape.Children.Add(LocalizedText("advanced.co2Baseline"));
         _co2Shape.Children.Add(Co2Baseline);
         _co2Shape.Children.Add(Co2CustomPlateau);
-        _co2Shape.Children.Add(Text("平台起始高度（mmHg，最多两位小数；基线至呼气末目标之间）"));
+        _co2Shape.Children.Add(LocalizedText("advanced.plateauStart"));
         _co2Shape.Children.Add(Co2PlateauStart);
-        AutomationProperties.SetName(Co2Baseline, "CO₂ 基线，毫米汞柱");
-        AutomationProperties.SetName(Co2PlateauStart, "CO₂ 平台起始高度，毫米汞柱");
+        Localization.Bind(Co2Baseline, AutomationProperties.NameProperty, "advanced.co2BaselineName");
+        Localization.Bind(Co2PlateauStart, AutomationProperties.NameProperty, "advanced.plateauStartName");
         if (_co2Timing.Children.Count == 0)
         {
-            foreach (var (label, input) in new[] { ("CO₂ 死腔时长（ms）", Co2DeadSpace), ("CO₂ 上升时长（ms）", Co2Rise), ("CO₂ 下降时长（ms）", Co2Fall) })
+            foreach (var (key, input) in new[] { ("advanced.co2DeadSpace", Co2DeadSpace), ("advanced.co2Rise", Co2Rise), ("advanced.co2Fall", Co2Fall) })
             {
                 var field = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 16, 12) };
-                field.Children.Add(Text(label)); field.Children.Add(input); _co2Timing.Children.Add(field);
-                AutomationProperties.SetName(input, label);
+                field.Children.Add(LocalizedText(key)); field.Children.Add(input); _co2Timing.Children.Add(field);
+                Localization.Bind(input, AutomationProperties.NameProperty, key);
             }
         }
         _co2Shape.Children.Add(_co2Timing);
-        _co2Response.Children.Add(Text("CO₂ 管路延迟（0–5000 ms）"));
+        _co2Response.Children.Add(LocalizedText("advanced.co2Delay"));
         _co2Response.Children.Add(Co2TransportDelay);
-        _co2Response.Children.Add(Text("CO₂ 展宽步长（0–500 ms）"));
+        _co2Response.Children.Add(LocalizedText("advanced.co2Dispersion"));
         _co2Response.Children.Add(Co2DispersionStep);
-        AutomationProperties.SetName(Co2TransportDelay, "CO₂ 管路延迟，毫秒");
-        AutomationProperties.SetName(Co2DispersionStep, "CO₂ 展宽步长，毫秒");
+        Localization.Bind(Co2TransportDelay, AutomationProperties.NameProperty, "advanced.co2DelayName");
+        Localization.Bind(Co2DispersionStep, AutomationProperties.NameProperty, "advanced.co2DispersionName");
         _co2Response.Children.Add(DesktopInformationPages.Help("settings-detail-6"));
         _advancedRespiration.Children.Add(RespirationGroups);
         _advancedRespiration.Children.Add(ResetRespirationPage);
@@ -618,15 +639,18 @@ internal sealed partial class DesignPreviewSettings : UserControl
             bool noEjection = !selected.VentricularMechanicalEnabled || selected.CardiacActivity is
                 Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
                 Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
-            _advancedEjection.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+            _advancedEjection.Children.Add(LocalizedText(noEjection ? "advanced.ejectionNone" : "advanced.ejectionConstrained"));
             SectionPages[6].SetDetail(2, "advanced.noParameters", "advanced.noParametersName");
         }
         catch (ArgumentException error)
         {
-            _advancedEjection.Children.Add(Text("当前组合不兼容：" + error.Message));
+            var incompatible = Text("");
+            string reason = error.Message;
+            Localization.Bind(incompatible, TextBlock.TextProperty, text => text.Format("advanced.ejectionIncompatible", reason));
+            _advancedEjection.Children.Add(incompatible);
             SectionPages[6].SetDetail(2, "advanced.incompatible", "advanced.incompatibleName");
         }
-        _advancedTools.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
+        _advancedTools.Children.Add(LocalizedText("advanced.toolsNote"));
         _advancedTools.Children.Add(developer);
     }
     private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => { control.Focus(); control.BringIntoView(); }, DispatcherPriority.Loaded);
@@ -686,7 +710,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     {
         if (!double.TryParse(slot.Minimum.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double minimum) ||
             !double.TryParse(slot.Maximum.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double maximum))
-        { throw new ArgumentException("量程上下限须为有效数值。"); }
+        { throw new ArgumentException("Preview.InvalidRange"); }
         return new MonitorDisplaySlot(slot.Channel.SelectedIndex, slot.Auto.IsChecked == true, new(minimum, maximum), slot.Speed.SelectedIndex switch { 0 => 125, 1 => 250, 2 => 500, _ => 0 });
     }).ToArray());
     private static TextBlock Text(string value) => new() { Text = value, TextWrapping = TextWrapping.Wrap };
@@ -702,8 +726,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (!_respirationPreviews.TryGetValue(selected, out var samples))
             { samples = _respirationPreview(selected); _respirationPreviews.Add(selected, samples); }
             return samples;
-        });
-    private sealed class StyleThumbnail(Func<StylePreviewData> session, int channel, Func<(long TimeNs, double Value)[]> respiration) : Control
+        }, Localization);
+    private sealed class StyleThumbnail(Func<StylePreviewData> session, int channel, Func<(long TimeNs, double Value)[]> respiration, DesktopLocalization localization) : Control
     {
         private StylePreviewData? _cachedSource;
         private StreamGeometry? _geometry;
@@ -732,8 +756,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
                     path.EndFigure(false);
                 }
             }
-            if (channel == 0 && source is not null) { context.DrawText(new FormattedText($"{source.Lead} 导联", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
-            if (channel == 1) { context.DrawText(new FormattedText("41.25 s · 完整呼吸分组", CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
+            string? caption = channel == 0 && source is not null ? localization.Format("generation.thumbnailLead", source.Lead.ToString())
+                : channel == 1 ? localization.Get("generation.thumbnailRespiration") : null;
+            if (caption is not null)
+            { context.DrawText(new FormattedText(caption, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(DesignPreviewWindow.PreviewFont), 10, Brushes.White), new Point(0, 64)); }
             if (_geometry is not null) { context.DrawGeometry(null, new Pen(Brush.Parse(LiveMonitorTrace.Colors[channel]), 1.2), _geometry); }
         }
     }

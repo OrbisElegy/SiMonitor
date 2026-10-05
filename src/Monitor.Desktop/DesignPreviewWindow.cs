@@ -444,7 +444,10 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.oxygenFlow"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
             exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
-        { SetStatus("validation.patientDetail", OxygenationPatientPanel.Explain(exception)); }
+        {
+            string reason = OxygenationPatientPanel.Explain(exception);
+            Localization.Bind(Settings.Status, TextBlock.TextProperty, text => text.Format("validation.patientDetail", text.GetString(reason)));
+        }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { SetStatus("validation.configuration"); }
     }

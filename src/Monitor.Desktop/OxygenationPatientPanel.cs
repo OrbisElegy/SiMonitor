@@ -10,36 +10,45 @@ namespace Monitor.Desktop;
 
 internal sealed class OxygenationPatientPanel : StackPanel
 {
-    internal CheckBox UseDefaults { get; } = new() { Content = "按患者资料计算基线（0 SD）", IsChecked = true };
+    internal CheckBox UseDefaults { get; } = new() { IsChecked = true };
     internal NumericUpDown Age { get; } = Field(18, 90, 35, 1);
-    internal ComboBox Sex { get; } = new() { ItemsSource = new[] { "男性参考系数", "女性参考系数" }, SelectedIndex = 0, MinWidth = 180 };
+    internal ComboBox Sex { get; } = new() { MinWidth = 180 };
     internal NumericUpDown PatientHeight { get; } = Field(140, 210, 175, 1);
     internal NumericUpDown Weight { get; } = Field(40, 150, 70, 1);
-    internal CheckBox OverrideBloodVolume { get; } = new() { Content = "手工指定血容量" };
-    internal CheckBox OverrideFrc { get; } = new() { Content = "手工指定 FRC" };
-    internal CheckBox OverrideHemoglobin { get; } = new() { Content = "手工指定 Hb" };
-    internal CheckBox OverrideBasalDemand { get; } = new() { Content = "手工指定基础耗氧量" };
+    internal CheckBox OverrideBloodVolume { get; } = new();
+    internal CheckBox OverrideFrc { get; } = new();
+    internal CheckBox OverrideHemoglobin { get; } = new();
+    internal CheckBox OverrideBasalDemand { get; } = new();
     internal NumericUpDown BloodVolume { get; } = Field(2500, 7500, 4823.755m, 100);
     internal NumericUpDown Frc { get; } = Field(500, 5000, 2200, 100);
     internal NumericUpDown Hemoglobin { get; } = Field(6, 20, 15, .1m);
     internal NumericUpDown BasalDemand { get; } = Field(0, 500, 250, 10);
     internal TextBlock Summary { get; } = new() { TextWrapping = TextWrapping.Wrap };
     private readonly StackPanel _details = new() { Spacing = 10 };
+    private readonly DesktopLocalization _localization;
     private bool _refreshing;
 
-    internal OxygenationPatientPanel()
+    internal OxygenationPatientPanel(DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
         Spacing = 10;
+        _localization.Bind(UseDefaults, ContentControl.ContentProperty, "oxygenation.useDefaults");
+        _localization.Bind(OverrideBloodVolume, ContentControl.ContentProperty, "oxygenation.overrideBloodVolume");
+        _localization.Bind(OverrideFrc, ContentControl.ContentProperty, "oxygenation.overrideFrc");
+        _localization.Bind(OverrideHemoglobin, ContentControl.ContentProperty, "oxygenation.overrideHemoglobin");
+        _localization.Bind(OverrideBasalDemand, ContentControl.ContentProperty, "oxygenation.overrideBasalDemand");
+        _localization.SetChoices(Sex, "oxygenation.sexMale", "oxygenation.sexFemale");
+        Sex.SelectedIndex = 0;
         Children.Add(UseDefaults);
         Children.Add(_details);
-        Add("年龄（岁）", Age);
-        Add("生理参考公式", Sex);
-        Add("身高（cm）", PatientHeight);
-        Add("体重（kg）", Weight);
-        AddOverride("血容量（mL）", OverrideBloodVolume, BloodVolume);
-        AddOverride("功能残气量 FRC（mL，BTPS）", OverrideFrc, Frc);
-        AddOverride("血红蛋白 Hb（g/dL）", OverrideHemoglobin, Hemoglobin);
-        AddOverride("基础耗氧需求（mL O₂/min，STPD）", OverrideBasalDemand, BasalDemand);
+        Add("oxygenation.age", Age);
+        Add("oxygenation.sex", Sex);
+        Add("oxygenation.height", PatientHeight);
+        Add("oxygenation.weight", Weight);
+        AddOverride("oxygenation.bloodVolume", OverrideBloodVolume, BloodVolume);
+        AddOverride("oxygenation.frc", OverrideFrc, Frc);
+        AddOverride("oxygenation.hemoglobin", OverrideHemoglobin, Hemoglobin);
+        AddOverride("oxygenation.basalDemand", OverrideBasalDemand, BasalDemand);
         Children.Add(Summary);
         foreach (var field in new[] { Age, PatientHeight, Weight, BloodVolume, Frc, Hemoglobin, BasalDemand })
         { field.ValueChanged += (_, _) => RefreshDefaults(); }
@@ -49,16 +58,18 @@ internal sealed class OxygenationPatientPanel : StackPanel
         RefreshDefaults();
     }
 
-    private void Add(string label, Control field)
+    private void Add(string key, Control field)
     {
-        _details.Children.Add(new TextBlock { Text = label });
+        var label = new TextBlock();
+        _localization.Bind(label, TextBlock.TextProperty, key);
+        _details.Children.Add(label);
         _details.Children.Add(field);
-        AutomationProperties.SetName(field, label);
+        _localization.Bind(field, AutomationProperties.NameProperty, key);
     }
-    private void AddOverride(string label, CheckBox check, NumericUpDown field)
+    private void AddOverride(string key, CheckBox check, NumericUpDown field)
     {
         _details.Children.Add(check);
-        Add(label, field);
+        Add(key, field);
     }
     private static NumericUpDown Field(decimal minimum, decimal maximum, decimal value, decimal increment) => new()
     {
@@ -74,17 +85,17 @@ internal sealed class OxygenationPatientPanel : StackPanel
     internal OxygenationPatientPreferences? Read()
     {
         if (UseDefaults.IsChecked != true) { return null; }
-        var profile = new OxygenationPatientProfile(ReadNumber(Age, 100, "年龄"), (OxygenationReferenceSex)Sex.SelectedIndex,
-            ReadNumber(PatientHeight, 100, "身高"), ReadNumber(Weight, 100, "体重"));
+        var profile = new OxygenationPatientProfile(ReadNumber(Age, 100, "oxygenation.ageField"), (OxygenationReferenceSex)Sex.SelectedIndex,
+            ReadNumber(PatientHeight, 100, "oxygenation.heightField"), ReadNumber(Weight, 100, "oxygenation.weightField"));
         var overrides = new OxygenationBaselineOverrides(
-            OverrideBloodVolume.IsChecked == true ? ReadNumber(BloodVolume, 1000, "血容量") : null,
-            OverrideFrc.IsChecked == true ? ReadNumber(Frc, 1000, "FRC") : null,
-            OverrideHemoglobin.IsChecked == true ? ReadNumber(Hemoglobin, 1000, "Hb") : null,
-            OverrideBasalDemand.IsChecked == true ? ReadNumber(BasalDemand, 1000, "基础耗氧量") : null);
+            OverrideBloodVolume.IsChecked == true ? ReadNumber(BloodVolume, 1000, "oxygenation.bloodVolumeField") : null,
+            OverrideFrc.IsChecked == true ? ReadNumber(Frc, 1000, "oxygenation.frcField") : null,
+            OverrideHemoglobin.IsChecked == true ? ReadNumber(Hemoglobin, 1000, "oxygenation.hemoglobinField") : null,
+            OverrideBasalDemand.IsChecked == true ? ReadNumber(BasalDemand, 1000, "oxygenation.basalDemandField") : null);
         return new(profile, overrides, OxygenationPatientDefaults.Resolve(profile, overrides));
     }
-    private static decimal ReadNumber(NumericUpDown field, int scale, string label) =>
-        DesignPreviewSettings.ReadVitalValue(field, scale, label) / (decimal)scale;
+    private static decimal ReadNumber(NumericUpDown field, int scale, string key) =>
+        DesignPreviewSettings.ReadVitalValue(field, scale, key) / (decimal)scale;
 
     private void RefreshDefaults()
     {
@@ -100,7 +111,7 @@ internal sealed class OxygenationPatientPanel : StackPanel
             var patient = Read();
             if (patient is null)
             {
-                Summary.Text = "使用固定基线；切换基线需从头开始。";
+                SetSummary("oxygenation.fixedBaseline");
                 return;
             }
             var values = patient.Resolved;
@@ -108,20 +119,23 @@ internal sealed class OxygenationPatientPanel : StackPanel
             if (!Frc.IsEnabled) { Frc.Value = decimal.Round(values.Frc.Value, 3); }
             if (!Hemoglobin.IsEnabled) { Hemoglobin.Value = decimal.Round(values.Hemoglobin.Value, 3); }
             if (!BasalDemand.IsEnabled) { BasalDemand.Value = decimal.Round(values.BasalOxygenDemand.Value, 3); }
-            Summary.Text = "患者资料与基线修改需从头开始。";
+            SetSummary("oxygenation.patientBaseline");
         }
         catch (Exception error) when (error is ArgumentException or OverflowException)
-        { Summary.Text = Explain(error); }
+        { SetSummary(Explain(error)); }
         finally { _refreshing = false; }
     }
 
+    private void SetSummary(string key) => _localization.Bind(Summary, TextBlock.TextProperty, key);
+
+    // The catalog key explaining why a patient baseline cannot be resolved.
     internal static string Explain(Exception error) => error.Message switch
     {
-        "OxygenationDefaults.HemoglobinNeedsOverride" => "当前 Hb 参考资料不覆盖 18–19 岁，请手工指定 Hb。",
-        "OxygenationDefaults.FrcNeedsOverride" => "GLI FRC 参考资料不覆盖 80 岁以上，请手工指定 FRC。",
-        "OxygenationDefaults.BloodVolumeNeedsOverride" => "当前血容量估算仅支持 BMI 18.5–<30，请手工指定血容量。",
-        "OxygenReservoir.NoReferenceEquilibrium" => "这组 Hb、基础耗氧和参考循环无法建立初始平衡，请检查基线。",
-        _ => "患者基线无效或超出成人模型范围，请检查资料和手工指定的数值。"
+        "OxygenationDefaults.HemoglobinNeedsOverride" => "oxygenation.hemoglobinNeedsOverride",
+        "OxygenationDefaults.FrcNeedsOverride" => "oxygenation.frcNeedsOverride",
+        "OxygenationDefaults.BloodVolumeNeedsOverride" => "oxygenation.bloodVolumeNeedsOverride",
+        "OxygenReservoir.NoReferenceEquilibrium" => "oxygenation.noEquilibrium",
+        _ => "oxygenation.invalidBaseline"
     };
 
     internal void Restore(OxygenationPatientPreferences? saved)

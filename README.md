@@ -1,12 +1,15 @@
 # Seele's SiMonitor
 
+<img src="src/Monitor.Desktop/Assets/app-icon.png" alt="Seele's SiMonitor 临时图标" width="128" height="128" />
+
 **简体中文** | [English](docs/en/README.md)
 
 Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**本项目不是医疗器械，不用于临床监护、诊断或治疗。**
 
 仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。
 
-技术资料的英文概览见 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
+技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
+
 
 ## 运行截图
 
@@ -102,7 +105,7 @@ python3 tools/clean.py dirclean
 
 ## Todo
 - i18n
-- icon
+- 正式图标设计（当前为临时图标）
 - 生命体征逐项调整
 - 监护仪皮肤接口
 - 12导联ecg的手动测量工具

@@ -1,5 +1,7 @@
 # Seele's SiMonitor
 
+<img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Temporary SiMonitor icon" width="128" height="128" />
+
 [简体中文](../../README.md) | **English**
 
 Seele's SiMonitor is a teaching simulator for ECG and other patient-monitor waveforms. **It is not a medical device and must not be used for clinical monitoring, diagnosis, or treatment.**
@@ -7,6 +9,8 @@ Seele's SiMonitor is a teaching simulator for ECG and other patient-monitor wave
 The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records. 
 
 For a shorter overview, see the [English summary](summary.md). Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
+
+See the [documentation index](../README.md) for the organized technical references.
 
 See the [interface reference](../interfaces/README.md) (Chinese) for current module contracts, data formats, native audio ABI, command-line entry points, and complete C# public declarations.
 
@@ -104,7 +108,7 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 
 ## To-Do
 - i18n
-- icon
+- Final icon design (a temporary icon is in use)
 - Individual adjustment of vital signs
 - Monitor skin interface
 - Manual measurement tool for 12-lead ECG

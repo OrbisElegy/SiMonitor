@@ -592,6 +592,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public int CvpBaselineCentiMmHg { get; init; }
     public VascularPressureTarget? AbpTarget { get; init; }
     public VascularPressureTarget? PaTarget { get; init; }
+    public VascularPressureVariation? PressureVariation { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; }
@@ -666,6 +667,18 @@ public sealed class SeededOpticalSaturation
     public DeterministicStreamState PreparedState { get; }
     public SeededOpticalSaturation(int targetMilliPercent, int amplitudeMilliPercent, string seedHex);
     public int At(long sampleTimeNs);
+}
+```
+
+## Authoring/VascularPressureVariation.cs
+
+源码：[VascularPressureVariation.cs](../../../src/Monitor.Simulation/Authoring/VascularPressureVariation.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public sealed record VascularPressureVariation(int AbpAmplitudeCentiMmHg, int PaAmplitudeCentiMmHg, string SeedHex)
+{
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) AbpAmplitudeRange { get; }
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) PaAmplitudeRange { get; }
 }
 ```
 
@@ -2293,6 +2306,29 @@ public sealed class SeededExpirationPressure
 }
 ```
 
+## Physiology/SeededVascularVariation.cs
+
+源码：[SeededVascularVariation.cs](../../../src/Monitor.Simulation/Physiology/SeededVascularVariation.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed class SeededVascularVariation : IEquatable<SeededVascularVariation>
+{
+    public const string PatternId = "SeededVascularDrift@1";
+    public const long KnotPeriodNs = 15_000_000_000;
+    public const int KnotCount = 64;
+    public const int MaximumAmplitudePermille = 400;
+    public int AmplitudePermille { get; }
+    public string StreamName { get; }
+    public DeterministicStreamState PreparedState { get; }
+    public string SeedHex { get; }
+    public SeededVascularVariation(int amplitudePermille, string seedHex, string streamName);
+    public bool Equals(SeededVascularVariation? other);
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
+    public int GainPermille(long simTimeNs);
+}
+```
+
 ## Physiology/ShortPrReference.cs
 
 源码：[ShortPrReference.cs](../../../src/Monitor.Simulation/Physiology/ShortPrReference.cs) · 命名空间：`Monitor.Simulation.Physiology`
@@ -2417,7 +2453,7 @@ public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKi
 源码：[VascularPressurePlan.cs](../../../src/Monitor.Simulation/Physiology/VascularPressurePlan.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs, long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg, int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1", VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false)
+public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs, long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg, int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1", VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false, SeededVascularVariation? Variation = null)
 {
     public const string EvidenceId = "VascularPressureRcIllustration@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
@@ -2435,6 +2471,7 @@ public sealed class VascularPressureSource
     public const long MeshStepNs = 1_000;
     public const int MaximumEjectionCount = 4096;
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan);
+    public static int? SolveVariationAmplitude(RegularPhysiologyPlan physiology, VascularPressurePlan plan, int amplitudeCentiMmHg);
     public static (int EjectionEquilibriumCentiMmHg, int PulseHeightCentiMmHg)? SolveTarget(RegularPhysiologyPlan physiology, VascularPressurePlan plan, int systolicCentiMmHg, int diastolicCentiMmHg);
     public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default);
 }

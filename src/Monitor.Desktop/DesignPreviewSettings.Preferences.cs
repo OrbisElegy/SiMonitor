@@ -21,6 +21,8 @@ internal sealed partial class DesignPreviewSettings
         ["AbpDiastolic"] = AbpDiastolic,
         ["PaSystolic"] = PaSystolic,
         ["PaDiastolic"] = PaDiastolic,
+        ["AbpVariation"] = AbpVariation,
+        ["PaVariation"] = PaVariation,
         ["OpticalTarget"] = OpticalTarget,
         ["OpticalVariation"] = OpticalVariation,
         ["OpticalModulation"] = OpticalModulation,
@@ -78,7 +80,7 @@ internal sealed partial class DesignPreviewSettings
     // pulse factors. Every earlier field must be present.
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
-        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled"
+        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
     };
     private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)
     {

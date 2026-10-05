@@ -317,6 +317,7 @@ internal sealed class DesignPreviewWindow : Window
             PaPulsePermille = Settings.PaTargetEnabled.IsChecked == true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "vitals.paPulseGainField"),
             AbpTarget = Settings.ReadPressureTarget(arterial: true),
             PaTarget = Settings.ReadPressureTarget(arterial: false),
+            PressureVariation = Settings.ReadPressureVariation(),
             CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "vitals.cvpBaselineField"),
             Co2EndExpiratoryMmHg = co2TargetMmHg
         };
@@ -451,6 +452,8 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.pressureTargetUnreachable"); }
         catch (ArgumentException exception) when (exception.Message == "Physiology.PressureTargetRequiresReservoirMorphology")
         { SetStatus("validation.pressureTargetUnsupported"); }
+        catch (ArgumentException exception) when (exception.Message is "Physiology.PressureVariationTooLarge" or "Physiology.PressureVariationRequiresReservoir")
+        { SetStatus("validation.pressureVariation"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
             exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
         {

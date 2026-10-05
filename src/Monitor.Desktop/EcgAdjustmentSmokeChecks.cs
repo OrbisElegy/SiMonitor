@@ -15,15 +15,15 @@ internal static class EcgAdjustmentSmokeChecks
             var settings = window.Settings;
             Require(!settings.EcgJPoint.IsEnabled && settings.ReadReferenceRepolarization() is null, "the adjustment starts off");
             window.RestartSettings();
-            var reference = Samples(window, EcgLead.V2);
-            var unaffected = Samples(window, EcgLead.I);
+            short[] reference = Samples(window, EcgLead.V2);
+            short[] unaffected = Samples(window, EcgLead.I);
 
             settings.EcgRegion.SelectedIndex = 7;
             settings.EcgJPoint.Value = 200;
             settings.EcgStEnd.Value = 300;
             Require(settings.EcgJPoint.IsEnabled && !settings.EcgTPeak.IsEnabled, "choosing a region enables the ST fields");
             window.RestartSettings();
-            var raised = Samples(window, EcgLead.V2);
+            short[] raised = Samples(window, EcgLead.V2);
             Require(raised.Length == reference.Length && raised.Zip(reference).Max(pair => pair.First - pair.Second) >= 100 &&
                 Samples(window, EcgLead.I).SequenceEqual(unaffected), "V1–V3 ST elevation raises V2 and leaves lead I unchanged");
 

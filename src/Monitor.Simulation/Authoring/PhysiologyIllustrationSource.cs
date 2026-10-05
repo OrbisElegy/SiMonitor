@@ -148,6 +148,12 @@ public static class PhysiologyIllustrationSource
     private static PhysiologyWaveformChannelPlan ApplyTarget(PhysiologyWaveformChannelPlan channel, VascularPressureTarget target,
         RegularPhysiologyPlan plan, Guid channelId)
     {
+        // Targets describe effective beats. With no ventricular mechanical activity,
+        // retain the selected source's runoff instead of rejecting the scenario or
+        // synthesizing ejections to satisfy the stored target.
+        if (plan.CardiacActivity is CardiacActivity.Absent or CardiacActivity.AtrialOnly ||
+            !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null)
+        { return channel; }
         var pressure = channel.VascularPressure;
         if (pressure?.Morphology is not { } morphology)
         { throw new ArgumentException("Physiology.PressureTargetRequiresReservoirMorphology"); }

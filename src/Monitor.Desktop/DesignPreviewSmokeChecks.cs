@@ -13,6 +13,18 @@ namespace Monitor.Desktop;
 
 internal static class DesignPreviewSmokeChecks
 {
+    // These fixtures compare the selected template's native perfusion. Pressure
+    // overrides and their enabled startup defaults have separate interaction checks.
+    private static DesignPreviewWindow CreateTemplateWindow()
+    {
+        var window = new DesignPreviewWindow();
+        window.Settings.AbpTargetEnabled.IsChecked = false;
+        window.Settings.PaTargetEnabled.IsChecked = false;
+        window.RestartSettings();
+        window.Pause();
+        return window;
+    }
+
     private static void VerifyActionFooter(DesignPreviewWindow window)
     {
         var settings = window.Settings;
@@ -126,7 +138,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyVisibleVariation()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             window.Settings.CardiacRateEnabled.IsChecked = true;
@@ -218,6 +230,8 @@ internal static class DesignPreviewSmokeChecks
         }
         int? oldAbp = window.Session.Measurements!.AbpMean.MeanCentiMmHg;
         int? oldPa = window.Session.Measurements!.PaMean.MeanCentiMmHg;
+        window.Settings.AbpTargetEnabled.IsChecked = false;
+        window.Settings.PaTargetEnabled.IsChecked = false;
         window.Settings.AbpPulseGain.Value = 1.5m;
         window.Settings.PaPulseGain.Value = .5m;
         window.RestartSettings();
@@ -276,7 +290,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyVariationRejectionMessages()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             var live = window.Session; var timer = window.ActiveTimer;
@@ -320,7 +334,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyVitalInputPrecision()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.OpticalEnabled.IsChecked = true;
@@ -365,7 +379,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyRespirationPageReset()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             window.Settings.RespirationSelection = 2;
@@ -416,7 +430,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyCo2LevelEditing()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             Require(window.Settings.ReadCo2Levels() == (0, 40, null), "default CO2 levels retain reference ratio");
@@ -494,7 +508,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyCo2TimingEditing()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             Require(window.Settings.ReadCo2Timing() == (125, 250, 200), "CO2 timing defaults preserve reference");
@@ -564,7 +578,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyCo2ResponseEditing()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             Require(window.Settings.ReadCo2Response() == (0, 0), "CO2 response defaults preserve source");
@@ -624,7 +638,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyRespirationSignalEditing()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int pattern in Enumerable.Range(0, 4))
@@ -1251,6 +1265,8 @@ internal static class DesignPreviewSmokeChecks
             window.Pulse(timer, 50_000_000); Require(window.Session.SimulationTimeNs == paused, "pause holds simulation");
             Require(held.SequenceEqual(window.MonitorView.NumericTexts), "paused numerics hold with patient time");
             window.Start(); window.SelectPage(0); Require(window.Session.SimulationTimeNs == paused, "navigation/resume never regenerates history");
+            window.Settings.AbpTargetEnabled.IsChecked = false;
+            window.Settings.PaTargetEnabled.IsChecked = false;
             foreach (var choice in new[] { (1, 1, 0), (2, 2, 1), (0, 0, 2), (0, 3, 3), (3, 0, 0), (4, 0, 0), (5, 0, 0) })
             {
                 source = window.Session;
@@ -1286,9 +1302,11 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyAtrialProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
+            window.Settings.AbpTargetEnabled.IsChecked = false;
+            window.Settings.PaTargetEnabled.IsChecked = false;
             foreach (int choice in new[] { 6, 7, 8, 9, 37, 38, 39, 8 })
             {
                 var previous = window.Session; window.Settings.EcgSelection = choice; window.RestartSettings();
@@ -1348,7 +1366,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyAtrialShapeProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 98, 99, 100, 101, 99, 0 })
@@ -1384,7 +1402,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyVentricularShapeProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 101, 102, 103, 104, 105, 106, 102, 0 })
@@ -1420,7 +1438,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyTContourProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 106, 107, 108, 109, 110, 111, 112, 113, 114, 0 })
@@ -1521,7 +1539,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyRegionalInfarctionProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in Enumerable.Range(114, 51).Append(115).Append(125).Append(135).Append(0))
@@ -1744,7 +1762,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyHyperkalemiaFusionProductStyle()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 97, 98, 77, 98, 0 })
@@ -1785,7 +1803,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyQuinidineProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 89, 90, 91, 92, 93, 94, 95, 96, 97, 90, 0 })
@@ -1830,7 +1848,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyDigitalisProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 86, 87, 88, 89, 87, 0 })
@@ -1874,7 +1892,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyCalciumProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 80, 82, 83, 84, 85, 86, 82, 0 })
@@ -1919,7 +1937,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyHypokalemiaProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 77, 78, 79, 80, 81, 78, 0 })
@@ -1966,7 +1984,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyHyperkalemiaProductStyle()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 75, 76, 77, 74, 75, 0 })
@@ -2037,7 +2055,7 @@ internal static class DesignPreviewSmokeChecks
         }
         Require(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(19, 0, 0).Ecg).Contains("QT 480 ms", StringComparison.Ordinal),
             "ventricular escape reports resolved QT rather than its QTc input");
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             window.SelectPage(2);
@@ -2068,7 +2086,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyStandstillProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 72, 73, 74, 72, 0 })
@@ -2125,7 +2143,7 @@ internal static class DesignPreviewSmokeChecks
 
     private static void VerifyAfVariantProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 66, 67, 68, 69, 70, 71, 6 })
@@ -2179,7 +2197,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyPreexcitationProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 59, 60, 61, 62, 63, 64, 65, 59, 0 })
@@ -2226,7 +2244,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyBundleBlockProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 53, 54, 55, 56, 57, 58, 0 })
@@ -2273,7 +2291,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyPvcGroupProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 44, 45, 46, 47, 48, 49, 50, 51, 52, 2 })
@@ -2357,7 +2375,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyPrematureSupraventricularProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 40, 41, 4, 42, 43, 5 })
@@ -2412,7 +2430,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyAutomaticRhythmProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 31, 32, 33, 34, 35, 36, 33 })
@@ -2468,7 +2486,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyVtProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 26, 27, 28, 29, 30, 26 })
@@ -2534,7 +2552,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifySvtProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 21, 23, 24, 25, 23 })
@@ -2571,7 +2589,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyDisorganizedProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             foreach (int choice in new[] { 20, 10, 21, 18, 22, 0 })
@@ -2605,7 +2623,7 @@ internal static class DesignPreviewSmokeChecks
     }
     private static void VerifyBlockProductStyles()
     {
-        var window = new DesignPreviewWindow(); window.Show();
+        var window = CreateTemplateWindow(); window.Show();
         try
         {
             // Alternate independent escape clocks and conducted rhythms to catch stale state.

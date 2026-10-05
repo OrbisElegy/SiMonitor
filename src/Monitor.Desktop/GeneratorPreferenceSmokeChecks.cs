@@ -89,6 +89,7 @@ internal static class GeneratorPreferenceSmokeChecks
         settings.OpticalVariation.Value = 2; settings.OpticalModulation.Value = .8m;
         settings.RateSeed.Text = new string('a', 64);
         settings.RespiratoryRate.Value = 18; settings.InspirationPercent.Value = 40;
+        settings.AbpTargetEnabled.IsChecked = false; settings.PaTargetEnabled.IsChecked = false;
         settings.CvpBaseline.Value = 8.5m; settings.AbpPulseGain.Value = 1.2m;
         settings.PaPulseGain.Value = .8m; settings.RespSignalAmplitude.Value = -750;
         settings.RespCardiacArtifact.Value = 30; settings.Co2TransportDelay.Value = 300;

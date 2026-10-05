@@ -65,10 +65,11 @@ internal sealed class DesignPreviewWindow : Window
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
-        _session = new(PhysiologyDemoConfiguration.Default, preferences.Display, enableMeasurements: true);
+        var defaults = BuildConfiguredSources();
+        _session = defaults.Session;
         _session.DiscardStartup();
-        _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
-        Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
+        _ecg = defaults.Paper;
+        Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
         if (preferences.Generator is { } generator)
         {
             try
@@ -83,7 +84,7 @@ internal sealed class DesignPreviewWindow : Window
             {
                 Settings.Sound.Close(); Settings = CreateSettings();
                 Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
-                Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
+                Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
                 rejected = true;
             }
         }

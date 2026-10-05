@@ -15,6 +15,7 @@ internal static class VascularPressureTargetSpecifications
     public static Specification[] All =>
     [
         new(nameof(PressureTargetsAreMeasuredAtRegularRates), PressureTargetsAreMeasuredAtRegularRates),
+        new(nameof(PressureTargetsDoNotCreateAbsentEjections), PressureTargetsDoNotCreateAbsentEjections),
         new(nameof(PressureTargetsCalibrateIrregularRhythmsOnCompleteBeats), PressureTargetsCalibrateIrregularRhythmsOnCompleteBeats),
         new(nameof(PressureTargetsRejectInvalidOrUnreachableInputs), PressureTargetsRejectInvalidOrUnreachableInputs),
         new(nameof(MorphologyReservoirsAcceptEjectionStrengthAboveTheSampleRange), MorphologyReservoirsAcceptEjectionStrengthAboveTheSampleRange),
@@ -33,6 +34,28 @@ internal static class VascularPressureTargetSpecifications
         reading.Status == WaveformMeasurementStatus.Valid &&
         Math.Abs(reading.SystolicCentiMmHg!.Value - target.SystolicCentiMmHg) <= toleranceCentiMmHg &&
         Math.Abs(reading.DiastolicCentiMmHg!.Value - target.DiastolicCentiMmHg) <= toleranceCentiMmHg;
+
+    private static void PressureTargetsDoNotCreateAbsentEjections()
+    {
+        foreach (var configuration in new[]
+        {
+            PhysiologyIllustrationConfiguration.Default with { CardiacActivity = CardiacActivity.Absent },
+            PhysiologyIllustrationConfiguration.Default with { CardiacActivity = CardiacActivity.AtrialOnly },
+            PhysiologyIllustrationConfiguration.Default with { VentricularMechanicalEnabled = false },
+            PhysiologyIllustrationConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationCoarseIllustration)
+        })
+        {
+            var reference = PhysiologyIllustrationSource.Create(configuration);
+            var targeted = PhysiologyIllustrationSource.Create(configuration with { AbpTarget = Arterial, PaTarget = Pulmonary });
+            for (long time = 200_000_000; time <= 8_000_000_000; time += 200_000_000)
+            {
+                var expected = reference.AdvanceTo(time, 50, 1, 100);
+                var actual = targeted.AdvanceTo(time, 50, 1, 100);
+                Check.That(actual.Count == expected.Count && actual.Zip(expected).All(pair => pair.First.SequenceEqual(pair.Second)),
+                    "stored pressure targets leave absent-ejection source samples and runoff unchanged");
+            }
+        }
+    }
 
     private static void PressureTargetsAreMeasuredAtRegularRates()
     {

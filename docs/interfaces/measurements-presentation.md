@@ -456,6 +456,20 @@ view/zoom 包装层还检查当前页、槽、准入和变换，pointer 方法�
 保存记录导航、选定槽和可选完整 cursor pair，并可扩展主题/zoom；恢复必须重新提供当前
 context 和各策略。权限、显示像素、正在拖动的手势不属于保存状态。
 
+### 十二导联纸图手动测量
+
+[Ecg12PaperLayout](../../src/Monitor.Application/Presentation/Ecg12PaperLayout.cs) 是十二导联纸图的
+唯一几何：25 mm/s、10 mm/mV、每毫米 4 px，3 × 4 或 6 × 2 短导联加底部长 II。桌面纸图绘制和卡尺
+共用它，保证指针落点与绘制的导联、时间一致。导联序号 0–11 按 `EcgLead` 顺序，12 为长 II 节律条
+（`SourceLead` 为 II）。每列前 30 px 为定标脉冲，不属于任何导联；`HitTest` 在定标、页边和行间空白返回 null。
+
+`Ecg12PaperMeasurement(layout, blocks, channelOfLead, policy, allowAuxiliaryRate=true)` 在一份冻结纸图上放置
+手动卡尺：`Begin` 在命中的导联上把锚点吸附到最近的实际采样，`Extend` 只在同一导联内移动另一端并夹在该导联的
+首尾采样，`Nudge` 以整采样移动，`Clear` 移除。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。
+`Display` 按时间排序两端（不论先放哪一端），用 `EcgManualMeasurement.Calculate` 给出 Δt、较晚一端减较早一端
+的 ΔV 和可选辅助频率；`ReasonCode` 为 Idle、Ready、Disabled 或 CourseLocked。策略非 Enabled 时撤除卡尺并拒绝
+新操作。不识别波形起止点，不保存卡尺，也不写回记录。
+
 ### 主题、zoom 与 SVG 发布
 
 [Ecg12ThemeSelection](../../src/Monitor.Domain/Presentation/Ecg12ThemeSelection.cs) 支持

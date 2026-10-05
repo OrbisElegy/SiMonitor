@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Domain.Presentation;
 using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
 using Monitor.Simulation.Acquisition;
@@ -38,7 +39,13 @@ internal sealed class DesignPreviewWindow : Window
     internal int Page { get; private set; }
     internal LocalMonitorPreviewSession Session => _session;
     internal DispatcherTimer? ActiveTimer => _timer;
-    internal DesignPreviewTrace? CurrentPaper => (_workspace.Content as Viewbox)?.Child as DesignPreviewTrace;
+    internal Ecg12PaperPage? EcgPage => _workspace.Content as Ecg12PaperPage;
+    internal DesignPreviewTrace? CurrentPaper => EcgPage?.Paper;
+    // Calipers survive page switches while the same paper and layout are shown.
+    private Ecg12PaperMeasurement? _paperMeasurement;
+    private WaveformEnvelope[]? _paperMeasurementBlocks;
+    private bool _paperMeasuring;
+    internal SystemViewCommandAssessmentPolicy MeasurementPolicy { get; private set; } = SystemViewCommandAssessmentPolicy.Enabled;
     internal LiveMonitorTrace MonitorTrace => _monitor;
     private readonly DisplayPreferenceStore? _preferences;
     private readonly LanguagePreferenceStore? _languagePreferences;
@@ -277,12 +284,34 @@ internal sealed class DesignPreviewWindow : Window
         _workspace.Content = page switch
         {
             0 => MonitorView,
-            1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
+            1 => CreateEcgPage(),
             2 => Settings,
             3 => DesktopInformationPages.CreateHelp(),
             _ => DesktopInformationPages.CreateAbout(Localization)
         };
     }
+    private Ecg12PaperPage CreateEcgPage()
+    {
+        var paper = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1);
+        if (_paperMeasurement is null || !ReferenceEquals(_paperMeasurementBlocks, _ecg) || _paperMeasurement.Layout.SixRows != paper.SixRows)
+        {
+            _paperMeasurement = new Ecg12PaperMeasurement(paper.Layout, _ecg, lead => ProjectedEcgDemoSource.ChannelId((EcgLead)lead), MeasurementPolicy);
+            _paperMeasurementBlocks = _ecg;
+        }
+        var page = new Ecg12PaperPage(paper, _paperMeasurement, Localization, _paperMeasuring);
+        page.MeasuringChanged += measuring => _paperMeasuring = measuring;
+        return page;
+    }
+
+    // Teaching and assessment sessions may disable or lock manual measurement.
+    internal void SetMeasurementPolicy(SystemViewCommandAssessmentPolicy policy)
+    {
+        if (!Enum.IsDefined(policy)) { throw new ArgumentOutOfRangeException(nameof(policy)); }
+        MeasurementPolicy = policy;
+        _paperMeasurement?.UpdatePolicy(policy);
+        if (Page == 1) { SelectPage(1); }
+    }
+
     private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources()
     {
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||

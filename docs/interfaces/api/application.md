@@ -1192,6 +1192,33 @@ public sealed record Ecg12PaperRegion(int Lead, int SourceLead, double Left, dou
 }
 ```
 
+## Presentation/Ecg12PaperMeasurement.cs
+
+源码：[Ecg12PaperMeasurement.cs](../../../src/Monitor.Application/Presentation/Ecg12PaperMeasurement.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record Ecg12PaperCursor(long TimeNs, long NumeratorMicrovolts, uint Denominator, double X, double Y)
+{
+    public EcgManualCursor Value { get; }
+}
+public sealed record Ecg12PaperMeasurementDisplay(string ReasonCode, Ecg12PaperRegion? Region, Ecg12PaperCursor? Start, Ecg12PaperCursor? End, EcgManualMeasurementResult? Result)
+{
+}
+public sealed class Ecg12PaperMeasurement
+{
+    public Ecg12PaperMeasurement(Ecg12PaperLayout layout, IReadOnlyList<WaveformEnvelope> blocks, Func<int, Guid> channelOfLead, SystemViewCommandAssessmentPolicy policy, bool allowAuxiliaryRate = true);
+    public Ecg12PaperLayout Layout { get; }
+    public SystemViewCommandAssessmentPolicy Policy { get; private set; }
+    public bool CanMeasure { get; }
+    public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy);
+    public bool Begin(double x, double y);
+    public bool Extend(double x);
+    public bool Nudge(int samples);
+    public void Clear();
+    public Ecg12PaperMeasurementDisplay Display { get; }
+}
+```
+
 ## Presentation/EcgStripDisplayComposition.cs
 
 源码：[EcgStripDisplayComposition.cs](../../../src/Monitor.Application/Presentation/EcgStripDisplayComposition.cs) · 命名空间：`Monitor.Application.Presentation`

@@ -14,6 +14,7 @@ internal sealed class DesignPreviewTrace : Control
 {
     private readonly WaveformEnvelope[] _blocks;
     internal int BlockCount => _blocks.Length;
+    internal IReadOnlyList<WaveformEnvelope> Blocks => _blocks;
     // Shared with the manual calipers so drawing and pointer mapping agree.
     internal Ecg12PaperLayout Layout { get; }
     internal bool SixRows => Layout.SixRows;

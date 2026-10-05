@@ -118,5 +118,14 @@
   "settings.general": "General",
   "settings.statusIdle": "Apply continues the current waveform; Restart clears the sweep history.",
   "settings.templateSelected": "Selected {0}. The preview is updated; running data changes only after you apply.",
-  "settings.pageDefaultsRestored": "Restored the {0} defaults. Not applied yet; the running simulation is unchanged."
+  "settings.pageDefaultsRestored": "Restored the {0} defaults. Not applied yet; the running simulation is unchanged.",
+  "ecg12.measure": "Manual calipers",
+  "ecg12.clear": "Clear calipers",
+  "ecg12.idle": "Drag along a lead to measure; arrow keys fine-tune, Esc clears.",
+  "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
+  "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  rate {3}/min",
+  "ecg12.rhythmLead": "II (rhythm strip)",
+  "ecg12.disabled": "Manual measurement is not allowed.",
+  "ecg12.courseLocked": "Manual measurement is locked by the course.",
+  "ecg12.overlay": "Twelve-lead manual calipers"
 }

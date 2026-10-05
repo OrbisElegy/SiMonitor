@@ -118,5 +118,14 @@
   "settings.general": "通用",
   "settings.statusIdle": "应用后接续当前波形；从头开始会清空扫描历史。",
   "settings.templateSelected": "已选择 {0}；预览已更新，运行数据须应用后改变。",
-  "settings.pageDefaultsRestored": "已恢复 {0} 默认参数，尚未应用；当前运行保持不变。"
+  "settings.pageDefaultsRestored": "已恢复 {0} 默认参数，尚未应用；当前运行保持不变。",
+  "ecg12.measure": "手动测量",
+  "ecg12.clear": "清除测量",
+  "ecg12.idle": "在导联上拖动以测量；方向键微调，Esc 清除。",
+  "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
+  "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  频率 {3} 次/分",
+  "ecg12.rhythmLead": "II（节律条）",
+  "ecg12.disabled": "当前不允许手动测量。",
+  "ecg12.courseLocked": "课程已锁定手动测量。",
+  "ecg12.overlay": "十二导联手动测量卡尺"
 }

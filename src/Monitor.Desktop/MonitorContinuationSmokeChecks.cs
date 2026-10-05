@@ -111,6 +111,7 @@ internal static class MonitorContinuationSmokeChecks
             window.Settings.CvpBaseline.Value = 20;
             window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.Settings.CvpBaseline.Value = -5;
+            window.Settings.AbpTargetEnabled.IsChecked = false;
             window.Settings.AbpPulseGain.Value = 1.5m;
             window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Require(window.ActiveTimer is null && session.PendingSourceTimeNs == session.SimulationTimeNs,

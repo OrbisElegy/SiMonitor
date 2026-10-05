@@ -74,7 +74,8 @@ internal sealed partial class DesignPreviewSettings
         return flags;
     }
     // Fields added after the first saved format. Older files omit them, and restoring
-    // keeps these controls at their defaults; every other field must be present.
+    // keeps numeric defaults but disables absent target flags to preserve the saved
+    // pulse factors. Every earlier field must be present.
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
         "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled"
@@ -131,6 +132,8 @@ internal sealed partial class DesignPreviewSettings
         {
             if (saved.Flags.TryGetValue(key, out bool value)) { field.IsChecked = value; }
         }
+        if (!saved.Flags.ContainsKey("AbpTargetEnabled")) { AbpTargetEnabled.IsChecked = false; }
+        if (!saved.Flags.ContainsKey("PaTargetEnabled")) { PaTargetEnabled.IsChecked = false; }
         Oxygenation.Restore(saved.Oxygenation);
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }

@@ -217,10 +217,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown AbpPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
     internal NumericUpDown PaPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
-    internal CheckBox AbpTargetEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox AbpTargetEnabled { get; } = new() { IsChecked = true };
     internal NumericUpDown AbpSystolic { get; } = PressureField(VascularPressureTarget.ArterialSystolicRange, 120);
     internal NumericUpDown AbpDiastolic { get; } = PressureField(VascularPressureTarget.ArterialDiastolicRange, 80);
-    internal CheckBox PaTargetEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox PaTargetEnabled { get; } = new() { IsChecked = true };
     internal NumericUpDown PaSystolic { get; } = PressureField(VascularPressureTarget.PulmonarySystolicRange, 25);
     internal NumericUpDown PaDiastolic { get; } = PressureField(VascularPressureTarget.PulmonaryDiastolicRange, 10);
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };

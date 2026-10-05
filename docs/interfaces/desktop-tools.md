@@ -14,6 +14,10 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 默认入口为 `DesignPreviewWindow`，装配 `LocalMonitorPreviewSession`、`LiveMonitorTrace`、`LiveMonitorView`、设置和声音。`MainWindow` 是已捕获记录交互壳，用于开发演示和检查；它不是当前默认监护窗口。
 
+首次启动和恢复默认设置使用同一组压力设置：ABP 目标 120/80 mmHg、PA 目标 25/10 mmHg 均启用，CVP 基线为 6 mmHg。
+启动时即按这些设置创建采样源，无需先点击应用。已保存的目标开关和值优先；旧生成器配置缺少目标开关时保持原脉搏倍率模式。
+平均压继续从实际波形采样计算，不由收缩压／舒张压目标直接写入读数。
+
 开发构建可在 `dotnet run ... --` 后传以下互斥启动参数，或者直接执行 `dotnet PATH/Monitor.Desktop.dll ARGS`：
 
 | 参数 | 行为 |

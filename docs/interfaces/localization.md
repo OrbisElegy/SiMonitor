@@ -2,15 +2,29 @@
 
 [接口总览](README.md)
 
-提供可独立调用的 i18n 接口、英文与简体中文资源，以及桌面首批接入。
+提供可独立调用的 i18n 接口、英文与简体中文资源，以及产品桌面界面的完整接入。
 “通用”位于设置分类首项，仅呈现立即生效的应用偏好，不显示仿真参数的应用操作。
 在“设置 → 通用 → 语言”选择 `English` 或 `简体中文`，立即生效并保存。
-已接入主导航、窗口／页面标题、运行状态、设置分类、显示设置、底部操作区及其状态提示、
-重置确认、十二导联手动测量工具栏与读数，以及主窗口的应用结果和校验提示。声音、报警、生命体征、高级参数和关于页的
-分类名随语言切换，其下的分组标题与参数面板仍使用原文；专业波形名称、监护绘制文案、
-帮助正文与关于页正文同样保留原文，部分专业错误详情也保留原文，不代表全界面翻译完成。
+产品窗口的导航、页面标题、全部设置分类与参数面板、波形模板名称与分组、形态摘要、
+监护画面、报警提示横幅、十二导联纸图与手动测量、帮助和关于页均随语言切换。
+开发入口（`WaveformDemoWindow`、`MainWindow` 及其专用控件）只面向开发核验，保留原文。
 设置导航只把点分格式的标题（如 `settings.alarms`）当作资源 key 查询，其余标题按原文显示，
 不会出现缺失标记。
+
+## 显示文本与稳定标识 / Display text and identities
+
+- 波形模板与分组的中文名称是持久化偏好和分组比较使用的稳定标识，不随语言变化。
+  显示名称由模板序号或分组位置得到的 key 提供（`ecgTemplate.t000`、`ecgGroup.g00`、
+  `respirationTemplate.t0`、`ejectionTemplate.t0` 等）；中文译文必须与标识一致。
+  这些 key 在运行时构造，静态 key 检查看不到，由桌面本地化检查逐项核对。
+- `Monitor.Application.Localization.TextMessage` 携带目录 key 和参数（字面文本或嵌套消息），
+  由 `Render(ITextLocalizer)` 按读者语言生成文本。监护提示（`MonitorNotice.Message`）和
+  测量顶部提示（`MeasurementDisplay.TopNoticeMessage`）在保留中文默认文本的同时附带消息；
+  消息不参与行为判断，按结构比较相等。
+- 校验错误、字段名和原因说明在桌面层以 key 保存，状态文本在语言切换时重新生成；
+  领域与仿真异常仍使用 `ReasonCode`，由桌面层映射到 key。
+- 帮助主题按语言分别存放：`help-topics.json` 为中文参考集，`help-topics.en.json` 为英文；
+  每种语言须列出相同 id 且顺序一致，分类一一对应，切换语言时帮助页保留分类筛选与搜索词。
 
 ## 桌面语言生命周期 / Desktop lifecycle
 
@@ -114,4 +128,5 @@ literal braces use `{{` and `}}`. Do not translate protocol IDs or persist displ
 identity. Add other languages only after demand is confirmed. The desktop shell and display
 settings use the immutable localizer through property bindings. Language changes preserve
 simulation state and unapplied edits; the language preference is saved separately.
-Specialized panels, preset names and detailed help remain to be translated.
+All product panels, template display names and help topics are translated; Chinese template
+names remain persisted identities, and development-only windows keep their original text.

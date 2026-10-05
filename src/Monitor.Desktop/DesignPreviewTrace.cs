@@ -24,14 +24,17 @@ internal sealed class DesignPreviewTrace : Control
     internal long ColumnStartNs(int column) => Layout.ColumnStartNs(column);
     internal const double PixelsPerSecond = Ecg12PaperLayout.PixelsPerSecond;
     internal const double PixelsPerMillivolt = Ecg12PaperLayout.PixelsPerMillivolt;
-    internal DesignPreviewTrace(WaveformEnvelope[] blocks, bool sixRows = false)
+    private readonly DesktopLocalization _localization;
+    internal DesignPreviewTrace(WaveformEnvelope[] blocks, bool sixRows = false, DesktopLocalization? localization = null)
     {
         _blocks = blocks;
+        _localization = localization ?? new DesktopLocalization();
         Layout = new Ecg12PaperLayout(sixRows);
         Width = PaperWidth;
         Height = Layout.Height;
-        Avalonia.Automation.AutomationProperties.SetName(this,
-            sixRows ? "十二导联六行两列，五秒短导联及10.3秒长II" : "十二导联三行四列，2.5秒短导联及10.9秒长II");
+        _localization.Bind(this, Avalonia.Automation.AutomationProperties.NameProperty, sixRows ? "paper.nameSixRows" : "paper.nameThreeRows");
+        AttachedToVisualTree += (_, _) => _localization.LocaleChanged += InvalidateVisual;
+        DetachedFromVisualTree += (_, _) => _localization.LocaleChanged -= InvalidateVisual;
     }
     public override void Render(DrawingContext context)
     {
@@ -46,7 +49,7 @@ internal sealed class DesignPreviewTrace : Control
         { context.DrawLine(new Pen(Brush.Parse((x - 32) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(x, 52), new(x, Height - 16)); }
         for (int y = 52; y <= Height - 16; y += 4)
         { context.DrawLine(new Pen(Brush.Parse((y - 52) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(32, y), new(PaperWidth - 32, y)); }
-        Label(context, SixRows ? "25 mm/s · 10 mm/mV · 短导联 5 s / 长Ⅱ 10.3 s" : "25 mm/s · 10 mm/mV · 短导联 2.5 s / 长Ⅱ 10.9 s", 32, 18, Brushes.Black, 10);
+        Label(context, _localization.Get(SixRows ? "paper.headerSixRows" : "paper.headerThreeRows"), 32, 18, Brushes.Black, 10);
         for (int lead = 0; lead < Ecg12PaperLayout.LongLeadIndex; lead++)
         {
             var region = Layout.Region(lead);

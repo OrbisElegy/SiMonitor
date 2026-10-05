@@ -76,7 +76,7 @@ flowchart LR
 | 端口 | 定义及契约说明 | 当前接入情况 |
 |---|---|---|
 | `IArterialOxygenationSource` | [仿真](simulation.md)／[声明](api/simulation.md) | 源时间 SaO₂ 读取；存在采样与实时实现，固定目标由光学源构造参数提供 |
-| `ITextLocalizer` | [本地化](localization.md)／[声明](api/application.md) | `CatalogTextLocalizer`，内置 `en`／`zh-CN`；桌面主壳及显示设置已接入 |
+| `ITextLocalizer` | [本地化](localization.md)／[声明](api/application.md) | `CatalogTextLocalizer`，内置 `en`／`zh-CN`；产品桌面界面与帮助已全部接入 |
 | `IPasswordHasher` | [身份](authority-identity-recovery.md)／[声明](api/application.md) | `Pbkdf2PasswordHasher` |
 | `ICompromisedPasswordChecker` | 同上 | 注入泄露密码检查；宿主提供生产数据来源 |
 | `IBootstrapIdentityRepository` | 同上 | `SqliteIdentityRepository` |

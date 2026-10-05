@@ -65,7 +65,7 @@ internal sealed class DesignPreviewWindow : Window
         bool languageRejected = false;
         Localization = new(_languagePreferences?.Load(out languageRejected));
         if (ProductIdentity.DevelopmentFeatures)
-        { Localization.Bind(this, TitleProperty, "shell.developmentTitle", ProductIdentity.Name); }
+        { Localization.Bind(this, TitleProperty, "shell.developmentTitle", ProductIdentity.Name, ProductIdentity.Version); }
         LanguageNotice.IsVisible = languageRejected;
         Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageRejected");
         bool rejected = false;
@@ -286,13 +286,13 @@ internal sealed class DesignPreviewWindow : Window
             0 => MonitorView,
             1 => CreateEcgPage(),
             2 => Settings,
-            3 => DesktopInformationPages.CreateHelp(),
+            3 => DesktopInformationPages.CreateHelp(Localization),
             _ => DesktopInformationPages.CreateAbout(Localization)
         };
     }
     private Ecg12PaperPage CreateEcgPage()
     {
-        var paper = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1);
+        var paper = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1, Localization);
         if (_paperMeasurement is null || !ReferenceEquals(_paperMeasurementBlocks, _ecg) || _paperMeasurement.Layout.SixRows != paper.SixRows)
         {
             _paperMeasurement = new Ecg12PaperMeasurement(paper.Layout, _ecg, lead => ProjectedEcgDemoSource.ChannelId((EcgLead)lead), MeasurementPolicy);
@@ -341,20 +341,20 @@ internal sealed class DesignPreviewWindow : Window
             RespCardiacArtifactCounts = respArtifact,
             BreathPeriodMilliseconds = breathPeriod,
             InspirationMilliseconds = inspiration,
-            AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "ABP 脉搏分量倍率"),
-            PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "PA 脉搏分量倍率"),
-            CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "CVP 基线"),
+            AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "vitals.abpPulseGainField"),
+            PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "vitals.paPulseGainField"),
+            CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "vitals.cvpBaselineField"),
             Co2EndExpiratoryMmHg = co2TargetMmHg
         };
         if (Settings.CardiacRateEnabled.IsChecked == true)
         {
             if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
             { throw new ArgumentException("Preview.CardiacRateRequiresSinus"); }
-            var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "心率目标"),
-                Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "心搏周期波动"));
+            var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "vitals.heartRateField"),
+                Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "vitals.rateVariationField"));
             config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
         }
-        int co2AmplitudeCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "CO₂ 逐呼吸波动");
+        int co2AmplitudeCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "vitals.etco2VariationField");
         if (co2AmplitudeCentiMmHg > 0 && co2BaselineMmHg != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
         if (co2AmplitudeCentiMmHg > 0)
         { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2AmplitudeCentiMmHg, Settings.RateSeed.Text ?? "") }; }
@@ -362,11 +362,11 @@ internal sealed class DesignPreviewWindow : Window
         SeededOpticalSaturation? opticalVariation = null;
         if (opticalTarget is { } target)
         {
-            int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "SpO₂ 波动幅度");
+            int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
         var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "光学脉动幅度"), opticalVariation: opticalVariation,
+            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField"), opticalVariation: opticalVariation,
             realtimeOxygenation: Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
                 ? Settings.Oxygenation.ReadConfiguration() : null);
         var ecg = CapturePaper(ecgConfig);
@@ -547,10 +547,10 @@ internal sealed class DesignPreviewWindow : Window
             RespiratoryPattern = resp switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
             RespiratoryActivity = resp == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing
         };
-        if (ejection == 1 && ecg != 2) { throw new ArgumentException("早搏弱射血需选择单形室早。"); }
+        if (ejection == 1 && ecg != 2) { throw new ArgumentException("Preview.EjectionRequiresPvc"); }
         if (ejection == 2)
         {
-            if (ecg != 0) { throw new ArgumentException("2:1漏搏需选择窦性参考。"); }
+            if (ecg != 0) { throw new ArgumentException("Preview.EjectionRequiresSinus"); }
             config = config with { VentricularConductionRatio = 2 };
             ecgConfig = ecgConfig with { VentricularConductionRatio = 2 };
         }

@@ -73,7 +73,7 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 生成时先写 `OUTPUT_PATH.tmp`、重新加载校验，再替换目标文件。构建自动生成目录；产品构建要求 `UsePrebuiltStylePreviews=true` 和存在的 `StylePreviewBinary`，跨平台发布使用宿主生成的目录，不执行目标平台程序。
 
-`help-topics.json` 是嵌入式帮助资源，`eng/dependencies.json` 和许可文本也作为资源嵌入。它们不是用户偏好或实时患者状态的存储接口。
+`help-topics.json`（简体中文）与 `help-topics.en.json`（英文）是嵌入式帮助资源，后者以 `WithCulture="false"` 嵌入主程序集；两者主题 id 及顺序一致，分类一一对应。`eng/dependencies.json` 和许可文本也作为资源嵌入。它们不是用户偏好或实时患者状态的存储接口。
 
 ## 构建、依赖及发布命令
 

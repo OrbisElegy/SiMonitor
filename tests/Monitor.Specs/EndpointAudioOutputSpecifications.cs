@@ -16,6 +16,7 @@ internal static class EndpointAudioOutputSpecifications
         new(nameof(FailedStopRetainsStreamUntilRetry), FailedStopRetainsStreamUntilRetry),
         new(nameof(OpenValidatesInputsAndReportsUnavailableDevices), OpenValidatesInputsAndReportsUnavailableDevices),
         new(nameof(MonoFramesFillTheFrontPairOnly), MonoFramesFillTheFrontPairOnly),
+        new(nameof(WasapiOutputValidatesTargetAndIsUnavailableOffWindows), WasapiOutputValidatesTargetAndIsUnavailableOffWindows),
     ];
 
     private static void QueueTargetKeepsTwoPeriodsWithinTheStreamBuffer()
@@ -195,6 +196,20 @@ internal static class EndpointAudioOutputSpecifications
         bool mismatch = false;
         try { RenderFrames.ExpandMono(mono, new float[3], 2); } catch (ArgumentException) { mismatch = true; }
         Check.That(mismatch, "interleaved length must match frames and channels");
+    }
+
+    private static void WasapiOutputValidatesTargetAndIsUnavailableOffWindows()
+    {
+        bool rejected = false;
+        try { using var invalid = new WasapiAudioOutput(queueTargetMilliseconds: 4); } catch (ArgumentOutOfRangeException) { rejected = true; }
+        Check.That(rejected, "managed WASAPI output validates its queue target");
+        using var output = new WasapiAudioOutput();
+        Check.That(output.StreamPath == WasapiStreamPath.None && output.QueueTargetFrames is null, "no stream before open");
+        // Opening on Windows would start a real device, so only other platforms check unavailability.
+        if (OperatingSystem.IsWindows()) { return; }
+        var lifecycle = new AudioOutputLifecycle(output);
+        Check.That(!lifecycle.Replace(null, 0) && lifecycle.Failure == AudioOutputFailure.Open && output.StreamPath == WasapiStreamPath.None,
+            "other platforms report an unavailable output instead of throwing");
     }
 
     private sealed class FakeEndpoint(int bufferFrames = 1920, int periodFrames = 480) : IRenderEndpoint

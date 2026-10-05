@@ -305,6 +305,40 @@ public static class ToneWaveFixture
 }
 ```
 
+## Audio/WasapiAudioOutput.cs
+
+源码：[WasapiAudioOutput.cs](../../../src/Monitor.Infrastructure/Audio/WasapiAudioOutput.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed class WasapiAudioOutput : IPumpedAudioOutput
+{
+    public WasapiAudioOutput(int queueTargetMilliseconds = NativeAudioOutputFactory.DefaultQueueTargetMilliseconds);
+    public int? QueueTargetFrames { get; }
+    public int? BufferFrames { get; }
+    public int? PeriodFrames { get; }
+    public WasapiStreamPath StreamPath { get; }
+    public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
+    public NativeAudioClockSample ReadClock();
+    public void Dispose();
+}
+```
+
+## Audio/WasapiRenderEndpoint.cs
+
+源码：[WasapiRenderEndpoint.cs](../../../src/Monitor.Infrastructure/Audio/WasapiRenderEndpoint.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public enum WasapiStreamPath
+{
+    None,
+    MixFormat,
+    ShortEnginePeriod,
+    WindowsConversion
+}
+```
+
 ## Continuity/RecoveryWireCodec.cs
 
 源码：[RecoveryWireCodec.cs](../../../src/Monitor.Infrastructure/Continuity/RecoveryWireCodec.cs) · 命名空间：`Monitor.Infrastructure.Continuity`

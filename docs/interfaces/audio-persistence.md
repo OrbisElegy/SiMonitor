@@ -149,6 +149,19 @@ Status / PeriodSnapshot 在无 device 时为 null；Open 后的诊断字段见�
 `ReadClock()` 在无 device 或旧库无该可选 symbol 时返回 Result=-2 的零值采样。
 `Dispose()` 要求先成功关闭 device，否则抛 CloseBeforeUnload；成功后卸载动态库。
 
+源码：[WasapiAudioOutput](../../src/Monitor.Infrastructure/Audio/WasapiAudioOutput.cs)、
+[WasapiRenderEndpoint](../../src/Monitor.Infrastructure/Audio/WasapiRenderEndpoint.cs)。
+
+`WasapiAudioOutput(int queueTargetMilliseconds=20)` 是不依赖原生库的 IPumpedAudioOutput：owner 线程用
+源生成 COM 互操作直接写 WASAPI shared-mode 流缓冲，没有原生 ring 或我方 callback 线程；非 Windows 平台 Open 返回 null。
+混音格式为 48 kHz float 时直接写入（单声道写到前两个声道，其余声道静音）；默认引擎周期的两倍超过队列目标且
+设备支持 IAudioClient3 时，改用不超过目标一半的最大支持周期；其他混音格式由 Windows 从 48 kHz 单声道 float 转换。
+`StreamPath` 依次为 None、MixFormat、ShortEnginePeriod、WindowsConversion；`BufferFrames`、`PeriodFrames`、
+`QueueTargetFrames` 以 48 kHz frame 计，无流时为 null。staged PCM 先 drain，新 PCM 只补到目标；运行中的流
+padding 为 0 即已播放静音，按 underrun 退役（缺帧数只记下限 1）。默认设备切换、设备移除或停用、流失效时退役，
+不自动重连。Start 为 owner 线程申请 MMCSS "Pro Audio"，Stop 撤销；Dispose 会先关闭仍打开的流而不抛异常。
+该实现尚未在 Windows 实机上验证延迟与欠载余量。
+
 NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequency、Qpc100Nanoseconds。
 `Nominal48kElapsedFrames` 只有 Result=0、HResult=0、frequency 非零且转换不溢出时才非空，
 按 `position * 48000 / frequency` 向下取整。它只是名义设备累计时间，不能直接当 renderer frontier。

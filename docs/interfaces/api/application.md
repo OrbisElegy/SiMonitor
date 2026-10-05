@@ -1152,6 +1152,46 @@ public sealed class ConfirmedNoExpirationNotice
 }
 ```
 
+## Presentation/Ecg12PaperLayout.cs
+
+源码：[Ecg12PaperLayout.cs](../../../src/Monitor.Application/Presentation/Ecg12PaperLayout.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed class Ecg12PaperLayout(bool sixRows)
+{
+    public const double PixelsPerSecond = 100;
+    public const double PixelsPerMillivolt = 40;
+    public const int LongLeadIndex = 12;
+    public const int LeadIIIndex = 1;
+    public const double GridLeft = 32;
+    public const double FirstBaseline = 136;
+    public const double RowPitch = 120;
+    public const double CalibrationWidth = 30;
+    public const double LongSamplesLeft = 62;
+    public bool SixRows { get; }
+    public int Rows { get; }
+    public int Columns { get; }
+    public int ColumnWidth { get; }
+    public double Width { get; }
+    public double Height { get; }
+    public long LongDurationNs { get; }
+    public double LongBaseline { get; }
+    public long ShortDurationNs { get; }
+    public long ColumnStartNs(int column);
+    public Ecg12PaperRegion Region(int lead);
+    public Ecg12PaperRegion? HitTest(double x, double y);
+}
+public sealed record Ecg12PaperRegion(int Lead, int SourceLead, double Left, double Baseline, long StartNs, long EndExclusiveNs)
+{
+    public double Right { get; }
+    public double Top { get; }
+    public double Bottom { get; }
+    public double XAt(long timeNs);
+    public double YAt(long numeratorMicrovolts, uint denominator);
+    public long TimeAt(double x);
+}
+```
+
 ## Presentation/EcgStripDisplayComposition.cs
 
 源码：[EcgStripDisplayComposition.cs](../../../src/Monitor.Application/Presentation/EcgStripDisplayComposition.cs) · 命名空间：`Monitor.Application.Presentation`

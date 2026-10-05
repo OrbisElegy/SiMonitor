@@ -202,6 +202,7 @@ internal static class Program
             .. SoundPreviewSpecifications.All,
             .. NativeAudioCommandSpecifications.All,
             .. EndpointAudioOutputSpecifications.All,
+            .. Ecg12PaperLayoutSpecifications.All,
             .. NativeAudioClockSpecifications.All,
             .. ElectrodeForkSpecifications.All,
             .. MechanicalUncouplingSpecifications.All,

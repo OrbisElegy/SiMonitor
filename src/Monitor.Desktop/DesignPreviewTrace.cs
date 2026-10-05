@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Physiology;
 
@@ -13,21 +14,21 @@ internal sealed class DesignPreviewTrace : Control
 {
     private readonly WaveformEnvelope[] _blocks;
     internal int BlockCount => _blocks.Length;
-    internal bool SixRows { get; }
-    internal double PaperWidth => SixRows ? 1124 : 1184;
-    private int Rows => SixRows ? 6 : 3;
-    private int Columns => SixRows ? 2 : 4;
-    private int ColumnWidth => SixRows ? 530 : 280;
-    internal long LongDurationNs => SixRows ? 10_300_000_000 : 10_900_000_000;
+    // Shared with the manual calipers so drawing and pointer mapping agree.
+    internal Ecg12PaperLayout Layout { get; }
+    internal bool SixRows => Layout.SixRows;
+    internal double PaperWidth => Layout.Width;
+    internal long LongDurationNs => Layout.LongDurationNs;
     // A calibration masks time on the common paper axis; it never inserts time.
-    internal long ColumnStartNs(int column) => column * ColumnWidth * 10_000_000L;
-    internal const double PixelsPerSecond = 100;
-    internal const double PixelsPerMillivolt = 40;
+    internal long ColumnStartNs(int column) => Layout.ColumnStartNs(column);
+    internal const double PixelsPerSecond = Ecg12PaperLayout.PixelsPerSecond;
+    internal const double PixelsPerMillivolt = Ecg12PaperLayout.PixelsPerMillivolt;
     internal DesignPreviewTrace(WaveformEnvelope[] blocks, bool sixRows = false)
     {
-        _blocks = blocks; SixRows = sixRows;
+        _blocks = blocks;
+        Layout = new Ecg12PaperLayout(sixRows);
         Width = PaperWidth;
-        Height = SixRows ? 956 : 596;
+        Height = Layout.Height;
         Avalonia.Automation.AutomationProperties.SetName(this,
             sixRows ? "十二导联六行两列，五秒短导联及10.3秒长II" : "十二导联三行四列，2.5秒短导联及10.9秒长II");
     }
@@ -45,20 +46,19 @@ internal sealed class DesignPreviewTrace : Control
         for (int y = 52; y <= Height - 16; y += 4)
         { context.DrawLine(new Pen(Brush.Parse((y - 52) % 20 == 0 ? "#E5A8B4" : "#F4DCE2"), .6), new(32, y), new(PaperWidth - 32, y)); }
         Label(context, SixRows ? "25 mm/s · 10 mm/mV · 短导联 5 s / 长Ⅱ 10.3 s" : "25 mm/s · 10 mm/mV · 短导联 2.5 s / 长Ⅱ 10.9 s", 32, 18, Brushes.Black, 10);
-        for (int column = 0; column < Columns; column++)
-            for (int row = 0; row < Rows; row++)
-            {
-                int lead = column * Rows + row;
-                double x = 32 + column * ColumnWidth;
-                double baseline = 136 + row * 120;
-                Label(context, ProjectedEcgDemoSource.LeadNames[lead], x + 4, baseline - 67, Brushes.Black, 15);
-                Calibration(context, x + 26, baseline);
-                DrawSamples(context, ProjectedEcgDemoSource.ChannelId((EcgLead)lead), ColumnStartNs(column),
-                    ColumnStartNs(column) + (ColumnWidth - 30) * 10_000_000L, x + 30, baseline, PixelsPerSecond, .04, Brushes.Black);
-            }
+        for (int lead = 0; lead < Ecg12PaperLayout.LongLeadIndex; lead++)
+        {
+            var region = Layout.Region(lead);
+            Label(context, ProjectedEcgDemoSource.LeadNames[lead], region.Left - 26, region.Baseline - 67, Brushes.Black, 15);
+            Calibration(context, region.Left - 4, region.Baseline);
+            DrawSamples(context, ProjectedEcgDemoSource.ChannelId((EcgLead)lead), region.StartNs, region.EndExclusiveNs,
+                region.Left, region.Baseline, PixelsPerSecond, .04, Brushes.Black);
+        }
+        var rhythm = Layout.Region(Ecg12PaperLayout.LongLeadIndex);
         Label(context, "II", 36, Height - 131, Brushes.Black, 15);
-        Calibration(context, 58, Height - 60);
-        DrawSamples(context, ProjectedEcgDemoSource.ChannelId(EcgLead.II), 0, LongDurationNs, 62, Height - 60, PixelsPerSecond, .04, Brushes.Black);
+        Calibration(context, rhythm.Left - 4, rhythm.Baseline);
+        DrawSamples(context, ProjectedEcgDemoSource.ChannelId(EcgLead.II), rhythm.StartNs, rhythm.EndExclusiveNs,
+            rhythm.Left, rhythm.Baseline, PixelsPerSecond, .04, Brushes.Black);
     }
     private static void Calibration(DrawingContext context, double x, double y)
     {

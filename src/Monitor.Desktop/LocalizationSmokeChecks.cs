@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
 
 namespace Monitor.Desktop;
@@ -138,6 +139,25 @@ internal static class LocalizationSmokeChecks
             finally { failing.Close(); }
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    // Template catalog keys are built from stable identities at run time, so the
+    // static key check cannot see them: Chinese must equal each identity, and every
+    // key must resolve in English.
+    internal static void VerifyTemplateCatalog()
+    {
+        var chinese = BuiltInLocalizations.Create("zh-CN");
+        var english = BuiltInLocalizations.Create("en");
+        var templates = DesignPreviewSettings.EcgTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EcgTemplateKey(index), Name: name))
+            .Concat(DesignPreviewSettings.RespirationTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.RespirationTemplateKey(index), Name: name)))
+            .Concat(DesignPreviewSettings.EjectionTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EjectionTemplateKey(index), Name: name)))
+            .Concat(EcgChooserGroups.Ordered.Select(name => (Key: EcgChooserGroups.Key(name), Name: name)))
+            .Concat(DesignPreviewSettings.TemplateGroupIdentities.Select(name => (Key: DesignPreviewSettings.TemplateGroupKey(name), Name: name)));
+        foreach (var (key, name) in templates)
+        {
+            Require(chinese.GetString(key) == name && !english.Resolve(key).IsMissing && !english.Resolve(key).IsFallback,
+                $"template catalog key {key} matches its identity and has an English name");
+        }
     }
 
     private static void Capture(Window window, string name)

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Simulation.Authoring;
@@ -45,6 +46,11 @@ public static class PhysiologyIllustrationSource
         { throw new ArgumentException("Physiology.CvpBaselineOutOfRange"); }
         if (configuration.AbpPulsePermille is < 500 or > 2000 || configuration.PaPulsePermille is < 500 or > 2000)
         { throw new ArgumentException("Physiology.PressurePulseOutOfRange"); }
+        configuration.AbpTarget?.Validate(arterial: true);
+        configuration.PaTarget?.Validate(arterial: false);
+        if (configuration.AbpTarget is not null && configuration.AbpPulsePermille != 1000 ||
+            configuration.PaTarget is not null && configuration.PaPulsePermille != 1000)
+        { throw new ArgumentException("Physiology.PressureTargetConflictsWithPulse"); }
         RegularPhysiologyPlan plan = configuration.ResolvePlan();
         bool sinusArrest = plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration;
         bool sinusArrhythmia = plan.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration;
@@ -130,9 +136,32 @@ public static class PhysiologyIllustrationSource
             channels[row] = (pressure with { Morphology = morphology with { PulseHeightCentiMmHg = height } })
                 .CreateChannel(plan, ChannelId(row), channels[row].QualityFlags);
         }
+        foreach (var (row, target) in new[] { (3, configuration.AbpTarget), (5, configuration.PaTarget) })
+        {
+            if (target is null) { continue; }
+            channels[row] = ApplyTarget(channels[row], target, plan, ChannelId(row));
+        }
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
+    }
+    private static PhysiologyWaveformChannelPlan ApplyTarget(PhysiologyWaveformChannelPlan channel, VascularPressureTarget target,
+        RegularPhysiologyPlan plan, Guid channelId)
+    {
+        var pressure = channel.VascularPressure;
+        if (pressure?.Morphology is not { } morphology)
+        { throw new ArgumentException("Physiology.PressureTargetRequiresReservoirMorphology"); }
+        var solved = VascularPressureSource.SolveTarget(plan, pressure, target.SystolicCentiMmHg, target.DiastolicCentiMmHg) ??
+            throw new ArgumentException("Physiology.PressureTargetUnreachable");
+        // Start at the diastolic target so the startup transient does not mask it.
+        var adjusted = pressure with
+        {
+            EjectionEquilibriumCentiMmHg = solved.EjectionEquilibriumCentiMmHg,
+            InitialPressureCentiMmHg = target.DiastolicCentiMmHg,
+            Morphology = morphology with { PulseHeightCentiMmHg = solved.PulseHeightCentiMmHg }
+        };
+        try { return adjusted.CreateChannel(plan, channelId, channel.QualityFlags); }
+        catch (EventWaveformException) { throw new ArgumentException("Physiology.PressureTargetUnreachable"); }
     }
     // Select the bundle once so Pleth/ABP/PA/CVP cannot drift into separate
     // per-channel rhythm mappings. Existing configuration validation runs first.

@@ -590,6 +590,8 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public int AbpPulsePermille { get; init; }
     public int PaPulsePermille { get; init; }
     public int CvpBaselineCentiMmHg { get; init; }
+    public VascularPressureTarget? AbpTarget { get; init; }
+    public VascularPressureTarget? PaTarget { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; }
@@ -664,6 +666,21 @@ public sealed class SeededOpticalSaturation
     public DeterministicStreamState PreparedState { get; }
     public SeededOpticalSaturation(int targetMilliPercent, int amplitudeMilliPercent, string seedHex);
     public int At(long sampleTimeNs);
+}
+```
+
+## Authoring/VascularPressureTarget.cs
+
+源码：[VascularPressureTarget.cs](../../../src/Monitor.Simulation/Authoring/VascularPressureTarget.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public sealed record VascularPressureTarget(int SystolicCentiMmHg, int DiastolicCentiMmHg)
+{
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) ArterialSystolicRange { get; }
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) ArterialDiastolicRange { get; }
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) PulmonarySystolicRange { get; }
+    public static (int MinimumCentiMmHg, int MaximumCentiMmHg) PulmonaryDiastolicRange { get; }
+    public const int MinimumPulseCentiMmHg = 500;
 }
 ```
 
@@ -2418,6 +2435,7 @@ public sealed class VascularPressureSource
     public const long MeshStepNs = 1_000;
     public const int MaximumEjectionCount = 4096;
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan);
+    public static (int EjectionEquilibriumCentiMmHg, int PulseHeightCentiMmHg)? SolveTarget(RegularPhysiologyPlan physiology, VascularPressurePlan plan, int systolicCentiMmHg, int diastolicCentiMmHg);
     public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default);
 }
 ```

@@ -78,6 +78,9 @@ public sealed record PhysiologyIllustrationConfiguration(
     public int AbpPulsePermille { get; init; } = 1000;
     public int PaPulsePermille { get; init; } = 1000;
     public int CvpBaselineCentiMmHg { get; init; } = 600;
+    // Optional pressure targets replace the pulse factor of the same channel.
+    public VascularPressureTarget? AbpTarget { get; init; }
+    public VascularPressureTarget? PaTarget { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);

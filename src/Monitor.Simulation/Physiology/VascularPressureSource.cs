@@ -13,6 +13,14 @@ public sealed class VascularPressureSource
     public const int MaximumEjectionCount = 4096;
     private const long MinimumTimeConstantNs = 100_000_000;
     private const long MaximumTimeConstantNs = 10_000_000_000;
+    // With morphology the checked output bound below limits the samples, so R*Q may
+    // exceed the sample range; this cap keeps every Int128 product below 2^126.
+    private const int MaximumMorphologyEjectionEquilibriumCentiMmHg = 1_000_000;
+    private const int CalibrationBeatCount = 32;
+    private const long CalibrationWindowNs = 40_000_000_000;
+    private const long CalibrationPeakStepNs = 16_000_000;
+    private const int StrongBeatGainPermille = 900;
+    private const int MinimumStrongBeatCount = 4;
     private readonly RegularPhysiologyPlan _physiology;
     private readonly VascularPressurePlan _plan;
     private readonly long _decayHorizonNs;
@@ -45,7 +53,10 @@ public sealed class VascularPressureSource
             support + plan.TransitDelayNs > long.MaxValue ||
             plan.AsymptoticPressureCentiMmHg < 0 || plan.InitialPressureCentiMmHg < plan.AsymptoticPressureCentiMmHg ||
             plan.InitialPressureCentiMmHg > short.MaxValue || plan.EjectionEquilibriumCentiMmHg < 0 ||
-            (Int128)plan.AsymptoticPressureCentiMmHg + plan.EjectionEquilibriumCentiMmHg > short.MaxValue ||
+            (plan.Morphology is null
+                ? (Int128)plan.AsymptoticPressureCentiMmHg + plan.EjectionEquilibriumCentiMmHg > short.MaxValue
+                : plan.AsymptoticPressureCentiMmHg > short.MaxValue ||
+                    plan.EjectionEquilibriumCentiMmHg > MaximumMorphologyEjectionEquilibriumCentiMmHg) ||
             (support + selectedPeriod - 1) / selectedPeriod > MaximumEjectionCount)
         { throw Invalid(); }
         _physiology = physiology;
@@ -116,6 +127,118 @@ public sealed class VascularPressureSource
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan) =>
         new(physiology, plan);
 
+    // Solves R*Q and the pulse height so the mean beat onset and the mean contour peak
+    // of this source meet diastolic and systolic targets. Generated pressure is linear
+    // in (R*Q, pulse height), so a probe without a pulse and a probe with one determine
+    // the 2x2 system; only the per-beat peak is sampled, near the contour maximum.
+    // Starts from the nominal steady-state onset. Returns null when the targets
+    // cannot be represented by this plan.
+    public static (int EjectionEquilibriumCentiMmHg, int PulseHeightCentiMmHg)? SolveTarget(
+        RegularPhysiologyPlan physiology, VascularPressurePlan plan, int systolicCentiMmHg, int diastolicCentiMmHg)
+    {
+        if (plan?.Morphology is not { } morphology) { throw Invalid(); }
+        int pulseCentiMmHg = systolicCentiMmHg - diastolicCentiMmHg;
+        int onsetCentiMmHg = diastolicCentiMmHg - plan.AsymptoticPressureCentiMmHg;
+        if (pulseCentiMmHg <= 0 || onsetCentiMmHg <= 0) { return null; }
+        long nominal = EjectionEquilibriumForOnset(physiology, plan, onsetCentiMmHg);
+        if (nominal is <= 0 or > MaximumMorphologyEjectionEquilibriumCentiMmHg) { return null; }
+        var withoutPulse = plan with
+        {
+            EjectionEquilibriumCentiMmHg = (int)nominal,
+            InitialPressureCentiMmHg = plan.AsymptoticPressureCentiMmHg,
+            Morphology = morphology with { PulseHeightCentiMmHg = 0 }
+        };
+        var withPulse = withoutPulse with { Morphology = morphology with { PulseHeightCentiMmHg = pulseCentiMmHg } };
+        (Int128 OnsetsQ32, Int128 PeaksQ32, int Count) probe, pulsed;
+        try
+        {
+            probe = new VascularPressureSource(physiology, withoutPulse).SampleBeats();
+            pulsed = new VascularPressureSource(physiology, withPulse).SampleBeats();
+        }
+        catch (EventWaveformException) { return null; }
+        if (probe.Count == 0 || probe.Count != pulsed.Count) { return null; }
+        Int128 floor = (Int128)probe.Count * plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One;
+        Int128 onsetA = probe.OnsetsQ32 - floor;
+        Int128 peakA = probe.PeaksQ32 - floor;
+        Int128 onsetGain = pulsed.OnsetsQ32 - probe.OnsetsQ32;
+        Int128 peakGain = pulsed.PeaksQ32 - probe.PeaksQ32;
+        Int128 onsetTarget = (Int128)probe.Count * onsetCentiMmHg * FixedPointMath.Q32One;
+        Int128 peakTarget = (Int128)probe.Count * (systolicCentiMmHg - plan.AsymptoticPressureCentiMmHg) * FixedPointMath.Q32One;
+        Int128 determinant = onsetA * peakGain - peakA * onsetGain;
+        Int128 scaleNumerator = onsetTarget * peakGain - peakTarget * onsetGain;
+        Int128 pulseNumerator = onsetA * peakTarget - peakA * onsetTarget;
+        if (determinant <= 0 || scaleNumerator <= 0 || pulseNumerator < 0) { return null; }
+        Int128 equilibrium = FixedPointMath.RoundDivideTiesToEven(nominal * scaleNumerator, determinant);
+        Int128 height = FixedPointMath.RoundDivideTiesToEven(pulseCentiMmHg * pulseNumerator, determinant);
+        if (equilibrium <= 0 || equilibrium > MaximumMorphologyEjectionEquilibriumCentiMmHg || height > short.MaxValue) { return null; }
+        return ((int)equilibrium, (int)height);
+    }
+
+    // Sums the pressure at each calibration beat onset and near its contour peak over a
+    // window that starts ten time constants after the epoch.
+    private (Int128 OnsetsQ32, Int128 PeaksQ32, int Count) SampleBeats()
+    {
+        var morphology = _plan.Morphology!;
+        // The probe without a pulse has an all-zero table; locate the peak on the seed contour.
+        IReadOnlyList<long> contour = morphology.Kind == VascularPressureMorphologyKind.Arterial
+            ? ArterialPulseTables.Pulse : PulmonaryArteryTables.Pulse;
+        int peakIndex = 0;
+        for (int index = 1; index < contour.Count; index++)
+        {
+            if (contour[index] > contour[peakIndex]) { peakIndex = index; }
+        }
+        long windowStart = checked(_physiology.EpochAnchorSimTimeNs + 10 * _plan.TimeConstantNs);
+        var accepted = new List<(PhysiologyCycleEvent Beat, int GainPermille)>();
+        RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, windowStart, (Int128)windowStart + CalibrationWindowNs,
+            MaximumEjectionCount, item =>
+            {
+                int gain = GainPermille(item.CycleIndex);
+                if (gain != 0) { accepted.Add((item, gain)); }
+            }, CancellationToken.None);
+        // Weak premature or filling-limited beats are often below the pulse detector's
+        // threshold; calibrate on full-strength beats whenever a rhythm has enough of them.
+        var strong = accepted.Where(item => item.GainPermille >= StrongBeatGainPermille).ToList();
+        var beats = (strong.Count >= MinimumStrongBeatCount ? strong : accepted)
+            .Take(CalibrationBeatCount).Select(item => item.Beat).ToList();
+        Int128 onsets = 0;
+        Int128 peaks = 0;
+        foreach (var beat in beats)
+        {
+            long onset = checked(beat.SimTimeNs + _plan.TransitDelayNs);
+            long durationNs = _plan.UsePrematureBeatPerfusion
+                ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, morphology.DurationNs)
+                : morphology.DurationNs;
+            long peakTime = onset + (long)((Int128)durationNs * peakIndex / contour.Count);
+            onsets += EvaluateAt(onset);
+            long peak = EvaluateAt(peakTime);
+            foreach (long offset in new[] { -CalibrationPeakStepNs, CalibrationPeakStepNs })
+            {
+                if (peakTime + offset > onset) { peak = Math.Max(peak, EvaluateAt(peakTime + offset)); }
+            }
+            peaks += peak;
+        }
+        return (onsets, peaks, beats.Count);
+    }
+
+    // Inverts the reference onset S0 = E * input(T) / (1 - decay(T)) with the same kernel.
+    private static long EjectionEquilibriumForOnset(RegularPhysiologyPlan physiology, VascularPressurePlan plan,
+        int onsetAboveAsymptoteCentiMmHg)
+    {
+        var kernel = new VascularPressureSource(physiology, plan with
+        {
+            Morphology = null,
+            EjectionEquilibriumCentiMmHg = 0,
+            InitialPressureCentiMmHg = plan.AsymptoticPressureCentiMmHg
+        });
+        long period = plan.UsePrematureBeatPerfusion
+            ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern)
+            : (long)physiology.VentricularPeriodNs;
+        long input = kernel.EjectionCoefficient(period);
+        if (input <= 0) { throw Invalid(); }
+        return (long)FixedPointMath.RoundDivideTiesToEven(
+            (Int128)onsetAboveAsymptoteCentiMmHg * (FixedPointMath.Q62One - kernel.Decay(period)), input);
+    }
+
     // Returns complete physical pressure as Q32.32 centi-mmHg.
     public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default) =>
         EvaluateIntervalAt(simTimeNs, _physiology.EpochAnchorSimTimeNs, long.MaxValue, true, cancellationToken);
@@ -144,11 +267,7 @@ public sealed class VascularPressureSource
             RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo,
                 MaximumEjectionCount, item =>
                 {
-                    int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex) :
-                        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, item.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                        _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, item.CycleIndex) :
-                        _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, item.CycleIndex) :
-                            _physiology.SeededRate?.EjectionGainPermille(item.CycleIndex) ?? 1000;
+                    int gain = GainPermille(item.CycleIndex);
                     if (gain == 0) { return; }
                     long age = sourceTime - item.SimTimeNs;
                     long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;
@@ -212,6 +331,13 @@ public sealed class VascularPressureSource
         { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)result;
     }
+
+    private int GainPermille(ulong cycleIndex) =>
+        _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, cycleIndex) :
+        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, cycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+        _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, cycleIndex) :
+        _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, cycleIndex) :
+            _physiology.SeededRate?.EjectionGainPermille(cycleIndex) ?? 1000;
 
     private long EjectionCoefficient(long ageNs) => EjectionCoefficient(ageNs, _plan.EjectionDurationNs);
 

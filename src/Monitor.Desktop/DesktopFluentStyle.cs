@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 
@@ -42,5 +43,9 @@ internal static class DesktopFluentStyle
         var windows = new Style(s => s.OfType<Window>());
         windows.Setters.Add(new Setter(Window.FontFamilyProperty, new FontFamily("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif")));
         app.Styles.Add(windows);
+        using var iconStream = AssetLoader.Open(new Uri("avares://Monitor.Desktop/Assets/app-icon.ico"));
+        var icons = new Style(s => s.Is<Window>());
+        icons.Setters.Add(new Setter(Window.IconProperty, new WindowIcon(iconStream)));
+        app.Styles.Add(icons);
     }
 }

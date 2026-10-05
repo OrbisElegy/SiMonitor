@@ -1203,6 +1203,8 @@ public sealed record Ecg12PaperCursor(long TimeNs, long NumeratorMicrovolts, uin
 }
 public sealed record Ecg12PaperMeasurementDisplay(string ReasonCode, Ecg12PaperRegion? Region, Ecg12PaperCursor? Start, Ecg12PaperCursor? End, EcgManualMeasurementResult? Result)
 {
+    public Ecg12PaperCursor? Hover { get; init; }
+    public EcgManualMeasurementResult? HoverResult { get; init; }
 }
 public sealed class Ecg12PaperMeasurement
 {
@@ -1211,8 +1213,9 @@ public sealed class Ecg12PaperMeasurement
     public SystemViewCommandAssessmentPolicy Policy { get; private set; }
     public bool CanMeasure { get; }
     public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy);
-    public bool Begin(double x, double y);
-    public bool Extend(double x);
+    public bool Hover(double x, double y);
+    public void EndHover();
+    public bool Place(double x, double y);
     public bool Nudge(int samples);
     public void Clear();
     public Ecg12PaperMeasurementDisplay Display { get; }

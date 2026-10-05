@@ -11,11 +11,19 @@ public sealed record Ecg12PaperCursor(long TimeNs, long NumeratorMicrovolts, uin
 }
 
 public sealed record Ecg12PaperMeasurementDisplay(string ReasonCode, Ecg12PaperRegion? Region,
-    Ecg12PaperCursor? Start, Ecg12PaperCursor? End, EcgManualMeasurementResult? Result);
+    Ecg12PaperCursor? Start, Ecg12PaperCursor? End, EcgManualMeasurementResult? Result)
+{
+    // The sample under the pointer, where the next point would be placed.
+    public Ecg12PaperCursor? Hover { get; init; }
+    // While the second point is being placed: the result if it were placed at Hover.
+    public EcgManualMeasurementResult? HoverResult { get; init; }
+}
 
-// Manual calipers on one frozen paper record. Both ends stay on one lead and
+// Manual point measurement on one frozen paper record. A hover point follows the
+// pointer along the trace; the first placed point fixes the lead and the second
+// completes the measurement, and a further placement starts a new one. Points
 // snap to acquired samples; nothing is detected. Results are ordered by time
-// (later end minus earlier end), whichever end the user placed first.
+// (later point minus earlier point), whichever point was placed first.
 public sealed class Ecg12PaperMeasurement
 {
     private readonly Ecg12PaperLayout _layout;
@@ -25,7 +33,9 @@ public sealed class Ecg12PaperMeasurement
     private readonly Dictionary<int, Ecg12PaperCursor[]> _samples = [];
     private Ecg12PaperRegion? _region;
     private int _anchorIndex;
-    private int _activeIndex;
+    private int? _endIndex;
+    private Ecg12PaperRegion? _hoverRegion;
+    private int _hoverIndex;
 
     public Ecg12PaperMeasurement(Ecg12PaperLayout layout, IReadOnlyList<WaveformEnvelope> blocks, Func<int, Guid> channelOfLead,
         SystemViewCommandAssessmentPolicy policy, bool allowAuxiliaryRate = true)
@@ -43,8 +53,9 @@ public sealed class Ecg12PaperMeasurement
     public Ecg12PaperLayout Layout => _layout;
     public SystemViewCommandAssessmentPolicy Policy { get; private set; }
     public bool CanMeasure => Policy == SystemViewCommandAssessmentPolicy.Enabled;
+    private bool Placing => _region is not null && _endIndex is null;
 
-    // Disabling or locking measurement withdraws any visible calipers.
+    // Disabling or locking measurement withdraws any visible points.
     public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy)
     {
         if (!Enum.IsDefined(policy)) { throw new ArgumentOutOfRangeException(nameof(policy)); }
@@ -52,33 +63,60 @@ public sealed class Ecg12PaperMeasurement
         if (!CanMeasure) { Clear(); }
     }
 
-    public bool Begin(double x, double y)
+    // While placing the second point the hover stays on the first point's lead,
+    // clamped to its samples; otherwise it follows whichever lead is under the pointer.
+    public bool Hover(double x, double y)
     {
-        if (!CanMeasure || _layout.HitTest(x, y) is not { } region) { return false; }
-        var samples = Samples(region);
-        if (samples.Length == 0) { return false; }
-        _region = region;
-        _anchorIndex = Nearest(samples, region.TimeAt(x));
-        _activeIndex = _anchorIndex;
+        if (!CanMeasure) { return false; }
+        if (Placing)
+        {
+            var region = _region!;
+            _hoverRegion = region;
+            _hoverIndex = Nearest(Samples(region), region.TimeAt(Math.Clamp(x, region.Left, region.Right)));
+            return true;
+        }
+        if (_layout.HitTest(x, y) is not { } hit || Samples(hit) is not { Length: > 0 } samples)
+        {
+            bool had = _hoverRegion is not null;
+            _hoverRegion = null;
+            return had;
+        }
+        _hoverRegion = hit;
+        _hoverIndex = Nearest(samples, hit.TimeAt(x));
         return true;
     }
 
-    // Keeps the moving end on the starting lead, clamped to that lead's samples.
-    public bool Extend(double x)
+    public void EndHover() => _hoverRegion = null;
+
+    public bool Place(double x, double y)
     {
-        if (!CanMeasure || _region is not { } region) { return false; }
-        _activeIndex = Nearest(Samples(region), region.TimeAt(Math.Clamp(x, region.Left, region.Right)));
+        if (!CanMeasure || !Hover(x, y) || _hoverRegion is not { } region) { return false; }
+        if (Placing) { _endIndex = _hoverIndex; }
+        else
+        {
+            _region = region;
+            _anchorIndex = _hoverIndex;
+            _endIndex = null;
+        }
         return true;
     }
 
+    // Moves the latest placed point by whole samples within its lead.
     public bool Nudge(int samples)
     {
         if (!CanMeasure || _region is not { } region) { return false; }
-        _activeIndex = Math.Clamp(_activeIndex + samples, 0, Samples(region).Length - 1);
+        int last = Samples(region).Length - 1;
+        if (_endIndex is { } end) { _endIndex = Math.Clamp(end + samples, 0, last); }
+        else { _anchorIndex = Math.Clamp(_anchorIndex + samples, 0, last); }
         return true;
     }
 
-    public void Clear() => _region = null;
+    public void Clear()
+    {
+        _region = null;
+        _endIndex = null;
+        _hoverRegion = null;
+    }
 
     public Ecg12PaperMeasurementDisplay Display
     {
@@ -88,13 +126,22 @@ public sealed class Ecg12PaperMeasurement
             {
                 SystemViewCommandAssessmentPolicy.Disabled => "Ecg12Measurement.Disabled",
                 SystemViewCommandAssessmentPolicy.CourseLocked => "Ecg12Measurement.CourseLocked",
-                _ => _region is null ? "Ecg12Measurement.Idle" : "Ecg12Measurement.Ready",
+                _ => _region is null ? "Ecg12Measurement.Idle" : _endIndex is null ? "Ecg12Measurement.Placing" : "Ecg12Measurement.Ready",
             };
-            if (_region is not { } region) { return new(reason, null, null, null, null); }
+            var hover = _hoverRegion is { } hoverRegion ? Samples(hoverRegion)[_hoverIndex] : null;
+            if (_region is not { } region) { return new(reason, null, null, null, null) { Hover = hover }; }
             var samples = Samples(region);
-            var start = samples[Math.Min(_anchorIndex, _activeIndex)];
-            var end = samples[Math.Max(_anchorIndex, _activeIndex)];
-            return new(reason, region, start, end, EcgManualMeasurement.Calculate(start.Value, end.Value, _allowAuxiliaryRate));
+            if (_endIndex is not { } endIndex)
+            {
+                var anchor = samples[_anchorIndex];
+                var preview = hover is null ? null : anchor.TimeNs <= hover.TimeNs
+                    ? EcgManualMeasurement.Calculate(anchor.Value, hover.Value, _allowAuxiliaryRate)
+                    : EcgManualMeasurement.Calculate(hover.Value, anchor.Value, _allowAuxiliaryRate);
+                return new(reason, region, anchor, null, null) { Hover = hover, HoverResult = preview };
+            }
+            var start = samples[Math.Min(_anchorIndex, endIndex)];
+            var end = samples[Math.Max(_anchorIndex, endIndex)];
+            return new(reason, region, start, end, EcgManualMeasurement.Calculate(start.Value, end.Value, _allowAuxiliaryRate)) { Hover = hover };
         }
     }
 

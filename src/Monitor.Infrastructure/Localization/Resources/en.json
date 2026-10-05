@@ -121,13 +121,13 @@
   "settings.pageDefaultsRestored": "Restored the {0} defaults. Not applied yet; the running simulation is unchanged.",
   "ecg12.measure": "Manual calipers",
   "ecg12.clear": "Clear calipers",
-  "ecg12.idle": "Drag along a lead to measure; arrow keys fine-tune, Esc clears.",
+  "ecg12.idle": "A dot follows the trace under the pointer; click two points to read their horizontal and vertical distance. Arrow keys fine-tune, Esc clears.",
   "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
   "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  rate {3}/min",
   "ecg12.rhythmLead": "II (rhythm strip)",
   "ecg12.disabled": "Manual measurement is not allowed.",
   "ecg12.courseLocked": "Manual measurement is locked by the course.",
-  "ecg12.overlay": "Twelve-lead manual calipers",
+  "ecg12.overlay": "Twelve-lead manual measurement",
   "sound.output": "Sound output",
   "sound.volume": "Volume: {0}%",
   "sound.volumeName": "Volume, percent",
@@ -869,5 +869,6 @@
   "vitalChanges.reasonSpo2": "SpO₂ changes require the pulse oximetry teaching source without the realtime oxygenation model.",
   "vitalChanges.reasonPressure": "These pressure targets cannot be produced with the current rhythm and heart rate.",
   "vitalChanges.reasonPressureTemplate": "The current waveform template does not support pressure targets.",
-  "vitalChanges.reasonOther": "The generator rejected these values; check the vital sign settings."
+  "vitalChanges.reasonOther": "The generator rejected these values; check the vital sign settings.",
+  "ecg12.placing": "First point placed on {0}; click a second point on the same lead to finish."
 }

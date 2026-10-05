@@ -71,10 +71,11 @@ internal sealed class Ecg12PaperPage : Grid
     {
         if (display.ReasonCode == "Ecg12Measurement.Disabled") { return text.GetString("ecg12.disabled"); }
         if (display.ReasonCode == "Ecg12Measurement.CourseLocked") { return text.GetString("ecg12.courseLocked"); }
-        if (display is not { Region: { } region, Result: { } result }) { return measuring ? text.GetString("ecg12.idle") : ""; }
+        if (display.Region is not { } region) { return measuring ? text.GetString("ecg12.idle") : ""; }
         string lead = region.Lead == Ecg12PaperLayout.LongLeadIndex
             ? text.GetString("ecg12.rhythmLead")
             : ProjectedEcgDemoSource.LeadNames[region.Lead];
+        if (display.Result is not { } result) { return text.Format("ecg12.placing", lead); }
         string elapsed = MeasurementReadout.Exact(result.ElapsedMilliseconds);
         string amplitude = MeasurementReadout.Exact(result.AmplitudeChangeMillivolts);
         return result.AuxiliaryRatePerMinute is { } rate

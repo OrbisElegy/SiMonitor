@@ -121,13 +121,13 @@
   "settings.pageDefaultsRestored": "已恢复 {0} 默认参数，尚未应用；当前运行保持不变。",
   "ecg12.measure": "手动测量",
   "ecg12.clear": "清除测量",
-  "ecg12.idle": "在导联上拖动以测量；方向键微调，Esc 清除。",
+  "ecg12.idle": "移到导联上会出现跟随的点；点击放置两点即可读出水平、垂直距离。方向键微调，Esc 清除。",
   "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
   "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  频率 {3} 次/分",
   "ecg12.rhythmLead": "II（节律条）",
   "ecg12.disabled": "当前不允许手动测量。",
   "ecg12.courseLocked": "课程已锁定手动测量。",
-  "ecg12.overlay": "十二导联手动测量卡尺",
+  "ecg12.overlay": "十二导联手动测量",
   "sound.output": "声音输出",
   "sound.volume": "声音音量：{0}%",
   "sound.volumeName": "声音音量，百分比",
@@ -869,5 +869,6 @@
   "vitalChanges.reasonSpo2": "SpO₂ 变化需启用指脉氧教学源且未使用实时氧合模型。",
   "vitalChanges.reasonPressure": "当前节律和心率下无法生成该压力目标。",
   "vitalChanges.reasonPressureTemplate": "当前波形模板不支持压力目标。",
-  "vitalChanges.reasonOther": "生成器拒绝了这组数值，请检查生命体征设置。"
+  "vitalChanges.reasonOther": "生成器拒绝了这组数值，请检查生命体征设置。",
+  "ecg12.placing": "已在 {0} 放置第一点；点击同一导联上的第二点完成测量。"
 }

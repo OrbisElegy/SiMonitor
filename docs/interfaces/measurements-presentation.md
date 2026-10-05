@@ -464,11 +464,12 @@ context 和各策略。权限、显示像素、正在拖动的手势不属于保
 （`SourceLead` 为 II）。每列前 30 px 为定标脉冲，不属于任何导联；`HitTest` 在定标、页边和行间空白返回 null。
 
 `Ecg12PaperMeasurement(layout, blocks, channelOfLead, policy, allowAuxiliaryRate=true)` 在一份冻结纸图上放置
-手动卡尺：`Begin` 在命中的导联上把锚点吸附到最近的实际采样，`Extend` 只在同一导联内移动另一端并夹在该导联的
-首尾采样，`Nudge` 以整采样移动，`Clear` 移除。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。
-`Display` 按时间排序两端（不论先放哪一端），用 `EcgManualMeasurement.Calculate` 给出 Δt、较晚一端减较早一端
-的 ΔV 和可选辅助频率；`ReasonCode` 为 Idle、Ready、Disabled 或 CourseLocked。策略非 Enabled 时撤除卡尺并拒绝
-新操作。不识别波形起止点，不保存卡尺，也不写回记录。
+手动测量点：`Hover` 把悬停点吸附到指针下导联的最近实际采样（放置第二点时停留在第一点的导联并夹在其首尾采样），
+`EndHover` 移除悬停点；`Place` 依次放置第一点和第二点，第二点放置后再次 `Place` 开始新的测量。`Nudge` 以整采样
+移动最近放置的点，`Clear` 移除。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。`Display` 按时间排序
+两点（不论先放哪一点），用 `EcgManualMeasurement.Calculate` 给出 Δt（水平距离）、较晚一点减较早一点的 ΔV（垂直
+距离）和可选辅助频率；只有第一点时 `HoverResult` 给出按悬停点放置的预览。`ReasonCode` 为 Idle、Placing、Ready、
+Disabled 或 CourseLocked。策略非 Enabled 时撤除测量点并拒绝新操作。不识别波形起止点，不保存测量点，也不写回记录。
 
 ### 主题、zoom 与 SVG 发布
 

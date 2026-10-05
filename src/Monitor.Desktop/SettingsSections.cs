@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
+using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -19,6 +22,8 @@ internal sealed class SettingsSections : UserControl
     private readonly int[] _itemOfSection;
     private readonly TextBlock[] _details;
     private readonly string[] _titles;
+    private readonly CompactEntry[] _entries;
+    private int _selected;
     private Action<double>? _adaptNavigation;
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -70,8 +75,21 @@ internal sealed class SettingsSections : UserControl
         _sectionOfItem = sectionOfItem.ToArray();
         _itemOfSection = Enumerable.Range(0, sections.Length).Select(section => Array.IndexOf(_sectionOfItem, section)).ToArray();
         Sections.ItemsSource = items;
-        if (localization is null) { _compact.ItemsSource = sections.Select(s => s.Title).ToArray(); }
-        else { localization.SetChoices(_compact, sections.Select(s => s.Title).ToArray()); }
+        // The compact selector mirrors list rows, including inert headers and section state.
+        _entries = _sectionOfItem.Select((section, item) => section < 0
+            ? new CompactEntry(headers[_sectionOfItem[item + 1]], true)
+            : new CompactEntry(_titles[section], false)).ToArray();
+        _compact.ItemTemplate = new FuncDataTemplate<CompactEntry>((entry, _) => CompactRow(entry, localization));
+        _compact.ContainerPrepared += (_, args) =>
+        {
+            if (args.Container is not ComboBoxItem container) { return; }
+            var entry = _entries[args.Index];
+            container.IsEnabled = !entry.IsHeader;
+            container.Focusable = !entry.IsHeader;
+            if (localization is null) { container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry }); }
+            else { localization.Bind(container, AutomationProperties.NameProperty, entry.Title); }
+        };
+        _compact.ItemsSource = _entries;
         AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
         if (localization is not null)
         {
@@ -89,14 +107,24 @@ internal sealed class SettingsSections : UserControl
             int selected = _sectionOfItem[Sections.SelectedIndex];
             if (selected < 0)
             {
-                Sections.SelectedIndex = _itemOfSection[Math.Max(_compact.SelectedIndex, 0)];
+                Sections.SelectedIndex = _itemOfSection[_selected];
                 return;
             }
-            _compact.SelectedIndex = selected;
+            _selected = selected;
+            _compact.SelectedIndex = Sections.SelectedIndex;
             heading.Text = category + " / " + sections[selected].Title; _detail.Content = pages[selected];
             localization?.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading", text.GetString(category), text.GetString(sections[selected].Title)));
         };
-        _compact.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compact) && _compact.SelectedIndex >= 0) { SelectedSection = _compact.SelectedIndex; } };
+        _compact.SelectionChanged += (_, args) =>
+        {
+            if (!ReferenceEquals(args.Source, _compact) || _compact.SelectedIndex < 0) { return; }
+            if (_sectionOfItem[_compact.SelectedIndex] < 0)
+            {
+                _compact.SelectedIndex = _itemOfSection[_selected];
+                return;
+            }
+            Sections.SelectedIndex = _compact.SelectedIndex;
+        };
         _adaptNavigation = width =>
         {
             bool compact = width < 760; Sections.IsVisible = !compact; _compact.IsVisible = compact;
@@ -114,7 +142,40 @@ internal sealed class SettingsSections : UserControl
     {
         _details[section].Text = text;
         var item = (ListBoxItem)Sections.Items[_itemOfSection[section]]!;
-        AutomationProperties.SetName(item, accessibleText is null ? _titles[section] : _titles[section] + "，" + accessibleText);
+        string name = accessibleText is null ? _titles[section] : _titles[section] + "，" + accessibleText;
+        AutomationProperties.SetName(item, name);
+        _entries[_itemOfSection[section]].Update(text, name);
+    }
+    private static Grid CompactRow(CompactEntry entry, DesktopLocalization? localization)
+    {
+        var title = new TextBlock { Text = entry.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        if (entry.IsHeader)
+        {
+            title.FontSize = 12;
+            title.FontWeight = FontWeight.SemiBold;
+            title.Foreground = DesktopFluentStyle.SecondaryText;
+        }
+        localization?.Bind(title, TextBlock.TextProperty, entry.Title);
+        var detail = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = DesktopFluentStyle.SecondaryText, Margin = new Thickness(12, 0, 0, 0) };
+        detail.Bind(TextBlock.TextProperty, new Binding(nameof(CompactEntry.Detail)) { Source = entry });
+        var row = new Grid { ColumnDefinitions = new("*,Auto") };
+        row.Children.Add(title); Grid.SetColumn(detail, 1); row.Children.Add(detail);
+        return row;
+    }
+    private sealed class CompactEntry(string title, bool isHeader) : INotifyPropertyChanged
+    {
+        public string Title { get; } = title;
+        public bool IsHeader { get; } = isHeader;
+        public string? Detail { get; private set; }
+        public string AccessibleName { get; private set; } = title;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        internal void Update(string? detail, string accessibleName)
+        {
+            Detail = detail;
+            AccessibleName = accessibleName;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Detail)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AccessibleName)));
+        }
     }
     private static ListBoxItem Header(string title, DesktopLocalization? localization)
     {

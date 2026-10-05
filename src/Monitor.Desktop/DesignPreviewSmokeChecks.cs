@@ -71,7 +71,7 @@ internal static class DesignPreviewSmokeChecks
             Require(viewer.Offset.Y > 100, "programmatic focus restoration does not jump to first card");
             back.Focus(); first.Focus(Avalonia.Input.NavigationMethod.Tab); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Require(viewer.Offset.Y < 50, "keyboard navigation still reveals focused card");
-            Click(advanced); window.Settings.SectionPages[6].Sections.SelectedIndex = 1;
+            Click(advanced); window.Settings.SectionPages[6].SelectedSection = 1;
             Capture(window, "ui-refine-resp-compact.png");
             Require(!window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "呼吸 · 规则呼吸"), "redundant respiration heading removed");
             var selectors = window.Settings.GetVisualDescendants().OfType<ComboBox>().Where(c => c.IsVisible &&
@@ -105,7 +105,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespSignalAmplitude.Value = 350;
             var session = window.Session;
             window.RestartSettings();
-            window.Settings.SectionPages[6].Sections.SelectedIndex = 3;
+            window.Settings.SectionPages[6].SelectedSection = 3;
             Require(ReferenceEquals(session, window.Session) && window.Settings.AppliedEcgParameters.Text == appliedEcg &&
                 window.Settings.AppliedRespirationParameters.Text == appliedRespiration,
                 "failed apply and overview navigation retain the active parameter snapshot");
@@ -657,13 +657,13 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("心源性干扰", StringComparison.Ordinal), "missing cardiac artifact gives actionable rejection");
             window.Settings.RespCardiacArtifact.Value = 120; window.Settings.RespSignalAmplitude.Value = -400;
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
-            Require(window.Settings.SectionPages[6].Sections.SelectedIndex == 1, "respiration style opens respiration advanced group directly");
+            Require(window.Settings.SectionPages[6].SelectedSection == 1, "respiration style opens respiration advanced group directly");
             live = window.Session;
             window.Settings.OpenAdvanced(0);
-            Require(window.Settings.SectionPages[6].Sections.SelectedIndex == 0, "ECG style opens ECG advanced group");
+            Require(window.Settings.SectionPages[6].SelectedSection == 0, "ECG style opens ECG advanced group");
             window.Settings.OpenAdvanced(3);
-            Require(window.Settings.SectionPages[6].Sections.SelectedIndex == 2, "ejection style opens ejection advanced group");
-            window.Settings.SectionPages[6].Sections.SelectedIndex = 3;
+            Require(window.Settings.SectionPages[6].SelectedSection == 2, "ejection style opens ejection advanced group");
+            window.Settings.SectionPages[6].SelectedSection = 3;
             window.Settings.Tabs.SelectedIndex = 1; window.Settings.OpenAdvanced(1);
             Require(ReferenceEquals(live, window.Session) && window.Settings.RespSignalAmplitude.Value == -400 && window.Settings.RespCardiacArtifact.Value == 120,
                 "advanced group navigation and return preserve drafts without applying");
@@ -890,6 +890,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
+        NativeSmokePartition.Run(SettingsNavigationSmokeChecks.Verify);
         NativeSmokePartition.Run(MonitorContinuationSmokeChecks.Verify);
         NativeSmokePartition.Run(PerfusionAuditSmokeChecks.Verify);
         NativeSmokePartition.Run(DefaultResetSmokeChecks.Verify);
@@ -1170,7 +1171,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Tabs.SelectedIndex = 4; Capture(window, "ui-preview-alarms.png");
             window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-vitals.png");
             window.Settings.Tabs.SelectedIndex = 6;
-            window.Settings.SectionPages[6].Sections.SelectedIndex = 3;
+            window.Settings.SectionPages[6].SelectedSection = 3;
             Capture(window, "ui-preview-advanced.png");
             Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "applied parameter page shows the active style");
             Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 7, "general preferences and all six simulation categories remain available");
@@ -2003,7 +2004,7 @@ internal static class DesignPreviewSmokeChecks
                 window.Settings.Tabs.SelectedIndex = 1; window.Settings.EcgSelection = choice;
                 window.RestartSettings();
                 window.Settings.OpenAdvanced(0);
-                window.Settings.SectionPages[6].Sections.SelectedIndex = 3;
+                window.Settings.SectionPages[6].SelectedSection = 3;
                 Capture(window, $"ui-preview-advanced-{choice}.png");
                 string?[] text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
                 Require(text.Any(t => t?.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg), StringComparison.Ordinal) == true),

@@ -160,6 +160,47 @@ internal static class LocalizationSmokeChecks
         }
     }
 
+    // Help topics are per-language resources: every language lists the Chinese topic ids in
+    // order, and categories map one to one so the category filter keeps its selection.
+    internal static void VerifyHelpCatalog()
+    {
+        var reference = DesktopInformationPages.Topics("zh-CN");
+        foreach (var locale in BuiltInLocalizations.Supported)
+        {
+            var topics = DesktopInformationPages.Topics(locale.Code);
+            Require(topics.Select(t => t.Id).SequenceEqual(reference.Select(t => t.Id)), $"{locale.Code} help lists the reference topics in order");
+            Require(topics.All(t => !string.IsNullOrWhiteSpace(t.Title) && !string.IsNullOrWhiteSpace(t.Text)), $"{locale.Code} help topics are complete");
+            var pairs = topics.Zip(reference, (topic, chinese) => (topic.Category, Chinese: chinese.Category)).Distinct().ToArray();
+            Require(pairs.Select(p => p.Category).Distinct().Count() == pairs.Length && pairs.Select(p => p.Chinese).Distinct().Count() == pairs.Length,
+                $"{locale.Code} help categories map one to one");
+        }
+        var window = new DesignPreviewWindow();
+        window.Show();
+        try
+        {
+            window.SelectPage(3);
+            window.Settings.Language.SelectedIndex = BuiltInLocalizations.Supported.ToList().FindIndex(locale => locale.Code == "en");
+            Dispatcher.UIThread.RunJobs();
+            var search = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Search help");
+            var category = window.GetVisualDescendants().OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == "Help category");
+            category.SelectedIndex = 2;
+            search.Text = "realtime oxygenation";
+            Dispatcher.UIThread.RunJobs();
+            var results = window.GetVisualDescendants().OfType<TextBlock>().Single(t => AutomationProperties.GetName(t) == "Help search results");
+            string Results() => results.Text ?? "";
+            Require(Results() == "Found 6 help topics" && window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Vital signs"),
+                "help shown before a language switch follows it and searches the English topics: " + Results());
+            window.Settings.Language.SelectedIndex = BuiltInLocalizations.Supported.ToList().FindIndex(locale => locale.Code == "zh-CN");
+            Dispatcher.UIThread.RunJobs();
+            Require(category.SelectedIndex == 2 && Results() == "没有匹配说明，请更换关键词或分类。",
+                "switching back keeps the category filter and search text");
+            search.Text = "实时氧合";
+            Dispatcher.UIThread.RunJobs();
+            Require(Results() == "找到 6 条说明", "Chinese help search finds the same topics: " + Results());
+        }
+        finally { window.Close(); }
+    }
+
     private static void Capture(Window window, string name)
     {
         Dispatcher.UIThread.RunJobs();

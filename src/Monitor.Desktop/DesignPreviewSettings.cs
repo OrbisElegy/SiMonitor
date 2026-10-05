@@ -647,8 +647,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
         catch (ArgumentException error)
         {
             var incompatible = Text("");
-            string reason = error.Message;
-            Localization.Bind(incompatible, TextBlock.TextProperty, text => text.Format("advanced.ejectionIncompatible", reason));
+            string reason = error.Message switch
+            {
+                "Preview.EjectionRequiresPvc" => "advanced.ejectionRequiresPvc",
+                "Preview.EjectionRequiresSinus" => "advanced.ejectionRequiresSinus",
+                _ => "advanced.ejectionInvalidStyle"
+            };
+            Localization.Bind(incompatible, TextBlock.TextProperty, text => text.Format("advanced.ejectionIncompatible", text.GetString(reason)));
             _advancedEjection.Children.Add(incompatible);
             SectionPages[6].SetDetail(2, "advanced.incompatible", "advanced.incompatibleName");
         }

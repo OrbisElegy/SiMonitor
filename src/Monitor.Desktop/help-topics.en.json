@@ -1,0 +1,230 @@
+[
+  {
+    "Id": "topic-1",
+    "Category": "Waveforms and display",
+    "Text": "In Settings → Display, choose an automatic or fixed range for each waveform row. An automatic range adjusts when the row starts a new sweep, based on the previous sweep's samples, and usually fills about 85% of the row height; ECG rows also leave room for the 0.5 mV calibration marks above and below the baseline. Older traces not yet overwritten by the sweep keep their previous scale. A fixed range uses the minimum and maximum you enter; parts beyond the range are drawn along the edge and never enter the neighboring row.",
+    "Title": "Automatic and fixed ranges"
+  },
+  {
+    "Id": "topic-2",
+    "Category": "Waveforms and display",
+    "Text": "In Settings → Display, choose a speed for each row. 12.5, 25 and 50 correspond to time windows of about 20, 10 and 5 seconds: the faster the speed, the less time one screen shows. This is a simulated paper speed; the display area adapts to the window size and on-screen millimeters are not meant to match real paper.",
+    "Title": "Sweep speed per row"
+  },
+  {
+    "Id": "topic-3",
+    "Category": "Vital signs",
+    "Text": "In the Breathing and CO₂ section of Settings → Vital signs, set the target and the variation. Only regular breathing supports this. Both the target minus the variation and the target plus the variation must lie within 5–80 mmHg. One expiration keeps a single generated target, while different breaths can vary; the same random seed and settings reproduce the same sequence. The monitor EtCO₂ is still measured from the generated CO₂ waveform and can differ from the target.",
+    "Title": "Random end-tidal CO₂ variation"
+  },
+  {
+    "Id": "topic-4",
+    "Category": "Vital signs",
+    "Text": "Adjust the heart rate, breathing rate and inspiration share of the cycle in Settings → Vital signs. After you click Apply, the change continues from the current waveform after the apply delay set at the bottom of the settings page, keeping the history and measurement windows. The delay runs in simulation time and stops while paused; acquisition to the sweep adds a buffer of about 2.2 seconds, and the switch aligns to a 0.2-second block boundary. Applying again replaces settings that have not taken effect yet. Restart clears the history and measurement windows; the first start and every restart remove the first 12 seconds of startup transition. The adjustable heart rate only supports compatible sinus reference templates with 1:1 conduction; fixed pathological templates use their own timing. With heart rate variation enabled, intervals lengthen or shorten smoothly, reproducibly for the same seed. Pauses and depth changes built into breathing templates, such as Cheyne–Stokes breathing, still make the measured breathing rate and EtCO₂ vary.",
+    "Title": "Adjusting heart rate and breathing timing"
+  },
+  {
+    "Id": "topic-5",
+    "Category": "Vital signs",
+    "Text": "In the Signal source group of Settings → Vital signs → Pulse oximetry, set the generated saturation target and its variation. With variation enabled, the target changes smoothly about every 30 seconds, and both ends of the change stay within 0–100%. Below 70%, the value is still shown and still checked against the low limit as long as the optical signal is valid. For example, 97.5% with ±2.5 percentage points covers 95–100%. The same seed reproduces the changes. The monitor reading is computed from red and infrared samples and may not reach every target end point. This is a teaching variation, not a model of oxygen delivery or of oxygen consumption during arrest.",
+    "Title": "SpO₂ target and variation"
+  },
+  {
+    "Id": "topic-6",
+    "Category": "Vital signs",
+    "Text": "In the Signal source group of Settings → Vital signs → Pulse oximetry, enable the dual-wavelength teaching source and the realtime oxygenation model, then click Restart the first time. The Patient baseline and Ventilation and demand groups become editable only after this. SpO₂ is measured from red and infrared samples and needs a few seconds to warm up; a valid value below 70% is still shown, and “---” appears when there is no valid pulsation. The low saturation alert must be enabled separately. Without the realtime model you can still use the fixed target and variation teaching source. For patient baselines, live adjustments and teaching examples, search for “realtime oxygenation”.",
+    "Title": "Enabling pulse oximetry"
+  },
+  {
+    "Id": "oxygenation-patient-baselines",
+    "Category": "Vital signs",
+    "Text": "In the Pulse oximetry → Patient baseline group, new settings calculate the baseline from age, reference sex, height and weight by default. FRC uses the GLI z = 0 median lung volume for people of European ancestry, Hb uses the NHANES III mean for white adults of the age group, basal oxygen demand is converted from the Schofield basal metabolic rate equations, and blood volume uses the Nadler estimate. Each item can be overridden manually; changing patient data recalculates only the automatic items, and the settings page shows the calculated values. Click Restart to save the baseline and create a new scenario. Apply keeps the current oxygen stores; changes to patient data or the oxygenation baseline require Restart.",
+    "Title": "Realtime oxygenation: patient data and baseline"
+  },
+  {
+    "Id": "oxygenation-reference-ranges",
+    "Category": "Vital signs",
+    "Text": "The patient baseline references do not represent every population. Fully automatic references cover ages 20–80; ages 18–19 require a manual Hb and ages over 80 require a manual FRC. The automatic blood volume estimate is limited to BMI 18.5 to under 30; outside that range, set blood volume manually. Older settings, or clearing “Calculate the baseline from patient data (0 SD)”, use the fixed research baseline: blood volume about 4.824 L, FRC 2.2 L, Hb 15 g/dL and basal oxygen demand 250 mL O₂/min (STPD). These fixed values are not a demographic 0 SD; after selecting the patient baseline option, click Restart to switch.",
+    "Title": "Realtime oxygenation: reference ranges and the fixed baseline"
+  },
+  {
+    "Id": "oxygenation-live-inputs",
+    "Category": "Vital signs",
+    "Text": "While running, click “Update ventilation and demand, keep current oxygen stores” in the Pulse oximetry → Ventilation and demand group to change tidal volume VT, dead space VD, inspired oxygen FiO₂, the airway state and the instructor demand multiplier. The button keeps the current oxygen stores and measurement windows; it does not apply patient data drafts or save other drafts, and the breathing rhythm and mechanical ejection of the current scenario continue. Oxygen demand = this run's basal oxygen demand × the instructor multiplier. The multiplier defaults to 1 and supports 1–4×, for extra expenditure such as agitation; it does not change the basal demand value and does not change heart rate or ventilation by itself.",
+    "Title": "Realtime oxygenation: updating ventilation and demand while running"
+  },
+  {
+    "Id": "oxygenation-teaching-example",
+    "Category": "Vital signs",
+    "Text": "In a realtime oxygenation scenario, set VT from 450 mL to 0 and click “Update ventilation and demand, keep current oxygen stores”. The subsequent RESP breathing component and the exhaled CO₂ component disappear and the saturation falls gradually; set 450 mL again and update to watch the waveforms return and the saturation recover. With the airway open, net gas uptake is still replenished. Breathing responses already underway and the line, acquisition and display delays complete as usual, and readings update with their existing measurement windows. Cardiac artifact and the CO₂ baseline remain.",
+    "Title": "Realtime oxygenation: a ventilation teaching example"
+  },
+  {
+    "Id": "oxygenation-respiratory-waveforms",
+    "Category": "Vital signs",
+    "Text": "In realtime oxygenation mode, VT scales the RESP breathing component relative to a 450 mL reference, keeping the signal polarity and the separate cardiac artifact. A closed airway can still show chest breathing effort but produces no new exhaled CO₂ component. The CO₂ dead-space segment follows each breath's VD/VT relative to 150/450; periodic or intermittent breathing uses each breath's own depth, and a breath whose actual tidal volume does not exceed the dead space produces no alveolar gas waveform. The end-tidal plateau level is still set by the CO₂ settings; CO₂ metabolism is not modeled yet. FiO₂ and the demand multiplier act on oxygenation and do not scale RESP or CO₂ directly. Initialization, Apply and live updates all use these rules; turning off realtime mode restores the original waveform settings.",
+    "Title": "Realtime oxygenation: linked RESP and CO₂ waveforms"
+  },
+  {
+    "Id": "topic-7",
+    "Category": "Vital signs",
+    "Text": "Adjust the CVP baseline in Settings → Vital signs to shift the whole central venous pressure waveform. The waveform also contains cardiac and breathing components, so the mean CVP computed from samples is not necessarily equal to the baseline setting. This only changes the simulated signal; it is not transducer zeroing and does not adjust arterial pressure or ejection.",
+    "Title": "Central venous pressure baseline"
+  },
+  {
+    "Id": "topic-8",
+    "Category": "Waveforms and display",
+    "Text": "Click “Advanced parameters of this waveform” on the waveform selection page, or open Settings → Advanced parameters, to see the parameters compatible with the current template. Values such as heart rate listed in a template description are defaults and may differ from the adjusted running values. Change the heart rate, breathing rate, inspiration share and EtCO₂ target on the Vital signs page; incompatible timing edits are not offered for fixed pathological templates. Perfusion waveforms of fast and slow rhythms follow the actual beat intervals and atrioventricular timing. Atrial fibrillation lacks normal coordinated atrial kick, atrial flutter keeps a reduced part of atrial function, and slow rhythms keep their stroke strength when filling is sufficient. Blood pressure is not a fixed value assigned by rhythm name. These are approximate teaching cases and cannot predict a patient's blood pressure.",
+    "Title": "Advanced parameters and template defaults"
+  },
+  {
+    "Id": "topic-9",
+    "Category": "Sound",
+    "Text": "In the sound settings you can pause alarm sounds for a set time; heartbeat tones and visual alarms continue. The pause runs on real elapsed time, so pausing waveform generation does not extend the countdown. When it ends, only alarm sounds that are still active resume; alarms that have already cleared are not replayed.",
+    "Title": "Pausing alarm sounds for a set time"
+  },
+  {
+    "Id": "topic-10",
+    "Category": "Sound",
+    "Text": "Open Settings → Sound and enable monitor sounds. The main volume affects both heartbeat and alarm sounds; the heartbeat relative volume adjusts only the heartbeat tone. Heartbeat tones follow the events actually detected and are not filled in from the set heart rate; alarm sounds follow the highest active level, and the two can overlap. With the SpO₂ pitch enabled, an unavailable SpO₂ falls back to a fixed pitch with a notice. Pausing the simulation stops monitor sounds. “Play three test tones” only checks the output.",
+    "Title": "Turning on sound and adjusting volume"
+  },
+  {
+    "Id": "topic-11",
+    "Category": "Alarms",
+    "Text": "The top center of the monitor shows one notice at a time. In one round, Info, Notice, Warning and Critical notices show for 2, 4, 6 and 8 seconds; notices of the same level take turns. A newly raised higher level is shown first. Banner rotation does not change sound priority; in continuous mode the alarm sound always matches the highest audible active level. Short alarms also follow repeat suppression and reminder rules; see “Event sounds, short and continuous alarms, and the default sound”.",
+    "Title": "How banner notices rotate"
+  },
+  {
+    "Id": "topic-12",
+    "Category": "Alarms",
+    "Text": "Enable and adjust the limits in Settings → Alarms → ECG heart rate; thresholds take effect immediately. The four values must satisfy Critical low < Warning low < Warning high < Critical high. A valid measured HR below the low limit or above the high limit raises the corresponding alarm once the confirmation time is reached; when HR cannot be computed, no placeholder is compared with the thresholds. Switch to the Trigger confirmation and Recovery confirmation groups to set each of the four limits separately; all default to 0 seconds, for immediate alerts. Changes re-confirm this parameter at once and are saved when you click Apply. The default thresholds are for teaching; alarm sounds can be paused separately.",
+    "Title": "ECG heart rate high and low alarms"
+  },
+  {
+    "Id": "topic-13",
+    "Category": "Alarms",
+    "Text": "Set the low limits in Settings → Alarms → SpO₂; the Critical low must be below the Warning low. An alarm is raised only when the measured value stays below a limit for the confirmation time. Switch to the Trigger confirmation and Recovery confirmation groups to set the trigger and recovery times of both low limits; they default to 0 seconds. High limit alarms are not offered yet. Changes re-confirm this parameter at once and are saved when you click Apply. The defaults of 85% and 92% can be adjusted. With a weak signal, a questionable reading may appear with a question mark, and “---” appears when nothing can be measured; invalid values are not used to infer low saturation and do not automatically mean a probe is off.",
+    "Title": "Low SpO₂ alarms and signal quality"
+  },
+  {
+    "Id": "topic-14",
+    "Category": "Alarms",
+    "Text": "Enable this alarm in Settings → Alarms → EtCO₂ → No breaths. The breath wait time is a whole number of 5–120 seconds, 20 by default; it starts from the later of the start of continuous valid CO₂ acquisition and the most recent confirmed complete expiration, and extra trigger confirmation begins only after it is reached. Extra trigger confirmation and recovery confirmation are each 0–600 seconds with up to three decimals, 0 by default. For example, with a 20-second wait and 2 seconds of extra confirmation, 20 seconds without a detected breath must pass first, followed by 2 seconds of continuous evidence. Recovery confirmation starts when a complete expiration is detected; reaching the no-breath wait time again during it cancels that recovery. Timing uses only the sample times of acquired CO₂; pauses and repeated refreshes do not count. Missing data, poor quality, acquisition gaps or time going backwards clear old notices and timers and are not treated as patient recovery. Changing the switch, wait time or confirmation times re-confirms this alarm without affecting the EtCO₂ and RR · CO₂ numeric alarms; click Apply to save. Restore default confirmation times sets only the trigger and recovery times to 0 and keeps the wait time and switch. This is teaching detection logic, not a clinical apnea diagnosis.",
+    "Title": "CO₂ no-breath alarm"
+  },
+  {
+    "Id": "pressure-alarm-validation",
+    "Category": "Alarms",
+    "Text": "Enable limit alerts in Settings → Alarms → ABP mean, PA mean or CVP mean. By default a value must stay below the low limit for 4 seconds, or above the high limit for 10 seconds, before the alert is raised or escalated to Critical; Warning and Critical are confirmed separately. A raised level is downgraded or cleared only after the reading stays back within that threshold (equal counts as within) for 3 seconds by default, so brief fluctuations near a threshold do not restart the alarm repeatedly. The displayed pressure is still the live measurement and may already be within limits during recovery confirmation. Pausing the simulation also pauses confirmation timing; missing valid data, turning the alarm off, changing thresholds or applying a waveform again clears that pressure's old state. Switch to the Trigger confirmation and Recovery confirmation groups to change the trigger and recovery times of all four limits, or restore this parameter's default times. Changes take effect at once and re-confirm this parameter; click Apply to save. These times are teaching settings of this software; sound intervals do not affect limit confirmation.",
+    "Title": "Pressure alarm limit violation and recovery confirmation"
+  },
+  {
+    "Id": "alarm-confirmation-timing",
+    "Category": "Alarms",
+    "Text": "In the alarm settings, ECG heart rate, SpO₂, RR · RESP, PR · PLETH, EtCO₂, RR · CO₂ and the three mean pressures each offer Thresholds, Trigger confirmation and Recovery confirmation groups. HR and the other two-sided parameters have separate trigger and recovery times for the Critical and Warning low and high limits; SpO₂ only has Critical and Warning low limits. Times range from 0 to 600 seconds with up to three decimals. 0 confirms at the first valid evidence; it does not turn the alarm off. Non-pressure parameters default to 0; pressures default to 4 seconds for low limit triggers, 10 seconds for high limit triggers and 3 seconds for recovery. Confirmation starts only when a value is strictly above or below a threshold; a value equal to the threshold counts as recovered. An interrupted condition starts timing again, and fluctuations near the Critical limit do not reset a Warning that remains true. Confirmation uses acquisition simulation time: pauses and repeated reads do not count, and observation gaps over 0.5 seconds, invalid data or time going backwards clear old evidence; missing data does not mean the patient has recovered. Changing a switch, threshold or confirmation time re-confirms this parameter immediately without affecting other channels; click Apply to save, and a restart restores only the configuration. The times do not change measured values, waveforms or sound group intervals, and do not include the detection window of the measurement itself. The CO₂ no-breath alarm has its own wait time and extra trigger and recovery confirmation in the EtCO₂ group, separate from the RR · CO₂ numeric limits.",
+    "Title": "Setting alarm trigger and recovery times separately"
+  },
+  {
+    "Id": "settings-detail-1",
+    "Category": "Waveforms and display",
+    "Text": "Open Settings → Waveform generation and click a waveform card in the ECG, Respiration or Ejection tab; the card with a check mark and blue border is the current selection. For ECG, switch between groups on the left (a dot marks the group that contains the current selection), or type name keywords in the search box to search across groups; multiple keywords must all match, and up to 12 results are shown. Cards show pregenerated examples, not the running signal. Browsing and selecting only change the draft; click Apply to schedule the change: after the delay, generation continues from the state at the end of the old waveform, waveform tails already triggered are kept, and no separately generated segment is spliced in. Restart clears the history and builds up measurement results again.",
+    "Title": "Choosing and applying waveforms"
+  },
+  {
+    "Id": "settings-detail-2",
+    "Category": "Waveforms and display",
+    "Text": "Choose a layout in Settings → Display to set a fixed 3, 5 or 7 rows on the monitor. Each row has its own channel, range and sweep speed. Resizing the window scales the display area but does not add or remove waveform rows.",
+    "Title": "Monitor layout and waveform rows"
+  },
+  {
+    "Id": "settings-detail-3",
+    "Category": "Waveforms and display",
+    "Text": "In Settings → Display, choose a 3 × 4 + 1 or 6 × 2 + 1 12-lead layout; the last row is a long lead II. The whole simulated paper scales uniformly with the display area, keeping the grid, waveforms and square-wave calibration in proportion, without calibrating real screen millimeters. Large waveforms can extend into neighboring lead areas, unlike the per-row clipping of the monitor.",
+    "Title": "12-lead paper"
+  },
+  {
+    "Id": "ecg12-calipers",
+    "Category": "Waveforms and display",
+    "Text": "On the 12-lead ECG page, turn on Manual calipers, then press and drag along any lead. Both ends snap to samples actually acquired for that lead; the moving end stays within the same lead and stops at the lead's first or last sample when dragged beyond it. In the reading, Δt is the time between the ends in milliseconds, ΔV is the later end's voltage minus the earlier end's in millivolts (it can be negative), and the rate is 60000 ÷ Δt, marked with “≈” and one decimal when not exact. Each arrow key press moves the moving end by one sample, or ten samples with Shift; Esc or Clear calipers removes the calipers. The long II at the bottom is the rhythm strip and measures lead II. The calipers do not detect wave onsets or ends; results depend on where you place them. Calipers remain when you switch pages and start over after new parameters are applied or the paper layout changes. When a course locks or disables measurement, the calipers are removed and cannot be placed.",
+    "Title": "Manual 12-lead measurement"
+  },
+  {
+    "Id": "settings-detail-4",
+    "Category": "Vital signs",
+    "Text": "Open Settings → Vital signs → Random seed and click “Generate random seed” to create a new value from the system's cryptographic random source, instead of typing 64 hexadecimal characters. The new seed takes effect after Apply. Keeping the same seed and related parameters reproduces the teaching variations of heart rate, saturation and CO₂; each kind of variation uses its own sequence.",
+    "Title": "Random seed and reproducibility"
+  },
+  {
+    "Id": "settings-detail-5",
+    "Category": "Vital signs",
+    "Text": "Adjust the ABP or PA pulse component factor in Settings → Vital signs to change the pulsation amplitude of that pressure waveform while keeping the natural decline over long intervals. The factor is not a systolic or diastolic target and not a display zoom; monitor blood pressures and means are still computed from the generated samples.",
+    "Title": "ABP and PA pulse component factors"
+  },
+  {
+    "Id": "settings-detail-6",
+    "Category": "Advanced parameters",
+    "Text": "Open Settings → Advanced parameters → Respiration → CO₂ line. The line delay makes the whole CO₂ signal arrive later; dispersion makes changes more gradual, which can also add delay and affect the measured EtCO₂. Set both to 0 to turn the line effects off. They change the acquired CO₂ signal, not the breathing rhythm source.",
+    "Title": "CO₂ line delay and dispersion"
+  },
+  {
+    "Id": "settings-detail-7",
+    "Category": "Sound",
+    "Text": "Sound plays on the system default audio device. Click the test button in Settings → Sound to check the device and volume; a successful test does not mean monitor sounds are enabled, which still requires the monitor sounds switch. If the system device changes or output fails, check the sound status and re-enable sound manually.",
+    "Title": "Audio device and test tones"
+  },
+  {
+    "Id": "settings-detail-8",
+    "Category": "Sound",
+    "Text": "Adjust the heartbeat relative volume in Settings → Sound. 100% is the program's original heartbeat level; lowering it does not lower alarm sounds. The main volume affects both, so to make alarms stand out more from heartbeats, keep the main volume and lower the heartbeat relative volume.",
+    "Title": "Heartbeat relative volume"
+  },
+  {
+    "Id": "settings-detail-9",
+    "Category": "Sound",
+    "Text": "With the heartbeat source set to automatic, valid ECG detection is preferred; when ECG is unavailable and PLETH is stable, PLETH is used. After switching, ECG must stay valid for 3 seconds before switching back, to reduce back-and-forth switching. When neither is available, heartbeat tones stop instead of continuing from the last heart rate.",
+    "Title": "Automatic heartbeat tone source"
+  },
+  {
+    "Id": "settings-detail-10",
+    "Category": "Alarms",
+    "Text": "Active alarms make the top banner and the matching numeric area flash once per second. In the alarm display settings you can turn off the blue Notice coloring; text notices and their sounds remain, and Warning and Critical colors are not affected.",
+    "Title": "Alarm colors and flashing"
+  },
+  {
+    "Id": "settings-detail-11",
+    "Category": "Alarms",
+    "Text": "Alarm testing checks how Info, Notice, Warning and Critical look and sound. Test notices do not mean the simulated patient has a problem and do not change measured values or simulate a sensor coming off. Before listening to these alarms, enable monitor sounds on the Sound page; Info also needs its sparse single tone option.",
+    "Title": "Testing the four alarm levels"
+  },
+  {
+    "Id": "resp-signal-detail",
+    "Category": "Advanced parameters",
+    "Text": "Open Settings → Advanced parameters → Respiration → RESP signal. The amplitude sets the size of the impedance breathing signal; negative values invert the waveform and 0 hides the breathing component. It does not represent tidal volume and does not change CO₂. Cardiac artifact adds beat-synchronous changes to RESP and can be shown even without a breathing component. Adjust the breathing rate and inspiration share on the Vital signs page.",
+    "Title": "RESP signal amplitude and cardiac artifact"
+  },
+  {
+    "Id": "reset-all",
+    "Category": "Settings and saving",
+    "Text": "Clicking Apply or Restart saves the current valid configuration and the apply delay for the next start; a pending countdown is not kept across starts. “Restore defaults…” at the bottom of the settings page first explains what will be cleared; after you confirm, it resets all waveform, display, sound, alarm and vital sign parameters, discards unapplied edits, saves the defaults and restarts the simulation. Monitor sounds return to off. If saving fails, the page says so; the defaults still apply to this run, but the next start may restore the old configuration.",
+    "Title": "Saving settings and restoring defaults"
+  },
+  {
+    "Id": "alarm-notification-settings",
+    "Category": "Alarms",
+    "Text": "Under Alarms, choose a measurement and open its Sound group, then choose Follow default, Short alarm or Continuous alarm for the low and high limits; the CO₂ no-breath alarm is in the Sound group of EtCO₂. Below Follow default, the current default mode is shown; change the default sound mode under Alarms → Notification policy. That page's “Event sounds by parameter” lists the sound mode in effect for each event and whether it comes from the default or an independent setting; click a row to open that parameter's Sound group. The default sound mode only controls conditions set to Follow default; older settings keep their original default mode and do not overwrite individual choices. Monitor sounds must still be enabled manually on the Sound page. A short alarm plays one group on first confirmation, escalation, recurrence or reminder; a continuous alarm plays while the condition is active and stops when recovery confirmation completes, the alarm is disabled or data is interrupted.\nExpand “Short alarm advanced settings” to configure repeat suppression and reminders, for short alarms only: repeat suppression is 0–3600 seconds, where 0 means no suppression; reminders are switched on separately, with an interval of 0.001–3600 seconds and up to three decimals. Continuous alarms do not use repeat suppression or extra reminders; those fields collapse and keep their values for switching back to short alarms. Turning reminders off also keeps the interval. Physiological conditions, banners and trigger and recovery confirmation do not change because of sound suppression. Escalation to a higher level is still notified by its own confirmation rules; while a group is still playing, reminders of the same or lower level merge into it instead of queuing.\nChanging a valid policy takes effect immediately and notifications are judged again from the next valid acquired evidence; active physiological events keep their identity. Invalid input keeps the last valid policy, and switching parameters or groups does not lose uncorrected input. Invalid fields expand automatically with a message below the event, and “Event sounds by parameter” marks them “Needs correction” and shows the last valid sound; after correcting, click Apply to save. “Restore this event's defaults” is in the advanced settings, or under “Latching and more actions” for continuous alarms; it resets only the event's sound mode, repeat suppression, reminders and latching after recovery, not thresholds or confirmation times.\nReminders use acquisition and simulation time; pauses and repeated samples do not count, and missed periods are not made up. Sound pauses still use the operating clock. When sound resumes, only conditions that are currently valid are handled, and recovered old alarms are not played. Info, technical and test notices keep their continuous sound rules, carried by the continuous source at the same level; device output failures are only displayed, and a sound request does not prove that the speaker played it or that anyone heard it.",
+    "Title": "Event sounds, short and continuous alarms, and the default sound"
+  },
+  {
+    "Id": "alarm-supported-conditions",
+    "Category": "Alarms",
+    "Text": "Alarm settings support measured ECG heart rate, SpO₂ low limits, impedance respiration rate, PLETH pulse rate, EtCO₂, CO₂ respiration rate, and ABP, PA and CVP mean pressures. SpO₂ only has low limits; the other values support both high and low limits. Warning and Critical use their own thresholds and confirmation times. Persistent CO₂ no-breath detection is configured separately and does not replace impedance apnea or cardiac arrest detection. The alarm page navigation has two groups, “Measurements” and “Notices and sound”; On or Off to the right of a parameter name shows whether its alarms are enabled, and EtCO₂ includes the no-breath alarm.\nChoosing a waveform template such as ventricular fibrillation or ventricular tachycardia does not directly raise an automatic detection alarm of the same name; numeric alarms are based on valid measured values. Existing suspected atrial fibrillation and irregular rhythm analysis results are not connected to separate alarm sounds. Missing or invalid readings are not treated as zero and do not mean recovery.\nTest notices check text, value highlighting and sound; they do not mean a physiological problem was detected. Afterwards, choose “Test notices off” in the alarm settings.",
+    "Title": "Which measurements raise alarms"
+  },
+  {
+    "Id": "alarm-acknowledgement",
+    "Category": "Alarms",
+    "Text": "The default monitor layout does not offer acknowledgement yet; the controls will come with a later layout. After acknowledgement, the active condition is still shown with “acknowledged”, and its sound and flashing stop; escalation or recurrence alerts again. Acknowledgement applies only to the matching event, and an outdated acknowledgement is rejected once the state has changed. Sound pauses and acknowledgement are handled separately, and resuming sound does not undo acknowledgement.\nIf reminders are enabled for a short alarm, new reminder groups can still play on acquisition time after acknowledgement; reminders missed while paused are not made up. A continuous alarm is silenced by acknowledgement and does not add short alarm reminders.\nIn each parameter's Sound group, under the advanced settings or “Latching and more actions”, you can turn on “Keep unacknowledged notices after recovery” per event; it is off by default. After recovery the notice shows “recovered, awaiting acknowledgement” without sound, flashing or active timing, and acknowledgement clears it. This setting only keeps the visual notice. With the default layout, clearing “Keep unacknowledged notices after recovery” immediately removes recovered notices of that event; selecting it again does not bring old notices back. Disabling the alarm or losing valid data also clears the notice, and a recurrence needs a new acknowledgement.\nChanges take effect immediately; click Apply to save the latching choice. Older settings do not latch by default. A restart restores only the configuration, not events or acknowledgement states. Monitor sounds still need to be turned on manually, and acknowledgement does not mean a physical sound was heard.",
+    "Title": "Acknowledgement and latching after recovery"
+  }
+]

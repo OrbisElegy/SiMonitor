@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Monitor.Application.Localization;
 using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 
@@ -10,34 +11,31 @@ namespace Monitor.Desktop;
 
 internal sealed class MonitorAlertSettings : StackPanel
 {
+    private readonly DesktopLocalization _localization;
+    private string? _noExpirationErrorKey;
     private readonly ConfirmedLimitNotice _heartRateNotice = new(MonitorNumeric.HeartRate);
     private readonly ConfirmedLimitNotice _spO2Notice = new(MonitorNumeric.SpO2);
     private readonly ConfirmedNoExpirationNotice _noExpirationNotice = new();
     private readonly TextBlock _noExpirationError = new() { Foreground = Avalonia.Media.Brushes.OrangeRed, TextWrapping = Avalonia.Media.TextWrapping.Wrap, IsVisible = false };
-    internal AlarmConfirmationEditor HeartRateConfirmation { get; } = new(MeasuredLimitNotice.HeartRateDescriptor);
-    internal AlarmConfirmationEditor SpO2Confirmation { get; } = new(MeasuredLimitNotice.SpO2Descriptor);
-    internal CheckBox HeartRateEnabled { get; } = new() { Content = "启用实测 HR 上下限提示", IsChecked = false };
+    internal AlarmConfirmationEditor HeartRateConfirmation { get; }
+    internal AlarmConfirmationEditor SpO2Confirmation { get; }
+    internal CheckBox HeartRateEnabled { get; } = new() { IsChecked = false };
     internal NumericUpDown WarningLowHeartRate { get; } = Number(50, 1, 299);
     internal NumericUpDown CriticalLowHeartRate { get; } = Number(40, 1, 298);
     internal NumericUpDown WarningHeartRate { get; } = Number(120, 20, 300);
     internal NumericUpDown CriticalHeartRate { get; } = Number(180, 21, 350);
-    internal CheckBox SpO2Enabled { get; } = new() { Content = "启用实测 SpO₂ 下限提示", IsChecked = false };
+    internal CheckBox SpO2Enabled { get; } = new() { IsChecked = false };
     internal NumericUpDown WarningSpO2 { get; } = Number(92, 1, 100);
     internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
-    internal CheckBox NoExpirationEnabled { get; } = new() { Content = "启用 CO₂ 持续未检出呼吸提示", IsChecked = false };
+    internal CheckBox NoExpirationEnabled { get; } = new() { IsChecked = false };
     internal NumericUpDown NoExpirationSeconds { get; } = new() { Minimum = 5, Maximum = 120, Value = 20, Increment = 1, Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown NoExpirationTriggerSeconds { get; } = AlarmConfirmationEditor.CreateTimingField();
     internal NumericUpDown NoExpirationRecoverySeconds { get; } = AlarmConfirmationEditor.CreateTimingField();
-    internal AdditionalMeasurementLimits AdditionalLimits { get; } = new();
-    internal ComboBox TestLevel { get; } = new() { ItemsSource = new[] { "关闭联调提示", "Info · 测试", "Notice · 测试", "Warning · 测试", "Critical · 测试" }, SelectedIndex = 0, MinWidth = 220 };
-    internal CheckBox InfoTone { get; } = new() { Content = "Info 使用稀疏单声（默认静音）" };
-    internal CheckBox NoticeColorEnabled { get; } = new() { Content = "显示 Notice 蓝色提示与数值闪烁", IsChecked = true };
-    internal ComboBox TestNumeric { get; } = new()
-    {
-        ItemsSource = new[] { "仅顶部提示", "HR", "RR · RESP", "SpO₂", "PR", "EtCO₂", "RR · CO₂", "ABP 平均压", "PA 平均压", "CVP 平均压" },
-        SelectedIndex = 0,
-        MinWidth = 220
-    };
+    internal AdditionalMeasurementLimits AdditionalLimits { get; }
+    internal ComboBox TestLevel { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
+    internal CheckBox InfoTone { get; } = new();
+    internal CheckBox NoticeColorEnabled { get; } = new() { IsChecked = true };
+    internal ComboBox TestNumeric { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     internal NumericUpDown InfoInterval { get; } = Number(30, 5, 120);
     internal NumericUpDown NoticeInterval { get; } = Number(10, 1.5m, 60);
     internal NumericUpDown WarningInterval { get; } = Number(5, 3.5m, 60);
@@ -45,15 +43,35 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal IReadOnlyList<AlarmLifecycleJournal> AlarmLifecycles =>
         new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
     internal AlarmNotificationSettingsPanel NotificationSettings { get; }
+    // Titles are catalog keys.
     internal IReadOnlyList<(MonitorNumeric Numeric, string Title)> Parameters { get; } =
-        MeasuredLimitNotice.Descriptors.Select(d => (d.Numeric, d.Label))
-            .Prepend((MonitorNumeric.SpO2, MeasuredLimitNotice.SpO2Descriptor.Label))
-            .Prepend((MonitorNumeric.HeartRate, "ECG 心率")).ToArray();
+        MeasuredLimitNotice.Descriptors.Select(d => (d.Numeric, d.LabelKey))
+            .Prepend((MonitorNumeric.SpO2, MeasuredLimitNotice.SpO2Descriptor.LabelKey))
+            .Prepend((MonitorNumeric.HeartRate, "alarm.parameterHr")).ToArray();
     internal IReadOnlyDictionary<MonitorNumeric, TabItem> SoundPages => _soundPages;
     private readonly Dictionary<MonitorNumeric, TabItem> _soundPages = [];
 
-    internal MonitorAlertSettings()
+    internal MonitorAlertSettings(DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
+        HeartRateConfirmation = new(MeasuredLimitNotice.HeartRateDescriptor, _localization);
+        SpO2Confirmation = new(MeasuredLimitNotice.SpO2Descriptor, _localization);
+        AdditionalLimits = new(_localization);
+        _localization.Bind(HeartRateEnabled, ContentControl.ContentProperty, "alarm.hrEnabled");
+        _localization.Bind(SpO2Enabled, ContentControl.ContentProperty, "alarm.spo2Enabled");
+        _localization.Bind(NoExpirationEnabled, ContentControl.ContentProperty, "alarm.noExpirationEnabled");
+        _localization.Bind(InfoTone, ContentControl.ContentProperty, "alarm.infoTone");
+        _localization.Bind(NoticeColorEnabled, ContentControl.ContentProperty, "alarm.noticeColor");
+        _localization.SetChoices(TestLevel, "alarm.testOff", "alarm.testInfo", "alarm.testNotice", "alarm.testWarning", "alarm.testCritical");
+        _localization.SetChoices(TestNumeric, new Func<ITextLocalizer, string>[]
+        {
+            text => text.GetString("alarm.testBannerOnly"), _ => "HR", _ => "RR · RESP", _ => "SpO₂", _ => "PR", _ => "EtCO₂", _ => "RR · CO₂",
+            text => text.GetString("numeric.abpMean"), text => text.GetString("numeric.paMean"), text => text.GetString("numeric.cvpMean"),
+        });
+        _localization.LocaleChanged += () =>
+        {
+            if (_noExpirationErrorKey is { } key) { _noExpirationError.Text = _localization.Get(key); }
+        };
         HeartRateEnabled.IsCheckedChanged += (_, _) => _heartRateNotice.Reset(HeartRateEnabled.IsChecked == true
             ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
         SpO2Enabled.IsCheckedChanged += (_, _) => _spO2Notice.Reset(SpO2Enabled.IsChecked == true
@@ -68,17 +86,17 @@ internal sealed class MonitorAlertSettings : StackPanel
         Margin = new Thickness(20); Spacing = 12;
         Children.Add(HeartRateEnabled);
         var heartRateThresholds = AlarmConfirmationEditor.CreateFieldsPanel();
-        Row("Critical HR 下限（bpm）", CriticalLowHeartRate, heartRateThresholds);
-        Row("Warning HR 下限（bpm）", WarningLowHeartRate, heartRateThresholds);
-        Row("Warning HR 上限（bpm）", WarningHeartRate, heartRateThresholds);
-        Row("Critical HR 上限（bpm）", CriticalHeartRate, heartRateThresholds);
+        Row("alarm.criticalLowHr", CriticalLowHeartRate, heartRateThresholds);
+        Row("alarm.warningLowHr", WarningLowHeartRate, heartRateThresholds);
+        Row("alarm.warningHighHr", WarningHeartRate, heartRateThresholds);
+        Row("alarm.criticalHighHr", CriticalHeartRate, heartRateThresholds);
         HeartRateConfirmation.SetThresholdContent(heartRateThresholds);
         Children.Add(HeartRateConfirmation);
         Children.Add(DesktopInformationPages.Help("topic-12"));
         Children.Add(SpO2Enabled);
         var saturationThresholds = AlarmConfirmationEditor.CreateFieldsPanel();
-        Row("Critical SpO₂ 下限（%）", CriticalSpO2, saturationThresholds);
-        Row("Warning SpO₂ 下限（%）", WarningSpO2, saturationThresholds);
+        Row("alarm.criticalLowSpo2", CriticalSpO2, saturationThresholds);
+        Row("alarm.warningLowSpo2", WarningSpO2, saturationThresholds);
         SpO2Confirmation.SetThresholdContent(saturationThresholds);
         Children.Add(SpO2Confirmation);
         Children.Add(DesktopInformationPages.Help("topic-13"));
@@ -91,9 +109,9 @@ internal sealed class MonitorAlertSettings : StackPanel
                 absence.Children.Add(NoExpirationEnabled);
                 var absenceFields = AlarmConfirmationEditor.CreateFieldsPanel();
                 absenceFields.MaxWidth = 660;
-                Row("呼吸等待时限（秒）", NoExpirationSeconds, absenceFields);
-                Row("额外触发确认（秒）", NoExpirationTriggerSeconds, absenceFields);
-                Row("恢复确认（秒）", NoExpirationRecoverySeconds, absenceFields);
+                Row("alarm.noExpirationWait", NoExpirationSeconds, absenceFields);
+                Row("alarm.noExpirationTrigger", NoExpirationTriggerSeconds, absenceFields);
+                Row("alarm.noExpirationRecovery", NoExpirationRecoverySeconds, absenceFields);
                 foreach (var row in absenceFields.Children.Cast<StackPanel>())
                 {
                     row.Width = 200;
@@ -101,7 +119,8 @@ internal sealed class MonitorAlertSettings : StackPanel
                     ((NumericUpDown)row.Children[1]).Width = 200;
                 }
                 absence.Children.Add(absenceFields);
-                var resetAbsence = new Button { Content = "恢复默认确认时间" };
+                var resetAbsence = new Button();
+                _localization.Bind(resetAbsence, ContentControl.ContentProperty, "alarm.resetConfirmation");
                 resetAbsence.Click += (_, _) =>
                 {
                     NoExpirationTriggerSeconds.Value = 0;
@@ -109,30 +128,30 @@ internal sealed class MonitorAlertSettings : StackPanel
                 };
                 var absenceActions = new WrapPanel { Orientation = Orientation.Horizontal };
                 absenceActions.Children.Add(resetAbsence);
-                var effect = Text("修改立即生效，并重新确认此报警。");
+                var effect = Text("alarm.changeEffect");
                 effect.Margin = new Thickness(12, 4, 0, 4);
                 effect.VerticalAlignment = VerticalAlignment.Center;
                 absenceActions.Children.Add(effect);
                 absenceActions.Children.Add(DesktopInformationPages.Help("topic-14"));
                 absence.Children.Add(absenceActions);
                 absence.Children.Add(_noExpirationError);
-                AdditionalLimits.Editors[descriptor.Numeric].Confirmation.AddPage("未检出呼吸", absence);
+                AdditionalLimits.Editors[descriptor.Numeric].Confirmation.AddPage("alarm.pageNoExpiration", absence);
             }
         }
         if (ProductIdentity.DevelopmentFeatures)
         {
-            Row("提示与声音联调（明确标为测试）", TestLevel);
-            Row("联调闪烁数值", TestNumeric);
+            Row("alarm.testLevel", TestLevel);
+            Row("alarm.testNumeric", TestNumeric);
         }
         Children.Add(NoticeColorEnabled);
         Children.Add(DesktopInformationPages.Help("topic-11"));
         Children.Add(DesktopInformationPages.Help("settings-detail-10"));
         if (ProductIdentity.DevelopmentFeatures) { Children.Add(DesktopInformationPages.Help("settings-detail-11")); }
         Children.Add(InfoTone);
-        Row("Info 单声间隔（秒）", InfoInterval); Row("Notice 三联音组间隔（秒）", NoticeInterval);
-        Row("Warning（3+2）×2 组间隔（秒）", WarningInterval); Row("Critical 单声间隔（秒）", CriticalInterval);
-        Children.Add(Text("间隔从每组起点计算；音色和时序为可调教学实现。"));
-        NotificationSettings = new(AlarmLifecycles);
+        Row("alarm.infoInterval", InfoInterval); Row("alarm.noticeInterval", NoticeInterval);
+        Row("alarm.warningInterval", WarningInterval); Row("alarm.criticalInterval", CriticalInterval);
+        Children.Add(Text("alarm.intervalNote"));
+        NotificationSettings = new(AlarmLifecycles, _localization);
         Children.Add(NotificationSettings);
         foreach (var (numeric, title) in Parameters)
         {
@@ -143,7 +162,7 @@ internal sealed class MonitorAlertSettings : StackPanel
                 MonitorNumeric.EtCo2 => [descriptor.Id + "-low", descriptor.Id + "-high", "co2-no-expiration"],
                 _ => [descriptor.Id + "-low", descriptor.Id + "-high"]
             };
-            _soundPages[numeric] = ConfirmationFor(numeric).AddPage("声音", NotificationSettings.CreateEventPage(numeric, title, ids));
+            _soundPages[numeric] = ConfirmationFor(numeric).AddPage("alarm.pageSound", NotificationSettings.CreateEventPage(numeric, title, ids));
         }
     }
     internal AlarmConfirmationEditor ConfirmationFor(MonitorNumeric numeric) => numeric switch
@@ -166,7 +185,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         static int? Read(NumericUpDown field, int scale)
         {
             if (field.Value is null) { return null; }
-            return DesignPreviewSettings.ReadVitalValue(field, scale, "报警阈值");
+            return DesignPreviewSettings.ReadVitalValue(field, scale, "alarm.thresholdField");
         }
         var result = new MonitorAlarmPreferences(
             new(HeartRateEnabled.IsChecked == true, Read(CriticalLowHeartRate, 1000), Read(WarningLowHeartRate, 1000), Read(WarningHeartRate, 1000), Read(CriticalHeartRate, 1000)),
@@ -232,17 +251,20 @@ internal sealed class MonitorAlertSettings : StackPanel
             {
                 if (state.State is AlarmAttentionState.None or AlarmAttentionState.RecoveredUnacknowledged || state.Level != notice.Level) { continue; }
                 yield return state.State == AlarmAttentionState.ActiveAcknowledged
-                    ? notice with { Text = notice.Text + " · 已确认", Audible = false } : notice;
+                    ? notice with { Text = notice.Text + " · 已确认", Audible = false, Message = new("alarm.acknowledged", Message(notice)) } : notice;
             }
             else { yield return notice; }
         }
         foreach (var state in attention.Values.Where(c => c.State == AlarmAttentionState.RecoveredUnacknowledged))
         {
-            string label = state.ConditionId == "co2-no-expiration" ? "CO₂ · 未检出呼吸" :
+            bool low = state.ConditionId.EndsWith("-low", StringComparison.Ordinal);
+            var descriptor = state.ConditionId == "co2-no-expiration" ? null :
                 MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.HeartRateDescriptor).Prepend(MeasuredLimitNotice.SpO2Descriptor)
-                    .Single(d => state.ConditionId == d.Id + "-low" || state.ConditionId == d.Id + "-high").Label +
-                    (state.ConditionId.EndsWith("-low", StringComparison.Ordinal) ? " · 低限" : " · 高限");
-            yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, label + " · 已恢复，待确认") { Audible = false };
+                    .Single(d => state.ConditionId == d.Id + "-low" || state.ConditionId == d.Id + "-high");
+            string label = descriptor is null ? "CO₂ · 未检出呼吸" : descriptor.Label + (low ? " · 低限" : " · 高限");
+            var labelMessage = descriptor is null ? new TextMessage("alarm.noExpirationLabel") : AlarmText.ConditionLabel(descriptor, low);
+            yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, label + " · 已恢复，待确认")
+            { Audible = false, Message = new("alarm.recoveredUnacknowledged", labelMessage) };
         }
     }
 
@@ -255,8 +277,9 @@ internal sealed class MonitorAlertSettings : StackPanel
         { yield return absence; }
         if (ProductIdentity.DevelopmentFeatures && TestLevel.SelectedIndex > 0)
         {
-            yield return new("explicit-test", (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1), "测试提示 · " + (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1))
-            { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null };
+            var level = (MonitorNoticeLevel)(TestLevel.SelectedIndex - 1);
+            yield return new("explicit-test", level, "测试提示 · " + level)
+            { Numeric = TestNumeric.SelectedIndex > 0 ? (MonitorNumeric)(TestNumeric.SelectedIndex - 1) : null, Message = new("alarm.testNoticeText", level.ToString()) };
         }
     }
     internal void Reset(AlarmTransitionReason reason = AlarmTransitionReason.SessionReset)
@@ -280,16 +303,18 @@ internal sealed class MonitorAlertSettings : StackPanel
         {
             _ = ReadNoExpirationTiming();
             if (NoExpirationEnabled.IsChecked == true && ReadNoExpirationDelay() is null)
-            { throw new ArgumentException("呼吸等待时限须为 5–120 秒整数。"); }
+            { throw new ArgumentException("AlarmNoExpiration.InvalidDelay"); }
             _noExpirationNotice.Reset(NoExpirationEnabled.IsChecked == true
                 ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
+            _noExpirationErrorKey = null;
             _noExpirationError.Text = null;
             _noExpirationError.IsVisible = false;
         }
         catch (ArgumentException error)
         {
             _noExpirationNotice.Reset(AlarmTransitionReason.InvalidConfiguration);
-            _noExpirationError.Text = error.Message;
+            _noExpirationErrorKey = error.Message == "AlarmNoExpiration.InvalidDelay" ? "alarm.noExpirationWaitInvalid" : "alarm.confirmationTimingInvalid";
+            _noExpirationError.Text = _localization.Get(_noExpirationErrorKey);
             _noExpirationError.IsVisible = true;
         }
     }
@@ -305,7 +330,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         {
             _noExpirationNotice.Reset(AlarmTransitionReason.InvalidConfiguration);
             return new("co2-absence-settings", MonitorNoticeLevel.Info, "CO₂ 未检出呼吸设置无效：确认时间须为 0–600 秒，最多三位小数")
-            { Audible = false };
+            { Audible = false, Message = new("alarm.noExpirationTimingInvalid") };
         }
     }
 
@@ -328,22 +353,30 @@ internal sealed class MonitorAlertSettings : StackPanel
         {
             filter.Reset(AlarmTransitionReason.InvalidConfiguration);
             var descriptor = MeasuredLimitNotice.Describe(numeric);
-            return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：请检查阈值范围和精度，以及确认时间（0–600 秒，最多三位小数）");
+            return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：请检查阈值范围和精度，以及确认时间（0–600 秒，最多三位小数）")
+            { Message = new("alarm.primarySettingsInvalid", descriptor.LabelMessage) };
         }
         return filter.Evaluate(limits, snapshot, timing);
     }
 
     private static int? MilliUnits(NumericUpDown field) => field.Value is null
-        ? null : DesignPreviewSettings.ReadVitalValue(field, 1000, "报警阈值");
+        ? null : DesignPreviewSettings.ReadVitalValue(field, 1000, "alarm.thresholdField");
     private static int Milliseconds(NumericUpDown number) => checked((int)((number.Value ?? number.Minimum) * 1000));
-    private void Row(string label, Control control, Panel? owner = null)
+    // A message for notices whose producer did not attach one keeps its default text.
+    private static TextMessage Message(MonitorNotice notice) => notice.Message ?? new("common.verbatim", notice.Text);
+    private void Row(string key, Control control, Panel? owner = null)
     {
         var row = new StackPanel { Spacing = 4 };
         if (owner is WrapPanel) { row.Width = 220; row.Margin = new Thickness(0, 0, 24, 12); }
-        row.Children.Add(Text(label)); row.Children.Add(control); (owner ?? this).Children.Add(row);
-        AutomationProperties.SetName(control, label);
+        row.Children.Add(Text(key)); row.Children.Add(control); (owner ?? this).Children.Add(row);
+        _localization.Bind(control, AutomationProperties.NameProperty, key);
     }
     private static NumericUpDown Number(decimal value, decimal minimum, decimal maximum) => new()
     { Value = value, Minimum = minimum, Maximum = maximum, Increment = .25m, Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
-    private static TextBlock Text(string value) => new() { Text = value, TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+    private TextBlock Text(string key)
+    {
+        var text = new TextBlock { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+        _localization.Bind(text, TextBlock.TextProperty, key);
+        return text;
+    }
 }

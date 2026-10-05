@@ -5,6 +5,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Localization;
 using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
 
@@ -15,6 +16,7 @@ namespace Monitor.Desktop;
 internal sealed class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
+    private readonly DesktopLocalization _localization;
     private long _lastMeasurementBucket = -1;
     private readonly List<(int Channel, TextBlock Primary, TextBlock Secondary)> _rows = [];
     private readonly List<(TextBlock Pi, PulseIndicator Bar)> _opticalRows = [];
@@ -52,9 +54,15 @@ internal sealed class LiveMonitorView : UserControl
         Notice.FontSize = 20 * scale;
         return base.MeasureOverride(availableSize);
     }
-    internal LiveMonitorView(LiveMonitorTrace trace)
+    internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null)
     {
         _trace = trace;
+        _localization = localization ?? new DesktopLocalization();
+        _localization.LocaleChanged += () =>
+        {
+            Refresh();
+            RefreshNotice();
+        };
         var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
         var header = new Grid { ColumnDefinitions = new("*,2*,*"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
@@ -76,26 +84,35 @@ internal sealed class LiveMonitorView : UserControl
             var color = Brush.Parse(LiveMonitorTrace.Colors[slot.Channel]);
             string label = slot.Channel switch
             {
-                0 => "HR · ECG   bpm",
-                1 => "RR · RESP   次/分",
-                2 => "SpO₂   %",
-                3 => "ABP 平均压   mmHg",
-                4 => "EtCO₂   mmHg",
-                5 => "PA 平均压   mmHg",
-                _ => "CVP 平均压   mmHg"
+                0 => "monitor.labelHr",
+                1 => "monitor.labelResp",
+                2 => "monitor.labelSpo2",
+                3 => "monitor.labelAbp",
+                4 => "monitor.labelEtco2",
+                5 => "monitor.labelPa",
+                _ => "monitor.labelCvp"
             };
             var primary = new TextBlock { Text = "---", FontSize = 52, FontWeight = FontWeight.SemiBold, Foreground = color };
             var secondary = new TextBlock { FontSize = 17, Foreground = color, IsVisible = slot.Channel is 2 or 3 or 4 or 5 };
-            AutomationProperties.SetName(primary, label);
-            AutomationProperties.SetName(secondary, slot.Channel switch { 2 => "PR · PLETH，bpm", 3 => "ABP 收缩压/舒张压，mmHg", 5 => "PA 收缩压/舒张压，mmHg", _ => "RR · CO₂，次/分" });
+            _localization.Bind(primary, AutomationProperties.NameProperty, label);
+            _localization.Bind(secondary, AutomationProperties.NameProperty, slot.Channel switch
+            {
+                2 => "monitor.secondaryPr",
+                3 => "monitor.secondaryAbp",
+                5 => "monitor.secondaryPa",
+                _ => "monitor.secondaryCo2Rate"
+            });
             var content = new StackPanel { Width = 166, Spacing = 2 };
-            content.Children.Add(new TextBlock { Text = label, Foreground = color, FontSize = 13 });
+            var caption = new TextBlock { Foreground = color, FontSize = 13 };
+            _localization.Bind(caption, TextBlock.TextProperty, label);
+            content.Children.Add(caption);
             if (slot.Channel == 2)
             {
                 var pair = new Grid { ColumnDefinitions = new("*,22") };
                 var bar = new PulseIndicator(); Grid.SetColumn(bar, 1); pair.Children.Add(HighlightHost(primary)); pair.Children.Add(bar); content.Children.Add(pair);
+                _localization.Bind(bar, AutomationProperties.NameProperty, "monitor.pulseIndicatorName");
                 var pi = new TextBlock { Text = "PI --- %", FontSize = 14, Foreground = color };
-                AutomationProperties.SetName(pi, "灌注指数 PI，百分比");
+                _localization.Bind(pi, AutomationProperties.NameProperty, "monitor.piName");
                 content.Children.Add(pi); _opticalRows.Add((pi, bar));
             }
             else { content.Children.Add(HighlightHost(primary)); }
@@ -124,7 +141,8 @@ internal sealed class LiveMonitorView : UserControl
     internal void Refresh()
     {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
-        Clock.Text = $"模拟 {seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}" + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
+        string clock = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
+        Clock.Text = _localization.Format("monitor.clock", clock) + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
         if (_opticalRows.Count > 0)
         {
             var pulse = _trace.Session.Samples(2, Math.Max(0, _trace.Session.FrontierNs - 32_000_000), _trace.Session.FrontierNs).LastOrDefault();
@@ -151,12 +169,18 @@ internal sealed class LiveMonitorView : UserControl
     }
     internal void RefreshReadings(LiveMeasurementSnapshot snapshot)
     {
-        List<string> notices = [];
+        List<MonitorNotice> notices = [];
         string Value(MeasurementSource source, WaveformMeasurementStatus status, int? value, int divisor, string label)
         {
             string? number = value is { } v ? ((decimal)v / divisor).ToString("0", CultureInfo.InvariantCulture) : null;
             var display = MeasurementDisplay.Resolve(source, status, number);
-            if (display.TopNotice is { } notice) { notices.Add(notice.StartsWith(label, StringComparison.Ordinal) ? notice : label + "：" + notice); }
+            if (display is { TopNotice: { } notice, TopNoticeMessage: { } message })
+            {
+                // Prefix the row label unless the source label already names it (SpO₂).
+                bool named = notice.StartsWith(label, StringComparison.Ordinal);
+                notices.Add(new MonitorNotice("measurement:" + label + ":" + status, MonitorNoticeLevel.Info, named ? notice : label + "：" + notice)
+                { Message = named ? message : new TextMessage("measurement.labelled", label, message) });
+            }
             return display.NumericText;
         }
         foreach (var (channel, primary, secondary) in _rows)
@@ -173,7 +197,7 @@ internal sealed class LiveMonitorView : UserControl
                     secondary.Text = "PR  " + Value(MeasurementSource.Pleth, snapshot.PulseRate.Status, snapshot.PulseRate.MilliBeatsPerMinute, 1000, "PR") + " bpm"; break;
                 case 4:
                     primary.Text = Value(MeasurementSource.Co2, snapshot.Capnography.EndTidalCentiMmHg.Status, snapshot.Capnography.EndTidalCentiMmHg.Value, 100, "EtCO₂");
-                    secondary.Text = "RR  " + Value(MeasurementSource.Co2, snapshot.Capnography.RespirationsMilliPerMinute.Status, snapshot.Capnography.RespirationsMilliPerMinute.Value, 1000, "RR-CO₂") + " 次/分"; break;
+                    secondary.Text = _localization.Format("monitor.co2RateValue", Value(MeasurementSource.Co2, snapshot.Capnography.RespirationsMilliPerMinute.Status, snapshot.Capnography.RespirationsMilliPerMinute.Value, 1000, "RR-CO₂")); break;
                 default:
                     var pressure = channel == 3 ? snapshot.AbpMean : channel == 5 ? snapshot.PaMean : snapshot.CvpMean;
                     primary.Text = Value(MeasurementSource.Pressure, pressure.Status, pressure.MeanCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
@@ -188,20 +212,19 @@ internal sealed class LiveMonitorView : UserControl
         }
         foreach (var (pi, _) in _opticalRows)
         { pi.Text = "PI " + (snapshot.SpO2.PerfusionMilliPercent is { } value ? ((decimal)value / 1000).ToString("0.00", CultureInfo.InvariantCulture) : "---") + " %"; }
-        _rawNotices = notices.Distinct().Select(n => new MonitorNotice(n, MonitorNoticeLevel.Info, n))
-            .Concat(AdditionalNotices?.Invoke(snapshot) ?? []).ToArray();
+        _rawNotices = notices.DistinctBy(notice => notice.Id).Concat(AdditionalNotices?.Invoke(snapshot) ?? []).ToArray();
         RefreshAttention();
     }
     private void RefreshNotice()
     {
         _rotation.Update(_notices, _trace.Session.SimulationTimeNs);
         var notice = _rotation.Current;
-        Notice.Text = notice?.Text ?? "";
+        Notice.Text = notice is null ? "" : notice.Message?.Render(_localization.Current) ?? notice.Text;
         _displayedAttention = notice is null ? null : AttentionFor?.Invoke(notice.Id);
         if (_displayedAttention?.State != AlarmAttentionState.RecoveredUnacknowledged && notice is not null && _rotation.CriticalElapsedNs(notice.Id) is { } elapsed)
         {
             long seconds = elapsed / 1_000_000_000;
-            Notice.Text += $"（{seconds / 60:00}:{seconds % 60:00}）";
+            Notice.Text = _localization.Format("monitor.criticalElapsed", Notice.Text, string.Create(CultureInfo.InvariantCulture, $"{seconds / 60:00}:{seconds % 60:00}"));
         }
         ToolTip.SetTip(Notice, Notice.Text); AutomationProperties.SetName(Notice, Notice.Text);
         RefreshNumericHighlights(_trace.Session.SimulationTimeNs);
@@ -256,7 +279,6 @@ internal sealed class LiveMonitorView : UserControl
     private sealed class PulseIndicator : Control
     {
         internal double Level;
-        public PulseIndicator() { AutomationProperties.SetName(this, "脉搏强度指示，随 PLETH 变化"); }
         public override void Render(DrawingContext context)
         {
             base.Render(context);

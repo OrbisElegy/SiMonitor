@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Application.Scenarios;
 using Monitor.Domain.Presentation;
 using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
@@ -32,6 +33,13 @@ internal sealed class DesignPreviewWindow : Window
     private LiveMonitorTrace _monitor;
     internal LiveMonitorView MonitorView { get; private set; }
     private LocalMonitorPreviewSession _session;
+    // Vital changes act on the inputs of the applied source, not on unapplied drafts.
+    private PreviewSourceInputs? _appliedInputs;
+    private VitalChangeScheduler? _vitalChanges;
+    private Dictionary<VitalSign, int> _vitalBaseline = [];
+    private IReadOnlyDictionary<VitalSign, int>? _pendingVitalValues;
+    private long _vitalPanelSecond = -1;
+    internal VitalChangeScheduler? VitalChanges => _vitalChanges;
     private DispatcherTimer? _timer;
     private long _lastTick;
     private bool _closed;
@@ -76,6 +84,7 @@ internal sealed class DesignPreviewWindow : Window
         _session.DiscardStartup();
         _ecg = CapturePaper(ProjectedEcgDemoConfiguration.Default);
         Settings.MarkParametersApplied(ProjectedEcgDemoConfiguration.Default, PhysiologyDemoConfiguration.Default);
+        PreviewSourceInputs? restoredInputs = null;
         if (preferences.Generator is { } generator)
         {
             try
@@ -85,6 +94,7 @@ internal sealed class DesignPreviewWindow : Window
                 restored.Session.DiscardStartup();
                 Settings.MarkParametersApplied(restored.Configuration, restored.Physiology);
                 _session = restored.Session; _ecg = restored.Paper;
+                restoredInputs = restored.Inputs;
             }
             catch (Exception error) when (error is ArgumentException or OverflowException)
             {
@@ -104,6 +114,12 @@ internal sealed class DesignPreviewWindow : Window
             SetStatus("settings.recoveryStatus");
         }
         ConnectSettings();
+        if (restoredInputs is null)
+        {
+            try { restoredInputs = ReadSourceInputs(); }
+            catch (Exception error) when (error is ArgumentException or OverflowException) { }
+        }
+        RebaseVitalChanges(restoredInputs, _session.SimulationTimeNs);
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
         var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
@@ -150,6 +166,7 @@ internal sealed class DesignPreviewWindow : Window
     private void ConnectSettings()
     {
         Settings.LanguageChanged += SelectLanguage;
+        Settings.VitalChanges.Connect(() => _vitalChanges, () => Settings.VitalChanges.ShowTime(_session.SimulationTimeNs));
         void UpdateNotificationMode()
         {
             Settings.Sound.UseNotificationPlayback(Settings.Alerts.AlarmLifecycles);
@@ -312,7 +329,69 @@ internal sealed class DesignPreviewWindow : Window
         if (Page == 1) { SelectPage(1); }
     }
 
-    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources()
+    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology, PreviewSourceInputs Inputs) BuildConfiguredSources()
+    {
+        var inputs = ReadSourceInputs();
+        var next = inputs.CreateSession();
+        var ecg = CapturePaper(inputs.Ecg);
+        return (next, inputs.Ecg, ecg, inputs.Physiology, inputs);
+    }
+
+    // Vital changes rebuild the applied inputs with the scheduler's values. Only signs
+    // that left their applied value are overridden; a pressure pair moves together.
+    private void RebaseVitalChanges(PreviewSourceInputs? inputs, long simulationTimeNs)
+    {
+        _appliedInputs = inputs;
+        _pendingVitalValues = null;
+        _vitalBaseline = inputs is null ? [] : VitalChangeSources.Baseline(inputs, _session.Measurements);
+        if (_vitalChanges is null) { _vitalChanges = new(_vitalBaseline, simulationTimeNs); }
+        else { _vitalChanges.Rebase(_vitalBaseline, simulationTimeNs); }
+        Settings?.VitalChanges.ShowTime(simulationTimeNs);
+        Settings?.VitalChanges.Reset();
+    }
+
+    private void AdvanceVitalChanges()
+    {
+        if (_vitalChanges is null || _appliedInputs is null) { return; }
+        if (_vitalChanges.Advance(_session.SimulationTimeNs) is { } values) { _pendingVitalValues = values; }
+        if (_pendingVitalValues is { } pending && _pendingPresentation is null && _session.PendingSourceTimeNs is null)
+        {
+            _pendingVitalValues = null;
+            var changed = pending.Where(pair => _vitalBaseline.TryGetValue(pair.Key, out int applied) && applied != pair.Value)
+                .Select(pair => pair.Key).ToHashSet();
+            foreach (var (systolic, diastolic) in new[] { (VitalSign.AbpSystolicCentiMmHg, VitalSign.AbpDiastolicCentiMmHg), (VitalSign.PaSystolicCentiMmHg, VitalSign.PaDiastolicCentiMmHg) })
+            {
+                if (changed.Contains(systolic) || changed.Contains(diastolic)) { changed.Add(systolic); changed.Add(diastolic); }
+            }
+            try
+            {
+                var inputs = VitalChangeSources.Apply(_appliedInputs, pending.Where(pair => changed.Contains(pair.Key)).ToDictionary());
+                _ = _session.ScheduleSource(inputs.CreateSession(), 0);
+            }
+            catch (Exception exception) when (exception is ArgumentException or OverflowException)
+            {
+                _vitalChanges.Stop();
+                Settings.VitalChanges.SetStatus("vitalChanges.failed", VitalChangeReason(exception.Message));
+            }
+        }
+        if (_session.SimulationTimeNs / 1_000_000_000 != _vitalPanelSecond)
+        {
+            _vitalPanelSecond = _session.SimulationTimeNs / 1_000_000_000;
+            Settings.VitalChanges.ShowTime(_session.SimulationTimeNs);
+        }
+    }
+
+    private static string VitalChangeReason(string reasonCode) => reasonCode switch
+    {
+        "VitalChange.HeartRateRequiresSinus" or "SeededRate.RequiresReferenceSinus" => "vitalChanges.reasonHeartRate",
+        "VitalChange.BreathingTimingUnsupported" => "vitalChanges.reasonBreathing",
+        "VitalChange.SpO2RequiresTeachingSource" => "vitalChanges.reasonSpo2",
+        "Physiology.PressureTargetUnreachable" or "Physiology.PressureTargetPulseTooSmall" => "vitalChanges.reasonPressure",
+        "Physiology.PressureTargetRequiresReservoirMorphology" => "vitalChanges.reasonPressureTemplate",
+        _ => "vitalChanges.reasonOther",
+    };
+
+    private PreviewSourceInputs ReadSourceInputs()
     {
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
             Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
@@ -361,18 +440,12 @@ internal sealed class DesignPreviewWindow : Window
         if (co2AmplitudeCentiMmHg > 0)
         { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2AmplitudeCentiMmHg, Settings.RateSeed.Text ?? "") }; }
         int? opticalTarget = Settings.ReadOpticalTarget();
-        SeededOpticalSaturation? opticalVariation = null;
-        if (opticalTarget is { } target)
-        {
-            int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
-            if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
-        }
-        var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField"), opticalVariation: opticalVariation,
-            realtimeOxygenation: Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
-                ? Settings.Oxygenation.ReadConfiguration() : null);
-        var ecg = CapturePaper(ecgConfig);
-        return (next, ecgConfig, ecg, config);
+        int opticalAmplitude = opticalTarget is null ? 0 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
+        return new(config, ecgConfig, Settings.ReadDisplay(), opticalTarget,
+            Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField"),
+            opticalAmplitude,
+            Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true ? Settings.Oxygenation.ReadConfiguration() : null,
+            Settings.RateSeed.Text ?? "", Settings.EcgSelection == 0 && Settings.EjectionSelection != 2);
     }
     internal void ApplySettings() => ApplySettings(restart: false);
     internal void RestartSettings() => ApplySettings(restart: true);
@@ -385,7 +458,7 @@ internal sealed class DesignPreviewWindow : Window
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
-            var (next, ecgConfig, ecg, physiology) = BuildConfiguredSources();
+            var (next, ecgConfig, ecg, physiology, inputs) = BuildConfiguredSources();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             long delayNs = Settings.ReadApplyDelayNs();
             long? effective = null;
@@ -417,6 +490,7 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             MonitorView.Refresh();
             SelectPage(Page);
+            RebaseVitalChanges(inputs, _session.SimulationTimeNs);
             if (restart) { SetStatus("settings.restarted"); }
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
@@ -521,6 +595,7 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             _session.Advance(deltaNs);
+            AdvanceVitalChanges();
             if (_pendingPresentation is { } applied && _session.PendingSourceTimeNs is null)
             {
                 _ecg = applied.Paper;

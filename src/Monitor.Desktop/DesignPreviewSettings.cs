@@ -199,6 +199,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal MonitorAlertSettings Alerts { get; }
     internal CheckBox OpticalEnabled { get; } = new() { IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; }
+    internal VitalChangePanel VitalChanges { get; }
     internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
@@ -264,6 +265,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Oxygenation = new OxygenationSettingsPanel(Localization);
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
+        VitalChanges = new VitalChangePanel(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -364,8 +366,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Localization.Bind(ResetRespirationPage, ContentControl.ContentProperty, "advanced.resetPage");
         Localization.LocaleChanged += RefreshBreathingTiming;
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
-        string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced"];
-        Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
+        SectionPages[7] = SettingsSections.Split(Localization, "settings.vitalChanges", VitalChanges,
+            ("vitalChanges.sectionNew", VitalChanges.Children[0]), ("vitalChanges.sectionQueue", VitalChanges.QueueLabel));
+        string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced", "settings.vitalChanges"];
+        Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6], SectionPages[7]];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
@@ -382,8 +386,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (selected == 1) { foreach (var page in _templatePages) { page.Refresh(); } }
             if (selected == 6) { RefreshAdvanced(more); }
             detail.Content = pages[selected];
-            controls.IsVisible = selected != 0;
-            Status.IsVisible = selected != 0;
+            // General preferences and vital changes take effect at once, without the apply footer.
+            controls.IsVisible = selected is not (0 or 7);
+            Status.IsVisible = selected is not (0 or 7);
         };
         _compactCategory.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compactCategory) && _compactCategory.SelectedIndex >= 0) { Tabs.SelectedIndex = _compactCategory.SelectedIndex; } };
         _adaptNavigation = width =>

@@ -188,7 +188,11 @@ internal static class LocalizationSmokeChecks
             Dispatcher.UIThread.RunJobs();
             var results = window.GetVisualDescendants().OfType<TextBlock>().Single(t => AutomationProperties.GetName(t) == "Help search results");
             string Results() => results.Text ?? "";
-            Require(Results() == "Found 6 help topics" && window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Vital signs"),
+            // Expected counts come from the catalogs, so adding related topics does not break the check.
+            static int Matches(string locale, string category, params string[] words) => DesktopInformationPages.Topics(locale)
+                .Count(t => t.Category == category && words.All(word => (t.Category + " " + t.Title + " " + t.Text).Contains(word, StringComparison.OrdinalIgnoreCase)));
+            int english = Matches("en", "Vital signs", "realtime", "oxygenation");
+            Require(english > 0 && Results() == $"Found {english} help topics" && window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Vital signs"),
                 "help shown before a language switch follows it and searches the English topics: " + Results());
             window.Settings.Language.SelectedIndex = BuiltInLocalizations.Supported.ToList().FindIndex(locale => locale.Code == "zh-CN");
             Dispatcher.UIThread.RunJobs();
@@ -196,7 +200,8 @@ internal static class LocalizationSmokeChecks
                 "switching back keeps the category filter and search text");
             search.Text = "实时氧合";
             Dispatcher.UIThread.RunJobs();
-            Require(Results() == "找到 6 条说明", "Chinese help search finds the same topics: " + Results());
+            int chinese = Matches("zh-CN", "生命体征", "实时氧合");
+            Require(chinese > 0 && Results() == $"找到 {chinese} 条说明", "Chinese help search finds the matching topics: " + Results());
         }
         finally { window.Close(); }
     }

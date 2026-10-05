@@ -107,7 +107,7 @@ The script handles only generated files inside this repository. It does not unin
 Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../../LICENSE) and the [license scope](../legal/license-scope.md). Third-party code and resources retain their own licenses. Dependency sources and hashes are recorded in [`eng/dependencies.json`](../../eng/dependencies.json); see [`eng/licenses/`](../../eng/licenses) and the [Infirmary source notice](../legal/infirmary-source-notice.md) for related notices.
 
 ## To-Do
+- Individual adjustment of vital signs
 - Monitor skin interface
-- Event-driven continuous vital sign changes
 - Separate teacher and student interfaces
 - Teaching and Exam features

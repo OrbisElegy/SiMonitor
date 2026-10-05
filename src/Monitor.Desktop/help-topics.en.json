@@ -168,6 +168,12 @@
     "Title": "ABP and PA systolic/diastolic targets"
   },
   {
+    "Id": "vital-changes",
+    "Category": "Vital signs",
+    "Text": "In Settings → Vital sign changes, select the signs to change (heart rate, breathing rate, SpO₂, EtCO₂, ABP, PA, CVP), enter their targets, set the ramp duration and how the event starts, then click “Add to queue”. An event can start manually, after a delay from being added, or after the previous event ends; to start a manual event, select it in the queue and click “Start selected now”. Once an event starts, each sign changes linearly in simulation time from its value at that moment to its target, and the waveform continues with the new values every 2 seconds while history, measurements and alarms keep accumulating; a duration of 0 changes the values at once. A later event takes over only the signs it includes; other signs continue their changes. “Remove selected” cancels a waiting event, or stops the signs of an active event that no later event has taken over; “Stop all changes” holds every sign at its current value and clears the queue. Changes pause while the simulation is paused. Which signs can change depends on the applied settings: heart rate needs the sinus reference template, and SpO₂ needs the pulse oximetry teaching source without the realtime oxygenation model; ABP and PA without targets start from the current reading and follow targets once changed. Clicking Apply or Restart stops running changes and uses the new settings as the starting point; waiting events are kept. If the generator cannot produce a set of values, changes stop and the reason is shown. Monitor readings are measured from the generated waveforms and may differ slightly from the targets; the 12-lead snapshot updates when settings are applied.",
+    "Title": "Continuous vital sign change events"
+  },
+  {
     "Id": "settings-detail-6",
     "Category": "Advanced parameters",
     "Text": "Open Settings → Advanced parameters → Respiration → CO₂ line. The line delay makes the whole CO₂ signal arrive later; dispersion makes changes more gradual, which can also add delay and affect the measured EtCO₂. Set both to 0 to turn the line effects off. They change the acquired CO₂ signal, not the breathing rhythm source.",

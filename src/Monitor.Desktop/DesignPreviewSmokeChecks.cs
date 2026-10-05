@@ -899,6 +899,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureTargetSmokeChecks.Verify);
+        NativeSmokePartition.Run(VitalChangeSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
         NativeSmokePartition.Run(SettingsNavigationSmokeChecks.Verify);
         NativeSmokePartition.Run(MonitorContinuationSmokeChecks.Verify);
@@ -1214,7 +1215,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.SectionPages[6].SelectedSection = 3;
             Capture(window, "ui-preview-advanced.png");
             Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "applied parameter page shows the active style");
-            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 7, "general preferences and all six simulation categories remain available");
+            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 8, "general preferences, the six simulation categories and vital changes remain available");
             var source = window.Session;
             window.Settings.Slots[0].Minimum.Text = "NaN";
             window.RestartSettings();

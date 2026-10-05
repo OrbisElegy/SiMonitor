@@ -55,6 +55,10 @@ jobs:
         if: runner.os == 'Linux'
         run: python -m unittest discover -s tools -p "test_*.py"
 
+      - name: Run issue triage tests
+        if: runner.os == 'Linux'
+        run: node --test .github/tests/issue-triage.test.cjs
+
       - name: Build and check native audio
         run: python tools/build_native_audio.py --jobs 4
 

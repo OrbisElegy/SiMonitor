@@ -107,7 +107,7 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 
 | ARGS | 输入／输出 |
 |---|---|
-| 无参数 | 执行全部已注册规格 |
+| 无参数 | 执行全部已注册规格；逐条输出 `ok N - 名称` 或 `not ok N - 名称`，异常写入标准错误；任一失败时全部执行完再以 1 退出 |
 | `--shard INDEX COUNT` | 选择规格分片；`0 <= INDEX < COUNT <= 32` |
 | `--list-svg-fixtures` | 标准输出列出 SVG 场景名 |
 | `--svg-fixture NAME` | 标准输出合成三角波 SVG；支持 live、nodata、frozen、frozen-nodata、review、review-nodata、paused、paused-nodata、stopped、stopped-nodata、frozen-return、review-return |

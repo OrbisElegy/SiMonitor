@@ -11,29 +11,42 @@ internal sealed class InfarctionParameterEditor : StackPanel
 {
     internal CheckBox[] ChestLeads { get; } = Enumerable.Range(1, 6).Select(i => new CheckBox { Content = $"V{i}" }).ToArray();
     internal NumericUpDown Delay { get; } = new() { Minimum = 0, Maximum = 500, Increment = 10, Value = 0, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
-    internal CheckBox ComponentsEnabled { get; } = new() { Content = "独立编辑 QRS／ST／T（替代阶段模板形态）" };
-    internal ComboBox Necrosis { get; } = new() { ItemsSource = new[] { "参考 QRS", "异常 Q 波伴 R 波降低", "QS 波" }, SelectedIndex = 0, MinWidth = 220 };
+    internal CheckBox ComponentsEnabled { get; } = new();
+    internal ComboBox Necrosis { get; } = new() { MinWidth = 220 };
     internal NumericUpDown QrsWeight { get; } = Field(0, 100, 100, 1);
-    internal CheckBox ReferenceT { get; } = new() { Content = "沿用参考 T 波", IsChecked = true };
+    internal CheckBox ReferenceT { get; } = new() { IsChecked = true };
     internal NumericUpDown TPeak { get; } = Field(-4000, 4000, 300, 10);
     internal NumericUpDown JPoint { get; } = Field(-4000, 4000, 0, 10);
     internal NumericUpDown StEnd { get; } = Field(-4000, 4000, 0, 10);
     internal NumericUpDown StArch { get; } = Field(-4000, 4000, 0, 10);
-    internal CheckBox SeparateRegions { get; } = new() { Content = "缺血／损伤／坏死分别选区" };
+    internal CheckBox SeparateRegions { get; } = new();
     internal ComboBox IschemiaRegion { get; } = Region();
     internal ComboBox InjuryRegion { get; } = Region();
     internal ComboBox NecrosisRegion { get; } = Region();
+    private readonly DesktopLocalization _localization;
     private readonly StackPanel _zones = new() { Spacing = 8, IsVisible = false };
     internal TabControl Groups { get; } = new() { Padding = new Avalonia.Thickness(0) };
     private readonly StackPanel _tOverride = new() { Spacing = 8 };
-    private readonly TextBlock _componentNote = new() { Text = "本模式不保留阶段模板的 ST–T 融合；QRS 混合比例仅为形态参数。", TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+    private readonly TextBlock _componentNote = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private readonly StackPanel _chest = new() { Spacing = 8 };
     private readonly TextBlock _region = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     internal event Action? Changed;
     private EcgChestInfarctionPlan? _preset;
-    internal InfarctionParameterEditor()
+    internal InfarctionParameterEditor(DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
         Spacing = 8;
+        _localization.Bind(ComponentsEnabled, ContentControl.ContentProperty, "infarction.componentsEnabled");
+        _localization.Bind(ReferenceT, ContentControl.ContentProperty, "infarction.referenceT");
+        _localization.Bind(SeparateRegions, ContentControl.ContentProperty, "infarction.separateRegions");
+        _localization.Bind(_componentNote, TextBlock.TextProperty, "infarction.componentNote");
+        _localization.SetChoices(Necrosis, "infarction.necrosisReference", "infarction.necrosisQ", "infarction.necrosisQs");
+        Necrosis.SelectedIndex = 0;
+        foreach (var selector in new[] { IschemiaRegion, InjuryRegion, NecrosisRegion })
+        {
+            _localization.SetChoices(selector, InfarctionZoneSelection.LocalizedNames);
+            selector.SelectedIndex = 0;
+        }
         Delay.ValueChanged += (_, _) => Changed?.Invoke();
 
         var regionPage = new StackPanel { Spacing = 8 };
@@ -43,35 +56,41 @@ internal sealed class InfarctionParameterEditor : StackPanel
         regionPage.Children.Add(ComponentsEnabled);
         regionPage.Children.Add(_componentNote);
         regionPage.Children.Add(_region);
-        _chest.Children.Add(new TextBlock { Text = "胸导联区域（至少选择一个）" });
+        var chestLabel = new TextBlock();
+        _localization.Bind(chestLabel, TextBlock.TextProperty, "infarction.chestRegion");
+        _chest.Children.Add(chestLabel);
         var row = new WrapPanel();
         foreach (var lead in ChestLeads)
         {
             lead.Margin = new Avalonia.Thickness(0, 0, 16, 0);
-            AutomationProperties.SetName(lead, $"梗死快照目标胸导联 {lead.Content}");
+            _localization.Bind(lead, AutomationProperties.NameProperty, "infarction.chestLeadName", lead.Content);
             lead.IsCheckedChanged += (_, _) => Changed?.Invoke();
             row.Children.Add(lead);
         }
         _chest.Children.Add(row); regionPage.Children.Add(_chest);
         regionPage.Children.Add(SeparateRegions);
-        foreach (var (zoneLabel, selector) in new[] { ("缺血（T 波及局部复极延长）", IschemiaRegion), ("损伤（J／ST）", InjuryRegion), ("坏死（QRS）", NecrosisRegion) })
+        foreach (var (zoneLabel, selector) in new[] { ("infarction.zoneIschemia", IschemiaRegion), ("infarction.zoneInjury", InjuryRegion), ("infarction.zoneNecrosis", NecrosisRegion) })
         {
             Add(_zones, zoneLabel, selector);
             selector.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         }
         regionPage.Children.Add(_zones);
-        Add(repolarizationPage, "局部复极延长（ms；T 时限与 QT 同步增加）", Delay);
-        _tOverride.Children.Add(ReferenceT); Add(_tOverride, "T 波峰幅（μV；负值倒置，0 为低平）", TPeak);
+        Add(repolarizationPage, "infarction.delay", Delay);
+        _tOverride.Children.Add(ReferenceT);
+        Add(_tOverride, "infarction.tPeak", TPeak);
         repolarizationPage.Children.Add(_tOverride);
-        Add(injuryPage, "J 点偏移（μV）", JPoint); Add(injuryPage, "ST 末端偏移（μV）", StEnd); Add(injuryPage, "ST 弓形幅度（μV）", StArch);
-        Add(necrosisPage, "QRS 形态", Necrosis); Add(necrosisPage, "异常 QRS 模板混合比例（%）", QrsWeight);
+        Add(injuryPage, "infarction.jPoint", JPoint);
+        Add(injuryPage, "infarction.stEnd", StEnd);
+        Add(injuryPage, "infarction.stArch", StArch);
+        Add(necrosisPage, "infarction.qrsShape", Necrosis);
+        Add(necrosisPage, "infarction.qrsWeight", QrsWeight);
         Groups.ItemsSource = new[]
         {
-            Page("区域", regionPage), Page("复极／T", repolarizationPage),
-            Page("损伤／ST", injuryPage), Page("坏死／QRS", necrosisPage)
+            Page("infarction.pageRegion", regionPage), Page("infarction.pageRepolarization", repolarizationPage),
+            Page("infarction.pageInjury", injuryPage), Page("infarction.pageNecrosis", necrosisPage)
         };
         Groups.SelectedIndex = 0;
-        AutomationProperties.SetName(Groups, "梗死高级参数分组");
+        _localization.Bind(Groups, AutomationProperties.NameProperty, "infarction.groupsName");
         Children.Add(Groups);
         SeparateRegions.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         ComponentsEnabled.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
@@ -79,23 +98,33 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Necrosis.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         foreach (var field in new[] { QrsWeight, TPeak, JPoint, StEnd, StArch }) { field.ValueChanged += (_, _) => Changed?.Invoke(); }
         RefreshComponents();
-        static TabItem Page(string title, Control content) => new()
+        TabItem Page(string key, Control content)
         {
-            Header = title,
-            Content = content,
-            Padding = new Avalonia.Thickness(0),
-            Margin = new Avalonia.Thickness(0, 0, 20, 0),
-            FontSize = 14,
-            MinHeight = 44
-        };
-        static void Add(StackPanel host, string label, Control control)
-        {
-            host.Children.Add(new TextBlock { Text = label }); host.Children.Add(control);
-            AutomationProperties.SetName(control, label);
+            var page = new TabItem
+            {
+                Content = content,
+                Padding = new Avalonia.Thickness(0),
+                Margin = new Avalonia.Thickness(0, 0, 20, 0),
+                FontSize = 14,
+                MinHeight = 44
+            };
+            _localization.Bind(page, TabItem.HeaderProperty, key);
+            return page;
         }
-        var reset = new Button { Content = "恢复梗死模板参数", MinHeight = 44 };
+        void Add(StackPanel host, string key, Control control)
+        {
+            var label = new TextBlock();
+            _localization.Bind(label, TextBlock.TextProperty, key);
+            host.Children.Add(label);
+            host.Children.Add(control);
+            _localization.Bind(control, AutomationProperties.NameProperty, key);
+        }
+        var reset = new Button { MinHeight = 44 };
+        _localization.Bind(reset, ContentControl.ContentProperty, "infarction.reset");
         reset.Click += (_, _) => Reset(_preset); Children.Add(reset);
-        Children.Add(new TextBlock { Text = "应用后同步十二导联与监护；卡片保留模板预览，快照不会随时间演变。", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+        var note = new TextBlock { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+        _localization.Bind(note, TextBlock.TextProperty, "infarction.applyNote");
+        Children.Add(note);
     }
     internal void Reset(EcgChestInfarctionPlan? preset)
     {
@@ -118,8 +147,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Necrosis.SelectedIndex = 0; QrsWeight.Value = 100;
         ReferenceT.IsChecked = true; TPeak.Value = 300; JPoint.Value = StEnd.Value = StArch.Value = 0;
         RefreshComponents();
-        _region.Text = _chest.IsVisible ? "仅修改所选胸导联；其他胸导联及肢体导联保持原样。"
-            : "保留模板区域及肢体导联投影关系，仅调整局部复极时限。";
+        _localization.Bind(_region, TextBlock.TextProperty, _chest.IsVisible ? "infarction.chestNote" : "infarction.territoryNote");
         Changed?.Invoke();
     }
     internal EcgChestInfarctionPlan? Read(EcgChestInfarctionPlan? preset)
@@ -153,7 +181,7 @@ internal sealed class InfarctionParameterEditor : StackPanel
         return new(InfarctionZoneSelection.Resolve(IschemiaRegion.SelectedIndex), InfarctionZoneSelection.Resolve(InjuryRegion.SelectedIndex),
             InfarctionZoneSelection.Resolve(NecrosisRegion.SelectedIndex), edited.Components!, edited.RepolarizationDelayNs);
     }
-    private static ComboBox Region() => new() { ItemsSource = InfarctionZoneSelection.Names, SelectedIndex = 0, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
+    private static ComboBox Region() => new() { MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Left };
     private bool RegionActive(ComboBox region) =>
         ComponentsEnabled.IsChecked != true || SeparateRegions.IsChecked != true || region.SelectedIndex != 0;
     private void RefreshComponents()

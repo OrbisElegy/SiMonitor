@@ -86,8 +86,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ShapeEditStatus.IsVisible = true;
         }
     }
-    internal TContourParameterEditor TContourParameters { get; } = new();
-    internal InfarctionParameterEditor InfarctionParameters { get; } = new();
+    internal TContourParameterEditor TContourParameters { get; }
+    internal InfarctionParameterEditor InfarctionParameters { get; }
     internal int EcgSelection
     {
         get => _ecgSelection;
@@ -255,6 +255,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Sound = new SoundSettingsPanel(localization: Localization);
         Alerts = new MonitorAlertSettings(Localization);
         Oxygenation = new OxygenationSettingsPanel(Localization);
+        TContourParameters = new TContourParameterEditor(Localization);
+        InfarctionParameters = new InfarctionParameterEditor(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;

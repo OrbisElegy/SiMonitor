@@ -48,6 +48,7 @@ public static class PhysiologyIllustrationSource
         { throw new ArgumentException("Physiology.PressurePulseOutOfRange"); }
         configuration.AbpTarget?.Validate(arterial: true);
         configuration.PaTarget?.Validate(arterial: false);
+        configuration.PressureVariation?.Validate();
         if (configuration.AbpTarget is not null && configuration.AbpPulsePermille != 1000 ||
             configuration.PaTarget is not null && configuration.PaPulsePermille != 1000)
         { throw new ArgumentException("Physiology.PressureTargetConflictsWithPulse"); }
@@ -141,10 +142,36 @@ public static class PhysiologyIllustrationSource
             if (target is null) { continue; }
             channels[row] = ApplyTarget(channels[row], target, plan, ChannelId(row));
         }
+        if (configuration.PressureVariation is { } variation)
+        {
+            channels[3] = ApplyVariation(channels[3], variation.AbpAmplitudeCentiMmHg, configuration.AbpTarget ?? ArterialReference,
+                variation.SeedHex, "physiology.pressure.arterial", plan, ChannelId(3));
+            channels[5] = ApplyVariation(channels[5], variation.PaAmplitudeCentiMmHg, configuration.PaTarget ?? PulmonaryReference,
+                variation.SeedHex, "physiology.pressure.pulmonary", plan, ChannelId(5));
+        }
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
     }
+    // Levels used to convert a drift amplitude when a channel has no target.
+    private static readonly VascularPressureTarget ArterialReference = new(12000, 8000);
+    private static readonly VascularPressureTarget PulmonaryReference = new(2500, 1000);
+
+    private static PhysiologyWaveformChannelPlan ApplyVariation(PhysiologyWaveformChannelPlan channel, int amplitudeCentiMmHg,
+        VascularPressureTarget level, string seedHex, string streamName, RegularPhysiologyPlan plan, Guid channelId)
+    {
+        if (amplitudeCentiMmHg == 0) { return channel; }
+        var pressure = channel.VascularPressure ?? throw new ArgumentException("Physiology.PressureVariationRequiresReservoir");
+        // The drift scales the pressure above the asymptote; express the amplitude at the mean level.
+        int above = (level.SystolicCentiMmHg + level.DiastolicCentiMmHg) / 2 - pressure.AsymptoticPressureCentiMmHg;
+        if (above <= 0) { throw new ArgumentException("Physiology.PressureVariationTooLarge"); }
+        long permille = (long)FixedPointMath.RoundDivideTiesToEven((Int128)amplitudeCentiMmHg * 1000, above);
+        if (permille > SeededVascularVariation.MaximumAmplitudePermille) { throw new ArgumentException("Physiology.PressureVariationTooLarge"); }
+        var varied = pressure with { Variation = new SeededVascularVariation((int)permille, seedHex, streamName) };
+        try { return varied.CreateChannel(plan, channelId, channel.QualityFlags); }
+        catch (EventWaveformException) { throw new ArgumentException("Physiology.PressureVariationTooLarge"); }
+    }
+
     private static PhysiologyWaveformChannelPlan ApplyTarget(PhysiologyWaveformChannelPlan channel, VascularPressureTarget target,
         RegularPhysiologyPlan plan, Guid channelId)
     {

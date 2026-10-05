@@ -14,7 +14,8 @@ public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDura
     int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1",
     VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false,
     bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false,
-    bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false)
+    bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false,
+    SeededVascularVariation? Variation = null)
 {
     public const string EvidenceId = "VascularPressureRcIllustration@1";
 

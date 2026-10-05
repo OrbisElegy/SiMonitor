@@ -99,6 +99,7 @@ internal static class Program
             .. PressureZeroOffsetSpecifications.All,
             .. VascularPressureMorphologySpecifications.All,
             .. VascularPressureTargetSpecifications.All,
+            .. VascularPressureVariationSpecifications.All,
             .. VitalChangeSchedulerSpecifications.All,
             .. PhysiologyForkSpecifications.All,
             .. EcgLimbPlacementSpecifications.All,

@@ -331,6 +331,7 @@ group 的 `Start` 在通用身份/预算参数后接 `RegularPhysiologyPlan phys
 | --- | --- |
 | `VascularPressureSource.Create(RegularPhysiologyPlan, VascularPressurePlan)` / `EvaluateAt(long, CancellationToken = default)` | centi-mmHg 的 Q32 值；储库衰减保留跨缺搏历史，最多 4096 次射血重建，固定 1 µs 网格 |
 | `VascularPressureSource.SolveTarget(RegularPhysiologyPlan, VascularPressurePlan, int systolicCentiMmHg, int diastolicCentiMmHg)` | 带形态的储库按目标求 `R*Q` 和脉搏形态高度；用无脉搏与有脉搏两次探测的完整搏动起点、峰值解线性方程，无法表示时返回 null |
+| `PhysiologyIllustrationConfiguration.PressureVariation`（`VascularPressureVariation`） / `SeededVascularVariation` | ABP、PA 的种子化缓慢波动，按平均压以 ±centi-mmHg 给出幅度，换算为每搏射血强度倍率（15 s 平滑节点）；目标校准不含波动，目标保持为中心 |
 | `PhysiologyIllustrationConfiguration.AbpTarget` / `PaTarget`（`VascularPressureTarget`） | 收缩压／舒张压目标，替代同一通道的脉搏分量倍率；超出范围、脉压小于 5 mmHg、无储库形态或无法生成时抛出 `Physiology.PressureTarget*` 原因 |
 | `PlethRunoffSource.Create(RegularPhysiologyPlan, PlethRunoffPlan)` / `EvaluateAt(long, CancellationToken = default)` | counts 的 Q32 值；有限 LUT 加有界衰减尾部，公开 `SupportNs` 和 `MaximumHistoryEvents` |
 | `ArterialPulsePlan` / `PulmonaryArteryPulsePlan` / `CentralVenousPressurePlan` / `VascularPressurePlan.CreateChannel` | 返回压力 `PhysiologyWaveformChannelPlan`；当前 wire 比例 1/100，量纲 mmHg |

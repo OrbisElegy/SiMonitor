@@ -16,7 +16,7 @@ const checklistHeading = '### 提交前确认 / Submission checklist';
 const statements = [
   '我已搜索现有 issues，未找到相同反馈。 / I searched existing issues and found no duplicate.',
   '我理解本项目仅用于教学模拟。 / I understand this project is for teaching simulation only.',
-  "I'm checking these boxes blindly",
+  "I'm checking these boxes blindly.",
   '我已核对以上信息，并愿意按需补充定位材料。 / I checked the information above and can provide clarification if needed.'
 ];
 const kinds = [

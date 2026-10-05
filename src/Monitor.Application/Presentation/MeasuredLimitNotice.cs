@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Localization;
 using Monitor.Application.Measurements;
 
 namespace Monitor.Application.Presentation;
 
 public sealed record MeasurementLimits(bool Enabled, int? CriticalLow, int? WarningLow, int? WarningHigh, int? CriticalHigh);
 public sealed record MeasurementLimitDescriptor(MonitorNumeric Numeric, string Id, string Label, string Unit,
-    int Divisor, int Minimum, int Maximum, MeasurementLimits TeachingDefaults);
+    int Divisor, int Minimum, int Maximum, MeasurementLimits TeachingDefaults)
+{
+    // Catalog key for Label: "numeric." plus the camel-cased Id, e.g. numeric.respRate.
+    public string LabelKey => "numeric." + string.Concat(Id.Split('-').Select((part, index) =>
+        index == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..]));
+    public TextMessage LabelMessage => new(LabelKey);
+}
 
 // Values and limits use the measurement's native integer units. These are
 // instantaneous local teaching conditions. ConfirmedLimitNotice adds temporal
@@ -50,7 +57,10 @@ public static class MeasuredLimitNotice
         if (!limits.Enabled) { return null; }
         if (limits.CriticalLow is not { } cl || limits.WarningLow is not { } wl || limits.WarningHigh is not { } wh || limits.CriticalHigh is not { } ch ||
             cl < descriptor.Minimum || ch > descriptor.Maximum || cl >= wl || wl >= wh || wh >= ch)
-        { return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限"); }
+        {
+            return new(descriptor.Id + "-settings", MonitorNoticeLevel.Info, descriptor.Label + " 提示设置无效：须满足 Critical 下限 < Warning 下限 < Warning 上限 < Critical 上限")
+            { Message = new("alarm.limitSettingsInvalid", descriptor.LabelMessage) };
+        }
         var (status, value) = Read(numeric, snapshot);
         if (status != WaveformMeasurementStatus.Valid || value is not { } measured || measured < descriptor.Minimum || measured > descriptor.Maximum)
         { return null; }
@@ -63,7 +73,10 @@ public static class MeasuredLimitNotice
     internal static MonitorNotice CreateNotice(MeasurementLimitDescriptor descriptor, bool low, bool critical) =>
         new(descriptor.Id + (low ? "-low" : "-high"), critical ? MonitorNoticeLevel.Critical : MonitorNoticeLevel.Warning,
             descriptor.Label + (critical ? low ? " 极低" : " 极高" : low ? " 低" : " 高"))
-        { Numeric = descriptor.Numeric };
+        { Numeric = descriptor.Numeric, Message = LimitMessage(descriptor.LabelMessage, low, critical) };
+
+    internal static TextMessage LimitMessage(TextMessage label, bool low, bool critical) =>
+        new(critical ? low ? "alarm.limitCriticalLow" : "alarm.limitCriticalHigh" : low ? "alarm.limitLow" : "alarm.limitHigh", label);
 
     internal static (WaveformMeasurementStatus Status, int? Value) Read(MonitorNumeric numeric, LiveMeasurementSnapshot s) => numeric switch
     {

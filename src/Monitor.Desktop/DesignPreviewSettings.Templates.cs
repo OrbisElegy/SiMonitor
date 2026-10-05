@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Localization;
 
 namespace Monitor.Desktop;
 
@@ -17,22 +18,42 @@ internal sealed partial class DesignPreviewSettings
     internal IReadOnlyList<TemplatePage> TemplatePages => _templatePages;
     private readonly List<TemplatePage> _templatePages = [];
 
+    // Template and group names below are stable identities (persisted and compared);
+    // the catalog keys give their display names in the selected language.
+    internal static string EcgTemplateKey(int index) => $"ecgTemplate.t{index:D3}";
+    internal static string RespirationTemplateKey(int index) => $"respirationTemplate.t{index}";
+    internal static string EjectionTemplateKey(int index) => $"ejectionTemplate.t{index}";
+    private static readonly Dictionary<string, string> TemplateGroupKeys = new()
+    {
+        ["规则呼吸"] = "respirationTemplate.groupRegular",
+        ["异常呼吸示意"] = "respirationTemplate.groupAbnormal",
+        ["节律相关"] = "ejectionTemplate.groupRhythm",
+        ["异常射血示意"] = "ejectionTemplate.groupAbnormal",
+    };
+    internal static IEnumerable<string> TemplateGroupIdentities => TemplateGroupKeys.Keys;
+    internal static string TemplateGroupKey(string group) =>
+        TemplateGroupKeys.TryGetValue(group, out string? key) ? key : EcgChooserGroups.Key(group);
+
     private TabControl BuildTemplatePages()
     {
-        _templatePages.Add(new(this, "心电图", 0, EcgChoices, EcgChooserGroups.For, EcgChooserGroups.Ordered,
+        _templatePages.Add(new(this, "generation.ecg", 0, EcgChoices, EcgTemplateKey, EcgChooserGroups.For, EcgChooserGroups.Ordered,
             () => EcgSelection, x => EcgSelection = x));
-        _templatePages.Add(new(this, "呼吸", 1, RespirationChoices, i => i == 0 ? "规则呼吸" : "异常呼吸示意", null,
+        _templatePages.Add(new(this, "generation.respiration", 1, RespirationChoices, RespirationTemplateKey, i => i == 0 ? "规则呼吸" : "异常呼吸示意", null,
             () => RespirationSelection, x => RespirationSelection = x));
-        _templatePages.Add(new(this, "射血", 3, EjectionChoices, i => i == 0 ? "节律相关" : "异常射血示意", null,
+        _templatePages.Add(new(this, "generation.ejection", 3, EjectionChoices, EjectionTemplateKey, i => i == 0 ? "节律相关" : "异常射血示意", null,
             () => EjectionSelection, x => EjectionSelection = x));
-        TemplateSignals.ItemsSource = _templatePages.Select(page => new TabItem
+        TemplateSignals.ItemsSource = _templatePages.Select(page =>
         {
-            Header = page.Title,
-            Content = page,
-            Padding = new Thickness(0),
-            Margin = new Thickness(0, 0, 20, 0),
-            FontSize = 14,
-            MinHeight = 44
+            var tab = new TabItem
+            {
+                Content = page,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 0, 20, 0),
+                FontSize = 14,
+                MinHeight = 44
+            };
+            Localization.Bind(tab, TabItem.HeaderProperty, page.Title);
+            return tab;
         }).ToArray();
         TemplateSignals.SelectionChanged += (_, args) =>
         {
@@ -41,7 +62,11 @@ internal sealed partial class DesignPreviewSettings
         };
         TemplateSignals.SelectedIndex = 0;
         TemplateSignals.Margin = new Thickness(20, 12, 20, 0);
-        AutomationProperties.SetName(TemplateSignals, "波形生成信号");
+        Localization.Bind(TemplateSignals, AutomationProperties.NameProperty, "generation.signals");
+        Localization.LocaleChanged += () =>
+        {
+            foreach (var page in _templatePages) { page.Refresh(); }
+        };
         foreach (var page in _templatePages) { _refreshSignalRows.Add(page.Reset); }
         return TemplateSignals;
     }
@@ -51,6 +76,7 @@ internal sealed partial class DesignPreviewSettings
         private readonly DesignPreviewSettings _owner;
         private readonly int _channel;
         private readonly string[] _choices;
+        private readonly Func<int, string> _nameKey;
         private readonly Func<int, string> _group;
         private readonly IReadOnlyList<string> _groups;
         private readonly Func<int> _read;
@@ -63,10 +89,11 @@ internal sealed partial class DesignPreviewSettings
         private readonly ScrollViewer _scroll;
         private string _activeGroup;
         private bool _syncing;
+        // Catalog key of the signal name.
         internal string Title { get; }
         internal bool Browsable { get; }
         internal TextBlock Selection { get; } = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        internal Button Advanced { get; } = new() { Content = "当前波形高级参数", MinHeight = 44, Padding = new Thickness(12, 0) };
+        internal Button Advanced { get; } = new() { MinHeight = 44, Padding = new Thickness(12, 0) };
         internal TextBox Search { get; } = new() { MinHeight = 44 };
         internal ListBox Groups { get; } = new();
         internal ComboBox CompactGroups { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, IsVisible = false };
@@ -75,13 +102,14 @@ internal sealed partial class DesignPreviewSettings
         internal bool Compact => CompactGroups.IsVisible;
         internal IEnumerable<Button> CardButtons => _cards.Children.OfType<WrapPanel>().SelectMany(panel => panel.Children.OfType<Button>());
 
-        internal TemplatePage(DesignPreviewSettings owner, string title, int channel, string[] choices, Func<int, string> group,
-            IReadOnlyList<string>? groups, Func<int> read, Action<int> write)
+        internal TemplatePage(DesignPreviewSettings owner, string title, int channel, string[] choices, Func<int, string> nameKey,
+            Func<int, string> group, IReadOnlyList<string>? groups, Func<int> read, Action<int> write)
         {
             _owner = owner;
             Title = title;
             _channel = channel;
             _choices = choices;
+            _nameKey = nameKey;
             _group = group;
             _read = read;
             _write = write;
@@ -89,6 +117,7 @@ internal sealed partial class DesignPreviewSettings
             _groups = groups ?? Enumerable.Range(0, choices.Length).Select(group).Distinct().ToArray();
             _activeGroup = group(read());
             _groupMarks = new TextBlock[_groups.Count];
+            owner.Localization.Bind(Advanced, ContentControl.ContentProperty, "generation.advanced");
             Advanced.Click += (_, _) => owner.OpenAdvanced(channel);
             var header = new Grid { ColumnDefinitions = new("*,Auto"), Margin = new Thickness(0, 12, 0, 12) };
             header.Children.Add(Selection); Grid.SetColumn(Advanced, 1); header.Children.Add(Advanced);
@@ -99,8 +128,8 @@ internal sealed partial class DesignPreviewSettings
             _scroll = SettingsScroll.Create(cardArea);
             if (Browsable)
             {
-                Search.PlaceholderText = "搜索" + title + "模板名称";
-                AutomationProperties.SetName(Search, "搜索" + title + "模板");
+                owner.Localization.Bind(Search, TextBox.PlaceholderTextProperty, text => text.Format("generation.searchPlaceholder", text.GetString(title)));
+                owner.Localization.Bind(Search, AutomationProperties.NameProperty, text => text.Format("generation.searchName", text.GetString(title)));
                 // Wide pages keep search above the group column so cards use the full height;
                 // compact pages put the group selector and search on one row.
                 _tools.Children.Add(CompactGroups); Grid.SetColumn(Search, 2); _tools.Children.Add(Search);
@@ -109,15 +138,15 @@ internal sealed partial class DesignPreviewSettings
                 Groups.ItemsSource = _groups.Select((name, index) =>
                 {
                     _groupMarks[index] = new TextBlock { Text = "●", FontSize = 10, Foreground = DesktopFluentStyle.Accent, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) };
-                    var item = SettingsSections.Item(name, showChevron: false, detail: _groupMarks[index]);
+                    var item = SettingsSections.Item(TemplateGroupKey(name), showChevron: false, localization: owner.Localization, detail: _groupMarks[index]);
                     item.MinHeight = 36;
                     item.Padding = new Thickness(4, 6, 10, 6);
                     item.Margin = new Thickness(0, 0, 0, 2);
                     return item;
                 }).ToArray();
-                CompactGroups.ItemsSource = _groups.ToArray();
-                AutomationProperties.SetName(Groups, title + "模板分组");
-                AutomationProperties.SetName(CompactGroups, title + "模板分组");
+                owner.Localization.SetChoices(CompactGroups, _groups.Select(TemplateGroupKey).ToArray());
+                owner.Localization.Bind(Groups, AutomationProperties.NameProperty, text => text.Format("generation.groupsName", text.GetString(title)));
+                owner.Localization.Bind(CompactGroups, AutomationProperties.NameProperty, text => text.Format("generation.groupsName", text.GetString(title)));
                 _groupScroll = SettingsScroll.Create(Groups);
                 Grid.SetRow(_groupScroll, 1); _body.Children.Add(_groupScroll);
                 Grid.SetColumn(_scroll, 2); Grid.SetRowSpan(_scroll, 2);
@@ -183,29 +212,34 @@ internal sealed partial class DesignPreviewSettings
             Refresh();
         }
 
+        private ITextLocalizer Text => _owner.Localization.Current;
+        private string TemplateName(int index) => Text.GetString(_nameKey(index));
+        private string GroupName(string group) => Text.GetString(TemplateGroupKey(group));
+
         internal void Refresh()
         {
             if (_syncing) { return; }
             int selected = _read();
-            Selection.Text = "当前选择：" + _choices[selected] + " · 应用后生效";
+            Selection.Text = Text.Format("generation.selection", TemplateName(selected));
             string current = _group(selected);
             for (int index = 0; index < _groupMarks.Length; index++)
             {
                 if (_groupMarks[index] is not { } mark) { continue; }
                 mark.IsVisible = _groups[index] == current;
                 var item = (ListBoxItem)Groups.Items[index]!;
-                AutomationProperties.SetName(item, _groups[index] + (mark.IsVisible ? "，含当前选择" : ""));
+                AutomationProperties.SetName(item, mark.IsVisible ? Text.Format("generation.groupWithSelection", GroupName(_groups[index])) : GroupName(_groups[index]));
             }
             string[] words = (Search.Text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             int[] shown;
             if (words.Length > 0)
             {
+                // Match displayed names and the stable Chinese identities, so either language finds a template.
                 int[] matches = Enumerable.Range(0, _choices.Length).Where(index => words.All(word =>
-                    (_choices[index] + " " + _group(index)).Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
+                    (TemplateName(index) + " " + GroupName(_group(index)) + " " + _choices[index] + " " + _group(index)).Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
                 shown = matches.Take(TemplateSearchLimit).ToArray();
-                Results.Text = matches.Length == 0 ? "没有匹配的模板，请更换关键词。"
-                    : matches.Length > TemplateSearchLimit ? $"找到 {matches.Length} 个模板，显示前 {TemplateSearchLimit} 个；请输入更具体的名称。"
-                    : $"找到 {matches.Length} 个模板";
+                Results.Text = matches.Length == 0 ? Text.GetString("generation.noMatches")
+                    : matches.Length > TemplateSearchLimit ? Text.Format("generation.manyMatches", matches.Length, TemplateSearchLimit)
+                    : Text.Format("generation.matches", matches.Length);
                 Results.IsVisible = true;
             }
             else
@@ -223,7 +257,7 @@ internal sealed partial class DesignPreviewSettings
             {
                 if (headings)
                 {
-                    _cards.Children.Add(new TextBlock { Text = section.Key, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = DesktopFluentStyle.SecondaryText });
+                    _cards.Children.Add(new TextBlock { Text = GroupName(section.Key), FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = DesktopFluentStyle.SecondaryText });
                 }
                 var panel = new WrapPanel { Orientation = Orientation.Horizontal };
                 foreach (int index in section) { panel.Children.Add(Card(index)); }
@@ -235,7 +269,7 @@ internal sealed partial class DesignPreviewSettings
         {
             bool selected = _read() == index;
             var heading = new Grid { ColumnDefinitions = new("*,Auto"), Height = 40 };
-            heading.Children.Add(new TextBlock { Text = _choices[index], Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
+            heading.Children.Add(new TextBlock { Text = TemplateName(index), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
             var check = new TextBlock { Text = "✓", Foreground = Brush.Parse("#60CDFF"), FontWeight = FontWeight.SemiBold, IsVisible = selected, Margin = new Thickness(6, 0, 0, 0) };
             Grid.SetColumn(check, 1); heading.Children.Add(check);
             var panel = new StackPanel { Spacing = 8 };
@@ -254,7 +288,8 @@ internal sealed partial class DesignPreviewSettings
                 BorderBrush = selected ? Brush.Parse("#60CDFF") : Brushes.Black,
                 BorderThickness = new Thickness(selected ? 3 : 1)
             };
-            AutomationProperties.SetName(candidate, _choices[index] + (selected ? "，已选择" : "，选择此模板"));
+            string CardName(bool chosen) => Text.Format(chosen ? "generation.cardSelected" : "generation.cardChoose", TemplateName(index));
+            AutomationProperties.SetName(candidate, CardName(selected));
             try
             {
                 var owner = _owner;
@@ -264,17 +299,18 @@ internal sealed partial class DesignPreviewSettings
                 candidate.Click += (_, _) =>
                 {
                     _write(index);
-                    owner.Localization.Bind(owner.Status, TextBlock.TextProperty, "settings.templateSelected", _choices[index]);
+                    string key = _nameKey(index);
+                    owner.Localization.Bind(owner.Status, TextBlock.TextProperty, text => text.Format("settings.templateSelected", text.GetString(key)));
                     Refresh();
-                    if (CardButtons.FirstOrDefault(button => AutomationProperties.GetName(button) == _choices[index] + "，已选择") is { } chosen)
+                    if (CardButtons.FirstOrDefault(button => AutomationProperties.GetName(button) == CardName(true)) is { } chosen)
                     { RestoreFocus(chosen); }
                 };
             }
             catch (ArgumentException)
             {
                 candidate.IsEnabled = false;
-                panel.Children.Add(new TextBlock { Text = "与当前其他参数不兼容", Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
-                AutomationProperties.SetHelpText(candidate, "请先调整其他波形设置，此组合当前不可用。");
+                panel.Children.Add(new TextBlock { Text = Text.GetString("generation.incompatible"), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
+                AutomationProperties.SetHelpText(candidate, Text.GetString("generation.incompatibleHelp"));
             }
             return candidate;
         }

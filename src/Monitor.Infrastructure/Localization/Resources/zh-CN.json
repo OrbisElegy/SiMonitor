@@ -803,5 +803,18 @@
   "vitals.opticalModulationField": "光学脉动幅度",
   "advanced.ejectionRequiresPvc": "早搏弱射血需选择单形室早。",
   "advanced.ejectionRequiresSinus": "2:1漏搏需选择窦性参考。",
-  "advanced.ejectionInvalidStyle": "所选模板组合无效。"
+  "advanced.ejectionInvalidStyle": "所选模板组合无效。",
+  "vitals.abpTargetEnabled": "按目标设定 ABP 收缩压／舒张压（替代脉搏分量倍率）",
+  "vitals.abpSystolic": "ABP 收缩压目标（mmHg，50–250）",
+  "vitals.abpDiastolic": "ABP 舒张压目标（mmHg，20–150）",
+  "vitals.paTargetEnabled": "按目标设定 PA 收缩压／舒张压（替代脉搏分量倍率）",
+  "vitals.paSystolic": "PA 收缩压目标（mmHg，10–100）",
+  "vitals.paDiastolic": "PA 舒张压目标（mmHg，6–60）",
+  "vitals.abpSystolicField": "ABP 收缩压目标",
+  "vitals.abpDiastolicField": "ABP 舒张压目标",
+  "vitals.paSystolicField": "PA 收缩压目标",
+  "vitals.paDiastolicField": "PA 舒张压目标",
+  "validation.pressureTargetPulse": "未应用：收缩压目标须比舒张压目标至少高 5 mmHg。原运行与画面保持不变。",
+  "validation.pressureTargetUnreachable": "未应用：当前节律和心率下无法生成所设压力目标；请降低目标、调整心率，或改用脉搏分量倍率。原运行与画面保持不变。",
+  "validation.pressureTargetUnsupported": "未应用：当前波形模板不支持压力目标；请关闭目标或改用脉搏分量倍率。原运行与画面保持不变。"
 }

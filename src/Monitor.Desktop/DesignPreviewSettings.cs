@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -216,6 +217,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown AbpPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
     internal NumericUpDown PaPulseGain { get; } = new() { Minimum = .5m, Maximum = 2, Value = 1, Increment = .1m, Width = 180 };
     internal NumericUpDown CvpBaseline { get; } = new() { Minimum = -5, Maximum = 30, Value = 6, Increment = .5m, Width = 180 };
+    internal CheckBox AbpTargetEnabled { get; } = new() { IsChecked = false };
+    internal NumericUpDown AbpSystolic { get; } = PressureField(VascularPressureTarget.ArterialSystolicRange, 120);
+    internal NumericUpDown AbpDiastolic { get; } = PressureField(VascularPressureTarget.ArterialDiastolicRange, 80);
+    internal CheckBox PaTargetEnabled { get; } = new() { IsChecked = false };
+    internal NumericUpDown PaSystolic { get; } = PressureField(VascularPressureTarget.PulmonarySystolicRange, 25);
+    internal NumericUpDown PaDiastolic { get; } = PressureField(VascularPressureTarget.PulmonaryDiastolicRange, 10);
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
@@ -460,6 +467,24 @@ internal sealed partial class DesignPreviewSettings : UserControl
             panel.Children.Add(control);
             Localization.Bind(control, AutomationProperties.NameProperty, key);
         }
+        // A target replaces the pulse factor of the same channel while it is selected.
+        void AddTarget(CheckBox toggle, string toggleKey, NumericUpDown systolic, string systolicKey,
+            NumericUpDown diastolic, string diastolicKey, NumericUpDown pulseFactor)
+        {
+            Localization.Bind(toggle, ContentControl.ContentProperty, toggleKey);
+            panel.Children.Add(toggle);
+            Add(systolicKey, systolic);
+            Add(diastolicKey, diastolic);
+            void Refresh()
+            {
+                bool enabled = toggle.IsChecked == true;
+                systolic.IsEnabled = enabled;
+                diastolic.IsEnabled = enabled;
+                pulseFactor.IsEnabled = !enabled;
+            }
+            toggle.IsCheckedChanged += (_, _) => Refresh();
+            Refresh();
+        }
         var source = new StackPanel { Spacing = 16 };
         source.Children.Add(OpticalEnabled);
         source.Children.Add(Oxygenation.Realtime);
@@ -484,8 +509,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Oxygenation.Realtime.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         RefreshOpticalControls();
         Add("vitals.abpPulseGain", AbpPulseGain);
+        AddTarget(AbpTargetEnabled, "vitals.abpTargetEnabled", AbpSystolic, "vitals.abpSystolic", AbpDiastolic, "vitals.abpDiastolic", AbpPulseGain);
         Add("vitals.paPulseGain", PaPulseGain);
+        AddTarget(PaTargetEnabled, "vitals.paTargetEnabled", PaSystolic, "vitals.paSystolic", PaDiastolic, "vitals.paDiastolic", PaPulseGain);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
+        panel.Children.Add(DesktopInformationPages.Help("pressure-targets"));
         Add("vitals.cvpBaseline", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
         Add("vitals.seed", RateSeed);
@@ -521,7 +549,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
             (CardiacRateEnabled, () => Filled(HeartRate, RateVariation)),
             (null, BreathingValid),
             (OpticalEnabled, OxygenationValid),
-            (null, () => Filled(AbpPulseGain, PaPulseGain, CvpBaseline)),
+            (null, () => Filled(CvpBaseline) &&
+                (AbpTargetEnabled.IsChecked == true ? PressureTargetValid(AbpSystolic, AbpDiastolic) : Filled(AbpPulseGain)) &&
+                (PaTargetEnabled.IsChecked == true ? PressureTargetValid(PaSystolic, PaDiastolic) : Filled(PaPulseGain))),
             (null, () => IsSeedFormatValid(RateSeed.Text))
         };
         void Refresh()
@@ -540,16 +570,39 @@ internal sealed partial class DesignPreviewSettings : UserControl
         }
         var patient = Oxygenation.Patient;
         var vitalFields = new[] { HeartRate, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
-            OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, Co2DeadSpace, Co2Rise, Co2Fall,
+            OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, AbpSystolic, AbpDiastolic, PaSystolic, PaDiastolic,
+            Co2DeadSpace, Co2Rise, Co2Fall,
             Oxygenation.TidalVolume, Oxygenation.DeadSpace, Oxygenation.InspiredOxygen, Oxygenation.DemandMultiplier,
             patient.Age, patient.PatientHeight, patient.Weight, patient.BloodVolume, patient.Frc, patient.Hemoglobin, patient.BasalDemand };
         foreach (var field in vitalFields) { field.ValueChanged += (_, _) => Refresh(); }
-        var toggles = new[] { CardiacRateEnabled, OpticalEnabled, Oxygenation.Realtime, Oxygenation.AirwayOpen, patient.UseDefaults,
+        var toggles = new[] { CardiacRateEnabled, OpticalEnabled, AbpTargetEnabled, PaTargetEnabled, Oxygenation.Realtime, Oxygenation.AirwayOpen, patient.UseDefaults,
             patient.OverrideBloodVolume, patient.OverrideFrc, patient.OverrideHemoglobin, patient.OverrideBasalDemand };
         foreach (var toggle in toggles) { toggle.IsCheckedChanged += (_, _) => Refresh(); }
         patient.Sex.SelectionChanged += (_, _) => Refresh();
         RateSeed.TextChanged += (_, _) => Refresh();
         Refresh();
+    }
+    private static NumericUpDown PressureField((int MinimumCentiMmHg, int MaximumCentiMmHg) range, decimal valueMmHg) => new()
+    {
+        Minimum = range.MinimumCentiMmHg / 100m,
+        Maximum = range.MaximumCentiMmHg / 100m,
+        Value = valueMmHg,
+        Increment = 1,
+        Width = 180
+    };
+    private static bool PressureTargetValid(NumericUpDown systolic, NumericUpDown diastolic) =>
+        systolic.Value is { } high && diastolic.Value is { } low && high - low >= VascularPressureTarget.MinimumPulseCentiMmHg / 100m;
+    // Reads an enabled target; whole-mmHg bounds come from the simulation contract.
+    internal VascularPressureTarget? ReadPressureTarget(bool arterial)
+    {
+        var (toggle, systolic, diastolic) = arterial ? (AbpTargetEnabled, AbpSystolic, AbpDiastolic) : (PaTargetEnabled, PaSystolic, PaDiastolic);
+        if (toggle.IsChecked != true) { return null; }
+        var target = new VascularPressureTarget(
+            ReadVitalValue(systolic, 100, arterial ? "vitals.abpSystolicField" : "vitals.paSystolicField"),
+            ReadVitalValue(diastolic, 100, arterial ? "vitals.abpDiastolicField" : "vitals.paDiastolicField"));
+        if (target.SystolicCentiMmHg - target.DiastolicCentiMmHg < VascularPressureTarget.MinimumPulseCentiMmHg)
+        { throw new ArgumentException("Preview.PressureTargetPulseTooSmall"); }
+        return target;
     }
     internal void OpenAdvanced(int channel)
     {

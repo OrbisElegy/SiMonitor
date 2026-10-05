@@ -803,5 +803,18 @@
   "vitals.opticalModulationField": "Optical pulse amplitude",
   "advanced.ejectionRequiresPvc": "Weak ejection of premature beats requires monomorphic PVCs.",
   "advanced.ejectionRequiresSinus": "2:1 dropped beats require the sinus reference.",
-  "advanced.ejectionInvalidStyle": "The selected template combination is invalid."
+  "advanced.ejectionInvalidStyle": "The selected template combination is invalid.",
+  "vitals.abpTargetEnabled": "Set ABP by systolic/diastolic targets (replaces the pulse factor)",
+  "vitals.abpSystolic": "ABP systolic target (mmHg, 50–250)",
+  "vitals.abpDiastolic": "ABP diastolic target (mmHg, 20–150)",
+  "vitals.paTargetEnabled": "Set PA by systolic/diastolic targets (replaces the pulse factor)",
+  "vitals.paSystolic": "PA systolic target (mmHg, 10–100)",
+  "vitals.paDiastolic": "PA diastolic target (mmHg, 6–60)",
+  "vitals.abpSystolicField": "ABP systolic target",
+  "vitals.abpDiastolicField": "ABP diastolic target",
+  "vitals.paSystolicField": "PA systolic target",
+  "vitals.paDiastolicField": "PA diastolic target",
+  "validation.pressureTargetPulse": "Not applied: the systolic target must be at least 5 mmHg above the diastolic target. The simulation and display are unchanged.",
+  "validation.pressureTargetUnreachable": "Not applied: the pressure targets cannot be produced with the current rhythm and heart rate. Lower the targets, change the heart rate, or use the pulse factor instead. The simulation and display are unchanged.",
+  "validation.pressureTargetUnsupported": "Not applied: the current waveform template does not support pressure targets. Turn the targets off or use the pulse factor instead. The simulation and display are unchanged."
 }

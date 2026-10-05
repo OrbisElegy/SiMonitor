@@ -898,6 +898,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyIntegratedWindow);
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
+        NativeSmokePartition.Run(PressureTargetSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyUiRefinement);
         NativeSmokePartition.Run(SettingsNavigationSmokeChecks.Verify);
         NativeSmokePartition.Run(MonitorContinuationSmokeChecks.Verify);

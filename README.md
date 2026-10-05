@@ -104,7 +104,6 @@ python3 tools/clean.py dirclean
 项目原创代码采用 AGPL-3.0-or-later，详见 [`LICENSE`](LICENSE) 和 [许可证范围说明](docs/legal/license-scope.md)。第三方代码及资源保留各自的许可证。依赖来源和哈希记录在 [`eng/dependencies.json`](eng/dependencies.json)，相关声明见 [`eng/licenses/`](eng/licenses/) 和 [Infirmary 来源声明](docs/legal/infirmary-source-notice.md)。
 
 ## Todo
-- 生命体征逐项调整
 - 监护仪皮肤接口
 - 事件驱动的生命征连续变化
 - 独立教师端、学生端

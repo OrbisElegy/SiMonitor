@@ -132,6 +132,7 @@ State 为 Stopped/Running/DeviceLost/StopFailed；Failure 区分 None/Open/Start
 
 NativeAudioOutputFactory(string libraryPath, bool allowTestBackend=false) 实现 IPumpedAudioOutput。
 libraryPath 必须 fully qualified，显式加载，无 DLL search-path fallback；ABI 版本必须为 1。
+`DefaultLibraryPath` 是应用目录下按当前平台命名的生产库（Windows `sim_audio_native.dll`）。
 默认拒绝导出 sa_test_render 的测试库；只可同时拥有一个 device，重复 Open 抛 DeviceStillOwned。
 设备 ID 按 UTF-8 传递，禁止内嵌 NUL；原生 open 失败映射 null。
 `Pump()` 每次最多搬运一队列容量，先 drain managed staging，再填 native queue；每次生产最多 240 frames。

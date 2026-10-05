@@ -22,6 +22,10 @@ public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
     private readonly ClockCall? _clock;
     private Device? _device;
 
+    // Production library beside the application, named for the current platform.
+    public static string DefaultLibraryPath => Path.Combine(AppContext.BaseDirectory,
+        OperatingSystem.IsWindows() ? "sim_audio_native.dll" : OperatingSystem.IsMacOS() ? "libsim_audio_native.dylib" : "libsim_audio_native.so");
+
     public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false)
     {
         if (!Path.IsPathFullyQualified(libraryPath)) { throw new ArgumentException("AudioNative.AbsolutePathRequired", nameof(libraryPath)); }

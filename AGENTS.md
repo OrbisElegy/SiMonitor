@@ -16,11 +16,26 @@
 
 ## 文档范围与存放
 
-- `docs/` 仅存放新增或维护的文档仅包含必要的接口文档与技术调研文档。
-- 文档导航见 `docs/README.md`。接口存放于 `docs/interfaces/`，技术调研存放于
-  `docs/research/`，各自按主题分组；英文指南位于 `docs/en/`，许可与归属说明
-  位于 `docs/legal/`，文档图片位于 `docs/assets/`。移动文件时同步维护链接、
-  构建资源、生成器和分发脚本中的引用。
+- 新增或维护的技术文档仅包含必要的接口文档与技术调研文档。
+  `docs/README.md` 为统一导航；`docs/` 根目录只保留该入口，不新增散放的文档。
+  写入前先查找对应主题，优先更新已有文件；确需新增时按下表选择位置。
+
+| 内容 | 写入位置 |
+|---|---|
+| 跨模块接口与集成契约 | `docs/interfaces/`，同步维护其 `README.md` |
+| C# 公开声明索引 | `docs/interfaces/api/`，按程序集维护 |
+| 报警、氧合专题接口 | `docs/interfaces/alarms/`、`docs/interfaces/oxygenation/` |
+| 报警、氧合、生理模型的技术调研 | `docs/research/alarms/`、`docs/research/oxygenation/`、`docs/research/physiology/` |
+| 英文项目指南与摘要 | `docs/en/README.md`、`docs/en/summary.md` |
+| 许可范围与来源归属说明 | `docs/legal/`；第三方许可原文仍保留在既有许可证目录 |
+| 文档图片与运行截图 | `docs/assets/`；运行截图统一放在 `docs/assets/screenshots/` |
+| 程序运行时图标等桌面资源 | `src/Monitor.Desktop/Assets/`；文档引用该资源，不在 `docs/` 复制一份 |
+
+- 新主题沿用上述分类建立子目录，不以临时任务名创建文档目录。
+  新增、移动或删除文档后同步维护 `docs/README.md`、所属目录导航及中英文指南
+  中的相关链接。相对链接以文件自身位置为基准，核对图片和源码链接是否仍可解析。
+- 移动文档时搜索并更新构建资源、依赖清单、生成器、分发脚本及相关测试中的引用；
+  涉及生成内容时修改生成器并验证可重复生成，不只改生成文件里的路径。
 - 其他工作文档，包括计划、TODO、进度、复核记录和验证报告，不得保存在
   被 Git 追踪的路径下。需要落盘时使用已被 Git 忽略的目录或仓库外路径，
   并确认忽略规则生效；不得将仅仅尚未暂存的文件视为已排除追踪。

@@ -17,6 +17,10 @@ internal sealed partial class DesignPreviewSettings
         ["AbpPulseGain"] = AbpPulseGain,
         ["PaPulseGain"] = PaPulseGain,
         ["CvpBaseline"] = CvpBaseline,
+        ["AbpSystolic"] = AbpSystolic,
+        ["AbpDiastolic"] = AbpDiastolic,
+        ["PaSystolic"] = PaSystolic,
+        ["PaDiastolic"] = PaDiastolic,
         ["OpticalTarget"] = OpticalTarget,
         ["OpticalVariation"] = OpticalVariation,
         ["OpticalModulation"] = OpticalModulation,
@@ -55,6 +59,8 @@ internal sealed partial class DesignPreviewSettings
         {
             ["OpticalEnabled"] = OpticalEnabled,
             ["CardiacRateEnabled"] = CardiacRateEnabled,
+            ["AbpTargetEnabled"] = AbpTargetEnabled,
+            ["PaTargetEnabled"] = PaTargetEnabled,
             ["Co2CustomPlateau"] = Co2CustomPlateau,
             ["InfarctionParameters.ComponentsEnabled"] = InfarctionParameters.ComponentsEnabled,
             ["InfarctionParameters.ReferenceT"] = InfarctionParameters.ReferenceT,
@@ -66,6 +72,18 @@ internal sealed partial class DesignPreviewSettings
             flags["InfarctionChest" + i] = InfarctionParameters.ChestLeads[i];
         }
         return flags;
+    }
+    // Fields added after the first saved format. Older files omit them, and restoring
+    // keeps these controls at their defaults; every other field must be present.
+    private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
+    {
+        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled"
+    };
+    private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)
+    {
+        var savedKeys = saved.ToHashSet(StringComparer.Ordinal);
+        var expectedKeys = expected.ToHashSet(StringComparer.Ordinal);
+        return savedKeys.IsSubsetOf(expectedKeys) && expectedKeys.Where(key => !savedKeys.Contains(key)).All(LaterGeneratorFields.Contains);
     }
     internal MonitorGeneratorPreferences CaptureGenerator()
     {
@@ -87,12 +105,12 @@ internal sealed partial class DesignPreviewSettings
         var numbers = GeneratorNumbers();
         var flags = GeneratorFlags();
         var choices = GeneratorChoices();
-        if (!numbers.Keys.ToHashSet().SetEquals(saved.Numbers.Keys) ||
-            !flags.Keys.ToHashSet().SetEquals(saved.Flags.Keys) || !choices.Keys.ToHashSet().SetEquals(saved.Choices.Keys))
+        if (!FieldsMatch(numbers.Keys, saved.Numbers.Keys) ||
+            !FieldsMatch(flags.Keys, saved.Flags.Keys) || !choices.Keys.ToHashSet().SetEquals(saved.Choices.Keys))
         { throw new ArgumentException("GeneratorPreferences.FieldsMismatch"); }
         foreach (var (key, field) in numbers)
         {
-            if (saved.Numbers[key] is { } value && (value < field.Minimum || value > field.Maximum))
+            if (saved.Numbers.TryGetValue(key, out decimal? value) && value is { } number && (number < field.Minimum || number > field.Maximum))
             { throw new ArgumentException("GeneratorPreferences.Range"); }
         }
         foreach (var (key, field) in choices)
@@ -104,9 +122,15 @@ internal sealed partial class DesignPreviewSettings
         EcgSelection = saved.Ecg;
         RespirationSelection = saved.Respiration;
         EjectionSelection = saved.Ejection;
-        foreach (var (key, field) in numbers) { field.Value = saved.Numbers[key]; }
+        foreach (var (key, field) in numbers)
+        {
+            if (saved.Numbers.TryGetValue(key, out decimal? value)) { field.Value = value; }
+        }
         foreach (var (key, field) in choices) { field.SelectedIndex = saved.Choices[key]; }
-        foreach (var (key, field) in flags) { field.IsChecked = saved.Flags[key]; }
+        foreach (var (key, field) in flags)
+        {
+            if (saved.Flags.TryGetValue(key, out bool value)) { field.IsChecked = value; }
+        }
         Oxygenation.Restore(saved.Oxygenation);
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }

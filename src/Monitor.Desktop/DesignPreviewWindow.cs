@@ -312,8 +312,10 @@ internal sealed class DesignPreviewWindow : Window
             RespCardiacArtifactCounts = respArtifact,
             BreathPeriodMilliseconds = breathPeriod,
             InspirationMilliseconds = inspiration,
-            AbpPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "vitals.abpPulseGainField"),
-            PaPulsePermille = DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "vitals.paPulseGainField"),
+            AbpPulsePermille = Settings.AbpTargetEnabled.IsChecked == true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.AbpPulseGain, 1000, "vitals.abpPulseGainField"),
+            PaPulsePermille = Settings.PaTargetEnabled.IsChecked == true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "vitals.paPulseGainField"),
+            AbpTarget = Settings.ReadPressureTarget(arterial: true),
+            PaTarget = Settings.ReadPressureTarget(arterial: false),
             CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "vitals.cvpBaselineField"),
             Co2EndExpiratoryMmHg = co2TargetMmHg
         };
@@ -442,6 +444,12 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.breathingDetail", Settings.BreathingConstraintDescription()); }
         catch (ArgumentException exception) when (exception.Message == "Oxygenation.VentilationFlowTooHigh")
         { SetStatus("validation.oxygenFlow"); }
+        catch (ArgumentException exception) when (exception.Message is "Preview.PressureTargetPulseTooSmall" or "Physiology.PressureTargetPulseTooSmall")
+        { SetStatus("validation.pressureTargetPulse"); }
+        catch (ArgumentException exception) when (exception.Message == "Physiology.PressureTargetUnreachable")
+        { SetStatus("validation.pressureTargetUnreachable"); }
+        catch (ArgumentException exception) when (exception.Message == "Physiology.PressureTargetRequiresReservoirMorphology")
+        { SetStatus("validation.pressureTargetUnsupported"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
             exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
         {

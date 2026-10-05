@@ -86,15 +86,15 @@ internal sealed class SettingsSections : UserControl
             var entry = _entries[args.Index];
             container.IsEnabled = !entry.IsHeader;
             container.Focusable = !entry.IsHeader;
-            if (localization is null) { container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry }); }
-            else { localization.Bind(container, AutomationProperties.NameProperty, entry.Title); }
+            if (localization is not null && DesktopLocalization.IsKey(entry.Title)) { localization.Bind(container, AutomationProperties.NameProperty, entry.Title); }
+            else { container.Bind(AutomationProperties.NameProperty, new Binding(nameof(CompactEntry.AccessibleName)) { Source = entry }); }
         };
         _compact.ItemsSource = _entries;
         AutomationProperties.SetName(Sections, category + "参数组"); AutomationProperties.SetName(_compact, category + "参数组");
         if (localization is not null)
         {
-            localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", text.GetString(category)));
-            localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", text.GetString(category)));
+            localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
+            localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
         }
         var heading = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 12) }; top.Children.Add(heading); top.Children.Add(_compact);
@@ -113,7 +113,8 @@ internal sealed class SettingsSections : UserControl
             _selected = selected;
             _compact.SelectedIndex = Sections.SelectedIndex;
             heading.Text = category + " / " + sections[selected].Title; _detail.Content = pages[selected];
-            localization?.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading", text.GetString(category), text.GetString(sections[selected].Title)));
+            localization?.Bind(heading, TextBlock.TextProperty, text => text.Format("settings.sectionHeading",
+                DesktopLocalization.Label(text, category), DesktopLocalization.Label(text, sections[selected].Title)));
         };
         _compact.SelectionChanged += (_, args) =>
         {
@@ -155,7 +156,7 @@ internal sealed class SettingsSections : UserControl
             title.FontWeight = FontWeight.SemiBold;
             title.Foreground = DesktopFluentStyle.SecondaryText;
         }
-        localization?.Bind(title, TextBlock.TextProperty, entry.Title);
+        localization?.BindLabel(title, TextBlock.TextProperty, entry.Title);
         var detail = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = DesktopFluentStyle.SecondaryText, Margin = new Thickness(12, 0, 0, 0) };
         detail.Bind(TextBlock.TextProperty, new Binding(nameof(CompactEntry.Detail)) { Source = entry });
         var row = new Grid { ColumnDefinitions = new("*,Auto") };
@@ -180,7 +181,7 @@ internal sealed class SettingsSections : UserControl
     private static ListBoxItem Header(string title, DesktopLocalization? localization)
     {
         var text = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = DesktopFluentStyle.SecondaryText };
-        localization?.Bind(text, TextBlock.TextProperty, title);
+        localization?.BindLabel(text, TextBlock.TextProperty, title);
         return new ListBoxItem
         {
             Content = text,
@@ -212,8 +213,8 @@ internal sealed class SettingsSections : UserControl
         }
         var item = new ListBoxItem { MinHeight = 44, Padding = new Thickness(4, 10, 10, 10), Margin = new Thickness(0, 0, 0, 4), Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(item, title);
-        localization?.Bind(text, TextBlock.TextProperty, title);
-        localization?.Bind(item, AutomationProperties.NameProperty, title);
+        localization?.BindLabel(text, TextBlock.TextProperty, title);
+        localization?.BindLabel(item, AutomationProperties.NameProperty, title);
         item.PropertyChanged += (_, args) =>
         {
             if (args.Property != ListBoxItem.IsSelectedProperty) { return; }
@@ -222,15 +223,15 @@ internal sealed class SettingsSections : UserControl
         };
         return item;
     }
-    internal static SettingsSections Split(string category, StackPanel owner, params (string Title, Control Start)[] groups)
-        => Split(category, owner, new Dictionary<int, string>(), groups);
-    internal static SettingsSections Split(string category, StackPanel owner, IReadOnlyDictionary<int, string> headers, (string Title, Control Start)[] groups)
+    internal static SettingsSections Split(DesktopLocalization? localization, string category, StackPanel owner, params (string Title, Control Start)[] groups)
+        => Split(localization, category, owner, new Dictionary<int, string>(), groups);
+    internal static SettingsSections Split(DesktopLocalization? localization, string category, StackPanel owner, IReadOnlyDictionary<int, string> headers, (string Title, Control Start)[] groups)
     {
         var children = owner.Children.ToArray();
         int[] indices = groups.Select(g => Array.IndexOf(children, g.Start)).ToArray();
         if (indices[0] != 0 || indices.Any(i => i < 0) || !indices.SequenceEqual(indices.Order())) { throw new InvalidOperationException("Settings.InvalidGroups"); }
         owner.Children.Clear();
-        return new(null, category, headers, groups.Select((g, i) =>
+        return new(localization, category, headers, groups.Select((g, i) =>
         {
             var panel = new StackPanel { Spacing = 14 };
             foreach (var child in children[indices[i]..(i + 1 < indices.Length ? indices[i + 1] : children.Length)]) { panel.Children.Add(child); }

@@ -29,6 +29,7 @@ internal sealed partial class DesignPreviewSettings
             { LanguageChanged?.Invoke(BuiltInLocalizations.Supported[Language.SelectedIndex].Code); }
         };
         Localization.Bind(Language, AutomationProperties.NameProperty, "settings.language");
+        Localization.Bind(Status, TextBlock.TextProperty, "settings.statusIdle");
         Localization.Bind(Apply, ContentControl.ContentProperty, "common.apply");
         Localization.Bind(Restart, ContentControl.ContentProperty, "settings.restart");
         Localization.Bind(ResetAll, ContentControl.ContentProperty, "settings.resetAction");

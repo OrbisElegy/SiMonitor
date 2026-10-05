@@ -23,6 +23,7 @@ internal static class SettingsNavigationSmokeChecks
             VerifyAlarmNavigation(window);
             VerifyVitalNavigation(window);
             VerifyAdvancedNavigation(window);
+            VerifyCategoryLanguage(window);
             Require(ReferenceEquals(session, window.Session), "navigation and state summaries never replace the running session");
         }
         finally { window.Close(); }
@@ -158,6 +159,35 @@ internal static class SettingsNavigationSmokeChecks
         Require(advanced.SelectedSection == 2, "ejection entry still opens its group with headers present");
         settings.EcgSelection = 0;
         settings.Tabs.SelectedIndex = 1;
+    }
+
+    // Categories follow the selected language even where section titles are not translated yet.
+    private static void VerifyCategoryLanguage(DesignPreviewWindow window)
+    {
+        var settings = window.Settings;
+        (int Tab, string English, string Chinese)[] categories =
+            [(3, "Sound", "声音"), (4, "Alarms", "报警"), (5, "Vital signs", "生命体征"), (6, "Advanced parameters", "高级参数")];
+        settings.Language.SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+        foreach (var (tab, english, _) in categories)
+        {
+            settings.Tabs.SelectedIndex = tab;
+            Layout(window);
+            var sections = settings.SectionPages[tab];
+            Require(sections.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.StartsWith(english + " / ", StringComparison.Ordinal) == true) &&
+                AutomationProperties.GetName(sections.Sections) == english + " parameter groups",
+                english + " heading and navigation name use the selected language");
+        }
+        Require(settings.Status.Text == "Apply continues the current waveform; Restart clears the sweep history.",
+            "idle footer status follows the selected language");
+        Capture(window, "ui-preview-alarms-en.png");
+        settings.Tabs.SelectedIndex = 4;
+        settings.Language.SelectedIndex = 1;
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+        Require(settings.SectionPages[4].GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "报警 / ECG 心率") &&
+            AutomationProperties.GetName(settings.SectionPages[4].Sections) == "报警参数组" &&
+            settings.SectionPages[4].DetailFor(0) == "关", "switching back restores Chinese headings without resetting section state");
     }
 
     private static ComboBox Selector(DesignPreviewWindow window, string name) =>

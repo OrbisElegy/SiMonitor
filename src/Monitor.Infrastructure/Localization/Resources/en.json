@@ -115,5 +115,8 @@
   "validation.patientDetail": "Not applied: {0} The simulation is unchanged.",
   "display.relative": "relative",
   "display.channelUnit": "{0} / {1}",
-  "settings.general": "General"
+  "settings.general": "General",
+  "settings.statusIdle": "Apply continues the current waveform; Restart clears the sweep history.",
+  "settings.templateSelected": "Selected {0}. The preview is updated; running data changes only after you apply.",
+  "settings.pageDefaultsRestored": "Restored the {0} defaults. Not applied yet; the running simulation is unchanged."
 }

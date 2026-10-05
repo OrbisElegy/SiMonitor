@@ -280,7 +280,7 @@ internal sealed class DesignPreviewWindow : Window
             1 => new Viewbox { Stretch = Stretch.Uniform, Child = new DesignPreviewTrace(_ecg, Settings.PaperLayout.SelectedIndex == 1) },
             2 => Settings,
             3 => DesktopInformationPages.CreateHelp(),
-            _ => DesktopInformationPages.CreateAbout()
+            _ => DesktopInformationPages.CreateAbout(Localization)
         };
     }
     private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources()

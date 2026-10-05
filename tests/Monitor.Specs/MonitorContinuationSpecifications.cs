@@ -15,6 +15,8 @@ internal static class MonitorContinuationSpecifications
         new(nameof(StartupDiscardDoesNotPublishTransientSamples), StartupDiscardDoesNotPublishTransientSamples),
         new(nameof(ContinuationSurvivesCheckpointAndPreservesUnchangedSources), ContinuationSurvivesCheckpointAndPreservesUnchangedSources),
         new(nameof(RealtimeContinuationRetainsOxygenReserves), RealtimeContinuationRetainsOxygenReserves),
+        new(nameof(CvpBaselineContinuationPreservesHistoryAndOtherChannels), CvpBaselineContinuationPreservesHistoryAndOtherChannels),
+        new(nameof(CvpBaselineContinuationSurvivesBufferedCheckpoint), CvpBaselineContinuationSurvivesBufferedCheckpoint),
     ];
 
     private static LocalMonitorPreviewSession Session(PhysiologyIllustrationConfiguration? config = null,
@@ -140,6 +142,61 @@ internal static class MonitorContinuationSpecifications
             var expected = control.AdvanceTo(time, 50, 1, 100);
             Check.That(actual.Count == expected.Count && actual.Zip(expected).All(p => p.First.SequenceEqual(p.Second)),
                 "equivalent seeded definitions preserve every source sample");
+        }
+    }
+
+    private static void CvpBaselineContinuationPreservesHistoryAndOtherChannels()
+    {
+        foreach (int baseline in new[] { -500, 0, 1250, 3000 })
+        {
+            var live = Session();
+            var control = Session();
+            live.DiscardStartup();
+            control.DiscardStartup();
+            Advance(live, 8_030_000_000);
+            var history = live.Blocks.ToArray();
+            long boundary = live.ScheduleSource(Session(PhysiologyIllustrationConfiguration.Default with
+            { CvpBaselineCentiMmHg = baseline }), 970_000_000);
+            Check.That(boundary == 9_000_000_000 && live.Blocks.SequenceEqual(history),
+                "CVP change queues without replacing existing acquisition blocks");
+            Advance(live, 25_000_000_000);
+            Advance(control, 25_000_000_000);
+            for (int channel = 0; channel < 7; channel++)
+            {
+                var actual = live.Samples(channel, 0, live.FrontierNs).ToArray();
+                var expected = control.Samples(channel, 0, live.FrontierNs).ToArray();
+                Check.That(actual.Length > 0 && actual.Length == expected.Length && actual.Zip(expected).All(pair =>
+                    pair.First.TimeNs == pair.Second.TimeNs && Math.Abs(pair.First.Value - pair.Second.Value -
+                        (channel == 6 && pair.First.TimeNs >= boundary ? (baseline - 600) / 100d : 0)) < 1e-9),
+                    "only CVP samples at or after activation shift; acquired history and all other channels stay identical");
+            }
+            Check.That(live.Measurements!.CvpMean.MeanCentiMmHg == control.Measurements!.CvpMean.MeanCentiMmHg + baseline - 600,
+                "CVP displayed mean derives the new sampled baseline");
+            var planes = live.Blocks.SelectMany(block => block.Planes).Where(plane => plane.ChannelId == PhysiologyIllustrationSource.ChannelId(6));
+            Check.That(planes.All(plane => plane.OffsetNumerator == 0 && plane.OffsetDenominator == 1),
+                "wire calibration stays fixed across baseline changes");
+        }
+    }
+
+    private static void CvpBaselineContinuationSurvivesBufferedCheckpoint()
+    {
+        var source = PhysiologyIllustrationSource.Create();
+        for (long time = 50_000_000; time <= 6_050_000_000; time += 50_000_000) { source.AdvanceTo(time, 50, 1, 100); }
+        long cursor = 6_050_000_000;
+        foreach (int baseline in new[] { 1250, -500, -500, 3000 })
+        {
+            source.ContinueWith(PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with
+            { CvpBaselineCentiMmHg = baseline }));
+            var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
+            for (int step = 0; step < 5; step++)
+            {
+                cursor += 50_000_000;
+                var expected = source.AdvanceTo(cursor, 50, 1, 100);
+                var actual = restored.AdvanceTo(cursor, 50, 1, 100);
+                Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+                    "repeated CVP changes retain pending old samples and replay identical envelopes");
+                restored = PhysiologyWaveformGroup.Restore(restored.CaptureState());
+            }
         }
     }
 

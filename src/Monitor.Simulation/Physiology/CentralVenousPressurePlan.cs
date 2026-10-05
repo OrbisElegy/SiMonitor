@@ -15,7 +15,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
         CvpWaveComponent[] components = [A, C, X, V, Y];
-        long budget = Math.Abs((long)RespiratoryDeltaCentiMmHg);
+        long budget = Math.Abs((long)BaselineCentiMmHg) + Math.Abs((long)RespiratoryDeltaCentiMmHg);
         if (MaximumComponentOverlap is < 1 or > 8 || BaselineCentiMmHg is < short.MinValue or > short.MaxValue) { throw Invalid(); }
         for (int index = 0; index < components.Length; index++)
         {
@@ -56,7 +56,10 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         bands.Add(new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs,
             Array.AsReadOnly(CvpComponentTables.Respiratory.Select(value => checked(value * RespiratoryDeltaCentiMmHg)).ToArray()),
             RespiratoryPhaseMap.Create(physiology, CvpComponentTables.Respiratory.Count), DepthPattern: physiology.RespiratoryPattern));
-        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, BaselineCentiMmHg, 100), bands.AsReadOnly(), 10, qualityFlags);
+        // The patient baseline belongs to the source, not the wire calibration.
+        // Continuation can then change it without reinterpreting acquired samples.
+        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, 0, 1), bands.AsReadOnly(), 10, qualityFlags,
+            PressureBaselineCentiMmHg: BaselineCentiMmHg);
     }
 
     private static EventWaveformException Invalid() => new("Cvp.InvalidPlan", "plan");

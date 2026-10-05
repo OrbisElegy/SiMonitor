@@ -500,16 +500,16 @@ internal static class WaveformDemoSmokeChecks
         {
             var block = blocks.Single(item => time >= item.StartSimTimeNs && time < item.StartSimTimeNs + 200_000_000);
             var plane = block.Planes.Single(item => item.ChannelId == PhysiologyDemoSource.ChannelId(6));
-            if (plane.ScaleNumerator != 1 || plane.ScaleDenominator != 100 || plane.OffsetNumerator != 600 ||
-                plane.OffsetDenominator != 100 || plane.SampleRateNumerator != 125 || plane.SampleRateDenominator != 1)
-            { throw new InvalidOperationException("CVP lost centi-mmHg baseline or native pressure rate."); }
+            if (plane.ScaleNumerator != 1 || plane.ScaleDenominator != 100 || plane.OffsetNumerator != 0 ||
+                plane.OffsetDenominator != 1 || plane.SampleRateNumerator != 125 || plane.SampleRateDenominator != 1)
+            { throw new InvalidOperationException("CVP lost absolute centi-mmHg encoding or native pressure rate."); }
             int raw = plane.Samples[(int)((time - block.StartSimTimeNs) / 8_000_000)];
-            if (checkSigns && (time is 2_952_000_000L or 3_344_000_000L or 3_480_000_000L ? raw <= 0 : raw >= 0))
+            if (checkSigns && (time is 2_952_000_000L or 3_344_000_000L or 3_480_000_000L ? raw <= 600 : raw >= 600))
             { throw new InvalidOperationException("CVP cardiac waves or signed descents disappeared under respiratory pressure."); }
             int x = (int)Math.Round(time / (double)DemoSweepLayout.NanosecondsPerPixel);
             // Six mmHg baseline is y=775 on the declared -5..15 mmHg axis;
             // each acquired centi-mmHg moves five hundredths of a logical pixel.
-            int y = (int)Math.Round(775 - raw * 0.05);
+            int y = (int)Math.Round(775 - (raw - 600) * 0.05);
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>
             {
                 int offset = line * buffer.RowBytes + column * 4;

@@ -141,7 +141,8 @@ internal static class AtrialFlutterSmokeChecks
             }
         }
         var cvpPlan = FlutterOneToOnePerfusionReference.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
-        var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(4_000_000_000, 500, 100);
+        var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands,
+            pressureBaselineCentiMmHg: cvpPlan.PressureBaselineCentiMmHg).GenerateBefore(4_000_000_000, 500, 100);
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, AtrialFlutterReference.CreateLeadIIBands(1)).GenerateBefore(4_000_000_000, 1000, 100);
         if (!MechanicalUncouplingSmokeChecks.Samples(blocks, 6).SequenceEqual(cvp.Select(s => s.NormalizedValue)) || MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
         { throw new InvalidOperationException("Fast flutter CVP/ECG mismatch."); }

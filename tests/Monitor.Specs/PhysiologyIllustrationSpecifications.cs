@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Security.Cryptography;
 
+using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using PhysiologyDemoConfiguration = Monitor.Simulation.Authoring.PhysiologyIllustrationConfiguration;
 using PhysiologyDemoSource = Monitor.Simulation.Authoring.PhysiologyIllustrationSource;
@@ -13,10 +14,12 @@ internal static class PhysiologyIllustrationSpecifications
     // envelopes from40 advances of200ms (30 completed blocks after delay).
     // SVT/VT/1:1 flutter and AAR/AJR/AIVR goldens reflect their documented
     // filling corrections; other fixtures retain the pre-refactor outputs.
-    // Independent expected bytes guard against shared test/source drift.
+    // CVP now encodes absolute pressure; normalize only that representation back
+    // to the recorded baseline/increment pair before hashing. Frozen hashes still
+    // guard every physical sample, other channel and acquisition metadata.
     public static Specification[] All =>
     [
-        new(nameof(PreservesFourteenRecordedWireOutputs), PreservesFourteenRecordedWireOutputs),
+        new(nameof(PreservesFourteenRecordedPhysicalOutputs), PreservesFourteenRecordedPhysicalOutputs),
         new(nameof(HeadlessSelectionAndValidationRetainBoundaries), HeadlessSelectionAndValidationRetainBoundaries),
     ];
     private static void HeadlessSelectionAndValidationRetainBoundaries()
@@ -40,7 +43,7 @@ internal static class PhysiologyIllustrationSpecifications
             Check.That(rejected, "headless construction preserves authored validation boundaries");
         }
     }
-    private static void PreservesFourteenRecordedWireOutputs()
+    private static void PreservesFourteenRecordedPhysicalOutputs()
     {
         (string Name, PhysiologyDemoConfiguration Configuration, int Envelopes, string Sha256)[] cases =
         [
@@ -66,10 +69,25 @@ internal static class PhysiologyIllustrationSpecifications
             int count = 0;
             for (long time = 200_000_000; time <= 8_000_000_000; time += 200_000_000)
                 foreach (byte[] wire in source.AdvanceTo(time, 50, 1, 100))
-                { hash.AppendData(wire); count++; }
+                {
+                    var envelope = WaveformEnvelopeCodec.Decode(wire);
+                    var cvp = envelope.Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(6));
+                    Check.That(cvp.ScaleNumerator == 1 && cvp.ScaleDenominator == 100 &&
+                        cvp.OffsetNumerator == 0 && cvp.OffsetDenominator == 1,
+                        "CVP uses absolute centi-mmHg samples with fixed zero-offset encoding");
+                    var legacy = cvp with
+                    {
+                        OffsetNumerator = item.Configuration.CvpBaselineCentiMmHg,
+                        OffsetDenominator = 100,
+                        Samples = cvp.Samples.Select(value => checked((short)(value - item.Configuration.CvpBaselineCentiMmHg))).ToArray()
+                    };
+                    hash.AppendData(WaveformEnvelopeCodec.EncodeRaw(envelope with
+                    { Planes = envelope.Planes.Select(plane => plane.ChannelId == cvp.ChannelId ? legacy : plane).ToArray() }));
+                    count++;
+                }
             string actual = Convert.ToHexStringLower(hash.GetHashAndReset());
             if (count != item.Envelopes || actual != item.Sha256)
-            { throw new InvalidOperationException(item.Name + " changed the recorded seven-channel wire output: " + actual); }
+            { throw new InvalidOperationException(item.Name + " changed the recorded seven-channel physical output: " + actual); }
         }
     }
 }

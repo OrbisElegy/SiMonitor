@@ -1839,7 +1839,7 @@ public static class OxygenationPatientDefaults
 源码：[PhysiologySignalContinuation.cs](../../../src/Monitor.Simulation/Physiology/PhysiologySignalContinuation.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed record PhysiologySignalSegment(RegularPhysiologyPlan Plan, IReadOnlyList<EventWaveformBand> Bands, VascularPressurePlan? Pressure, PlethRunoffPlan? Pleth, long FromEventTimeNs, long ToExclusiveEventTimeNs, bool IncludeInitialPressure)
+public sealed record PhysiologySignalSegment(RegularPhysiologyPlan Plan, IReadOnlyList<EventWaveformBand> Bands, VascularPressurePlan? Pressure, PlethRunoffPlan? Pleth, long FromEventTimeNs, long ToExclusiveEventTimeNs, bool IncludeInitialPressure, int PressureBaselineCentiMmHg = 0)
 {
 }
 ```
@@ -1849,7 +1849,7 @@ public sealed record PhysiologySignalSegment(RegularPhysiologyPlan Plan, IReadOn
 源码：[PhysiologySignalGenerator.cs](../../../src/Monitor.Simulation/Physiology/PhysiologySignalGenerator.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed record PhysiologySignalState(RegularPhysiologyState Timeline, SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null)
+public sealed record PhysiologySignalState(RegularPhysiologyState Timeline, SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureBaselineCentiMmHg = 0)
 {
     public long? ActiveFromEventTimeNs { get; init; }
     public IReadOnlyList<PhysiologySignalSegment> History { get; init; }
@@ -1863,7 +1863,7 @@ public sealed class PhysiologySignalException(string reason, string parameter) :
 }
 public sealed class PhysiologySignalGenerator
 {
-    public static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId, ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null);
+    public static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId, ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null, int pressureBaselineCentiMmHg = 0);
     public static PhysiologySignalGenerator Restore(PhysiologySignalState state);
     public PhysiologySignalState CaptureState();
     public IReadOnlyList<PhysiologySignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples, int maximumEvents, CancellationToken cancellationToken = default);
@@ -1917,7 +1917,7 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 {
     public string ReasonCode { get; }
 }
-public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, int DelayCapacity, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0)
+public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, int DelayCapacity, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
 }
 public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator, SignalAcquisitionDelayState Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)

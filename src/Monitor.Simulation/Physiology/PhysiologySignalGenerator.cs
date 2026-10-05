@@ -6,7 +6,7 @@ namespace Monitor.Simulation.Physiology;
 
 public sealed record PhysiologySignalState(RegularPhysiologyState Timeline,
     SignalSampleClockState Clock, IReadOnlyList<EventWaveformBand> Bands,
-    VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null)
+    VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureBaselineCentiMmHg = 0)
 {
     public long? ActiveFromEventTimeNs { get; init; }
     public IReadOnlyList<PhysiologySignalSegment> History { get; init; } = [];
@@ -26,6 +26,7 @@ public sealed class PhysiologySignalGenerator
     private SignalSampleClock _clock;
     private readonly IReadOnlyList<EventWaveformBand> _bands;
     private readonly long _lookbackNs;
+    private readonly int _pressureBaselineCentiMmHg;
     private readonly VascularPressurePlan? _vascularPressurePlan;
     private readonly VascularPressureSource? _vascularPressure;
     private readonly PlethRunoffPlan? _plethRunoffPlan;
@@ -39,6 +40,7 @@ public sealed class PhysiologySignalGenerator
         _clock = SignalSampleClock.Restore(source._clock.CaptureState());
         _bands = source._bands;
         _lookbackNs = source._lookbackNs;
+        _pressureBaselineCentiMmHg = source._pressureBaselineCentiMmHg;
         _vascularPressurePlan = source._vascularPressurePlan;
         _vascularPressure = source._vascularPressure;
         _plethRunoffPlan = source._plethRunoffPlan;
@@ -56,6 +58,11 @@ public sealed class PhysiologySignalGenerator
         if (state.Timeline.CursorSimTimeNs != _clock.CursorSimTimeNs ||
             state.Timeline.Plan.EpochAnchorSimTimeNs != _clock.EpochAnchorSimTimeNs)
         { throw Invalid(); }
+        if (state.PressureBaselineCentiMmHg is < short.MinValue or > short.MaxValue ||
+            state.PressureBaselineCentiMmHg != 0 &&
+            (state.Clock.ProfileId != "AcqPressure125@1" || state.VascularPressure is not null || state.PlethRunoff is not null))
+        { throw Invalid(); }
+        _pressureBaselineCentiMmHg = state.PressureBaselineCentiMmHg;
         if (state.PlethRunoff is { } runoff)
         {
             if (state.VascularPressure is not null || state.Bands is null || state.Bands.Count != 0) { throw Invalid(); }
@@ -92,7 +99,7 @@ public sealed class PhysiologySignalGenerator
         {
             if (from < state.Clock.EpochAnchorSimTimeNs || from > state.Clock.CursorSimTimeNs ||
                 _history.Any(s => s.Segment.ToExclusiveEventTimeNs > from)) { throw Invalid(); }
-            _active = new(new(state.Timeline.Plan, _bands, _vascularPressurePlan, _plethRunoffPlan, from, long.MaxValue, false));
+            _active = new(new(state.Timeline.Plan, _bands, _vascularPressurePlan, _plethRunoffPlan, from, long.MaxValue, false, _pressureBaselineCentiMmHg));
         }
         else if (_history.Length != 0) { throw Invalid(); }
     }
@@ -103,7 +110,7 @@ public sealed class PhysiologySignalGenerator
         bool sameRate = current.Timeline.Plan.SeededRate is { } rate && definition.Timeline.Plan.SeededRate is { } nextRate
             ? rate.HeartRateBpm == nextRate.HeartRateBpm && rate.SeedHex == nextRate.SeedHex && rate.VariationPermille == nextRate.VariationPermille
             : current.Timeline.Plan.SeededRate is null && definition.Timeline.Plan.SeededRate is null;
-        if (sameRate && current.Timeline.Plan with { SeededRate = definition.Timeline.Plan.SeededRate } == definition.Timeline.Plan && _vascularPressurePlan == definition.VascularPressure &&
+        if (_pressureBaselineCentiMmHg == definition.PressureBaselineCentiMmHg && sameRate && current.Timeline.Plan with { SeededRate = definition.Timeline.Plan.SeededRate } == definition.Timeline.Plan && _vascularPressurePlan == definition.VascularPressure &&
             _plethRunoffPlan == definition.PlethRunoff && _bands.Count == definition.Bands.Count &&
             _bands.Zip(definition.Bands).All(pair =>
                 pair.First with
@@ -123,7 +130,7 @@ public sealed class PhysiologySignalGenerator
         if (boundary > from)
         {
             history.Add(new(current.Timeline.Plan, _bands, _vascularPressurePlan, _plethRunoffPlan,
-                from, boundary, _active is null));
+                from, boundary, _active is null, _pressureBaselineCentiMmHg));
         }
         return Restore(definition with
         {
@@ -147,7 +154,7 @@ public sealed class PhysiologySignalGenerator
             { CursorSimTimeNs = Math.Max(state.Plan.EpochAnchorSimTimeNs, timeNs - _lookbackNs) });
             return EventWaveformComposition.Restore(new(_bands,
                 timeline.AdvanceBefore(checked(timeNs + 1), EventWaveformComposition.MaximumEventCount, cancellationToken)))
-                .EvaluateAt(timeNs, cancellationToken);
+                .EvaluateAt(timeNs, cancellationToken) + (long)_pressureBaselineCentiMmHg * FixedPointMath.Q32One;
         }
         foreach (var previous in _history)
         {
@@ -159,11 +166,11 @@ public sealed class PhysiologySignalGenerator
     }
 
     public static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId,
-        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null)
+        ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands, VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null, int pressureBaselineCentiMmHg = 0)
     {
         ArgumentNullException.ThrowIfNull(plan);
         return Restore(new(RegularPhysiologyTimeline.Start(plan).CaptureState(),
-            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands, vascularPressure, plethRunoff));
+            SignalSampleClock.Start(profileId, streamEpoch, plan.EpochAnchorSimTimeNs).CaptureState(), bands, vascularPressure, plethRunoff, pressureBaselineCentiMmHg));
     }
 
     public static PhysiologySignalGenerator Restore(PhysiologySignalState state)
@@ -173,7 +180,7 @@ public sealed class PhysiologySignalGenerator
         catch (OverflowException) { throw Invalid(); }
     }
 
-    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands, _vascularPressurePlan, _plethRunoffPlan)
+    public PhysiologySignalState CaptureState() => new(_timeline.CaptureState(), _clock.CaptureState(), _bands, _vascularPressurePlan, _plethRunoffPlan, _pressureBaselineCentiMmHg)
     {
         ActiveFromEventTimeNs = _active?.Segment.FromEventTimeNs,
         History = Array.AsReadOnly(_history.Select(s => s.Segment).ToArray())
@@ -209,7 +216,8 @@ public sealed class PhysiologySignalGenerator
             long value = _active is not null ? EvaluateAt(ticks[index].SimTimeNs, cancellationToken) : _vascularPressure is { } pressure
                 ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
                 : PlethRunoff is { } runoff ? runoff.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
-                : composition!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
+                : checked(composition!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken) +
+                    (long)_pressureBaselineCentiMmHg * FixedPointMath.Q32One);
             short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
             output[index] = new(ticks[index], value, normalized);
         }

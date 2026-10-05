@@ -55,7 +55,8 @@ internal static class VtPhysiologySmokeChecks
             if (samples.Skip(250).Distinct().Count() < 10) { throw new InvalidOperationException("VT perfusion became flat."); }
         }
         var cvpPlan = VtPerfusionReference.Venous.CreateChannel(plan, PhysiologyDemoSource.ChannelId(6), 0);
-        var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands).GenerateBefore(6_000_000_000, 750, 200);
+        var cvp = PhysiologySignalGenerator.Start(plan, "AcqPressure125@1", 1, cvpPlan.Bands,
+            pressureBaselineCentiMmHg: cvpPlan.PressureBaselineCentiMmHg).GenerateBefore(6_000_000_000, 750, 200);
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 6).Zip(cvp).Any(p => p.First != p.Second.NormalizedValue))
         { throw new InvalidOperationException("VT CVP overlap mismatch."); }
         var artifactConfig = config with { RespCardiacArtifactCounts = 200 };

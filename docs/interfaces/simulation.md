@@ -305,7 +305,7 @@ IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel,
 void ContinueWith(PhysiologyWaveformGroup definition);
 ```
 
-`PhysiologyWaveformChannelPlan` 把 physiology、plane、bands、delay capacity、quality flags、可选 pressure/pleth 源和零偏关联。
+`PhysiologyWaveformChannelPlan` 把 physiology、plane、bands、delay capacity、quality flags、可选 pressure/pleth 源、零偏和 `PressureBaselineCentiMmHg` 关联。
 同组共享同一 physiology plan、epoch 和 cursor；压力储库源、Pleth runoff 源、普通 band 三种路径互斥。
 单通道样本预算最多 1,000,000，事件预算最多 4096，输出块预算 1–300。
 组块 `AdvanceTo` 返回已满足采集延迟的完整 raw envelope，可能暂时为空。
@@ -314,6 +314,13 @@ void ContinueWith(PhysiologyWaveformGroup definition);
 它保留样本时钟、索引、延迟队列和已组装数据，新定义仅处理当前 cursor 之后的新事件；旧事件已触发的尾部继续衰减。
 `PhysiologySignalState` 的 `ActiveFromEventTimeNs` 与 `History` 保存接续分段，外部恢复最多接收 512 个历史段。
 新参数对每个 generator 完成校验后才整体发布；需要改变通道形状、profile 或零偏时不能复用此接口。
+
+CVP 的 `PressureBaselineCentiMmHg` 属于事件叠加信号源，并随当前定义与历史段保存。
+接续时新基线从生效 cursor 开始作用于新采样，已采集数据仍按旧基线恢复；基线不作为旧事件尾部再次叠加。
+它仅用于 `AcqPressure125@1` 的 band 源，不能与 pressure/pleth 储库源同时使用。
+`CentralVenousPressurePlan` 将基线计入有符号 16 位幅度预算，超限在构造通道时拒绝。
+新建 CVP 通道固定使用 scale `1/100`、offset `0/1`，样本包含基线，单位为 centi-mmHg。
+这改变了此前“样本为增量、offset 保存基线”的编码表示；消费者应继续按 plane 的 scale/offset 换算，不能假定样本不含基线。
 
 十二导联走 [ElectrodeSignalGenerator](../../src/Monitor.Simulation/Physiology/ElectrodeSignalGenerator.cs)
 和 [ElectrodeWaveformGroup](../../src/Monitor.Simulation/Physiology/ElectrodeWaveformGroup.cs)：

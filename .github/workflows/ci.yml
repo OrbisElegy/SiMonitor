@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Prepare locked dependencies
+        run: python tools/fetch_dependencies.py
+
+      - name: Verify dependency ledger
+        run: python tools/verify_dependency_ledger.py
+
+      - name: Check SPDX headers
+        if: runner.os == 'Linux'
+        run: python tools/spdx_headers.py --check
+
+      - name: Run Python tool tests
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tools -p "test_*.py"
+
+      - name: Build and check native audio
+        run: python tools/build_native_audio.py --jobs 4
+
+      - name: Build solution (Release)
+        run: dotnet build Monitor.slnx --no-restore --configuration Release
+
+      - name: Check C# style
+        if: runner.os == 'Linux'
+        run: |
+          dotnet format style Monitor.slnx --no-restore --verify-no-changes --severity info --diagnostics IDE0007 IDE0008 IDE0040 IDE0161 IDE1006
+          dotnet format whitespace Monitor.slnx --no-restore --verify-no-changes
+
+      - name: Run executable specifications
+        run: python tools/run_parallel_checks.py --specs-only --configuration Release --jobs 4
+
+      - name: Build solution (Debug) for native binding check
+        run: dotnet build Monitor.slnx --no-restore --configuration Debug
+
+      - name: Check managed/native audio binding
+        run: python tools/check_native_audio_binding.py
+
+      - name: Upload check logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: check-logs-${{ matrix.os }}
+          path: |
+            artifacts/parallel-checks/
+            artifacts/native-audio/build-evidence.json
+          if-no-files-found: ignore

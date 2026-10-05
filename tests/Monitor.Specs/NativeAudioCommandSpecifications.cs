@@ -23,6 +23,10 @@ internal static class NativeAudioCommandSpecifications
         bool rejected = false;
         try { using var factory = new NativeAudioOutputFactory("relative.dll"); } catch (ArgumentException) { rejected = true; }
         Check.That(rejected, "library search-path fallback is forbidden");
+        string defaultLibrary = NativeAudioOutputFactory.DefaultLibraryPath;
+        Check.That(Path.IsPathFullyQualified(defaultLibrary) && Path.GetDirectoryName(defaultLibrary) == Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) &&
+            Path.GetFileName(defaultLibrary) == (OperatingSystem.IsWindows() ? "sim_audio_native.dll" : OperatingSystem.IsMacOS() ? "libsim_audio_native.dylib" : "libsim_audio_native.so"),
+            "default library is the platform-named file beside the application");
         Check.That(NativeAudioCommand.Execute(["--audio-native-diagnostics", missing], output, error, new CancellationToken(true)) == 130,
             "cancelled diagnostics cannot open device");
         Check.That(NativeAudioCommand.Execute(["--audio-native-unknown", missing], output, error, default) == 2,

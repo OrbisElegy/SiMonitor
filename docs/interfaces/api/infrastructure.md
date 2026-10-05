@@ -184,6 +184,7 @@ public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint D
 }
 public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 {
+    public static string DefaultLibraryPath { get; }
     public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false);
     public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
     public NativeAudioStatus? Status { get; }

@@ -91,7 +91,7 @@
   "validation.sound": "Not applied or saved: check volume, source, pause duration and alarm intervals on the Sound page. The current waveform session is unchanged.",
   "validation.notification": "Not applied or saved: correct the mode or timing under Alarms → Notification policy. The current simulation is unchanged.",
   "validation.alarmLimits": "Not applied or saved: complete enabled alarm limits in this order: Critical low < Warning low < Warning high < Critical high. SpO₂ requires Critical low < Warning low. The CO₂ no-breath timeout must be 5–120 seconds. Check the Alarms page. The waveform session is unchanged.",
-  "validation.seed": "Not applied: the shared seed requires 64 lowercase hexadecimal characters (0–9, a–f). Generate one under Vital signs → Shared random seed. The current simulation and display are unchanged.",
+  "validation.seed": "Not applied: the shared seed requires 64 lowercase hexadecimal characters (0–9, a–f). Generate one under Vital signs → Random seed. The current simulation and display are unchanged.",
   "validation.cardiacRate": "Not applied: heart-rate adjustment requires the sinus reference with 1:1 conduction. Disable adjustment under Vital signs → Heart rate, or select a compatible template. The simulation and display are unchanged.",
   "validation.co2Range": "Not applied: the end-tidal CO₂ target plus or minus variation must stay within 5–80 mmHg. Adjust the target or variation under Vital signs → Respiration and CO₂. The simulation and display are unchanged.",
   "validation.co2Regular": "Not applied: breath-to-breath CO₂ variation requires regular breathing. Set variation to 0 under Vital signs → Respiration and CO₂, or select regular breathing. The simulation and display are unchanged.",

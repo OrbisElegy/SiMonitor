@@ -192,6 +192,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal Button GenerateSeed { get; } = new() { Content = "生成随机种子", MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
+    internal TextBlock SeedError { get; } = new()
+    {
+        Text = "须为 64 个小写十六进制字符（0–9、a–f），否则无法应用随机波动。",
+        Foreground = Brushes.OrangeRed,
+        TextWrapping = TextWrapping.Wrap,
+        IsVisible = false
+    };
     internal NumericUpDown InspirationPercent { get; } = new() { Minimum = 10, Maximum = 90, Value = 50, Increment = 1, Width = 180 };
     internal TextBlock BreathingTiming { get; } = Text("");
     internal NumericUpDown RespiratoryRate { get; } = new() { Minimum = 6, Maximum = 60, Value = 16, Increment = 1, Width = 180 };
@@ -307,9 +314,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
             alarmSections.SelectedSection = Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(numeric);
         };
         SectionPages[5] = SettingsSections.Split("生命体征", vitals,
-            ("心率", vitals.Children[0]), ("共用随机种子", Before(vitals, RateSeed)),
-            ("呼吸与 CO₂", Before(vitals, RespiratoryRate)), ("指脉氧", Before(vitals, OpticalEnabled)),
-            ("压力", Before(vitals, AbpPulseGain)));
+            ("心率", vitals.Children[0]), ("呼吸与 CO₂", Before(vitals, RespiratoryRate)),
+            ("指脉氧", Oxygenation), ("压力", Before(vitals, AbpPulseGain)),
+            ("随机种子", Before(vitals, RateSeed)));
+        TrackVitalSections(SectionPages[5]);
         var advancedGroups = new List<(string Title, Control Content)>
         { ("心电图", _advancedEcg), ("呼吸", _advancedRespiration), ("射血", _advancedEjection) };
         var appliedParameters = new StackPanel { Spacing = 20 };
@@ -319,7 +327,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         appliedParameters.Children.Add(AppliedEjectionParameters);
         advancedGroups.Add(("当前已应用参数", appliedParameters));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("开发工具", _advancedTools)); }
-        SectionPages[6] = new SettingsSections("高级参数", advancedGroups.ToArray());
+        var advancedHeaders = new Dictionary<int, string> { [0] = "当前波形", [3] = ProductIdentity.DevelopmentFeatures ? "概览与工具" : "概览" };
+        SectionPages[6] = new SettingsSections(null, "高级参数", advancedHeaders, advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[]
         {
             new TabItem { Header = "RESP 信号", Content = _respSignal, Padding = new Thickness(0), Margin = new Thickness(0, 0, 20, 0), FontSize = 14, MinHeight = 44 },
@@ -527,10 +536,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         panel.Children.Add(CardiacRateEnabled);
         Add("心率目标（bpm，30–180）", HeartRate);
         Add("心搏周期慢波动上限（±%，0–5）", RateVariation);
-        Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
-        panel.Children.Add(GenerateSeed);
-        GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-        panel.Children.Add(DesktopInformationPages.Help("settings-detail-4"));
         Add("基础呼吸频率（次/分，6–60）", RespiratoryRate);
         Add("吸气占周期比例（%，10–90；50表示吸呼1:1）", InspirationPercent);
         panel.Children.Add(BreathingTiming);
@@ -546,45 +551,101 @@ internal sealed partial class DesignPreviewSettings : UserControl
         panel.Children.Add(DesktopInformationPages.Help("topic-4"));
         void Add(string label, Control control)
         { control.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(Text(label)); panel.Children.Add(control); AutomationProperties.SetName(control, label); }
-        panel.Children.Add(Text("指脉氧"));
-        panel.Children.Add(OpticalEnabled);
-        panel.Children.Add(Oxygenation);
-        panel.Children.Add(Text("SpO₂ 教学目标（0–100%）")); panel.Children.Add(OpticalTarget);
-        panel.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); panel.Children.Add(OpticalModulation);
+        var source = new StackPanel { Spacing = 16 };
+        source.Children.Add(OpticalEnabled);
+        source.Children.Add(Oxygenation.Realtime);
+        source.Children.Add(Text("SpO₂ 教学目标（0–100%）")); source.Children.Add(OpticalTarget);
+        source.Children.Add(Text("SpO₂波动幅度（±百分点，0–2.5；0关闭）")); source.Children.Add(OpticalVariation);
+        source.Children.Add(Text("光学脉动幅度倍率（影响实测 PI）")); source.Children.Add(OpticalModulation);
         AutomationProperties.SetName(OpticalModulation, "光学脉动幅度倍率，0.1至2");
         AutomationProperties.SetName(OpticalTarget, "SpO₂ 教学目标，百分比，0至100");
-        Add("SpO₂波动幅度（±百分点，0–2.5；0关闭）", OpticalVariation);
+        AutomationProperties.SetName(OpticalVariation, "SpO₂波动幅度（±百分点，0–2.5；0关闭）");
+        source.Children.Add(DesktopInformationPages.Help("topic-5"));
+        source.Children.Add(DesktopInformationPages.Help("topic-6"));
+        Oxygenation.SetSourceContent(source);
+        panel.Children.Add(Oxygenation);
         void RefreshOpticalControls()
         {
             bool enabled = OpticalEnabled.IsChecked == true;
             OpticalModulation.IsEnabled = enabled;
             OpticalTarget.IsEnabled = OpticalVariation.IsEnabled = enabled && Oxygenation.Realtime.IsChecked != true;
-            Oxygenation.IsEnabled = enabled;
+            Oxygenation.SetSourceEnabled(enabled);
         }
         OpticalEnabled.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         Oxygenation.Realtime.IsCheckedChanged += (_, _) => RefreshOpticalControls();
         RefreshOpticalControls();
-        panel.Children.Add(DesktopInformationPages.Help("topic-5"));
-        panel.Children.Add(DesktopInformationPages.Help("topic-6"));
         Add("ABP脉搏分量倍率（0.5–2）", AbpPulseGain);
         Add("PA脉搏分量倍率（0.5–2）", PaPulseGain);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-5"));
         Add("CVP基线压力（mmHg，−5–30）", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
-        panel.Children.Add(Text("其他生命体征 · 预留编辑，下列项目尚未接入设置。"));
-        foreach (string name in new[] { "无创血压（mmHg）", "体温（°C）", "ABP收缩压/舒张压（mmHg）", "PA收缩压/舒张压（mmHg）" })
-        {
-            var row = new Grid { ColumnDefinitions = new("220,*") };
-            row.Children.Add(Text(name));
-            var field = new TextBox { Text = "尚未接入", IsEnabled = false, MaxWidth = 300, HorizontalAlignment = HorizontalAlignment.Left };
-            AutomationProperties.SetName(field, name + "，尚未接入"); Grid.SetColumn(field, 1); row.Children.Add(field); panel.Children.Add(row);
-        }
+        Add("波动共用种子（64 个小写十六进制字符，256 位）", RateSeed);
+        panel.Children.Add(SeedError);
+        panel.Children.Add(GenerateSeed);
+        GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        RateSeed.TextChanged += (_, _) => SeedError.IsVisible = !IsSeedFormatValid(RateSeed.Text);
+        panel.Children.Add(DesktopInformationPages.Help("settings-detail-4"));
         return panel;
+    }
+    // Mirrors DeterministicStreamFactory.FromLowercaseHex so the draft can be corrected before apply.
+    internal static bool IsSeedFormatValid(string? seed) =>
+        seed is { Length: 64 } && seed.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
+    private void TrackVitalSections(SettingsSections sections)
+    {
+        bool Filled(params NumericUpDown[] fields) => fields.All(field => field.Value is not null);
+        bool OxygenationValid()
+        {
+            if (OpticalEnabled.IsChecked != true) { return true; }
+            if (Oxygenation.Realtime.IsChecked != true) { return Filled(OpticalTarget, OpticalVariation, OpticalModulation); }
+            try { Oxygenation.Capture(true); }
+            catch (ArgumentException) { return false; }
+            return Filled(OpticalModulation);
+        }
+        bool BreathingValid()
+        {
+            try { ReadBreathingTiming(); }
+            catch (ArgumentException) { return false; }
+            return Filled(EtCo2Target, EtCo2Variation);
+        }
+        var states = new (CheckBox? Toggle, Func<bool> Valid)[]
+        {
+            (CardiacRateEnabled, () => Filled(HeartRate, RateVariation)),
+            (null, BreathingValid),
+            (OpticalEnabled, OxygenationValid),
+            (null, () => Filled(AbpPulseGain, PaPulseGain, CvpBaseline)),
+            (null, () => IsSeedFormatValid(RateSeed.Text))
+        };
+        void Refresh()
+        {
+            for (int section = 0; section < states.Length; section++)
+            {
+                var (toggle, valid) = states[section];
+                if (!valid()) { sections.SetDetail(section, "待修正", "待修正"); }
+                else if (toggle is null) { sections.SetDetail(section, null); }
+                else
+                {
+                    bool enabled = toggle.IsChecked == true;
+                    sections.SetDetail(section, enabled ? "开" : "关", enabled ? "已启用" : "已关闭");
+                }
+            }
+        }
+        var patient = Oxygenation.Patient;
+        var vitalFields = new[] { HeartRate, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
+            OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, Co2DeadSpace, Co2Rise, Co2Fall,
+            Oxygenation.TidalVolume, Oxygenation.DeadSpace, Oxygenation.InspiredOxygen, Oxygenation.DemandMultiplier,
+            patient.Age, patient.PatientHeight, patient.Weight, patient.BloodVolume, patient.Frc, patient.Hemoglobin, patient.BasalDemand };
+        foreach (var field in vitalFields) { field.ValueChanged += (_, _) => Refresh(); }
+        var toggles = new[] { CardiacRateEnabled, OpticalEnabled, Oxygenation.Realtime, Oxygenation.AirwayOpen, patient.UseDefaults,
+            patient.OverrideBloodVolume, patient.OverrideFrc, patient.OverrideHemoglobin, patient.OverrideBasalDemand };
+        foreach (var toggle in toggles) { toggle.IsCheckedChanged += (_, _) => Refresh(); }
+        patient.Sex.SelectionChanged += (_, _) => Refresh();
+        RateSeed.TextChanged += (_, _) => Refresh();
+        Refresh();
     }
     internal void OpenAdvanced(int channel)
     {
         Tabs.SelectedIndex = 6;
-        SectionPages[6].Sections.SelectedIndex = channel switch { 0 => 0, 1 => 1, _ => 2 };
+        SectionPages[6].SelectedSection = channel switch { 0 => 0, 1 => 1, _ => 2 };
     }
     private void ResetRespirationDraft()
     {
@@ -625,8 +686,10 @@ internal sealed partial class DesignPreviewSettings : UserControl
         RefreshShapeSummary();
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
-        if (config.Ecg.TContour is null && config.Ecg.Infarction is null)
+        bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null;
+        if (!ecgEditable)
         { _advancedEcg.Children.Add(Text("此模板暂无可编辑的心电图高级参数。")); }
+        SectionPages[6].SetDetail(0, ecgEditable ? null : "无参数", ecgEditable ? null : "当前模板无可编辑参数");
         _advancedEcg.Children.Add(ShapeEditStatus);
         ToolTip.SetTip(RespirationGroups, "当前呼吸模板：" + RespirationChoices[RespirationSelection]);
         _respSignal.Children.Add(Text("RESP 相对信号幅度（−1000–1000；负值反相，0 隐去呼吸分量）"));
@@ -669,8 +732,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
                 Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
             _advancedEjection.Children.Add(Text(noEjection ? "当前无有效射血，不提供射血强度编辑。" : "当前射血模板参数由节律与机械事件共同约束，自定义编辑尚未接入。"));
+            SectionPages[6].SetDetail(2, "无参数", "当前模板无可编辑参数");
         }
-        catch (ArgumentException error) { _advancedEjection.Children.Add(Text("当前组合不兼容：" + error.Message)); }
+        catch (ArgumentException error)
+        {
+            _advancedEjection.Children.Add(Text("当前组合不兼容：" + error.Message));
+            SectionPages[6].SetDetail(2, "不兼容", "当前组合不兼容");
+        }
         _advancedTools.Children.Add(Text("以下为独立开发工具，不会同步本页模板或参数。"));
         _advancedTools.Children.Add(developer);
     }

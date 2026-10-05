@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Localization;
 using Monitor.Application.Presentation;
 
 namespace Monitor.Desktop;
@@ -11,9 +12,9 @@ namespace Monitor.Desktop;
 // Event editors are hosted by their parameter pages; this page keeps the default and an overview.
 internal sealed class AlarmNotificationSettingsPanel : StackPanel
 {
+    private readonly DesktopLocalization _localization;
     internal ComboBox Mode { get; } = new()
     {
-        ItemsSource = new[] { "长警报（持续播放）", "短警报（每次一组）" },
         SelectedIndex = 0,
         MinHeight = 44,
         HorizontalAlignment = HorizontalAlignment.Stretch
@@ -34,21 +35,26 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
     private bool _restoring;
     private readonly Dictionary<string, AlarmNotificationSettings> _effective = new(StringComparer.Ordinal);
 
-    internal AlarmNotificationSettingsPanel(IReadOnlyList<AlarmLifecycleJournal> journals)
+    internal AlarmNotificationSettingsPanel(IReadOnlyList<AlarmLifecycleJournal> journals, DesktopLocalization? localization = null)
     {
+        _localization = localization ?? new DesktopLocalization();
         Spacing = 8;
         var labels = MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.SpO2Descriptor)
             .Prepend(MeasuredLimitNotice.HeartRateDescriptor)
             .SelectMany(d => (d.Numeric == MonitorNumeric.SpO2 ? LowOnly : BothDirections)
-                .Select(low => (Id: d.Id + (low ? "-low" : "-high"), Label: d.Label + (low ? " · 低限" : " · 高限"))))
-            .Append((Id: "co2-no-expiration", Label: "CO₂ · 未检出呼吸")).ToArray();
+                .Select(low => (Id: d.Id + (low ? "-low" : "-high"), Label: AlarmText.ConditionLabel(d, low))))
+            .Append((Id: "co2-no-expiration", Label: new TextMessage("alarm.noExpirationLabel"))).ToArray();
         _ids = labels.Select(l => l.Id).ToArray();
-        Editors = labels.ToDictionary(l => l.Id, l => new ConditionEditor(l.Label), StringComparer.Ordinal);
-        AutomationProperties.SetName(Mode, "默认报警声音方式");
-        Children.Add(new TextBlock { Text = "默认声音方式", TextWrapping = TextWrapping.Wrap });
+        Editors = labels.ToDictionary(l => l.Id, l => new ConditionEditor(l.Label, _localization), StringComparer.Ordinal);
+        _localization.SetChoices(Mode, "alarm.modeContinuous", "alarm.modeNotifications");
+        _localization.Bind(Mode, AutomationProperties.NameProperty, "alarm.modeName");
+        Children.Add(Text("alarm.modeLabel"));
         Children.Add(Mode);
-        Children.Add(new TextBlock { Text = "仅用于选择“跟随默认”的事件；修改立即生效，应用后保存。", TextWrapping = TextWrapping.Wrap });
-        Children.Add(new TextBlock { Text = "各参数事件声音", FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 12, 0, 0) });
+        Children.Add(Text("alarm.modeNote"));
+        var heading = Text("alarm.eventSounds");
+        heading.FontWeight = FontWeight.SemiBold;
+        heading.Margin = new Thickness(0, 12, 0, 0);
+        Children.Add(heading);
         Children.Add(_overview);
         Children.Add(_errors);
         Children.Add(DesktopInformationPages.Help("alarm-notification-settings"));
@@ -88,22 +94,27 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             }
             RefreshErrors();
         };
+        _localization.LocaleChanged += RefreshErrors;
         RefreshErrors();
     }
 
     // Moves the parameter's event editors into a page and adds its overview row.
+    // title is a catalog key or verbatim text.
     internal Control CreateEventPage(MonitorNumeric numeric, string title, params string[] ids)
     {
         var page = new StackPanel { Spacing = 12 };
         foreach (string id in ids)
         {
             var section = new StackPanel { Spacing = 4 };
-            section.Children.Add(new TextBlock { Text = Direction(id), FontWeight = FontWeight.SemiBold });
+            var direction = Text(DirectionKey(id));
+            direction.FontWeight = FontWeight.SemiBold;
+            section.Children.Add(direction);
             section.Children.Add(Editors[id]);
             page.Children.Add(section);
         }
         page.Children.Add(DesktopInformationPages.Help("alarm-notification-settings"));
-        var name = new TextBlock { Text = title, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        var name = new TextBlock { FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        _localization.BindLabel(name, TextBlock.TextProperty, title);
         var summary = new TextBlock { Foreground = DesktopFluentStyle.SecondaryText, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
         var chevron = new TextBlock { Text = "›", VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
         var content = new Grid { ColumnDefinitions = new("120,*,16") };
@@ -130,28 +141,28 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
 
     internal string SummaryFor(string id) => _summaries[id];
 
-    private static string Direction(string id) =>
-        id.EndsWith("-low", StringComparison.Ordinal) ? "低限" :
-        id.EndsWith("-high", StringComparison.Ordinal) ? "高限" : "未检出呼吸";
+    private static string DirectionKey(string id) =>
+        id.EndsWith("-low", StringComparison.Ordinal) ? "alarm.directionLow" :
+        id.EndsWith("-high", StringComparison.Ordinal) ? "alarm.directionHigh" : "alarm.directionNoExpiration";
 
     private void RefreshErrors()
     {
         string[] invalid = Editors.Where(e => !e.Value.IsValid).Select(e => e.Value.Label).ToArray();
-        _errors.Text = Mode.SelectedIndex is not (0 or 1) ? "请选择有效声音模式；保留上次有效模式。" :
-            invalid.Length == 0 ? null : string.Join("、", invalid) + "：请选择有效声音方式；时间须在标注范围内且最多三位小数。保留上次有效策略。";
+        _errors.Text = Mode.SelectedIndex is not (0 or 1) ? _localization.Get("alarm.modeInvalid") :
+            invalid.Length == 0 ? null : _localization.Format("alarm.eventsInvalid", string.Join(_localization.Get("alarm.listSeparator"), invalid));
         _errors.IsVisible = _errors.Text is not null;
         foreach (string id in _ids)
         {
             var settings = _effective[id];
-            string duration = settings.ToPolicy(EffectiveMode).SoundDuration == AlarmSoundDuration.Continuous ? "长警报" : "短警报";
-            string source = settings.SoundMode == AlarmSoundMode.Inherit ? "默认" : "独立";
-            string error = Editors[id].IsValid ? "" : " · 待修正";
-            _summaries[id] = $"{duration}（{source}）{error}";
+            string duration = _localization.Get(settings.ToPolicy(EffectiveMode).SoundDuration == AlarmSoundDuration.Continuous ? "alarm.continuous" : "alarm.notifications");
+            string source = _localization.Get(settings.SoundMode == AlarmSoundMode.Inherit ? "alarm.sourceDefault" : "alarm.sourceIndependent");
+            string error = Editors[id].IsValid ? "" : _localization.Get("alarm.needsFixSuffix");
+            _summaries[id] = _localization.Format("alarm.eventSummary", duration, source, error);
         }
         foreach (var (title, ids, summary, row) in _overviewRows)
         {
-            summary.Text = string.Join("  ·  ", ids.Select(id => Direction(id) + " " + _summaries[id]));
-            AutomationProperties.SetName(row, title + " 事件声音：" + summary.Text);
+            summary.Text = string.Join("  ·  ", ids.Select(id => _localization.Get(DirectionKey(id)) + " " + _summaries[id]));
+            AutomationProperties.SetName(row, _localization.Format("alarm.eventRowName", DesktopLocalization.Label(_localization.Current, title), summary.Text));
         }
     }
 
@@ -186,9 +197,19 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         ModeChanged?.Invoke();
     }
 
+    private TextBlock Text(string key)
+    {
+        var text = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        _localization.Bind(text, TextBlock.TextProperty, key);
+        return text;
+    }
+
     internal sealed class ConditionEditor : StackPanel
     {
-        internal string Label { get; }
+        private readonly DesktopLocalization _localization;
+        private readonly Func<ITextLocalizer, string> _label;
+        // The condition label in the selected language.
+        internal string Label => _label(_localization.Current);
         internal IReadOnlyList<RadioButton> SoundChoices { get; }
         internal int SelectedSoundMode
         {
@@ -210,33 +231,46 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         private readonly TextBlock _defaultDescription = new();
         private readonly TextBlock _error = new()
         {
-            Text = "请选择声音方式；时间须在标注范围内且最多三位小数。保留上次有效策略。",
             Foreground = Brushes.OrangeRed,
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false
         };
         internal NumericUpDown RepeatSeconds { get; } = Number(0, 0);
-        internal CheckBox LatchUntilAcknowledged { get; } = new() { Content = "恢复后保留未确认提示", IsChecked = false };
-        internal CheckBox ReminderEnabled { get; } = new() { Content = "持续活动时提醒", IsChecked = false };
+        internal CheckBox LatchUntilAcknowledged { get; } = new() { IsChecked = false };
+        internal CheckBox ReminderEnabled { get; } = new() { IsChecked = false };
         internal NumericUpDown ReminderSeconds { get; } = Number(30, .001m);
         internal event Action? Changed;
         internal bool IsValid { get { try { _ = Read(); return true; } catch (ArgumentException) { return false; } } }
         private bool _restoring;
         private AlarmPlaybackMode _defaultMode;
 
-        internal ConditionEditor(string label)
+        // label is verbatim text.
+        internal ConditionEditor(string label, DesktopLocalization? localization = null) : this(_ => label, localization) { }
+
+        internal ConditionEditor(TextMessage label, DesktopLocalization? localization = null) : this(label.Render, localization) { }
+
+        private ConditionEditor(Func<ITextLocalizer, string> label, DesktopLocalization? localization)
         {
-            Label = label;
+            _localization = localization ?? new DesktopLocalization();
+            _label = label;
             Spacing = 4;
             var choices = new WrapPanel { Orientation = Orientation.Horizontal };
-            string[] titles = ["跟随默认", "短警报", "长警报"];
-            string[] descriptions = ["", "每次播放一组", "活动期间持续播放"];
+            string[] titles = ["alarm.soundInherit", "alarm.notifications", "alarm.continuous"];
+            string[] descriptions = ["", "alarm.notificationsDescription", "alarm.continuousDescription"];
             var buttons = new List<RadioButton>();
             for (int index = 0; index < titles.Length; index++)
             {
                 var content = new StackPanel { Spacing = 2 };
-                content.Children.Add(new TextBlock { Text = titles[index], FontWeight = FontWeight.SemiBold });
-                content.Children.Add(index == 0 ? _defaultDescription : new TextBlock { Text = descriptions[index], FontSize = 12 });
+                var title = new TextBlock { FontWeight = FontWeight.SemiBold };
+                _localization.Bind(title, TextBlock.TextProperty, titles[index]);
+                content.Children.Add(title);
+                if (index == 0) { content.Children.Add(_defaultDescription); }
+                else
+                {
+                    var description = new TextBlock { FontSize = 12 };
+                    _localization.Bind(description, TextBlock.TextProperty, descriptions[index]);
+                    content.Children.Add(description);
+                }
                 var choice = new RadioButton
                 {
                     Content = content,
@@ -244,41 +278,50 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
                     Width = 196,
                     IsChecked = index == 0
                 };
-                AutomationProperties.SetName(choice, label + " " + titles[index]);
+                string key = titles[index];
+                if (index > 0) { _localization.Bind(choice, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString(key))); }
                 choices.Children.Add(choice);
                 buttons.Add(choice);
             }
             SoundChoices = buttons;
             Children.Add(choices);
             var fields = AlarmConfirmationEditor.CreateFieldsPanel();
-            Add("重复抑制（秒，0–3600）", RepeatSeconds);
-            Add("提醒间隔（秒，0.001–3600）", ReminderSeconds);
+            Add("alarm.repeatSuppression", RepeatSeconds);
+            Add("alarm.reminderInterval", ReminderSeconds);
+            _localization.Bind(LatchUntilAcknowledged, ContentControl.ContentProperty, "alarm.latch");
+            _localization.Bind(ReminderEnabled, ContentControl.ContentProperty, "alarm.reminder");
+            _localization.Bind(_error, TextBlock.TextProperty, "alarm.eventInvalid");
             _shortSettings.Children.Add(ReminderEnabled);
             _shortSettings.Children.Add(fields);
             var advancedContent = new StackPanel { Spacing = 8 };
             advancedContent.Children.Add(LatchUntilAcknowledged);
             advancedContent.Children.Add(_shortSettings);
-            var reset = new Button { Content = "恢复此事件默认", MinHeight = 44 };
-            AutomationProperties.SetName(reset, label + " 恢复默认通知策略");
+            var reset = new Button { MinHeight = 44 };
+            _localization.Bind(reset, ContentControl.ContentProperty, "alarm.resetEvent");
+            _localization.Bind(reset, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString("alarm.resetEventName")));
             reset.Click += (_, _) => Restore(AlarmNotificationSettings.Default);
             var actions = new WrapPanel { Orientation = Orientation.Horizontal };
             actions.Children.Add(reset);
-            actions.Children.Add(new TextBlock { Text = "修改立即生效，应用后保存。", Margin = new Thickness(12, 10, 0, 0), TextWrapping = TextWrapping.Wrap });
+            var effect = new TextBlock { Margin = new Thickness(12, 10, 0, 0), TextWrapping = TextWrapping.Wrap };
+            _localization.Bind(effect, TextBlock.TextProperty, "alarm.eventChangeEffect");
+            actions.Children.Add(effect);
             advancedContent.Children.Add(actions);
             Advanced.Content = advancedContent;
             Children.Add(Advanced);
             Children.Add(_error);
-            void Add(string text, NumericUpDown field)
+            void Add(string key, NumericUpDown field)
             {
                 var row = new StackPanel { Spacing = 4, Width = 220, Margin = new Thickness(0, 0, 24, 8) };
-                row.Children.Add(new TextBlock { Text = text });
+                var caption = new TextBlock();
+                _localization.Bind(caption, TextBlock.TextProperty, key);
+                row.Children.Add(caption);
                 row.Children.Add(field);
                 fields.Children.Add(row);
-                AutomationProperties.SetName(field, label + " " + text);
+                _localization.Bind(field, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString(key)));
             }
-            AutomationProperties.SetName(LatchUntilAcknowledged, label + " 恢复后保留未确认提示");
+            _localization.Bind(LatchUntilAcknowledged, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString("alarm.latch")));
             LatchUntilAcknowledged.IsCheckedChanged += (_, _) => Edited();
-            AutomationProperties.SetName(ReminderEnabled, label + " 持续活动时提醒");
+            _localization.Bind(ReminderEnabled, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString("alarm.reminder")));
             foreach (var choice in SoundChoices)
             {
                 choice.IsCheckedChanged += (_, _) =>
@@ -290,6 +333,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             ReminderSeconds.ValueChanged += (_, _) => Edited();
             ReminderEnabled.IsCheckedChanged += (_, _) => Edited();
             ReminderSeconds.IsEnabled = false;
+            _localization.LocaleChanged += UpdateAvailability;
         }
 
         private static NumericUpDown Number(decimal value, decimal minimum) => new()
@@ -318,12 +362,12 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         {
             bool shortSound = SelectedSoundMode == 1 || SelectedSoundMode == 0 && _defaultMode == AlarmPlaybackMode.Notifications;
             bool invalid = !IsValid;
-            _defaultDescription.Text = _defaultMode == AlarmPlaybackMode.Notifications ? "当前：短警报" : "当前：长警报";
-            AutomationProperties.SetName(SoundChoices[0], Label + " 跟随默认，" + _defaultDescription.Text);
+            _defaultDescription.Text = _localization.Get(_defaultMode == AlarmPlaybackMode.Notifications ? "alarm.currentNotifications" : "alarm.currentContinuous");
+            AutomationProperties.SetName(SoundChoices[0], _localization.Format("alarm.inheritName", Label, _defaultDescription.Text));
             _shortSettings.IsVisible = shortSound || invalid;
             RepeatSeconds.IsEnabled = ReminderEnabled.IsEnabled = shortSound || invalid;
             ReminderSeconds.IsEnabled = invalid || shortSound && ReminderEnabled.IsChecked == true;
-            Advanced.Header = shortSound || invalid ? "短警报高级参数" : "保持与更多操作";
+            Advanced.Header = _localization.Get(shortSound || invalid ? "alarm.advancedShort" : "alarm.advancedMore");
             _error.IsVisible = invalid;
             if (invalid) { Advanced.IsExpanded = true; }
         }

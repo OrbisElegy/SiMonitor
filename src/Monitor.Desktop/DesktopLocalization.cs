@@ -18,6 +18,8 @@ internal sealed class DesktopLocalization(string? locale = null)
     private readonly List<WeakReference<LocalizedValue>> _values = [];
     private readonly ConditionalWeakTable<AvaloniaObject, Dictionary<AvaloniaProperty, LocalizedValue>> _sources = new();
     internal string Locale => _text.Locale;
+    // The localizer for the selected language, for text computed outside bindings.
+    internal ITextLocalizer Current => _text;
     internal string Get(string key) => _text.GetString(key);
     internal string Format(string key, params object?[] arguments) => _text.Format(key, arguments);
 

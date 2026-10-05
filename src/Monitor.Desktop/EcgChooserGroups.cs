@@ -13,6 +13,12 @@ internal static class EcgChooserGroups
         "T 波形态", "钾相关形态", "钙相关形态", "洋地黄样形态", "奎尼丁样形态",
         "下壁梗死形态", "侧壁梗死形态", "前间壁梗死形态", "前壁梗死形态", "广泛前壁梗死形态"
     });
+    // Display key for a group identity; the identity itself stays Chinese.
+    internal static string Key(string group)
+    {
+        int index = Ordered.ToList().IndexOf(group);
+        return index < 0 ? throw new ArgumentOutOfRangeException(nameof(group)) : $"ecgGroup.g{index:D2}";
+    }
     internal static string For(int index) => index switch
     {
         0 or 1 or 3 => "窦性心律",

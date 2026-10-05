@@ -856,6 +856,7 @@ internal static class DesignPreviewSmokeChecks
     {
         // Each registration runs on its process-owned Avalonia dispatcher.
         NativeSmokePartition.Run(LocalizationSmokeChecks.Verify);
+        NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyTemplateCatalog);
         NativeSmokePartition.Run(Ecg12MeasurementSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyVisibleVariation);
         NativeSmokePartition.Run(VerifyStableSlowContours);

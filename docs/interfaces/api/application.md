@@ -6,6 +6,58 @@
 
 位置 record 的参数也定义其同名属性；编译器合成的构造器、相等性方法以及继承成员不重复展开。`internal` 类型即使有 `public` 成员也不属于本索引。按开发构建的预处理分支读取；桌面产品构建差异见[桌面与命令行入口](../desktop-tools.md)。行为约束和集成顺序见总览中的分模块文档。
 
+## Classroom/Exam.cs
+
+源码：[Exam.cs](../../../src/Monitor.Application/Classroom/Exam.cs) · 命名空间：`Monitor.Application.Classroom`
+
+```csharp
+public enum ExamQuestionKind { SingleChoice, Numeric }
+public sealed record ExamQuestion(string Prompt, ExamQuestionKind Kind, IReadOnlyList<string> Options, int? CorrectOption, decimal? CorrectValue, decimal Tolerance, string Unit, int Points)
+{
+    public const int MaximumPromptLength = 500;
+    public const int MaximumOptionCount = 8;
+    public const int MaximumOptionLength = 200;
+    public const int MaximumPoints = 100;
+}
+public sealed record ExamDefinition(Guid Id, string Title, bool Formal, long DurationNs, bool LockMeasurement, IReadOnlyList<ExamQuestion> Questions)
+{
+    public const int MaximumQuestionCount = 50;
+    public const int MaximumTitleLength = 100;
+    public const long MaximumDurationNs = 4L * 3_600_000_000_000;
+    public void Validate(bool requireAnswers = true);
+    public ExamDefinition WithoutAnswers();
+}
+public sealed record ExamAnswer(int QuestionIndex, int? Option, decimal? Value)
+{
+}
+public sealed record ExamQuestionScore(int QuestionIndex, bool Answered, bool Correct, int Awarded, int Possible)
+{
+}
+public sealed record ExamScore(int Awarded, int Possible, IReadOnlyList<ExamQuestionScore> Questions)
+{
+}
+public static class ExamScorer
+{
+    public static ExamScore Score(ExamDefinition exam, IReadOnlyList<ExamAnswer> answers);
+    public static void ValidateAnswers(ExamDefinition exam, IReadOnlyList<ExamAnswer> answers);
+}
+public sealed record ExamSubmission(string StudentId, string StudentName, long ReceivedSimTimeNs, IReadOnlyList<ExamAnswer> Answers, ExamScore Score)
+{
+}
+public sealed class ExamRun
+{
+    public ExamRun(ExamDefinition exam, long openedSimTimeNs);
+    public ExamDefinition Exam { get; }
+    public long OpenedSimTimeNs { get; }
+    public bool IsOpen { get; }
+    public IReadOnlyCollection<ExamSubmission> Submissions { get; }
+    public bool AcceptsAt(long simTimeNs);
+    public ExamSubmission Submit(string studentId, string studentName, IReadOnlyList<ExamAnswer> answers, long simTimeNs);
+    public void Close();
+    public string ToCsv();
+}
+```
+
 ## Continuity/ClientRecoverySession.cs
 
 源码：[ClientRecoverySession.cs](../../../src/Monitor.Application/Continuity/ClientRecoverySession.cs) · 命名空间：`Monitor.Application.Continuity`

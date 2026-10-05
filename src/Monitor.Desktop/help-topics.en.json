@@ -174,6 +174,12 @@
     "Title": "Continuous vital sign change events"
   },
   {
+    "Id": "ecg-st-adjustment",
+    "Category": "Vital signs",
+    "Text": "In Settings → Vital signs → ECG ST segment and J point, choose a lead region (a single chest lead, V1–V3, V3–V5, V1–V5, inferior II/III/aVF or lateral I/aVL/V5/V6), then enter the J point offset, ST end offset and ST arch height in microvolts (positive raises, negative lowers) and click Apply; the monitor and 12-lead views both change. Select “Also change the T wave peak in this region” to set the T wave peak; negative values invert it and 0 flattens it. Limb lead regions change together through electrode projection; other leads keep the reference shape. Set the region to Off to return to the reference shape. This applies only to the sinus reference template and not together with heart-rate adjustment or 2:1 dropped beats; edit infarction and T wave shape templates under Advanced parameters. These are shape parameters, not measured ST values, and do not represent a diagnosis.",
+    "Title": "ECG ST segment and J point adjustment"
+  },
+  {
     "Id": "settings-detail-6",
     "Category": "Advanced parameters",
     "Text": "Open Settings → Advanced parameters → Respiration → CO₂ line. The line delay makes the whole CO₂ signal arrive later; dispersion makes changes more gradual, which can also add delay and affect the measured EtCO₂. Set both to 0 to turn the line effects off. They change the acquired CO₂ signal, not the breathing rhythm source.",

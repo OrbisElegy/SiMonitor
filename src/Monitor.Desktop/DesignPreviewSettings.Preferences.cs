@@ -23,6 +23,10 @@ internal sealed partial class DesignPreviewSettings
         ["PaDiastolic"] = PaDiastolic,
         ["AbpVariation"] = AbpVariation,
         ["PaVariation"] = PaVariation,
+        ["EcgJPoint"] = EcgJPoint,
+        ["EcgStEnd"] = EcgStEnd,
+        ["EcgStArch"] = EcgStArch,
+        ["EcgTPeak"] = EcgTPeak,
         ["OpticalTarget"] = OpticalTarget,
         ["OpticalVariation"] = OpticalVariation,
         ["OpticalModulation"] = OpticalModulation,
@@ -53,6 +57,7 @@ internal sealed partial class DesignPreviewSettings
         ["InfarctionParameters.IschemiaRegion"] = InfarctionParameters.IschemiaRegion,
         ["InfarctionParameters.InjuryRegion"] = InfarctionParameters.InjuryRegion,
         ["InfarctionParameters.NecrosisRegion"] = InfarctionParameters.NecrosisRegion,
+        ["EcgRegion"] = EcgRegion,
     };
 
     private Dictionary<string, CheckBox> GeneratorFlags()
@@ -63,6 +68,7 @@ internal sealed partial class DesignPreviewSettings
             ["CardiacRateEnabled"] = CardiacRateEnabled,
             ["AbpTargetEnabled"] = AbpTargetEnabled,
             ["PaTargetEnabled"] = PaTargetEnabled,
+            ["EcgTOverride"] = EcgTOverride,
             ["Co2CustomPlateau"] = Co2CustomPlateau,
             ["InfarctionParameters.ComponentsEnabled"] = InfarctionParameters.ComponentsEnabled,
             ["InfarctionParameters.ReferenceT"] = InfarctionParameters.ReferenceT,
@@ -79,7 +85,8 @@ internal sealed partial class DesignPreviewSettings
     // keeps these controls at their defaults; every other field must be present.
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
-        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
+        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation",
+        "EcgJPoint", "EcgStEnd", "EcgStArch", "EcgTPeak", "EcgTOverride", "EcgRegion"
     };
     private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)
     {
@@ -108,7 +115,7 @@ internal sealed partial class DesignPreviewSettings
         var flags = GeneratorFlags();
         var choices = GeneratorChoices();
         if (!FieldsMatch(numbers.Keys, saved.Numbers.Keys) ||
-            !FieldsMatch(flags.Keys, saved.Flags.Keys) || !choices.Keys.ToHashSet().SetEquals(saved.Choices.Keys))
+            !FieldsMatch(flags.Keys, saved.Flags.Keys) || !FieldsMatch(choices.Keys, saved.Choices.Keys))
         { throw new ArgumentException("GeneratorPreferences.FieldsMismatch"); }
         foreach (var (key, field) in numbers)
         {
@@ -117,7 +124,7 @@ internal sealed partial class DesignPreviewSettings
         }
         foreach (var (key, field) in choices)
         {
-            if (saved.Choices[key] < -1 || saved.Choices[key] >= field.Items.Count)
+            if (saved.Choices.TryGetValue(key, out int choice) && (choice < -1 || choice >= field.Items.Count))
             { throw new ArgumentException("GeneratorPreferences.Choice"); }
         }
         ApplyDelaySeconds.Value = saved.ApplyDelaySeconds;
@@ -128,7 +135,10 @@ internal sealed partial class DesignPreviewSettings
         {
             if (saved.Numbers.TryGetValue(key, out decimal? value)) { field.Value = value; }
         }
-        foreach (var (key, field) in choices) { field.SelectedIndex = saved.Choices[key]; }
+        foreach (var (key, field) in choices)
+        {
+            if (saved.Choices.TryGetValue(key, out int choice)) { field.SelectedIndex = choice; }
+        }
         foreach (var (key, field) in flags)
         {
             if (saved.Flags.TryGetValue(key, out bool value)) { field.IsChecked = value; }

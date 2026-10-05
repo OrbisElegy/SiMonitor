@@ -79,18 +79,18 @@ internal static class SettingsNavigationSmokeChecks
         settings.Tabs.SelectedIndex = 5;
         var vitals = settings.SectionPages[5];
         string?[] names = vitals.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已关闭", "压力", "随机种子"]),
+        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已关闭", "压力", "心电图 ST 段与 J 点", "随机种子"]),
             "vital sections list measurements first and the shared seed last, with switch state: " + string.Join(" / ", names));
         settings.CardiacRateEnabled.IsChecked = true;
         Require(vitals.DetailFor(0) == "开", "heart-rate state follows its switch");
         string? seed = settings.RateSeed.Text;
         settings.RateSeed.Text = new string('A', 64);
-        vitals.SelectedSection = 4;
+        vitals.SelectedSection = 5;
         Capture(window, "ui-preview-vitals-seed-error.png");
-        Require(vitals.DetailFor(4) == "待修正" && settings.SeedError.IsEffectivelyVisible, "invalid seed is flagged before apply");
+        Require(vitals.DetailFor(5) == "待修正" && settings.SeedError.IsEffectivelyVisible, "invalid seed is flagged before apply");
         settings.RateSeed.Text = seed;
         Dispatcher.UIThread.RunJobs();
-        Require(vitals.DetailFor(4) is null && !settings.SeedError.IsVisible, "corrected seed clears the inline error");
+        Require(vitals.DetailFor(5) is null && !settings.SeedError.IsVisible, "corrected seed clears the inline error");
         settings.InspirationPercent.Value = null;
         settings.CvpBaseline.Value = null;
         Require(vitals.DetailFor(1) == "待修正" && vitals.DetailFor(3) == "待修正", "missing breathing and pressure inputs are flagged");

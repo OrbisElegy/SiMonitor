@@ -399,6 +399,8 @@ internal sealed class DesignPreviewWindow : Window
         var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
         var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
         var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
+        // ST/J adjustments apply to the sinus reference only; other templates reject them.
+        if (Settings.ReadReferenceRepolarization() is { } reference) { zones = reference; }
         config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
         var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
         config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
@@ -556,6 +558,9 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.pressureTargetUnsupported"); }
         catch (ArgumentException exception) when (exception.Message is "Physiology.PressureVariationTooLarge" or "Physiology.PressureVariationRequiresReservoir")
         { SetStatus("validation.pressureVariation"); }
+        catch (ArgumentException exception) when (exception.Message == "Preview.EcgAdjustmentRequiresSinus" ||
+            exception is EventWaveformException { ReasonCode: "EcgInfarction.ConflictingModes" } && Settings.EcgRegion.SelectedIndex > 0)
+        { SetStatus("validation.ecgAdjustment"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("OxygenationDefaults.", StringComparison.Ordinal) ||
             exception.Message.StartsWith("OxygenReservoir.", StringComparison.Ordinal))
         {

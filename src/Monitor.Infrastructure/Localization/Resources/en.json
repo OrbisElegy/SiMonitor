@@ -875,5 +875,17 @@
   "vitals.paVariation": "PA random drift (±mmHg at the mean, 0–5; 0 off)",
   "vitals.abpVariationField": "ABP random drift",
   "vitals.paVariationField": "PA random drift",
-  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged."
+  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged.",
+  "vitals.sectionEcg": "ECG ST segment and J point",
+  "vitals.ecgRegion": "Lead region to adjust (sinus reference only)",
+  "vitals.ecgJPoint": "J point offset (μV, −4000–4000)",
+  "vitals.ecgStEnd": "ST end offset (μV, −4000–4000)",
+  "vitals.ecgStArch": "ST arch height (μV, −4000–4000)",
+  "vitals.ecgTOverride": "Also change the T wave peak in this region",
+  "vitals.ecgTPeak": "T wave peak (μV; negative inverts, 0 is flat)",
+  "vitals.ecgJPointField": "J point offset",
+  "vitals.ecgStEndField": "ST end offset",
+  "vitals.ecgStArchField": "ST arch height",
+  "vitals.ecgTPeakField": "T wave peak",
+  "validation.ecgAdjustment": "Not applied: ST segment and J point adjustment works only with the sinus reference template and not together with heart-rate adjustment or 2:1 dropped beats. Set the region to Off or change the other settings. The simulation and display are unchanged."
 }

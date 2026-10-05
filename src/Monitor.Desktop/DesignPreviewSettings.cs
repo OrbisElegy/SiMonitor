@@ -225,6 +225,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown PaSystolic { get; } = PressureField(VascularPressureTarget.PulmonarySystolicRange, 25);
     internal NumericUpDown PaDiastolic { get; } = PressureField(VascularPressureTarget.PulmonaryDiastolicRange, 10);
     internal NumericUpDown AbpVariation { get; } = VariationField(VascularPressureVariation.AbpAmplitudeRange);
+    // ST segment, J point and T wave of the sinus reference in a lead region (μV).
+    internal ComboBox EcgRegion { get; } = new() { MinWidth = 220 };
+    internal NumericUpDown EcgJPoint { get; } = MicrovoltField();
+    internal NumericUpDown EcgStEnd { get; } = MicrovoltField();
+    internal NumericUpDown EcgStArch { get; } = MicrovoltField();
+    internal CheckBox EcgTOverride { get; } = new() { IsChecked = false };
+    internal NumericUpDown EcgTPeak { get; } = MicrovoltField(300);
     internal NumericUpDown PaVariation { get; } = VariationField(VascularPressureVariation.PaAmplitudeRange);
     internal NumericUpDown EtCo2Target { get; } = new() { Minimum = 5, Maximum = 80, Value = 40, Increment = 1, Width = 180 };
     internal NumericUpDown OpticalVariation { get; } = new() { Minimum = 0, Maximum = 2.5m, Value = 0, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
@@ -336,7 +343,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         SectionPages[5] = SettingsSections.Split(Localization, "settings.vitals", vitals,
             ("vitals.sectionHeartRate", vitals.Children[0]), ("vitals.sectionBreathing", Before(vitals, RespiratoryRate)),
             ("vitals.sectionOximetry", Oxygenation), ("vitals.sectionPressure", Before(vitals, AbpPulseGain)),
-            ("vitals.sectionSeed", Before(vitals, RateSeed)));
+            ("vitals.sectionEcg", Before(vitals, EcgRegion)), ("vitals.sectionSeed", Before(vitals, RateSeed)));
         TrackVitalSections(SectionPages[5]);
         var advancedGroups = new List<(string Title, Control Content)>
         { ("generation.ecg", _advancedEcg), ("generation.respiration", _advancedRespiration), ("generation.ejection", _advancedEjection) };
@@ -525,6 +532,25 @@ internal sealed partial class DesignPreviewSettings : UserControl
         panel.Children.Add(DesktopInformationPages.Help("pressure-targets"));
         Add("vitals.cvpBaseline", CvpBaseline);
         panel.Children.Add(DesktopInformationPages.Help("topic-7"));
+        Localization.SetChoices(EcgRegion, InfarctionZoneSelection.LocalizedNames);
+        EcgRegion.SelectedIndex = 0;
+        Add("vitals.ecgRegion", EcgRegion);
+        Add("vitals.ecgJPoint", EcgJPoint);
+        Add("vitals.ecgStEnd", EcgStEnd);
+        Add("vitals.ecgStArch", EcgStArch);
+        Localization.Bind(EcgTOverride, ContentControl.ContentProperty, "vitals.ecgTOverride");
+        panel.Children.Add(EcgTOverride);
+        Add("vitals.ecgTPeak", EcgTPeak);
+        void RefreshEcgFields()
+        {
+            bool active = EcgRegion.SelectedIndex > 0;
+            EcgJPoint.IsEnabled = EcgStEnd.IsEnabled = EcgStArch.IsEnabled = EcgTOverride.IsEnabled = active;
+            EcgTPeak.IsEnabled = active && EcgTOverride.IsChecked == true;
+        }
+        EcgRegion.SelectionChanged += (_, _) => RefreshEcgFields();
+        EcgTOverride.IsCheckedChanged += (_, _) => RefreshEcgFields();
+        RefreshEcgFields();
+        panel.Children.Add(DesktopInformationPages.Help("ecg-st-adjustment"));
         Add("vitals.seed", RateSeed);
         panel.Children.Add(SeedError);
         panel.Children.Add(GenerateSeed);
@@ -561,6 +587,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             (null, () => Filled(CvpBaseline, AbpVariation, PaVariation) &&
                 (AbpTargetEnabled.IsChecked == true ? PressureTargetValid(AbpSystolic, AbpDiastolic) : Filled(AbpPulseGain)) &&
                 (PaTargetEnabled.IsChecked == true ? PressureTargetValid(PaSystolic, PaDiastolic) : Filled(PaPulseGain))),
+            (null, () => EcgRegion.SelectedIndex <= 0 || Filled(EcgJPoint, EcgStEnd, EcgStArch, EcgTPeak)),
             (null, () => IsSeedFormatValid(RateSeed.Text))
         };
         void Refresh()
@@ -580,12 +607,13 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var patient = Oxygenation.Patient;
         var vitalFields = new[] { HeartRate, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
             OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, AbpSystolic, AbpDiastolic, PaSystolic, PaDiastolic,
-            AbpVariation, PaVariation,
+            AbpVariation, PaVariation, EcgJPoint, EcgStEnd, EcgStArch, EcgTPeak,
             Co2DeadSpace, Co2Rise, Co2Fall,
             Oxygenation.TidalVolume, Oxygenation.DeadSpace, Oxygenation.InspiredOxygen, Oxygenation.DemandMultiplier,
             patient.Age, patient.PatientHeight, patient.Weight, patient.BloodVolume, patient.Frc, patient.Hemoglobin, patient.BasalDemand };
         foreach (var field in vitalFields) { field.ValueChanged += (_, _) => Refresh(); }
-        var toggles = new[] { CardiacRateEnabled, OpticalEnabled, AbpTargetEnabled, PaTargetEnabled, Oxygenation.Realtime, Oxygenation.AirwayOpen, patient.UseDefaults,
+        EcgRegion.SelectionChanged += (_, _) => Refresh();
+        var toggles = new[] { CardiacRateEnabled, OpticalEnabled, AbpTargetEnabled, PaTargetEnabled, EcgTOverride, Oxygenation.Realtime, Oxygenation.AirwayOpen, patient.UseDefaults,
             patient.OverrideBloodVolume, patient.OverrideFrc, patient.OverrideHemoglobin, patient.OverrideBasalDemand };
         foreach (var toggle in toggles) { toggle.IsCheckedChanged += (_, _) => Refresh(); }
         patient.Sex.SelectionChanged += (_, _) => Refresh();
@@ -600,6 +628,29 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Increment = 1,
         Width = 180
     };
+    private static NumericUpDown MicrovoltField(decimal value = 0) => new()
+    {
+        Minimum = -4000,
+        Maximum = 4000,
+        Value = value,
+        Increment = 10,
+        Width = 180
+    };
+    // Zones on the sinus reference, or null when no region is selected or nothing changes.
+    internal EcgInfarctionZones? ReadReferenceRepolarization()
+    {
+        if (EcgRegion.SelectedIndex <= 0) { return null; }
+        var region = InfarctionZoneSelection.Resolve(EcgRegion.SelectedIndex);
+        int j = ReadVitalValue(EcgJPoint, 1, "vitals.ecgJPointField");
+        int stEnd = ReadVitalValue(EcgStEnd, 1, "vitals.ecgStEndField");
+        int stArch = ReadVitalValue(EcgStArch, 1, "vitals.ecgStArchField");
+        int? tPeak = EcgTOverride.IsChecked == true ? ReadVitalValue(EcgTPeak, 1, "vitals.ecgTPeakField") : null;
+        bool injury = j != 0 || stEnd != 0 || stArch != 0;
+        if (!injury && tPeak is null) { return null; }
+        if (EcgSelection != 0) { throw new ArgumentException("Preview.EcgAdjustmentRequiresSinus"); }
+        return new(tPeak is null ? new() : region, injury ? region : new(), new(),
+            new(TPeakMicrovolts: tPeak, JMicrovolts: j, StEndMicrovolts: stEnd, StArchMicrovolts: stArch));
+    }
     private static NumericUpDown VariationField((int MinimumCentiMmHg, int MaximumCentiMmHg) range) => new()
     {
         Minimum = range.MinimumCentiMmHg / 100m,

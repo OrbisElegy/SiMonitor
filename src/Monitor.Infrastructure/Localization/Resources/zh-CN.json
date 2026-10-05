@@ -875,5 +875,17 @@
   "vitals.paVariation": "PA 随机波动（±mmHg，按平均压，0–5；0 关闭）",
   "vitals.abpVariationField": "ABP 随机波动",
   "vitals.paVariationField": "PA 随机波动",
-  "validation.pressureVariation": "未应用：当前压力水平或波形模板不支持该随机波动幅度；请减小波动或提高压力目标。原运行与画面保持不变。"
+  "validation.pressureVariation": "未应用：当前压力水平或波形模板不支持该随机波动幅度；请减小波动或提高压力目标。原运行与画面保持不变。",
+  "vitals.sectionEcg": "心电图 ST 段与 J 点",
+  "vitals.ecgRegion": "调整的导联区域（仅窦性参考）",
+  "vitals.ecgJPoint": "J 点偏移（μV，−4000–4000）",
+  "vitals.ecgStEnd": "ST 末端偏移（μV，−4000–4000）",
+  "vitals.ecgStArch": "ST 弓形幅度（μV，−4000–4000）",
+  "vitals.ecgTOverride": "同时改变该区域的 T 波峰幅",
+  "vitals.ecgTPeak": "T 波峰幅（μV；负值倒置，0 为低平）",
+  "vitals.ecgJPointField": "J 点偏移",
+  "vitals.ecgStEndField": "ST 末端偏移",
+  "vitals.ecgStArchField": "ST 弓形幅度",
+  "vitals.ecgTPeakField": "T 波峰幅",
+  "validation.ecgAdjustment": "未应用：ST 段与 J 点调整仅用于窦性参考模板，且不能与心率调整或 2:1 漏搏同时使用。请将区域设为“关闭”或调整其他设置。原运行与画面保持不变。"
 }

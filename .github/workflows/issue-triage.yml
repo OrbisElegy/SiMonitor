@@ -1,29 +1,33 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-name: Issue intake
+name: Issue and PR intake
 
 on:
   issues:
     types: [opened, edited]
+  # Label fork PRs using trusted base-branch code; never check out or execute PR code.
+  pull_request_target:
+    types: [opened, edited, reopened]
   workflow_dispatch:
   push:
     paths:
       - .github/ISSUE_TEMPLATE/**
+      - .github/pull_request_template.md
       - .github/workflows/issue-triage.yml
 
 permissions:
   issues: write
 
 concurrency:
-  group: issue-intake-${{ github.event.issue.number || github.ref }}
+  group: issue-intake-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   triage:
     if: github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Initialize labels and process issue form
+      - name: Initialize labels and process issue or PR declarations
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -35,7 +39,9 @@ jobs:
               { name: 'area:waveform', color: '5319e7', description: 'Waveforms, physiology, or measurements.' },
               { name: 'needs-triage', color: 'fbca04', description: 'Awaiting maintainer review.' },
               { name: 'invalid', color: 'e4e669', description: 'This report is not accepted in its current form.' },
-              { name: 'triage:blind-check', color: 'b60205', description: 'The reporter selected the blind-checking statement.' }
+              { name: 'triage:blind-check', color: 'b60205', description: 'The submitter selected the blind-checking statement.' },
+              { name: 'No human-supervised', color: 'f9d0c4', description: 'The submitter declared an AI-agent submission without human review.' },
+              { name: 'Suspicious human-supervised', color: 'fbca04', description: 'The submitter declared that human review status is unknown.' }
             ];
             const types = new Map([
               ['程序逻辑 Bug / Program bug', ['bug', 'area:program']],
@@ -44,12 +50,15 @@ jobs:
               ['波形功能建议 / Waveform feature request', ['enhancement', 'area:waveform']]
             ]);
 
-            // Only standalone form headings count. Ignore quoted text and code fences.
-            function sections(body) {
+            // Forms use level 3 headings; the PR template uses level 2 headings.
+            // Only standalone headings count. Ignore HTML comments, quotes and fences.
+            function sections(body, level = 3) {
               const found = new Map();
+              const prefix = '#'.repeat(level) + ' ';
               let current = null;
               let fence = null;
-              for (const line of body.replace(/\r\n/g, '\n').split('\n')) {
+              const visible = body.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+              for (const line of visible.replace(/\r\n/g, '\n').split('\n')) {
                 if (fence) {
                   const end = line.match(/^ {0,3}(`+|~+)\s*$/);
                   if (end && end[1][0] === fence[0] && end[1].length >= fence.length) fence = null;
@@ -59,8 +68,8 @@ jobs:
                 if (start) { fence = start[1]; continue; }
                 if (/^#{1,6} /.test(line)) {
                   current = null;
-                  if (line.startsWith('### ')) {
-                    const title = line.slice(4).trim();
+                  if (line.startsWith(prefix)) {
+                    const title = line.slice(prefix.length).trim();
                     // Duplicate headings are ambiguous; never act on them.
                     if (found.has(title)) found.set(title, null);
                     else { current = []; found.set(title, current); }
@@ -68,6 +77,12 @@ jobs:
                 } else if (current) current.push(line);
               }
               return new Map([...found].map(([title, lines]) => [title, lines?.join('\n').trim()]));
+            }
+
+            function checkedItems(section) {
+              return (section || '').split('\n')
+                .map(line => /^- \[[xX]\] (.+?)\s*$/.exec(line))
+                .filter(Boolean).map(match => match[1]);
             }
 
             async function ensureLabel(label) {
@@ -85,15 +100,36 @@ jobs:
               }
             }
 
-            if (context.eventName !== 'issues') {
+            const isPr = context.eventName === 'pull_request_target';
+            if (context.eventName !== 'issues' && !isPr) {
               for (const label of catalog) await ensureLabel(label);
               return;
             }
 
             // Read current content so an old queued edit cannot close a corrected issue.
-            const issue_number = context.payload.issue.number;
+            const issue_number = isPr ? context.payload.pull_request.number : context.payload.issue.number;
             const { data: issue } = await github.rest.issues.get({ ...repo, issue_number });
-            if (issue.pull_request || issue.state !== 'open') return;
+            if (Boolean(issue.pull_request) !== isPr || issue.state !== 'open') return;
+
+            // PR intake can only add labels. It never enters the issue-closing branch.
+            if (isPr) {
+              const fields = sections(issue.body || '', 2);
+              const origin = checkedItems(fields.get('内容来源与人工审核 / Content origin and human review'));
+              const noHumanReview = origin.length === 1 && origin[0]
+                === 'Agent 自动提交，本次改动未经人类审核 / Submitted automatically by an AI agent without human review';
+              const unknownReview = origin.length === 1 && origin[0]
+                === '无法确认是否经过人类审核 / Human review status is unknown';
+              const blind = checkedItems(fields.get('提交前确认 / Submission checklist'))
+                .includes("I'm checking these boxes blindly.");
+              const labels = [];
+              if (noHumanReview) labels.push('No human-supervised');
+              if (unknownReview) labels.push('Suspicious human-supervised');
+              if (blind) labels.push('triage:blind-check');
+              for (const name of labels) await ensureLabel(catalog.find(label => label.name === name));
+              if (labels.length) await github.rest.issues.addLabels({ ...repo, issue_number, labels });
+              return;
+            }
+
             const fields = sections(issue.body || '');
             const typeLabels = types.get(fields.get('反馈类型 / Issue type'));
             if (!typeLabels) return;
@@ -115,6 +151,14 @@ jobs:
             // Keep manual triage on later edits; only rejected reports get new labels then.
             const labels = blind ? ['invalid', 'triage:blind-check']
               : context.payload.action === 'opened' ? [...typeLabels, 'needs-triage'] : [];
+            if (fields.get('内容来源与人工审核 / Content origin and human review')
+                === 'Agent 自动提交，本次内容未经人类审核 / Submitted automatically by an AI agent without human review') {
+              labels.push('No human-supervised');
+            }
+            if (fields.get('内容来源与人工审核 / Content origin and human review')
+                === '无法确认是否经过人类审核 / Human review status is unknown') {
+              labels.push('Suspicious human-supervised');
+            }
             for (const name of labels) await ensureLabel(catalog.find(label => label.name === name));
             if (labels.length) await github.rest.issues.addLabels({ ...repo, issue_number, labels });
             if (blind) {

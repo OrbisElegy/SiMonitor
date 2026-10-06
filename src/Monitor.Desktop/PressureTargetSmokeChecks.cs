@@ -27,7 +27,7 @@ internal static class PressureTargetSmokeChecks
                 current.Settings.AbpVariation.Value = 10;
                 current.Settings.PaVariation.Value = 3;
                 current.Settings.ApplyDelaySeconds.Value = 0;
-                current.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                SettingsApplySmokeChecks.ApplySynchronously(current);
                 for (int i = 0; i < 600; i++) { current.Pulse(current.ActiveTimer, 50_000_000); }
             }
             Require(ReferenceEquals(session, window.Session), "enabling both drifts through Apply continues the same session");
@@ -36,15 +36,15 @@ internal static class PressureTargetSmokeChecks
             window.Pause();
             settings.AbpVariation.Value = 5;
             settings.ApplyDelaySeconds.Value = 3;
-            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             window.Pulse(window.ActiveTimer, 250_000_000);
             Require(session.SimulationTimeNs == boundary && session.PendingSourceTimeNs == boundary + 3_000_000_000,
                 "drift changes preserve pause and wait on simulation time");
             settings.AbpVariation.Value = 10;
             settings.ApplyDelaySeconds.Value = 0;
-            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             settings.AbpVariation.Value = null;
-            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(session.PendingSourceTimeNs == boundary && settings.Status.Text!.Contains("未应用", StringComparison.Ordinal),
                 "an empty amplitude cannot replace the accepted pending source");
             settings.AbpVariation.Value = 10;
@@ -70,7 +70,7 @@ internal static class PressureTargetSmokeChecks
             finally { reopened.Close(); }
             settings.AbpVariation.Value = 0;
             settings.PaVariation.Value = 0;
-            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             for (int i = 0; i < 600; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Require(ReferenceEquals(session, window.Session) && Near(session.Measurements!.AbpMean.Pulse, 12000, 8000) &&
                 Near(session.Measurements.PaMean.Pulse, 2500, 1000), "zero amplitudes disable drift without restarting");
@@ -116,7 +116,7 @@ internal static class PressureTargetSmokeChecks
             var session = window.Session;
             long time = session.SimulationTimeNs;
             settings.ApplyDelaySeconds.Value = 0;
-            settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(ReferenceEquals(session, window.Session) && session.SimulationTimeNs == time && session.PendingSourceTimeNs == time,
                 "ABP, PA and CVP changes queue together through the Apply button without restarting");
             for (int i = 0; i < 600; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }

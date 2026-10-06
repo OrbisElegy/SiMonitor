@@ -35,6 +35,8 @@ internal sealed class DesignPreviewWindow : Window
     private DispatcherTimer? _timer;
     private long _lastTick;
     private bool _closed;
+    private bool _applying;
+    internal bool IsApplying => _applying;
     internal DesignPreviewSettings Settings { get; private set; }
     internal int Page { get; private set; }
     internal LocalMonitorPreviewSession Session => _session;
@@ -146,7 +148,7 @@ internal sealed class DesignPreviewWindow : Window
         SelectPage(0); UpdateState();
     }
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
-            ApplySettings, () => { if (_timer is null) { Start(); } else { Pause(); } },
+            async () => await ApplySettingsAsync(), () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this), Localization);
     private void ConnectSettings()
     {
@@ -171,7 +173,7 @@ internal sealed class DesignPreviewWindow : Window
         };
         MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
         Settings.Apply.Classes.Add("accent");
-        Settings.Restart.Click += (_, _) => RestartSettings();
+        Settings.Restart.Click += async (_, _) => await ApplySettingsAsync(restart: true);
         Settings.ResetAll.Click += async (_, _) => await ConfirmResetAllSettings();
         Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
     }
@@ -314,7 +316,10 @@ internal sealed class DesignPreviewWindow : Window
         if (Page == 1) { SelectPage(1); }
     }
 
-    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources()
+    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources() => CaptureSourceBuilder()();
+
+    // Capture controls on the dispatcher; the returned computation owns no UI objects.
+    private Func<(LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology)> CaptureSourceBuilder()
     {
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
             Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
@@ -359,7 +364,7 @@ internal sealed class DesignPreviewWindow : Window
         };
         if (Settings.CardiacRateEnabled.IsChecked == true)
         {
-            var adjustment = Settings.ReadCardiacRate();
+            var adjustment = Settings.ReadCardiacRate(validateSources: false);
             if (adjustment is not null)
             {
                 if (Settings.EcgSelection == 0 && Settings.EjectionSelection != 2 && adjustment.Rate.HeartRateBpm is >= 30 and <= 180)
@@ -386,17 +391,32 @@ internal sealed class DesignPreviewWindow : Window
             int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
-        var next = new LocalMonitorPreviewSession(config, Settings.ReadDisplay(), enableMeasurements: true,
-            opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField"), opticalVariation: opticalVariation,
-            realtimeOxygenation: Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
-                ? Settings.Oxygenation.ReadConfiguration() : null);
-        var ecg = CapturePaper(ecgConfig);
-        return (next, ecgConfig, ecg, config);
+        var display = Settings.ReadDisplay();
+        int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
+        var oxygenation = Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
+            ? Settings.Oxygenation.ReadConfiguration() : null;
+        return () =>
+        {
+            var next = new LocalMonitorPreviewSession(config, display, enableMeasurements: true,
+                opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: modulation,
+                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation);
+            return (next, ecgConfig, CapturePaper(ecgConfig), config);
+        };
     }
-    internal void ApplySettings() => ApplySettings(restart: false);
-    internal void RestartSettings() => ApplySettings(restart: true);
-    private void ApplySettings(bool restart)
+    internal void ApplySettings() => ApplySettingsCore(restart: false, background: false).GetAwaiter().GetResult();
+    internal void RestartSettings() => ApplySettingsCore(restart: true, background: false).GetAwaiter().GetResult();
+    internal Task ApplySettingsAsync(bool restart = false) => ApplySettingsCore(restart, background: true);
+
+    private async Task ApplySettingsCore(bool restart, bool background)
     {
+        if (_applying || _closed) { return; }
+        _applying = true;
+        var editor = Settings;
+        if (background)
+        {
+            editor.IsEnabled = false;
+            SetStatus("settings.preparing");
+        }
         try
         {
             _ = Settings.Alerts.NotificationSettings.Read();
@@ -404,13 +424,22 @@ internal sealed class DesignPreviewWindow : Window
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
-            var (next, ecgConfig, ecg, physiology) = BuildConfiguredSources();
+            var build = CaptureSourceBuilder();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             long delayNs = Settings.ReadApplyDelayNs();
+            var selection = (Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+            var prepared = background ? await Task.Run(() =>
+            {
+                var result = build();
+                if (restart) { result.Session.DiscardStartup(); }
+                return result;
+            }) : build();
+            if (_closed || !ReferenceEquals(editor, Settings)) { return; }
+            var (next, ecgConfig, ecg, physiology) = prepared;
             long? effective = null;
             if (restart)
             {
-                next.DiscardStartup();
+                if (!background) { next.DiscardStartup(); }
                 Pause();
                 _session = next;
                 _pendingPresentation = null;
@@ -424,7 +453,7 @@ internal sealed class DesignPreviewWindow : Window
             {
                 effective = _session.ScheduleSource(next, delayNs);
                 _pendingPresentation = (ecgConfig, physiology, ecg, effective.Value,
-                    Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+                    selection.EcgSelection, selection.RespirationSelection, selection.EjectionSelection);
                 _session.UpdateDisplay(next.Display);
             }
             _monitor = new(_session, Localization);
@@ -507,7 +536,12 @@ internal sealed class DesignPreviewWindow : Window
             Localization.Bind(Settings.Status, TextBlock.TextProperty, text => text.Format("validation.patientDetail", text.GetString(reason)));
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
-        { SetStatus("validation.configuration"); }
+        { if (!_closed && ReferenceEquals(editor, Settings)) { SetStatus("validation.configuration"); } }
+        finally
+        {
+            _applying = false;
+            editor.IsEnabled = true;
+        }
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {

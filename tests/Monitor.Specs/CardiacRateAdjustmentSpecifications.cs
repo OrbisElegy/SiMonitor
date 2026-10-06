@@ -13,6 +13,8 @@ internal static class CardiacRateAdjustmentSpecifications
         new(nameof(PauseDurationIsIndependentOfNormalRate), PauseDurationIsIndependentOfNormalRate),
         new(nameof(FlutterPercentageControlsConductedFraction), FlutterPercentageControlsConductedFraction),
         new(nameof(SeededAfSelectionAndPerfusionAgree), SeededAfSelectionAndPerfusionAgree),
+        new(nameof(PreparedTimingAndFillingCachesPreserveRecovery), PreparedTimingAndFillingCachesPreserveRecovery),
+        new(nameof(ReapplyingEquivalentRhythmsDoesNotAccumulateHistory), ReapplyingEquivalentRhythmsDoesNotAccumulateHistory),
         new(nameof(IndependentRatesPreserveDissociation), IndependentRatesPreserveDissociation),
         new(nameof(AdjustedPatternsPreserveEventsAndRecovery), AdjustedPatternsPreserveEventsAndRecovery),
         new(nameof(RonTCouplingSurvivesRateChanges), RonTCouplingSurvivesRateChanges),
@@ -88,6 +90,41 @@ internal static class CardiacRateAdjustmentSpecifications
             if (expected) { selected++; }
         }
         Check.That(selected > 0, "seeded sequence exercises long-short selection");
+    }
+
+    private static void PreparedTimingAndFillingCachesPreserveRecovery()
+    {
+        var plan = SinusArrestReference.CreatePlan() with { RhythmSchedule = new(Seed, 2_700_000_000), RateAdjustment = new(67, null, Seed, 50) };
+        var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(3_000_000_000_000, 30000);
+        var beats = events.Where(e => e.Kind == PhysiologyCycleEventKind.AtrialElectrical).ToArray();
+        long period = beats[1024].SimTimeNs - beats[0].SimTimeNs;
+        Check.That(beats.Skip(1024).Zip(beats).All(p => p.First.SimTimeNs - p.Second.SimTimeNs == period), "prepared clock repeats only at combined rate/pause boundary");
+        foreach (long cut in new[] { beats[1024].SimTimeNs - 1, beats[1024].SimTimeNs, beats[1024].SimTimeNs + 1 })
+        {
+            var restored = RegularPhysiologyTimeline.Restore(new(plan, cut));
+            Check.That(restored.AdvanceBefore(cut + 10_000_000_000, 1000).SequenceEqual(events.Where(e => e.SimTimeNs >= cut && e.SimTimeNs < cut + 10_000_000_000)), "inverse lookup preserves nanosecond boundaries after wrap");
+        }
+        ulong[] indices = [0, 1, 1023, 1024, 4095, 4096, 4097, 8192];
+        int[] expected = indices.Select(i => CardiacFillingPerfusion.GainPermille(plan with { }, i)).ToArray();
+        Parallel.For(0, 128, iteration =>
+        {
+            int index = iteration % indices.Length;
+            Check.That(CardiacFillingPerfusion.GainPermille(plan, indices[index]) == expected[index], "bounded filling cache eviction and concurrent reads preserve exact values");
+        });
+    }
+
+    private static void ReapplyingEquivalentRhythmsDoesNotAccumulateHistory()
+    {
+        PhysiologyIllustrationConfiguration Prepare() => PhysiologyIllustrationConfiguration.SinusArrestPreset with
+        { RhythmSchedule = new(Seed), RateAdjustment = new(75, null, Seed, 50) };
+        var source = PhysiologyIllustrationSource.Create(Prepare());
+        source.AdvanceTo(200_000_000, 50, 1, 100);
+        for (int i = 0; i < 8; i++) { source.ContinueWith(PhysiologyIllustrationSource.Create(Prepare())); }
+        Check.That(source.CaptureState().Channels.All(c => c.Generator.History.Count == 0 && c.Generator.ActiveFromEventTimeNs is null),
+            "equivalent rebuilt seeded schedules retain channels without redundant history");
+        var altered = Prepare() with { RateAdjustment = new(60, null, Seed, 50) };
+        source.ContinueWith(PhysiologyIllustrationSource.Create(altered));
+        Check.That(source.CaptureState().Channels.Any(c => c.Generator.History.Count > 0), "actual timing changes still retain pending old responses");
     }
 
     private static void IndependentRatesPreserveDissociation()

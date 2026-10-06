@@ -24,7 +24,7 @@ internal sealed partial class DesignPreviewSettings
     internal TextBlock AtrialRateLabel { get; } = Text("");
     internal TextBlock CardiacRateStatus { get; } = Text("");
 
-    internal CardiacRateAdjustment? ReadCardiacRate()
+    internal CardiacRateAdjustment? ReadCardiacRate(bool validateSources = true)
     {
         var pair = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         var rhythm = ReadRhythm(pair.Physiology.ConductionPattern);
@@ -37,7 +37,7 @@ internal sealed partial class DesignPreviewSettings
         adjustment.Validate(plan);
         // Keep the established sinus timing adaptation; all other templates
         // retain their morphology and must fit their source support bounds.
-        if (EcgSelection != 0 || adjustment.Rate.HeartRateBpm is < 30 or > 180)
+        if (validateSources && (EcgSelection != 0 || adjustment.Rate.HeartRateBpm is < 30 or > 180))
         {
             try
             {

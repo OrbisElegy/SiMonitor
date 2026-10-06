@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.CompilerServices;
+
 namespace Monitor.Simulation.Physiology;
 
 // Re-times the authored event sequence, preserving its omissions, event kinds,
@@ -7,6 +9,7 @@ namespace Monitor.Simulation.Physiology;
 // a promise about the detector's displayed HR in rhythms with premature beats.
 public sealed record CardiacRateAdjustment
 {
+    private readonly ConditionalWeakTable<SeededRhythmSchedule, ArrestClock> _arrestClocks = new();
     public SeededCardiacRate Rate { get; }
     public SeededCardiacRate? AtrialRate { get; }
 
@@ -96,7 +99,7 @@ public sealed record CardiacRateAdjustment
     {
         var rate = Schedule(atrial);
         if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration && plan.RhythmSchedule is { } rhythm)
-        { return rhythm.MapArrest(rate, relativeNs); }
+        { return ArrestTiming(rhythm).Map(relativeNs, inverse: false); }
         long reference = ReferencePeriodNs(plan, atrial);
         Int128 cycle = FloorDivide(relativeNs, reference);
         Int128 phase = relativeNs - cycle * reference;
@@ -111,17 +114,8 @@ public sealed record CardiacRateAdjustment
     internal Int128 Unmap(RegularPhysiologyPlan plan, bool atrial, Int128 relativeNs)
     {
         var rate = Schedule(atrial);
-        if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration && plan.RhythmSchedule is not null)
-        {
-            Int128 low = -((Int128)long.MaxValue * 32), high = (Int128)long.MaxValue * 32;
-            while (low < high)
-            {
-                Int128 middle = low + (high - low) / 2;
-                if (Map(plan, atrial, middle) < relativeNs) { low = middle + 1; }
-                else { high = middle; }
-            }
-            return low;
-        }
+        if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration && plan.RhythmSchedule is { } rhythm)
+        { return ArrestTiming(rhythm).Map(relativeNs, inverse: true); }
         long reference = ReferencePeriodNs(plan, atrial);
         long duration = rate.PeriodNs * rate.Slots.Length;
         Int128 group = FloorDivide(relativeNs, duration);
@@ -132,6 +126,41 @@ public sealed record CardiacRateAdjustment
         long end = index + 1 == rate.Slots.Length ? duration : rate.Slots[index + 1];
         return (group * rate.Slots.Length + index) * reference +
             ((Int128)(phase - start) * reference + end - start - 1) / (end - start);
+    }
+
+    private ArrestClock ArrestTiming(SeededRhythmSchedule rhythm) => _arrestClocks.TryGetValue(rhythm, out var clock)
+        ? clock : _arrestClocks.GetValue(rhythm, key => new(key, Rate));
+
+    // Four 256-beat arrest groups contain 768 normal intervals: both the
+    // 256-slot normal-rate clock and pause placement repeat at this boundary.
+    // This immutable lookup replaces a whole-Int64-domain inverse search on
+    // every sample. It is derived data, never authoritative checkpoint state.
+    private sealed class ArrestClock
+    {
+        private readonly long[] _reference = new long[1025];
+        private readonly long[] _adjusted = new long[1025];
+
+        internal ArrestClock(SeededRhythmSchedule rhythm, SeededCardiacRate rate)
+        {
+            for (int i = 0; i < _reference.Length; i++)
+            {
+                _reference[i] = checked((long)rhythm.CycleStartNs(AvConductionPattern.SinusArrestIllustration, (ulong)i));
+                _adjusted[i] = checked((long)rhythm.MapArrest(rate, _reference[i]));
+            }
+        }
+
+        internal Int128 Map(Int128 timeNs, bool inverse)
+        {
+            long[] input = inverse ? _adjusted : _reference;
+            long[] output = inverse ? _reference : _adjusted;
+            Int128 group = FloorDivide(timeNs, input[^1]);
+            long phase = (long)(timeNs - group * input[^1]);
+            int index = Array.BinarySearch(input, phase);
+            if (index < 0) { index = ~index - 1; }
+            long interval = input[index + 1] - input[index];
+            Int128 numerator = (Int128)(phase - input[index]) * (output[index + 1] - output[index]);
+            return group * output[^1] + output[index] + (numerator + (inverse ? interval - 1 : 0)) / interval;
+        }
     }
 
     private static Int128 FloorDivide(Int128 value, long divisor) =>

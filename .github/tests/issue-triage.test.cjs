@@ -63,7 +63,12 @@ async function simulate(text, options = {}) {
   await run(github, {
     repo: { owner: 'example', repo: 'simulator' },
     eventName: options.eventName || 'issues',
-    payload: { action: options.action || 'opened', issue: { number: 123, body: options.staleBody || text } }
+    payload: {
+      action: options.action || 'opened',
+      [options.eventName === 'pull_request_target' ? 'pull_request' : 'issue']: {
+        number: 123, body: options.staleBody || text
+      }
+    }
   });
   return calls;
 }
@@ -139,11 +144,11 @@ test('normal edits preserve manual triage labels', async () => {
 
 test('bootstrap only creates missing labels and does not touch issues', async () => {
   const calls = await simulate(null, { eventName: 'workflow_dispatch', existingLabels: ['bug', 'invalid'] });
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 7);
   assert.ok(calls.every(([method, args]) => method === 'createLabel' && !['bug', 'invalid'].includes(args.name)));
   assert.deepEqual(await simulate(null, {
     eventName: 'push',
-    existingLabels: ['bug', 'enhancement', 'area:program', 'area:waveform', 'needs-triage', 'invalid', 'triage:blind-check']
+    existingLabels: ['bug', 'enhancement', 'area:program', 'area:waveform', 'needs-triage', 'invalid', 'triage:blind-check', 'No human-supervised', 'Suspicious human-supervised']
   }), []);
 });
 
@@ -161,4 +166,146 @@ test('issue content is handled as data', async () => {
   const text = body().replace('Example', '${{ secrets.GITHUB_TOKEN }}\n`throw new Error("injected")`\n$(exit 1)');
   assert.deepEqual(updates(await simulate(text)), []);
   assert.ok(!scriptBlock[1].includes('${{'), 'Never interpolate workflow expressions into JavaScript');
+});
+
+const originTitle = '内容来源与人工审核 / Content origin and human review';
+const issueAgent = 'Agent 自动提交，本次内容未经人类审核 / Submitted automatically by an AI agent without human review';
+const prAgent = 'Agent 自动提交，本次改动未经人类审核 / Submitted automatically by an AI agent without human review';
+const prTemplate = readFileSync(path.join(__dirname, '../pull_request_template.md'), 'utf8');
+
+function prBody({ agent = false, blind = false } = {}) {
+  return prTemplate.replace(`- [ ] ${prAgent}`, `- [${agent ? 'x' : ' '}] ${prAgent}`)
+    .replace(`- [ ] ${statements[2]}`, `- [${blind ? 'x' : ' '}] ${statements[2]}`);
+}
+
+async function simulatePr(text, options = {}) {
+  const calls = await simulate(text, { eventName: 'pull_request_target', ...options,
+    issue: { pull_request: {}, ...options.issue } });
+  assert.deepEqual(updates(calls), [], 'PR intake must never close or otherwise update a PR');
+  assert.ok(calls.every(([method]) => method !== 'removeLabel'), 'PR intake only adds labels');
+  return calls;
+}
+
+test('issues declaring an unreviewed agent submission get the exact requested label without closing', async () => {
+  for (const [kind] of kinds) {
+    for (const action of ['opened', 'edited']) {
+      const text = body(false, kind) + `\n\n### ${originTitle}\n\n${issueAgent}`;
+      const calls = await simulate(text, { action });
+      assert.ok(addedLabels(calls).includes('No human-supervised'));
+      assert.deepEqual(updates(calls), []);
+    }
+  }
+});
+
+test('human-reviewed, unknown, absent, quoted, or commented issue declarations do not assert lack of review', async () => {
+  for (const declaration of [
+    '人类编写并提交 / Written and submitted by a human',
+    'AI 参与编写，人类已逐项审核本次提交内容 / AI-assisted, with this submission fully reviewed by a human',
+    '无法确认是否经过人类审核 / Human review status is unknown',
+    '', `> ${issueAgent}`, `<!-- ${issueAgent} -->`, '```\n' + issueAgent + '\n```'
+  ]) {
+    const calls = await simulate(body() + `\n\n### ${originTitle}\n\n${declaration}`);
+    assert.ok(!addedLabels(calls).includes('No human-supervised'));
+  }
+});
+
+test('blind issues keep their existing closure policy alongside the new declaration label', async () => {
+  const calls = await simulate(body(true) + `\n\n### ${originTitle}\n\n${issueAgent}`);
+  assert.deepEqual(addedLabels(calls), ['invalid', 'triage:blind-check', 'No human-supervised']);
+  assert.equal(updates(calls).length, 1);
+});
+
+test('PR agent and blind selections add independent tags and never close the PR', async () => {
+  for (const action of ['opened', 'edited', 'reopened']) {
+    for (const agent of [false, true]) {
+      for (const blind of [false, true]) {
+        const calls = await simulatePr(prBody({ agent, blind }), { action });
+        assert.deepEqual(addedLabels(calls), [
+          ...(agent ? ['No human-supervised'] : []), ...(blind ? ['triage:blind-check'] : [])
+        ]);
+      }
+    }
+  }
+});
+
+test('normal and ambiguous PR review declarations do not assert lack of review', async () => {
+  for (const option of [
+    '人类编写并提交 / Written and submitted by a human',
+    'AI 参与编写，人类已逐项审核本次改动 / AI-assisted, with this change fully reviewed by a human'
+  ]) {
+    const text = prTemplate.replace(`- [ ] ${option}`, `- [x] ${option}`);
+    assert.deepEqual(addedLabels(await simulatePr(text)), []);
+    const contradictory = text.replace(`- [ ] ${prAgent}`, `- [x] ${prAgent}`);
+    assert.deepEqual(addedLabels(await simulatePr(contradictory)), []);
+  }
+});
+
+test('PR markers must be in their own sections, outside quotes, comments, and fences', async () => {
+  for (const wrap of [
+    text => '> ' + text,
+    text => '<!--\n' + text + '\n-->',
+    text => '```markdown\n' + text + '\n```',
+    text => '~~~~markdown\n' + text + '\n~~~~',
+    text => '    ' + text
+  ]) {
+    const text = prTemplate.replace(`- [ ] ${prAgent}`, wrap(`- [x] ${prAgent}`))
+      .replace(`- [ ] ${statements[2]}`, wrap(`- [x] ${statements[2]}`));
+    assert.deepEqual(addedLabels(await simulatePr(text)), []);
+  }
+  const elsewhere = `## Example\n\n- [x] ${prAgent}\n- [x] ${statements[2]}\n\n` + prTemplate;
+  assert.deepEqual(addedLabels(await simulatePr(elsewhere)), []);
+  assert.deepEqual(addedLabels(await simulatePr(prBody({ agent: true, blind: true }) + '\n' + prTemplate)), []);
+});
+
+test('PR parsing accepts uppercase checkmarks and CRLF while ignoring template comments', async () => {
+  const text = prBody({ agent: true, blind: true }).replaceAll('[x]', '[X]').replaceAll('\n', '\r\n');
+  assert.deepEqual(addedLabels(await simulatePr(text)), ['No human-supervised', 'triage:blind-check']);
+});
+
+test('PR content cannot enter the issue-closing path even if it imitates the issue form', async () => {
+  await simulatePr(body(true) + '\n\n' + prBody({ blind: true }));
+});
+
+test('stale PR events use the latest declaration and leave corrected or closed PRs alone', async () => {
+  assert.deepEqual(await simulatePr(prTemplate, { action: 'edited', staleBody: prBody({ agent: true, blind: true }) }), []);
+  assert.deepEqual(await simulatePr(prBody({ blind: true }), { issue: { state: 'closed' } }), []);
+  assert.deepEqual(await simulatePr(null), []);
+});
+
+test('PR tagging supports existing labels and concurrent initialization without resetting triage', async () => {
+  const text = prBody({ agent: true, blind: true });
+  const existing = await simulatePr(text, { existingLabels: ['No human-supervised', 'triage:blind-check'] });
+  assert.ok(existing.every(([method]) => method === 'addLabels'));
+  assert.deepEqual(addedLabels(await simulatePr(text, { labelRace: true })), ['No human-supervised', 'triage:blind-check']);
+});
+
+test('explicitly unknown issue review status gets Suspicious human-supervised, without asserting no human review or closing', async () => {
+  for (const [kind] of kinds) {
+    const text = body(false, kind) + `\n\n### ${originTitle}\n\n无法确认是否经过人类审核 / Human review status is unknown`;
+    const calls = await simulate(text, { action: 'edited' });
+    assert.deepEqual(addedLabels(calls), ['Suspicious human-supervised']);
+    assert.deepEqual(updates(calls), []);
+  }
+});
+
+test('unknown PR review status gets Suspicious human-supervised independently of the blind-check tag', async () => {
+  for (const blind of [false, true]) {
+    const text = prBody({ blind }).replace(
+      '- [ ] 无法确认是否经过人类审核 / Human review status is unknown',
+      '- [x] 无法确认是否经过人类审核 / Human review status is unknown'
+    );
+    const calls = await simulatePr(text);
+    assert.deepEqual(addedLabels(calls), ['Suspicious human-supervised', ...(blind ? ['triage:blind-check'] : [])]);
+    const ambiguous = text.replace(`- [ ] ${prAgent}`, `- [x] ${prAgent}`);
+    assert.deepEqual(addedLabels(await simulatePr(ambiguous)), blind ? ['triage:blind-check'] : []);
+  }
+});
+
+test('absent or quoted unknown declarations are not labeled Suspicious human-supervised', async () => {
+  const unknown = '无法确认是否经过人类审核 / Human review status is unknown';
+  for (const text of [body(), body() + `\n\n### ${originTitle}\n\n> ${unknown}`]) {
+    assert.ok(!addedLabels(await simulate(text)).includes('Suspicious human-supervised'));
+  }
+  const text = prTemplate.replace(`- [ ] ${unknown}`, `> - [x] ${unknown}`);
+  assert.deepEqual(addedLabels(await simulatePr(text)), []);
 });

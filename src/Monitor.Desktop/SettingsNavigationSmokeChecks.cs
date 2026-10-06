@@ -38,6 +38,7 @@ internal static class SettingsNavigationSmokeChecks
         var rows = alarms.Sections.Items.Cast<ListBoxItem>().ToArray();
         Require(!rows[0].IsEnabled && !rows[measurements + 1].IsEnabled, "alarm list keeps both group headers");
         Layout(window);
+        Require(!alarms.Compact && alarms.Sections.IsEffectivelyVisible, "keyboard navigation has a visible wide-layout list");
         alarms.SelectedSection = measurements - 1;
         Press(rows[measurements], Key.Down);
         Require(alarms.SelectedSection == measurements && alarms.Sections.SelectedIndex == measurements + 2,
@@ -48,7 +49,7 @@ internal static class SettingsNavigationSmokeChecks
         Press(rows[1], Key.Up);
         Require(alarms.SelectedSection == 0 && alarms.Sections.SelectedIndex == 1, "Up from the first measurement never selects the group header");
 
-        window.Width = 1000; window.Height = 720;
+        DesktopViewportSmokeChecks.Layout(window, 1000, 720);
         Capture(window, "ui-preview-alarm-compact-navigation.png");
         var compact = Selector(window, "报警参数组");
         Require(alarms.Compact && compact.ItemCount == rows.Length && compact.SelectedIndex == 1,
@@ -70,7 +71,7 @@ internal static class SettingsNavigationSmokeChecks
             "compact drop-down shows inert group headers and accessible section state");
         compact.IsDropDownOpen = false;
         settings.Alerts.HeartRateEnabled.IsChecked = false;
-        window.Width = 1440; window.Height = 940;
+        DesktopViewportSmokeChecks.Layout(window);
     }
 
     private static void VerifyVitalNavigation(DesignPreviewWindow window)
@@ -209,18 +210,17 @@ internal static class SettingsNavigationSmokeChecks
 
     private static void Layout(Window window)
     {
-        Dispatcher.UIThread.RunJobs();
         var root = (Control)window.Content!;
-        root.InvalidateMeasure();
-        root.Measure(new Size(window.Width, window.Height));
-        root.Arrange(new Rect(0, 0, window.Width, window.Height));
+        DesktopViewportSmokeChecks.Layout(window,
+            double.IsNaN(root.Width) ? 1440 : root.Width,
+            double.IsNaN(root.Height) ? 940 : root.Height);
     }
 
     private static void Capture(Window window, string name)
     {
         Layout(window);
         Directory.CreateDirectory("artifacts");
-        using var image = new RenderTargetBitmap(new PixelSize((int)window.Width, (int)window.Height), new Vector(96, 96));
+        using var image = new RenderTargetBitmap(new PixelSize((int)((Control)window.Content!).Width, (int)((Control)window.Content!).Height), new Vector(96, 96));
         image.Render((Control)window.Content!);
         image.Save(Path.Combine("artifacts", name), PngBitmapEncoderOptions.Default);
     }

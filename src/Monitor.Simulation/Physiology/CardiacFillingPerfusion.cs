@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.CompilerServices;
 using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
@@ -39,7 +40,31 @@ public static class CardiacFillingPerfusion
             (Int128)referenceFillingNs * (fillingNs + FillingConstantNs) * AtrialContractionDurationNs);
     }
 
-    public static int GainPermille(RegularPhysiologyPlan plan, ulong cycleIndex)
+    private static readonly ConditionalWeakTable<RegularPhysiologyPlan, BeatGainCache> Gains = new();
+
+    // Every pressure/pleth sample in the finite response window reuses the same
+    // immutable beat's filling result. Cache at most the pressure event budget,
+    // with weak plan ownership; eviction only causes exact recomputation.
+    public static int GainPermille(RegularPhysiologyPlan plan, ulong cycleIndex) =>
+        Gains.GetValue(plan, static _ => new()).Get(plan, cycleIndex);
+
+    private sealed class BeatGainCache
+    {
+        private sealed record Entry(ulong CycleIndex, int GainPermille);
+        private readonly Entry?[] _entries = new Entry[VascularPressureSource.MaximumEjectionCount];
+
+        internal int Get(RegularPhysiologyPlan plan, ulong cycleIndex)
+        {
+            int slot = (int)(cycleIndex % (ulong)_entries.Length);
+            var previous = Volatile.Read(ref _entries[slot]);
+            if (previous is not null && previous.CycleIndex == cycleIndex) { return previous.GainPermille; }
+            int gain = CalculateGainPermille(plan, cycleIndex);
+            Volatile.Write(ref _entries[slot], new(cycleIndex, gain));
+            return gain;
+        }
+    }
+
+    private static int CalculateGainPermille(RegularPhysiologyPlan plan, ulong cycleIndex)
     {
         if (!Supports(plan)) { throw new ArgumentException("CardiacFilling.UnsupportedPlan", nameof(plan)); }
         long nonFillingNs = plan.SeededRate is not null || plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration

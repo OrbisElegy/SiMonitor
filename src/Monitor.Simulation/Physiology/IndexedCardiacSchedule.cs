@@ -10,27 +10,31 @@ internal static class IndexedCardiacSchedule
         Action<PhysiologyCycleEvent> visitor, long groupDuration, ReadOnlySpan<long> slots,
         CancellationToken cancellationToken)
     {
-        Int128 firstGroup = Int128.MaxValue, lastGroup = -1, count = 0;
-        for (int slot = 0; slot < slots.Length; slot++)
-        {
-            Int128 start = (Int128)plan.EpochAnchorSimTimeNs + offset + slots[slot];
-            Int128 first = inclusive <= start ? 0 : ((Int128)inclusive - start + groupDuration - 1) / groupDuration;
-            if (exclusive <= start + first * groupDuration) { continue; }
-            Int128 last = (exclusive - 1 - start) / groupDuration;
-            count += last - first + 1;
-            firstGroup = Int128.Min(firstGroup, first); lastGroup = Int128.Max(lastGroup, last);
-        }
-        if (count > maximumEvents)
+        Int128 origin = (Int128)plan.EpochAnchorSimTimeNs + offset;
+        Int128 first = LowerBound((Int128)inclusive - origin, groupDuration, slots);
+        Int128 last = LowerBound(exclusive - origin, groupDuration, slots);
+        if (last - first > maximumEvents)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents)); }
-        for (Int128 group = firstGroup; group <= lastGroup; group++)
+        for (Int128 index = first; index < last; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            for (int slot = 0; slot < slots.Length; slot++)
-            {
-                Int128 time = (Int128)plan.EpochAnchorSimTimeNs + offset + group * groupDuration + slots[slot];
-                if (time >= inclusive && time < exclusive) { visitor(new((long)time, kind, (ulong)(group * slots.Length + slot))); }
-            }
+            Int128 time = origin + index / slots.Length * groupDuration + slots[(int)(index % slots.Length)];
+            visitor(new((long)time, kind, (ulong)index));
         }
     }
 
+    private static Int128 LowerBound(Int128 relativeNs, long groupDuration, ReadOnlySpan<long> slots)
+    {
+        if (relativeNs <= 0) { return 0; }
+        Int128 group = relativeNs / groupDuration;
+        long phase = (long)(relativeNs % groupDuration);
+        int left = 0, right = slots.Length;
+        while (left < right)
+        {
+            int middle = (left + right) / 2;
+            if (slots[middle] < phase) { left = middle + 1; }
+            else { right = middle; }
+        }
+        return group * slots.Length + left;
+    }
 }

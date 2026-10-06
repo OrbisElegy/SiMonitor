@@ -25,7 +25,7 @@ internal static class MonitorContinuationSmokeChecks
             long frontier = session.FrontierNs;
             window.Settings.ApplyDelaySeconds.Value = 1.3m;
             window.Settings.EcgSelection = 72;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                 session.SimulationTimeNs == time && session.FrontierNs == frontier && session.Blocks.SequenceEqual(blocks) &&
                 session.Measurements == readings && session.PendingSourceTimeNs == time + 1_400_000_000,
@@ -37,10 +37,10 @@ internal static class MonitorContinuationSmokeChecks
             window.Pulse(timer, 250_000_000);
             Require(session.SimulationTimeNs == time && session.PendingSourceTimeNs == pending, "pause also pauses the delay");
             window.Settings.ApplyDelaySeconds.Value = 0;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(window.ActiveTimer is null && session.PendingSourceTimeNs == time, "Apply while paused preserves pause and replaces pending settings");
             window.Settings.ApplyDelaySeconds.Value = null;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(session.PendingSourceTimeNs == time && window.Settings.Status.Text!.Contains("未应用", StringComparison.Ordinal),
                 "invalid delay preserves the prior pending change");
             window.Settings.ApplyDelaySeconds.Value = 0;
@@ -56,7 +56,7 @@ internal static class MonitorContinuationSmokeChecks
             window.Settings.ApplyDelaySeconds.Value = 60;
             window.ApplySettings();
             timer = window.ActiveTimer;
-            window.Settings.Restart.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window, restart: true);
             Require(!ReferenceEquals(session, window.Session) && window.Session.PendingSourceTimeNs is null &&
                 window.Session.SimulationTimeNs == 0 && window.Session.Blocks.Count == 0,
                 "From the beginning explicitly clears history and pending changes");
@@ -85,7 +85,7 @@ internal static class MonitorContinuationSmokeChecks
             var cvpHistory = session.Samples(6, 0, frontier).ToArray();
             window.Settings.CvpBaseline.Value = 12;
             window.Settings.ApplyDelaySeconds.Value = 3;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
                 session.SimulationTimeNs == time && session.FrontierNs == frontier && session.Blocks.SequenceEqual(blocks) &&
                 session.Measurements == readings && session.PendingSourceTimeNs == time + 3_000_000_000,
@@ -95,7 +95,7 @@ internal static class MonitorContinuationSmokeChecks
             Require(session.SimulationTimeNs == time && session.PendingSourceTimeNs == time + 3_000_000_000,
                 "CVP pending change respects pause");
             window.Settings.CvpBaseline.Value = null;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(session.PendingSourceTimeNs == time + 3_000_000_000 &&
                 window.Settings.Status.Text!.Contains("未应用", StringComparison.Ordinal),
                 "empty CVP input rejects without discarding the accepted pending change");
@@ -109,11 +109,11 @@ internal static class MonitorContinuationSmokeChecks
             window.Pause();
             window.Settings.ApplyDelaySeconds.Value = 0;
             window.Settings.CvpBaseline.Value = 20;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             window.Settings.CvpBaseline.Value = -5;
             window.Settings.AbpTargetEnabled.IsChecked = false;
             window.Settings.AbpPulseGain.Value = 1.5m;
-            window.Settings.Apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(window.ActiveTimer is null && session.PendingSourceTimeNs == session.SimulationTimeNs,
                 "repeated CVP Apply replaces pending values without resuming playback");
             int? oldAbp = session.Measurements!.AbpMean.MeanCentiMmHg;

@@ -848,5 +848,6 @@
   "vitals.pauseDuration": "Pause interval (ms)",
   "vitals.conductionPercent": "Mean conduction (%, 10–50)",
   "vitals.normalSinusRate": "Normal rhythm rate (bpm)",
-  "validation.CardiacRate.PauseMustBeLonger": "The pause interval must exceed normal rhythm intervals including variation; increase the pause duration or normal rate."
+  "validation.CardiacRate.PauseMustBeLonger": "The pause interval must exceed normal rhythm intervals including variation; increase the pause duration or normal rate.",
+  "settings.preparing": "Preparing waveforms; monitoring continues until the settings are ready."
 }

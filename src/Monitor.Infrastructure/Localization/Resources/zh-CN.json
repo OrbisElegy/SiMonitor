@@ -848,5 +848,6 @@
   "vitals.pauseDuration": "停搏间隔（ms）",
   "vitals.conductionPercent": "平均下传比例（%，10–50）",
   "vitals.normalSinusRate": "正常节律心率（bpm）",
-  "validation.CardiacRate.PauseMustBeLonger": "停搏间隔须长于正常节律间隔（含波动），请延长停搏时间或提高正常心率。"
+  "validation.CardiacRate.PauseMustBeLonger": "停搏间隔须长于正常节律间隔（含波动），请延长停搏时间或提高正常心率。",
+  "settings.preparing": "正在准备波形，完成后应用；监护继续运行。"
 }

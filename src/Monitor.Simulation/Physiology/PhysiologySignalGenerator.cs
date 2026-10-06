@@ -111,7 +111,18 @@ public sealed class PhysiologySignalGenerator
         bool sameRate = current.Timeline.Plan.SeededRate is { } rate && definition.Timeline.Plan.SeededRate is { } nextRate
             ? rate.HeartRateBpm == nextRate.HeartRateBpm && rate.SeedHex == nextRate.SeedHex && rate.VariationPermille == nextRate.VariationPermille
             : current.Timeline.Plan.SeededRate is null && definition.Timeline.Plan.SeededRate is null;
-        if (_pressureBaselineCentiMmHg == definition.PressureBaselineCentiMmHg && sameRate && current.Timeline.Plan with { SeededRate = definition.Timeline.Plan.SeededRate } == definition.Timeline.Plan && _vascularPressurePlan == definition.VascularPressure &&
+        var previousPlan = current.Timeline.Plan;
+        var nextPlan = definition.Timeline.Plan;
+        bool sameAdjustment = previousPlan.RateAdjustment is { } adjustment && nextPlan.RateAdjustment is { } nextAdjustment
+            ? SameRate(adjustment.Rate, nextAdjustment.Rate) && SameRate(adjustment.AtrialRate, nextAdjustment.AtrialRate)
+            : previousPlan.RateAdjustment is null && nextPlan.RateAdjustment is null;
+        bool sameRhythm = previousPlan.RhythmSchedule is { } rhythm && nextPlan.RhythmSchedule is { } nextRhythm
+            ? rhythm.SeedHex == nextRhythm.SeedHex && rhythm.PauseDurationNs == nextRhythm.PauseDurationNs && rhythm.ConductionPercent == nextRhythm.ConductionPercent
+            : previousPlan.RhythmSchedule is null && nextPlan.RhythmSchedule is null;
+        // Reprepared schedules are value-equivalent even when their derived
+        // tables/caches have different identities. Unchanged channels need no tails.
+        if (_pressureBaselineCentiMmHg == definition.PressureBaselineCentiMmHg && sameRate && sameAdjustment && sameRhythm &&
+            previousPlan with { SeededRate = nextPlan.SeededRate, RateAdjustment = nextPlan.RateAdjustment, RhythmSchedule = nextPlan.RhythmSchedule } == nextPlan && _vascularPressurePlan == definition.VascularPressure &&
             _plethRunoffPlan == definition.PlethRunoff && _bands.Count == definition.Bands.Count &&
             _bands.Zip(definition.Bands).All(pair =>
                 pair.First with
@@ -141,6 +152,10 @@ public sealed class PhysiologySignalGenerator
             History = history
         });
     }
+
+    private static bool SameRate(SeededCardiacRate? left, SeededCardiacRate? right) => left is null || right is null
+        ? left is null && right is null
+        : left.HeartRateBpm == right.HeartRateBpm && left.SeedHex == right.SeedHex && left.VariationPermille == right.VariationPermille;
 
     internal long EvaluateAt(long timeNs, CancellationToken cancellationToken = default)
     {

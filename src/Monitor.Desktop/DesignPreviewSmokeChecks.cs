@@ -942,6 +942,7 @@ internal static class DesignPreviewSmokeChecks
         var launched = MonitorApp.CreateLaunchWindow([], persistDisplay: false);
         Require(launched is DesignPreviewWindow, "no-argument launch enters the integrated monitor");
         var window = (DesignPreviewWindow)launched; window.Show();
+        DesktopViewportSmokeChecks.Layout(window);
         try
         {
             window.Settings.Sound.StartAudioPause(120);
@@ -958,10 +959,10 @@ internal static class DesignPreviewSmokeChecks
             VerifyGapAndCalibration(window.MonitorTrace);
             Capture(window, "ui-preview-monitor.png");
             double wideMonitor = window.MonitorTrace.Bounds.Width;
-            window.Width = 1000; window.Height = 720;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-monitor-compact.png");
             Require(window.MonitorTrace.Bounds.Width < wideMonitor && window.Session.Display.Slots.Count == 5, "monitor resizes but skin row count stays fixed");
-            window.Width = 1440; window.Height = 940;
+            DesktopViewportSmokeChecks.Layout(window);
             for (int i = 0; i < 450; i++) { window.Pulse(timer, 50_000_000); }
             Capture(window, "ui-preview-monitor-auto.png");
             Require(window.MonitorView.NumericTexts[4] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
@@ -1012,12 +1013,12 @@ internal static class DesignPreviewSmokeChecks
                 region.Bounds.Width < window.MonitorView.Bounds.Width * .7 && window.MonitorView.Notice.TextAlignment == Avalonia.Media.TextAlignment.Center,
                 $"bounded alarm region and its text are centered independently of side labels: center={center.X}, view={window.MonitorView.Bounds.Width}, region={region.Bounds.Width}, alignment={window.MonitorView.Notice.TextAlignment}");
             var wideNoticeSize = region.Bounds.Size; double wideNoticeFont = window.MonitorView.Notice.FontSize;
-            window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-critical-compact.png");
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720); Capture(window, "ui-preview-critical-compact.png");
             Require(region.Bounds.Width < wideNoticeSize.Width && region.Bounds.Height < wideNoticeSize.Height && window.MonitorView.Notice.FontSize < wideNoticeFont,
                 "notice width, height and typography scale with monitor viewport");
             var compactCenter = region.TranslatePoint(new Point(region.Bounds.Width / 2, 0), window.MonitorView)!.Value;
             Require(Math.Abs(compactCenter.X - window.MonitorView.Bounds.Width / 2) <= 1, "scaled notice remains centered");
-            window.Width = 1440; window.Height = 940; Capture(window, "ui-preview-critical.png");
+            DesktopViewportSmokeChecks.Layout(window); Capture(window, "ui-preview-critical.png");
             window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             window.Settings.Alerts.HeartRateEnabled.IsChecked = false;
             foreach (int level in new[] { 1, 2, 3, 4 })
@@ -1039,12 +1040,12 @@ internal static class DesignPreviewSmokeChecks
             var root = (Control)window.Content!;
             double wideScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
             Require(window.CurrentPaper!.BlockCount == 55 && window.Settings.Parent is null, "complete paper snapshot with no settings controls");
-            window.Width = 1000; window.Height = 720;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-compact.png");
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             double narrowScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
             Require(narrowScale < wideScale, "paper including waves and calibration scales with the viewport");
-            window.Width = 1440; window.Height = 940; window.SelectPage(2);
+            DesktopViewportSmokeChecks.Layout(window); window.SelectPage(2);
             Capture(window, "ui-preview-settings.png");
             Require(window.Settings.Apply.Classes.Contains("accent"), "primary action uses Fluent accent state styling");
             var mainNavigation = window.GetVisualDescendants().OfType<ListBox>().Single(list => AutomationProperties.GetName(list) == "主导航");
@@ -1100,9 +1101,9 @@ internal static class DesignPreviewSmokeChecks
             Require(selectedCandidate.Bounds.Size == candidateSize && candidateSize == new Size(238, 162), "candidate sizes stay equal before and after selection");
             Require(selectedCandidate.IsFocused, "keyboard focus follows rebuilt selected candidate");
             Require(templates.Selection.Text == "当前选择：窦性停搏（无逸搏） · 应用后生效", "tab header row names the draft selection");
-            window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-waveform-compact.png");
-            Require(selectedCandidate.TranslatePoint(default, root)!.Value.X + selectedCandidate.Bounds.Width < window.Width, "leaf preview fits compact window");
-            window.Width = 1440; window.Height = 940;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720); Capture(window, "ui-preview-waveform-compact.png");
+            Require(selectedCandidate.TranslatePoint(default, root)!.Value.X + selectedCandidate.Bounds.Width < root.Bounds.Width, "leaf preview fits compact window");
+            DesktopViewportSmokeChecks.Layout(window);
             Require(!window.Settings.GetVisualDescendants().OfType<Expander>().Any(), "redundant twelve-lead chooser expansion is removed");
             templates.Search.Text = "下壁 陈旧";
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -1148,8 +1149,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Tabs.SelectedIndex = 2; Capture(window, "ui-preview-display.png");
             Require(AutomationProperties.GetName(window.Settings.Slots[0].Speed) == "第1行扫描速度，相对毫米每秒", "speed control has a contextual accessibility name");
             Require(window.Settings.Slots[0].Channel.Bounds.Height > 0, "display tab content has completed layout");
-            window.Width = 1000; window.Height = 720; Capture(window, "ui-preview-display-compact.png");
-            window.Width = 1440; window.Height = 940;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720); Capture(window, "ui-preview-display-compact.png");
+            DesktopViewportSmokeChecks.Layout(window);
             window.Settings.Tabs.SelectedIndex = 3; Capture(window, "ui-preview-audio.png");
             var settingsSession = window.Session;
             var alarmGroups = window.Settings.SectionPages[4];
@@ -1179,7 +1180,7 @@ internal static class DesignPreviewSmokeChecks
                 "trigger page only displays trigger inputs, without the threshold and recovery stack");
             heartRateGroups.Groups.SelectedIndex = 2;
             heartRateGroups.Fields[1].Value = .75m;
-            window.Width = 1000; window.Height = 720;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-alarm-recovery-compact.png");
             Require(heartRateGroups.Fields[1].GetVisualAncestors().Contains(window.Settings) &&
                 window.Settings.Alerts.HeartRateEnabled.GetVisualAncestors().Contains(window.Settings),
@@ -1210,7 +1211,7 @@ internal static class DesignPreviewSmokeChecks
                 $"CO2 condition and confirmation fit the compact group: extent {absenceScroll.Extent}, viewport {absenceScroll.Viewport}");
             co2Groups.SelectedIndex = 0;
             alarmGroups.SelectedSection = 0;
-            window.Width = 1440; window.Height = 940;
+            DesktopViewportSmokeChecks.Layout(window);
             window.Settings.Tabs.SelectedIndex = 3;
             var soundGroups = window.Settings.SectionPages[3];
             soundGroups.Sections.SelectedIndex = 1;
@@ -1220,12 +1221,12 @@ internal static class DesignPreviewSmokeChecks
             Require(!window.Settings.Sound.PauseSeconds.GetVisualAncestors().Contains(window.Settings), "unselected group is progressively hidden");
             window.Settings.Tabs.SelectedIndex = 4; window.Settings.Tabs.SelectedIndex = 3;
             Require(soundGroups.Sections.SelectedIndex == 1 && window.Settings.Sound.HeartbeatVolume.Value == 62 && ReferenceEquals(settingsSession, window.Session), "navigation preserves section, edits and running simulation");
-            window.Width = 1000; window.Height = 720;
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-settings-hierarchy-compact.png");
             Require(window.Settings.CompactNavigation && soundGroups.Compact, "narrow windows collapse navigation columns instead of squeezing parameter cards");
             Require(soundGroups.Bounds.Width > 680 && window.Settings.Sound.HeartbeatVolume.TranslatePoint(default, window.Settings)!.Value.X < 100, "compact details reclaim both hidden navigation columns");
             Require(window.Settings.Sound.HeartbeatVolume.Bounds.Width > 0 && window.Settings.Apply.Bounds.Height >= 44, "compact layout retains parameter access and apply action");
-            window.Width = 1440; window.Height = 940;
+            DesktopViewportSmokeChecks.Layout(window);
             window.Settings.Sound.HeartbeatVolume.Value = 100;
             soundGroups.Sections.SelectedIndex = 0;
             VerifySoundSettings();
@@ -2877,9 +2878,12 @@ internal static class DesignPreviewSmokeChecks
     {
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         Directory.CreateDirectory("artifacts");
-        using var image = new RenderTargetBitmap(new PixelSize((int)window.Width, (int)window.Height), new Vector(96, 96));
-        var root = (Control)window.Content!; root.InvalidateMeasure();
-        root.Measure(new Size(window.Width, window.Height)); root.Arrange(new Rect(0, 0, window.Width, window.Height));
+        var root = (Control)window.Content!;
+        double width = double.IsNaN(root.Width) ? window.Width : root.Width;
+        double height = double.IsNaN(root.Height) ? window.Height : root.Height;
+        using var image = new RenderTargetBitmap(new PixelSize((int)width, (int)height), new Vector(96, 96));
+        root.InvalidateMeasure();
+        root.Measure(new Size(width, height)); root.Arrange(new Rect(0, 0, width, height));
         image.Render(root); image.Save(Path.Combine("artifacts", name), PngBitmapEncoderOptions.Default);
     }
     private static void Require(bool condition, string message)

@@ -15,6 +15,7 @@ internal static class Ecg12MeasurementSmokeChecks
     {
         var window = new DesignPreviewWindow();
         window.Show();
+        DesktopViewportSmokeChecks.Layout(window);
         try
         {
             window.SelectPage(1);
@@ -88,6 +89,9 @@ internal static class Ecg12MeasurementSmokeChecks
             Require(page.Overlay.Measurement.Display is { Start.TimeNs: 100_000_000, End.TimeNs: 900_000_000 }, "drag release applies the final pointer position");
             var measured = page.Overlay.Measurement.Display.Result;
             var offset = page.Scroller.Offset;
+            Require(page.Scroller.Extent.Width - page.Scroller.Viewport.Width - offset.X >= 60 &&
+                page.Scroller.Extent.Height - page.Scroller.Viewport.Height - offset.Y >= 40,
+                "zoomed viewport has room for the requested hand drag on both axes");
             page.Hand.IsChecked = true;
             Require(!page.Overlay.IsHitTestVisible && page.Overlay.Measurement.Display.Result == measured, "hand tool preserves measurements and disables caliper placement");
             var panStart = page.Scroller.TranslatePoint(new Point(500, 300), window)!.Value;

@@ -812,5 +812,21 @@
   "vitals.paVariation": "PA random drift (about ±mmHg, 0–5; 0 off)",
   "vitals.abpVariationField": "ABP random drift",
   "vitals.paVariationField": "PA random drift",
-  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged."
+  "validation.pressureVariation": "Not applied: the current pressure level or waveform template does not support this drift amplitude. Reduce the drift or raise the pressure targets. The simulation and display are unchanged.",
+  "ecg12.measure": "Manual calipers",
+  "ecg12.clear": "Clear calipers",
+  "ecg12.idle": "Click two points on a lead; drag either point to adjust.",
+  "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
+  "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  rate {3}/min",
+  "ecg12.rhythmLead": "II (rhythm strip)",
+  "ecg12.disabled": "Manual measurement is not allowed.",
+  "ecg12.courseLocked": "Manual measurement is locked by the course.",
+  "ecg12.overlay": "Twelve-lead manual measurement",
+  "ecg12.placing": "{0} · Click the second point to measure",
+  "ecg12.title": "12-lead ECG",
+  "ecg12.fit": "Fit",
+  "ecg12.viewport": "12-lead waveforms, scroll to zoom",
+  "ecg12.preview": "{0} · Preview",
+  "ecg12.pan": "Hand: drag to pan",
+  "ecg12.actualSize": "100% (1:1)"
 }

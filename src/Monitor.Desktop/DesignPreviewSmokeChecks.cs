@@ -876,6 +876,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyHelpCatalog);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyPausedMonitorLanguage);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyRetiredMonitorCollection);
+        NativeSmokePartition.Run(Ecg12MeasurementSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyVisibleVariation);
         NativeSmokePartition.Run(VerifyStableSlowContours);
         NativeSmokePartition.Run(VerifyRespirationOverview);
@@ -1033,11 +1034,14 @@ internal static class DesignPreviewSmokeChecks
             VerifySixRowPaper(window.CurrentPaper!);
             window.Settings.PaperLayout.SelectedIndex = 0; window.SelectPage(1);
             VerifyPaperEnd(window.CurrentPaper!);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             var root = (Control)window.Content!;
             double wideScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
             Require(window.CurrentPaper!.BlockCount == 55 && window.Settings.Parent is null, "complete paper snapshot with no settings controls");
             window.Width = 1000; window.Height = 720;
             Capture(window, "ui-preview-compact.png");
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             double narrowScale = window.CurrentPaper!.TransformToVisual(root)!.Value.M11;
             Require(narrowScale < wideScale, "paper including waves and calibration scales with the viewport");
             window.Width = 1440; window.Height = 940; window.SelectPage(2);

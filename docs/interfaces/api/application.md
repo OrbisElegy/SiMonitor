@@ -1152,6 +1152,79 @@ public sealed class ConfirmedNoExpirationNotice
 }
 ```
 
+## Presentation/Ecg12PaperLayout.cs
+
+源码：[Ecg12PaperLayout.cs](../../../src/Monitor.Application/Presentation/Ecg12PaperLayout.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed class Ecg12PaperLayout(bool sixRows)
+{
+    public const double PixelsPerSecond = 100;
+    public const double PixelsPerMillivolt = 40;
+    public const int LongLeadIndex = 12;
+    public const int LeadIIIndex = 1;
+    public const double GridLeft = 32;
+    public const double FirstBaseline = 136;
+    public const double RowPitch = 120;
+    public const double CalibrationWidth = 30;
+    public const double LongSamplesLeft = 62;
+    public bool SixRows { get; }
+    public int Rows { get; }
+    public int Columns { get; }
+    public int ColumnWidth { get; }
+    public double Width { get; }
+    public double Height { get; }
+    public long LongDurationNs { get; }
+    public double LongBaseline { get; }
+    public long ShortDurationNs { get; }
+    public long ColumnStartNs(int column);
+    public Ecg12PaperRegion Region(int lead);
+    public Ecg12PaperRegion? HitTest(double x, double y);
+}
+public sealed record Ecg12PaperRegion(int Lead, int SourceLead, double Left, double Baseline, long StartNs, long EndExclusiveNs)
+{
+    public double Right { get; }
+    public double Top { get; }
+    public double Bottom { get; }
+    public double XAt(long timeNs);
+    public double YAt(long numeratorMicrovolts, uint denominator);
+    public long TimeAt(double x);
+}
+```
+
+## Presentation/Ecg12PaperMeasurement.cs
+
+源码：[Ecg12PaperMeasurement.cs](../../../src/Monitor.Application/Presentation/Ecg12PaperMeasurement.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record Ecg12PaperCursor(long TimeNs, long NumeratorMicrovolts, uint Denominator, double X, double Y)
+{
+    public EcgManualCursor Value { get; }
+}
+public sealed record Ecg12PaperMeasurementDisplay(string ReasonCode, Ecg12PaperRegion? Region, Ecg12PaperCursor? Start, Ecg12PaperCursor? End, EcgManualMeasurementResult? Result)
+{
+    public Ecg12PaperCursor? Hover { get; init; }
+    public EcgManualMeasurementResult? HoverResult { get; init; }
+}
+public sealed class Ecg12PaperMeasurement
+{
+    public Ecg12PaperMeasurement(Ecg12PaperLayout layout, IReadOnlyList<WaveformEnvelope> blocks, Func<int, Guid> channelOfLead, SystemViewCommandAssessmentPolicy policy, bool allowAuxiliaryRate = true);
+    public Ecg12PaperLayout Layout { get; }
+    public SystemViewCommandAssessmentPolicy Policy { get; private set; }
+    public bool CanMeasure { get; }
+    public void UpdatePolicy(SystemViewCommandAssessmentPolicy policy);
+    public bool Hover(double x, double y);
+    public void EndHover();
+    public bool Place(double x, double y);
+    public bool Nudge(int samples);
+    public bool BeginDrag(double x, double y, double tolerance);
+    public bool DragTo(double x);
+    public void EndDrag();
+    public void Clear();
+    public Ecg12PaperMeasurementDisplay Display { get; }
+}
+```
+
 ## Presentation/EcgStripDisplayComposition.cs
 
 源码：[EcgStripDisplayComposition.cs](../../../src/Monitor.Application/Presentation/EcgStripDisplayComposition.cs) · 命名空间：`Monitor.Application.Presentation`

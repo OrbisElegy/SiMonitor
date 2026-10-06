@@ -5,7 +5,7 @@ using Monitor.Application.Presentation;
 
 namespace Monitor.Infrastructure.Preferences;
 
-public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null);
+public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false);
 
 // Local preferences and generator inputs; no runtime waveform state or audio opt-in.
 public sealed class DisplayPreferenceStore(string path)
@@ -21,6 +21,7 @@ public sealed class DisplayPreferenceStore(string path)
         public required MonitorSkin Skin { get; init; }
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
+        public bool MeasurementMillimeters { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
         public MonitorSoundPreferences? Sound { get; init; }
         private MonitorGeneratorPreferences? _generator;
@@ -43,7 +44,7 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
@@ -53,7 +54,7 @@ public sealed class DisplayPreferenceStore(string path)
             if (data.Version == 4 && data.Generator is null) { throw new ArgumentException("Preferences.MissingGenerator"); }
             data.Generator?.Validate();
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator);
+                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator, data.MeasurementMillimeters);
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
@@ -69,12 +70,13 @@ public sealed class DisplayPreferenceStore(string path)
         preferences.Generator?.Validate();
         var data = new Document
         {
-            Version = 10,
+            Version = 11,
             Generator = preferences.Generator,
             Sound = sound,
             Alarms = alarms,
             Skin = preferences.Display.Skin,
             PaperLayout = preferences.PaperLayout,
+            MeasurementMillimeters = preferences.MeasurementMillimeters,
             Slots = preferences.Display.Slots.Select(s => new Slot(s.Channel, s.Automatic, s.Range.Minimum, s.Range.Maximum, s.SpeedTenthsMmPerSecond)).ToArray()
         };
         string fullPath = Path.GetFullPath(path);

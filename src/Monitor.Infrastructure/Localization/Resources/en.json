@@ -828,5 +828,9 @@
   "ecg12.viewport": "12-lead waveforms, scroll to zoom",
   "ecg12.preview": "{0} · Preview",
   "ecg12.pan": "Hand: drag to pan",
-  "ecg12.actualSize": "100% (1:1)"
+  "ecg12.actualSize": "100% (1:1)",
+  "ecg12.units": "Measurement units",
+  "ecg12.unitsConverted": "Converted (ms, mV)",
+  "ecg12.unitsMillimeters": "Paper distance (mm)",
+  "ecg12.resultMillimeters": "{0}  Δx {1} mm  Δy {2} mm"
 }

@@ -65,7 +65,7 @@ internal static class NotificationSettingsSpecifications
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms)), "save notification configuration");
             string valid = File.ReadAllText(path);
             var loaded = store.Load(out bool rejected);
-            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 10 &&
+            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 11 &&
                 loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications &&
                 settings.All(e => loaded.Alarms.NotificationFor(e.Key) == e.Value) &&
                 !valid.Contains("Occurrence", StringComparison.Ordinal) && !valid.Contains("NotificationSequence", StringComparison.Ordinal),

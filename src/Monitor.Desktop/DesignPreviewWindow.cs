@@ -71,7 +71,7 @@ internal sealed class DesignPreviewWindow : Window
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
         Settings = CreateSettings();
-        Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+        Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
         var defaults = BuildConfiguredSources();
         _session = defaults.Session;
         _session.DiscardStartup();
@@ -90,7 +90,7 @@ internal sealed class DesignPreviewWindow : Window
             catch (Exception error) when (error is ArgumentException or OverflowException)
             {
                 Settings.Sound.Close(); Settings = CreateSettings();
-                Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout);
+                Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
                 Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
                 rejected = true;
             }
@@ -151,6 +151,7 @@ internal sealed class DesignPreviewWindow : Window
     private void ConnectSettings()
     {
         Settings.LanguageChanged += SelectLanguage;
+        Settings.MeasurementUnits.SelectionChanged += (_, _) => EcgPage?.SetMeasurementUnits(Settings.MeasurementUnits.SelectedIndex == 1);
         void UpdateNotificationMode()
         {
             Settings.Sound.UseNotificationPlayback(Settings.Alerts.AlarmLifecycles);
@@ -299,7 +300,7 @@ internal sealed class DesignPreviewWindow : Window
             _paperMeasurement = new Ecg12PaperMeasurement(paper.Layout, _ecg, lead => ProjectedEcgDemoSource.ChannelId((EcgLead)lead), MeasurementPolicy);
             _paperMeasurementBlocks = _ecg;
         }
-        var page = new Ecg12PaperPage(paper, _paperMeasurement, Localization, _paperMeasuring);
+        var page = new Ecg12PaperPage(paper, _paperMeasurement, Localization, _paperMeasuring, Settings.MeasurementUnits.SelectedIndex == 1);
         page.MeasuringChanged += measuring => _paperMeasuring = measuring;
         return page;
     }
@@ -424,7 +425,7 @@ internal sealed class DesignPreviewWindow : Window
             if (restart) { Start(); }
             if (_preferences is not null)
             {
-                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator));
+                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, Settings.MeasurementUnits.SelectedIndex == 1));
                 PreferenceNotice.IsVisible = !saved;
                 Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
                 if (!saved) { SetStatus("settings.preferenceSaveWarning"); }

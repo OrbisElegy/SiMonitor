@@ -16,6 +16,14 @@ internal static class DisplayPreferenceSmokeChecks
         {
             var store = new DisplayPreferenceStore(path);
             Require(store.Load(out bool rejected).Display.Skin == MonitorSkin.FiveRows && !rejected, "missing file uses defaults quietly");
+            Require(store.Save(new(MonitorDisplayConfiguration.Default(), 0, MeasurementMillimeters: true)) &&
+                store.Load(out rejected).MeasurementMillimeters && !rejected, "millimeter units persist");
+            var legacyUnits = JsonNode.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8))!.AsObject();
+            legacyUnits["Version"] = 10;
+            legacyUnits.Remove("MeasurementMillimeters");
+            File.WriteAllText(path, legacyUnits.ToJsonString(), new System.Text.UTF8Encoding(false));
+            Require(!store.Load(out rejected).MeasurementMillimeters && !rejected, "legacy preferences default to converted units");
+            File.Delete(path);
             var window = new DesignPreviewWindow(path); window.Show();
             try
             {
@@ -26,6 +34,7 @@ internal static class DisplayPreferenceSmokeChecks
                 window.Settings.Slots[0].Maximum.Text = "90";
                 window.Settings.Slots[0].Speed.SelectedIndex = 0;
                 window.Settings.PaperLayout.SelectedIndex = 1;
+                window.Settings.MeasurementUnits.SelectedIndex = 1;
                 var alarms = window.Settings.Alerts;
                 alarms.HeartRateEnabled.IsChecked = true; alarms.WarningHeartRate.Value = 130.25m;
                 alarms.SpO2Enabled.IsChecked = true; alarms.WarningSpO2.Value = 93.5m;
@@ -116,7 +125,7 @@ internal static class DisplayPreferenceSmokeChecks
                         "each measurement restores thresholds in its native units");
                 }
                 Require(display.Skin == MonitorSkin.ThreeRows && display.Slots[0] == new MonitorDisplaySlot(4, false, new(-2.5, 90), 125) &&
-                    reopened.Settings.ReadDisplay().Slots.SequenceEqual(display.Slots) && reopened.Settings.PaperLayout.SelectedIndex == 1,
+                    reopened.Settings.ReadDisplay().Slots.SequenceEqual(display.Slots) && reopened.Settings.PaperLayout.SelectedIndex == 1 && reopened.Settings.MeasurementUnits.SelectedIndex == 1,
                     "restart restores applied configuration in source display and editors, ignoring uncommitted draft");
                 Require(reopened.Settings.EcgSelection == 0 && reopened.Settings.Sound.AlarmEnabled.IsChecked == false &&
                     reopened.Settings.OpticalEnabled.IsChecked == false, "display recovery does not restore physiology or audio opt-in");
@@ -190,7 +199,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 10", "\"Version\": 109"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 11", "\"Version\": 119"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

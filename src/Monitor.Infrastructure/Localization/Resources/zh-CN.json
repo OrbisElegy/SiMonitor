@@ -828,5 +828,9 @@
   "ecg12.viewport": "12 导联波形，滚轮缩放",
   "ecg12.preview": "{0} · 预览",
   "ecg12.pan": "抓手：拖动平移",
-  "ecg12.actualSize": "100%（1:1）"
+  "ecg12.actualSize": "100%（1:1）",
+  "ecg12.units": "测量结果单位",
+  "ecg12.unitsConverted": "换算单位（ms、mV）",
+  "ecg12.unitsMillimeters": "纸面距离（mm）",
+  "ecg12.resultMillimeters": "{0}  Δx {1} mm  Δy {2} mm"
 }

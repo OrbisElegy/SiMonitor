@@ -34,6 +34,8 @@ internal sealed partial class DesignPreviewSettings
         Localization.Bind(Restart, ContentControl.ContentProperty, "settings.restart");
         Localization.Bind(ResetAll, ContentControl.ContentProperty, "settings.resetAction");
         Localization.SetChoices(Skin, "display.skinThree", "display.skinFive", "display.skinSeven");
+        Localization.SetChoices(MeasurementUnits, "ecg12.unitsConverted", "ecg12.unitsMillimeters");
+        Localization.Bind(MeasurementUnits, AutomationProperties.NameProperty, "ecg12.units");
         Localization.SetChoices(PaperLayout, "display.layoutThree", "display.layoutSix");
         Localization.Bind(Skin, AutomationProperties.NameProperty, "display.skin");
         Localization.Bind(PaperLayout, AutomationProperties.NameProperty, "display.paperLayout");

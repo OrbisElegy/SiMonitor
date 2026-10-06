@@ -122,6 +122,38 @@ static void check_already_retired(ma_device_notification_type type)
     ma_pcm_rb_uninit(&output.ring);
 }
 
+static void check_consumer_wakeup(void)
+{
+    sa_output output;
+    float pcm[] = {1, 1};
+    prepare_output(&output);
+    CHECK(sa_wait_writable(&output, 1) == -2);
+    CHECK(consumed_init(&output));
+    CHECK(sa_wait_writable(NULL, 1) == -1);
+    CHECK(sa_wait_writable(&output, 0) == -1);
+    CHECK(sa_wait_writable(&output, 1001) == -1);
+    CHECK(sa_wait_writable(&output, 1) == 1);
+    /* A consumer pass before the wait is latched, then consumed exactly once. */
+    sa_test_render(&output, pcm, 2);
+    CHECK(sa_info(&output, 6) == 0 && hook_calls == 0);
+    CHECK(sa_wait_writable(&output, 1000) == 0);
+    CHECK(sa_wait_writable(&output, 1) == 1);
+    /* Underrun retirement wakes the producer and reports retirement. */
+    sa_test_render(&output, pcm, 2);
+    CHECK(sa_info(&output, 6) == 1 && hook_calls == 1);
+    CHECK(sa_wait_writable(&output, 1000) == -4);
+    consumed_uninit(&output);
+    ma_pcm_rb_uninit(&output.ring);
+
+    prepare_output(&output);
+    CHECK(consumed_init(&output));
+    notify(&output, ma_device_notification_type_stopped);
+    CHECK(sa_wait_writable(&output, 1000) == -4);
+    consumed_uninit(&output);
+    ma_pcm_rb_uninit(&output.ring);
+    puts("PASS consumer progress and retirement wake the producer once");
+}
+
 int main(void)
 {
     const ma_device_notification_type types[] = {
@@ -137,5 +169,6 @@ int main(void)
         check_already_retired(types[index]);
     }
     puts("PASS retirement interleavings and already-retired output");
+    check_consumer_wakeup();
     return EXIT_SUCCESS;
 }

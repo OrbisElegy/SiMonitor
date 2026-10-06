@@ -98,6 +98,16 @@ jobs:
       - name: Check managed/native audio binding
         run: python tools/check_native_audio_binding.py
 
+      - name: Smoke-test managed WASAPI interop
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Hosted runners usually have no audio endpoint: exit 1 (unavailable)
+          # still exercises COM activation and the device enumerator.
+          dotnet tests/Monitor.Specs/bin/Release/net10.0/Monitor.Specs.dll --audio-wasapi-diagnostics
+          if ($LASTEXITCODE -notin 0, 1) { throw "WASAPI diagnostics failed with exit code $LASTEXITCODE" }
+          exit 0
+
       - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

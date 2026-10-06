@@ -36,7 +36,54 @@ struct sa_output {
     IAudioClock* clock;
     HRESULT clock_hr;
 #endif
+    /* Producer wake-up after consumer progress. Zeroed state means unavailable. */
+#ifdef _WIN32
+    HANDLE consumed; /* Auto-reset; SetEvent never blocks the device callback. */
+#elif defined(SIM_AUDIO_TEST)
+    /* Test backend only: no production non-Windows device can open. */
+    ma_uint32 consumed_pending;
+    ma_uint32 consumed_ready;
+#endif
 };
+
+static int consumed_init(sa_output* output)
+{
+#ifdef _WIN32
+    output->consumed = CreateEventW(NULL, FALSE, FALSE, NULL);
+    return output->consumed != NULL;
+#elif defined(SIM_AUDIO_TEST)
+    output->consumed_pending = 0;
+    output->consumed_ready = 1;
+    return 1;
+#else
+    (void)output;
+    return 1;
+#endif
+}
+
+/* Only after the device worker is joined; no callback can signal afterwards. */
+static void consumed_uninit(sa_output* output)
+{
+#ifdef _WIN32
+    if (output->consumed) CloseHandle(output->consumed);
+    output->consumed = NULL;
+#elif defined(SIM_AUDIO_TEST)
+    output->consumed_ready = 0;
+#else
+    (void)output;
+#endif
+}
+
+static void consumed_signal(sa_output* output)
+{
+#ifdef _WIN32
+    if (output->consumed) SetEvent(output->consumed);
+#elif defined(SIM_AUDIO_TEST)
+    if (output->consumed_ready) ma_atomic_exchange_32(&output->consumed_pending, 1);
+#else
+    (void)output;
+#endif
+}
 
 static void snapshot_periods(sa_output* output)
 {
@@ -93,6 +140,8 @@ static void consume(sa_output* output, float* pcm, ma_uint32 frames)
         /* A concurrent stop/reroute notification must keep its retirement reason. */
         ma_atomic_compare_and_swap_32(&output->retired, 0, 1);
     }
+    /* After commit and any retirement, so a woken producer observes both. */
+    consumed_signal(output);
 }
 static void data_callback(ma_device* device, void* output, const void* input, ma_uint32 frames)
 {
@@ -106,6 +155,7 @@ static void notification_callback(const ma_device_notification* notification)
         notification->type == ma_device_notification_type_interruption_began) {
         sa_output* output = (sa_output*)notification->pDevice->pUserData;
         ma_atomic_exchange_32(&output->retired, 2);
+        consumed_signal(output);
     }
 }
 uint32_t sa_abi_version(void) { return 1; }
@@ -135,6 +185,9 @@ int32_t sa_open(const char* device_id_utf8, uint32_t capacity_ms, sa_output** ou
     if (ma_pcm_rb_init(ma_format_f32, 1, 48 * capacity_ms, NULL, NULL, &output->ring) != MA_SUCCESS) {
         ma_context_uninit(&output->context); free(output); return -2;
     }
+    if (!consumed_init(output)) {
+        ma_pcm_rb_uninit(&output->ring); ma_context_uninit(&output->context); free(output); return -2;
+    }
     config = ma_device_config_init(ma_device_type_playback);
     config.playback.format = ma_format_f32;
     config.playback.channels = 1;
@@ -150,12 +203,14 @@ int32_t sa_open(const char* device_id_utf8, uint32_t capacity_ms, sa_output** ou
         memset(&selected, 0, sizeof(selected));
         if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, device_id_utf8, -1,
                 (LPWSTR)selected.wasapi, 64)) {
+            consumed_uninit(output);
             ma_pcm_rb_uninit(&output->ring); ma_context_uninit(&output->context); free(output); return -1;
         }
         config.playback.pDeviceID = &selected;
     }
 #endif
     if (ma_device_init(&output->context, &config, &output->device) != MA_SUCCESS) {
+        consumed_uninit(output);
         ma_pcm_rb_uninit(&output->ring); ma_context_uninit(&output->context); free(output); return -2;
     }
     snapshot_periods(output);
@@ -199,6 +254,7 @@ int32_t sa_close(sa_output* output)
 #if defined(_WIN32) && !defined(SIM_AUDIO_TEST)
     if (output->clock) output->clock->lpVtbl->Release(output->clock);
 #endif
+    consumed_uninit(output);
     ma_pcm_rb_uninit(&output->ring);
     ma_context_uninit(&output->context);
     free(output);
@@ -264,6 +320,33 @@ int32_t sa_clock_sample(sa_output* output, uint64_t* position,
     }
 #endif
     return -2;
+}
+int32_t sa_wait_writable(sa_output* output, uint32_t timeout_ms)
+{
+    if (!output || timeout_ms < 1 || timeout_ms > 1000) return -1;
+    if (ma_atomic_load_32(&output->retired)) return -4;
+#ifdef _WIN32
+    {
+        DWORD result;
+        if (!output->consumed) return -2;
+        result = WaitForSingleObject(output->consumed, timeout_ms);
+        if (result == WAIT_TIMEOUT) return 1;
+        if (result != WAIT_OBJECT_0) return -2;
+    }
+#elif defined(SIM_AUDIO_TEST)
+    {
+        /* Test backend polls in 1 ms steps; it never qualifies wake-up latency. */
+        uint32_t waited;
+        if (!output->consumed_ready) return -2;
+        for (waited = 0; !ma_atomic_exchange_32(&output->consumed_pending, 0); waited++) {
+            if (waited == timeout_ms) return 1;
+            ma_sleep(1);
+        }
+    }
+#else
+    return -2;
+#endif
+    return ma_atomic_load_32(&output->retired) ? -4 : 0;
 }
 #ifdef SIM_AUDIO_TEST
 void sa_test_render(sa_output* output, float* pcm, uint32_t frames) { consume(output, pcm, frames); }

@@ -112,7 +112,8 @@ Offline launch: run {executable} without arguments; keep this directory intact.
 No .NET SDK installation is required for this self-contained package.
 Windows audio: keep sim_audio_native.dll beside the executable.
 Sound remains off at startup; enable it explicitly in Settings > Sound.
-On other targets the current WASAPI backend is unavailable.
+Linux audio uses the system ALSA library, including PipeWire/PulseAudio routing.
+macOS currently has no sound output.
 
 Applied settings are stored in local application data under
 Monitor/display-preferences.json (Windows: %LOCALAPPDATA%/Monitor/).

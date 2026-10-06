@@ -54,6 +54,7 @@ class NativeAudioAbiEntryPointTests(unittest.TestCase):
                 self.assertEqual(exit_status.exception.code, 0)
                 library.sa_abi_version.assert_called_once_with()
                 self.assertEqual(library.sa_open.call_count, 2)
+                library.sa_wait_writable.assert_called_once_with(None, 1)
                 self.assertEqual(output.getvalue(),
                                  'PASS production Linux build rejects unsupported backend; no test sink exported\n')
 

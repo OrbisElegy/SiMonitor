@@ -23,21 +23,26 @@ def main():
     lib.sa_info.argtypes = [c.c_void_p, c.c_uint32]
     lib.sa_info.restype = c.c_uint32
     lib.sa_clock_sample.argtypes = [c.c_void_p, c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64), c.POINTER(c.c_uint32)]
+    lib.sa_wait_writable.argtypes = [c.c_void_p, c.c_uint32]
     check(lib.sa_abi_version() == 1, 'ABI version must be 1')
     h = c.c_void_p()
     check(lib.sa_open(None, 19, c.byref(h)) == -1 and not h.value, 'Invalid buffer size must be rejected without a handle')
+    check(lib.sa_wait_writable(None, 1) == -1, 'Waiting on a null handle must be rejected')
     if '--production-unavailable' in sys.argv:
         check(lib.sa_open(None, 40, c.byref(h)) == -2 and not h.value, 'Unsupported backend must be rejected without a handle')
         check(not hasattr(lib, 'sa_test_render'), 'Production library must not export the test sink')
         print('PASS production Linux build rejects unsupported backend; no test sink exported')
         sys.exit(0)
     lib.sa_test_render.argtypes = [c.c_void_p, c.POINTER(c.c_float), c.c_uint32]
-    check(lib.sa_open(None, 40, c.byref(h)) == 0, 'A fresh test output must open after retirement')
+    check(lib.sa_open(None, 40, c.byref(h)) == 0, 'Test backend must open')
     try:
         check(lib.sa_info(h, 8) == 1920 and lib.sa_info(h, 9) == 0, 'Fresh ring must expose its capacity and no submitted frames')
+        check(lib.sa_wait_writable(h, 0) == -1 and lib.sa_wait_writable(h, 1001) == -1, 'Invalid wait timeouts must be rejected')
+        check(lib.sa_wait_writable(h, 1) == 1, 'An idle consumer must time out')
         check(all(lib.sa_info(h, key) == 0 for key in range(10, 19)), 'Test backend must not report hardware diagnostics')
         position, frequency, qpc, hr = c.c_uint64(9), c.c_uint64(9), c.c_uint64(9), c.c_uint32(9)
-        check(lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -2, 'Test backend must report an unavailable device clock')
+        check(lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -2,
+              'Test backend must report an unavailable device clock')
         check((position.value, frequency.value, qpc.value, hr.value) == (0, 0, 0, 0), 'Unavailable clock values must be cleared')
         source = (c.c_float * 1500)(*[(i % 99 - 49) / 50 for i in range(1500)])
         check(lib.sa_submit(h, source, 1500) == 0, 'Initial PCM submission must succeed')
@@ -45,6 +50,7 @@ def main():
         first = (c.c_float * 1000)()
         lib.sa_test_render(h, first, 1000)
         check(list(first) == list(source)[:1000], 'Consumer must render submitted PCM in order')
+        check(lib.sa_wait_writable(h, 1000) == 0 and lib.sa_wait_writable(h, 1) == 1, 'Consumer progress must wake the producer once')
         invalid = (c.c_float * 2)(0, math.nan)
         check(lib.sa_submit(h, invalid, 2) == -1, 'Non-finite PCM must be rejected')
         check(lib.sa_submit(h, source, 1000) == 0, 'PCM submission after consumption must succeed')
@@ -52,13 +58,15 @@ def main():
         lib.sa_test_render(h, tail, 2000)
         check(list(tail) == list(source)[1000:] + list(source)[:1000] + [0] * 500, 'Wrapped PCM must be followed by underrun silence')
         check(lib.sa_info(h, 6) == 1 and lib.sa_info(h, 7) == 500, 'Underrun must retire output and record missing frames')
+        check(lib.sa_wait_writable(h, 1000) == -4, 'Waiting on retired output must report retirement')
         check(lib.sa_submit(h, source, 1) == -4 and lib.sa_start(h) == -4, 'Retired output must reject submission and start')
-        check(lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -4, 'Retired output must reject clock sampling')
+        check(lib.sa_clock_sample(h, c.byref(position), c.byref(frequency), c.byref(qpc), c.byref(hr)) == -4,
+              'Retired output must reject clock sampling')
         lib.sa_test_render(h, tail, 2000)
         check(not any(tail), 'Retired output must render silence')
     finally:
         close_status = lib.sa_close(h)
-        check(close_status == 0, 'Native ABI contract must hold: lib.sa_close(h) == 0')
+        check(close_status == 0, 'Test output must close successfully')
     # Exercise real miniaudio null-worker start/stop/join, not just manual reads.
     check(lib.sa_open(None, 40, c.byref(h)) == 0, 'A fresh test output must open after retirement')
     try:
@@ -66,14 +74,17 @@ def main():
         silence = (c.c_float * 1920)()
         check(lib.sa_submit(h, silence, 1920) == 0, 'A fresh output must accept PCM')
         check(lib.sa_start(h) == 0, 'Native worker must start')
+        # The worker's consumer pass wakes this thread; a slow host may already see underrun.
+        check(lib.sa_wait_writable(h, 1000) in (0, -4), 'Worker consumption or retirement must wake the producer')
         deadline = time.monotonic() + 3
         while lib.sa_info(h, 6) == 0 and time.monotonic() < deadline:
-            time.sleep(0.005)
+            lib.sa_wait_writable(h, 5)
         check(lib.sa_info(h, 6) == 1 and lib.sa_info(h, 7) > 0, 'Native worker must report an underrun')
+        check(lib.sa_wait_writable(h, 1000) == -4, 'Retired worker must report retirement to the producer')
     finally:
         close_status = lib.sa_close(h)
-        check(close_status == 0, 'Native ABI contract must hold: lib.sa_close(h) == 0')
-    print('PASS native ABI, ring wrap, rejection, underrun fencing, fresh handle and worker join')
+        check(close_status == 0, 'Native worker must stop and join on close')
+    print('PASS native ABI, ring wrap, rejection, underrun fencing, consumer wake-up, fresh handle and worker join')
 
 
 if __name__ == '__main__':

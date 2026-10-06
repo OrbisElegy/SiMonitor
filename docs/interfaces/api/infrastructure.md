@@ -6,6 +6,25 @@
 
 位置 record 的参数也定义其同名属性；编译器合成的构造器、相等性方法以及继承成员不重复展开。`internal` 类型即使有 `public` 成员也不属于本索引。按开发构建的预处理分支读取；桌面产品构建差异见[桌面与命令行入口](../desktop-tools.md)。行为约束和集成顺序见总览中的分模块文档。
 
+## Audio/AlsaAudioOutput.cs
+
+源码：[AlsaAudioOutput.cs](../../../src/Monitor.Infrastructure/Audio/AlsaAudioOutput.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed class AlsaAudioOutput : IPumpedAudioOutput
+{
+    public AlsaAudioOutput(int queueTargetMilliseconds = NativeAudioOutputFactory.DefaultQueueTargetMilliseconds);
+    public int? QueueTargetFrames { get; }
+    public int? BufferFrames { get; }
+    public int? PeriodFrames { get; }
+    public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
+    public NativeAudioClockSample ReadClock();
+    public void Dispose();
+}
+```
+
 ## Audio/AudioClockBridge.cs
 
 源码：[AudioClockBridge.cs](../../../src/Monitor.Infrastructure/Audio/AudioClockBridge.cs) · 命名空间：`Monitor.Infrastructure.Audio`
@@ -16,6 +35,26 @@ public sealed class AudioClockBridge
     public AudioClockBridge(long ticksPerSecond, long initialTicks, long initialFrame);
     public void Observe(long monotonicTicks, long engineFrame);
     public long MapToFrame(long monotonicTicks);
+}
+```
+
+## Audio/AudioOutputSelection.cs
+
+源码：[AudioOutputSelection.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputSelection.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public enum AudioOutputBackend
+{
+    Native,
+    Wasapi,
+    Alsa
+}
+public static class AudioOutputSelection
+{
+    public const string EnvironmentVariable = "SIMONITOR_AUDIO_OUTPUT";
+    public static AudioOutputBackend Current { get; }
+    public static AudioOutputBackend Resolve(string? value);
+    public static IPumpedAudioOutput Create(AudioOutputBackend backend);
 }
 ```
 
@@ -184,12 +223,15 @@ public readonly record struct NativeAudioPeriodSnapshot(uint QueryStatus, uint D
 }
 public sealed class NativeAudioOutputFactory : IPumpedAudioOutput
 {
+    public const int DefaultQueueTargetMilliseconds = 20;
     public static string DefaultLibraryPath { get; }
-    public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false);
+    public NativeAudioOutputFactory(string libraryPath, bool allowTestBackend = false, int queueTargetMilliseconds = DefaultQueueTargetMilliseconds);
     public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public int? QueueTargetFrames { get; }
     public NativeAudioStatus? Status { get; }
     public NativeAudioPeriodSnapshot? PeriodSnapshot { get; }
     public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
     public NativeAudioClockSample ReadClock();
     public void Dispose();
 }
@@ -248,6 +290,7 @@ public static class SelectedMonitorTones
 public interface IPumpedAudioOutput : IAudioOutputFactory, IDisposable
 {
     public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
 }
 public enum SoundPreviewResult
 {
@@ -298,6 +341,40 @@ public sealed class ToneVoice
 public static class ToneWaveFixture
 {
     public static void Write(Stream output, TonePreset preset, int beatCount, int periodFrames, CancellationToken cancellationToken = default);
+}
+```
+
+## Audio/WasapiAudioOutput.cs
+
+源码：[WasapiAudioOutput.cs](../../../src/Monitor.Infrastructure/Audio/WasapiAudioOutput.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed class WasapiAudioOutput : IPumpedAudioOutput
+{
+    public WasapiAudioOutput(int queueTargetMilliseconds = NativeAudioOutputFactory.DefaultQueueTargetMilliseconds);
+    public int? QueueTargetFrames { get; }
+    public int? BufferFrames { get; }
+    public int? PeriodFrames { get; }
+    public WasapiStreamPath StreamPath { get; }
+    public IAudioOutputDevice? Open(string? deviceId, AudioRenderSession session, long generation);
+    public bool Pump();
+    public void WaitForQueueSpace(int timeoutMilliseconds);
+    public NativeAudioClockSample ReadClock();
+    public void Dispose();
+}
+```
+
+## Audio/WasapiRenderEndpoint.cs
+
+源码：[WasapiRenderEndpoint.cs](../../../src/Monitor.Infrastructure/Audio/WasapiRenderEndpoint.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public enum WasapiStreamPath
+{
+    None,
+    MixFormat,
+    ShortEnginePeriod,
+    WindowsConversion
 }
 ```
 

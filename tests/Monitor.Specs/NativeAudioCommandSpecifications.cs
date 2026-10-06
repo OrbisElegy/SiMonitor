@@ -23,6 +23,13 @@ internal static class NativeAudioCommandSpecifications
         bool rejected = false;
         try { using var factory = new NativeAudioOutputFactory("relative.dll"); } catch (ArgumentException) { rejected = true; }
         Check.That(rejected, "library search-path fallback is forbidden");
+        foreach (int invalid in new[] { 4, 101 })
+        {
+            bool invalidTarget = false;
+            try { using var factory = new NativeAudioOutputFactory(missing, queueTargetMilliseconds: invalid); }
+            catch (ArgumentOutOfRangeException) { invalidTarget = true; }
+            Check.That(invalidTarget, "queue target outside 5-100 ms is rejected before loading");
+        }
         string defaultLibrary = NativeAudioOutputFactory.DefaultLibraryPath;
         Check.That(Path.IsPathFullyQualified(defaultLibrary) && Path.GetDirectoryName(defaultLibrary) == Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory) &&
             Path.GetFileName(defaultLibrary) == (OperatingSystem.IsWindows() ? "sim_audio_native.dll" : OperatingSystem.IsMacOS() ? "libsim_audio_native.dylib" : "libsim_audio_native.so"),

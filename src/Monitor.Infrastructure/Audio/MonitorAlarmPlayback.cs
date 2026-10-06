@@ -32,6 +32,7 @@ public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmS
 // banner rotation never changes the highest active audible priority.
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
+    private const int PumpWaitMilliseconds = 10;
     private MonitorAlarmSoundRequest? _request;
     private int _busy;
     private IPumpedAudioOutput? _output;
@@ -70,6 +71,8 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     private SoundPreviewResult Run(CancellationToken cancellationToken)
     {
         var result = SoundPreviewResult.Unavailable;
+        // Dedicated LongRunning producer: a short native queue tolerates little scheduling delay.
+        Thread.CurrentThread.Priority = ThreadPriority.Highest;
         try
         {
             if (!Close()) { return SoundPreviewResult.StopFailed; }
@@ -88,7 +91,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                     sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
                     if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
                     Volatile.Write(ref _outputActive, true);
-                    Thread.Sleep(1);
+                    _output.WaitForQueueSpace(PumpWaitMilliseconds);
                 }
             }
         }

@@ -35,6 +35,11 @@ SA_API uint32_t sa_info(sa_output* output, uint32_t key);
    not raw QueryPerformanceCounter ticks. Outputs zeroed on failure. */
 SA_API int32_t sa_clock_sample(sa_output* output, uint64_t* position,
     uint64_t* frequency, uint64_t* qpc_100ns, uint32_t* hresult);
+/* Optional ABI1 extension. Producer/owner thread only, never device callback.
+   Waits until the native consumer has run since the previous wait, the output
+   retires, or timeout_ms (1-1000) elapses. Returns0 consumer ran,1 timeout,
+   -1 invalid,-2 unavailable,-4 retired. Re-read key 8 before submitting. */
+SA_API int32_t sa_wait_writable(sa_output* output, uint32_t timeout_ms);
 #ifdef SIM_AUDIO_TEST
 /* Test-only build: no hardware. Runs the SAME PCM consumer as the callback. */
 SA_API void sa_test_render(sa_output* output, float* pcm, uint32_t frames);

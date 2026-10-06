@@ -64,6 +64,9 @@ each participating model/tool combination. Do not infer model identity
 from the tool name or add tool attribution to an unassisted contribution.
 An unassisted contribution does not require a `Co-authored-by` trailer.
 
+Note that sometime codex will use GPT-6 instead of gpt-6-astra as model
+name, in this case GPT-6 and gpt-6-astra were both acceptable.
+
 The `Signed-off-by` name and email must exactly match the human author.
 Use `git commit -s` to add this trailer from the committer identity.
 The `--author` option changes only the author, so ensure that its name and
@@ -88,3 +91,24 @@ signed. Verify signatures with `git verify-commit HEAD` or
 When the signing key is on a smart card, keep the card connected and enter
 its PIN only through the local GPG pinentry prompt. Never put a PIN in a
 commit message, command argument, repository file, or chat.
+
+## Commits
+
+Basicly the same as Linux kernel patch style:
+
+```text
+therapy: cancel a held shock before same-time QRS
+
+The safety contract gives cancellation precedence over a valid QRS.  Sort
+both inputs before applying them so a synchronized request cannot deliver
+after its lease has ceased to be valid.
+
+Co-authored-by: model-name <tool@localhost>
+Signed-off-by: Developer Name <developer@example.com>
+```
+
+- Use an imperative subject prefixed by the affected subsystem.
+- Keep the subject concise and do not end it with a period.
+- Wrap body text at roughly 72 columns.
+- Explain the reason and observable behavior, not a line-by-line diff.
+- Keep refactors separate from behavior changes.

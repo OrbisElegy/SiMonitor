@@ -40,6 +40,6 @@
 
 ## 本地保存格式
 
-`DisplayPreferenceStore` 写入版本 10，保存 `Alarms.ConfirmationTimings` 和独立的 `Alarms.NoExpirationConfirmation`，不保存待确认起点或活动提示。版本 5–10 要求存在 `Generator` 字段，但允许其值为 `null`，与 `DisplayPreferences` 接口一致；非空值完整校验，字段丢失视为损坏。版本 1–9 继续按原必需字段规则读取，其中版本 4 仍要求非空 `Generator`。旧文件缺少确认覆盖项时使用对应默认值；缺少未检出呼吸确认属性时使用 0/0 ms。原开关、呼吸等待时限、数值阈值及已有覆盖项不变。
+`DisplayPreferenceStore` 写入版本 11，保存 `Alarms.ConfirmationTimings` 和独立的 `Alarms.NoExpirationConfirmation`，不保存待确认起点或活动提示。版本 5–11 要求存在 `Generator` 字段，但允许其值为 `null`，与 `DisplayPreferences` 接口一致；非空值完整校验，字段丢失视为损坏。版本 1–10 继续按原必需字段规则读取，其中版本 4 仍要求非空 `Generator`。旧文件缺少确认覆盖项时使用对应默认值；缺少未检出呼吸确认属性时使用 0/0 ms。原开关、呼吸等待时限、数值阈值及已有覆盖项不变。
 
 数值通道只保存不同于通道默认值的覆盖项；恢复某参数的默认确认时间会清除此覆盖。编辑即时影响当前提示，点击应用后保存。时间控件显示秒，最多三位小数，往返保存保持毫秒精度。此接口尚不提供教学预设分层或独立导入/导出。

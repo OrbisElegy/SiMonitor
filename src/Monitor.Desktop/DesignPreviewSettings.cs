@@ -255,6 +255,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
+    internal ComboBox MeasurementUnits { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     internal ComboBox PaperLayout { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     private readonly List<Action> _refreshSignalRows = [];
     internal int PreviewCacheCount => _previews.Count;
@@ -301,6 +302,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         var paper = new StackPanel { Spacing = 16 };
         Control paperLabel = Before(display, PaperLayout), paperHelp = display.Children[^1];
         foreach (var control in new[] { paperLabel, PaperLayout, paperHelp }) { display.Children.Remove(control); paper.Children.Add(control); }
+        paper.Children.Add(LocalizedText("ecg12.units"));
+        paper.Children.Add(MeasurementUnits);
         display.Margin = new Thickness(0);
         SectionPages[2] = new SettingsSections(Localization, "settings.display", ("shell.monitor", display), ("display.paper", paper));
         SectionPages[3] = SettingsSections.Split(Localization, "settings.sound", Sound,
@@ -772,7 +775,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             _slotRows.Children.Add(row); Slots.Add(new(channel, automatic, minimum, maximum, speed));
         }
     }
-    internal void RestoreDisplay(MonitorDisplayConfiguration display, int paperLayout)
+    internal void RestoreDisplay(MonitorDisplayConfiguration display, int paperLayout, bool measurementMillimeters = false)
     {
         Skin.SelectedIndex = (int)display.Skin;
         for (int i = 0; i < display.Slots.Count; i++)
@@ -785,6 +788,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             field.Speed.SelectedIndex = saved.SpeedTenthsMmPerSecond switch { 125 => 0, 250 => 1, _ => 2 };
         }
         PaperLayout.SelectedIndex = paperLayout;
+        MeasurementUnits.SelectedIndex = measurementMillimeters ? 1 : 0;
     }
     internal MonitorDisplayConfiguration ReadDisplay() => new((MonitorSkin)Skin.SelectedIndex, Slots.Select(slot =>
     {

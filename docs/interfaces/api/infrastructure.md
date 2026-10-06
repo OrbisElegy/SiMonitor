@@ -599,7 +599,7 @@ public sealed class EncryptedSqliteBackupService
 源码：[DisplayPreferenceStore.cs](../../../src/Monitor.Infrastructure/Preferences/DisplayPreferenceStore.cs) · 命名空间：`Monitor.Infrastructure.Preferences`
 
 ```csharp
-public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null)
+public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false)
 {
 }
 public sealed class DisplayPreferenceStore(string path)

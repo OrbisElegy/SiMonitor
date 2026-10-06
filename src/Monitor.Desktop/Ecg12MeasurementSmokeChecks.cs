@@ -39,6 +39,19 @@ internal static class Ecg12MeasurementSmokeChecks
                 page.Readout.Text!.StartsWith("II  Δt 800 ms  ΔV ", StringComparison.Ordinal) && page.Readout.Text.EndsWith("  频率 75 次/分", StringComparison.Ordinal) &&
                 page.ClearCalipers.IsEnabled, $"two points on lead II read the interval, amplitude and rate: {page.Readout.Text}");
 
+            var evidence = page.Overlay.Measurement.Display;
+            window.Settings.MeasurementUnits.SelectedIndex = 1;
+            string amplitudeMm = MeasurementReadout.Exact(new(evidence.Result!.AmplitudeChangeMillivolts.Numerator * 10,
+                evidence.Result.AmplitudeChangeMillivolts.Denominator));
+            Require(page.Readout.Text == $"II  Δx 20 mm  Δy {amplitudeMm} mm" && page.Overlay.Measurement.Display == evidence,
+                "unit selection shows calibrated paper distances without moving points");
+            window.SelectPage(0);
+            window.SelectPage(1);
+            page = window.EcgPage!;
+            Require(page.Readout.Text!.Contains("Δx 20 mm", StringComparison.Ordinal), "selected units survive navigation");
+            window.Settings.MeasurementUnits.SelectedIndex = 0;
+            Require(page.Readout.Text!.Contains("Δt 800 ms", StringComparison.Ordinal), "converted units restore exactly");
+
             page.Overlay.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Right, KeyModifiers = KeyModifiers.Shift });
             var plane = page.Paper.Blocks[0].Planes.Single(p => p.ChannelId == ProjectedEcgDemoSource.ChannelId(Monitor.Simulation.Physiology.EcgLead.II));
             long samplePeriod = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
@@ -58,6 +71,9 @@ internal static class Ecg12MeasurementSmokeChecks
             Require(Math.Abs(zoomedAnchor.X - anchor.X) < 1 && Math.Abs(zoomedAnchor.Y - anchor.Y) < 1, "wheel zoom keeps the pointer anchor stationary when scrolling is available");
             Require(page.Zoom > fitted * 1.5 && page.Overlay.Measurement.Display.Result!.ElapsedMilliseconds.Numerator == 800,
                 "wheel zoom enlarges the paper without changing the measured interval");
+            window.Settings.MeasurementUnits.SelectedIndex = 1;
+            Require(page.Readout.Text!.Contains("Δx 20 mm", StringComparison.Ordinal), "paper millimeters do not change with screen zoom");
+            window.Settings.MeasurementUnits.SelectedIndex = 0;
             var beforeDrag = page.Overlay.Measurement.Display.Start!;
             var pointer = new Pointer(85, PointerType.Mouse, true);
             Press(window, page, pointer, new Point(beforeDrag.X, beforeDrag.Y));

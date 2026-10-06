@@ -25,12 +25,14 @@ internal sealed class Ecg12PaperPage : Grid
     private Point _panOrigin;
     private Vector _panOffset;
     private readonly TextBlock _zoom = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 42 };
+    private bool _millimeters;
     private bool _fit = true;
     private bool _scaling;
 
-    internal Ecg12PaperPage(DesignPreviewTrace paper, Ecg12PaperMeasurement measurement, DesktopLocalization localization, bool measuring)
+    internal Ecg12PaperPage(DesignPreviewTrace paper, Ecg12PaperMeasurement measurement, DesktopLocalization localization, bool measuring, bool millimeters = false)
     {
         _localization = localization;
+        _millimeters = millimeters;
         Paper = paper;
         Overlay = new Ecg12CaliperOverlay(measurement);
         ClipToBounds = true;
@@ -233,10 +235,16 @@ internal sealed class Ecg12PaperPage : Grid
         _panSurface.IsHitTestVisible = Hand.IsChecked == true;
         _panSurface.Cursor = new Cursor(StandardCursorType.Hand);
         ClearCalipers.IsEnabled = measurement.Display.Region is not null;
-        _localization.Bind(Readout, TextBlock.TextProperty, text => Describe(text, measurement.Display, measuring));
+        _localization.Bind(Readout, TextBlock.TextProperty, text => Describe(text, measurement.Display, measuring, _millimeters));
     }
 
-    internal static string Describe(ITextLocalizer text, Ecg12PaperMeasurementDisplay display, bool measuring)
+    internal void SetMeasurementUnits(bool millimeters)
+    {
+        _millimeters = millimeters;
+        Refresh();
+    }
+
+    internal static string Describe(ITextLocalizer text, Ecg12PaperMeasurementDisplay display, bool measuring, bool millimeters = false)
     {
         if (display.ReasonCode == "Ecg12Measurement.Disabled") { return text.GetString("ecg12.disabled"); }
         if (display.ReasonCode == "Ecg12Measurement.CourseLocked") { return text.GetString("ecg12.courseLocked"); }
@@ -246,11 +254,24 @@ internal sealed class Ecg12PaperPage : Grid
             : ProjectedEcgDemoSource.LeadNames[region.Lead];
         var result = display.Result ?? display.HoverResult;
         if (result is null || (display.End is null && result.ElapsedMilliseconds.Numerator == 0)) { return text.Format("ecg12.placing", lead); }
-        string elapsed = MeasurementReadout.Exact(result.ElapsedMilliseconds);
-        string amplitude = MeasurementReadout.Exact(result.AmplitudeChangeMillivolts);
-        string readout = result.AuxiliaryRatePerMinute is { } rate
-            ? text.Format("ecg12.resultRate", lead, elapsed, amplitude, Rate(rate))
-            : text.Format("ecg12.result", lead, elapsed, amplitude);
+        string readout;
+        if (millimeters)
+        {
+            // Fixed paper calibration: 25 mm/s and 10 mm/mV, independent of display zoom.
+            string horizontal = MeasurementReadout.Exact(new(result.ElapsedMilliseconds.Numerator,
+                result.ElapsedMilliseconds.Denominator * 40));
+            string vertical = MeasurementReadout.Exact(new(result.AmplitudeChangeMillivolts.Numerator * 10,
+                result.AmplitudeChangeMillivolts.Denominator));
+            readout = text.Format("ecg12.resultMillimeters", lead, horizontal, vertical);
+        }
+        else
+        {
+            string elapsed = MeasurementReadout.Exact(result.ElapsedMilliseconds);
+            string amplitude = MeasurementReadout.Exact(result.AmplitudeChangeMillivolts);
+            readout = result.AuxiliaryRatePerMinute is { } rate
+                ? text.Format("ecg12.resultRate", lead, elapsed, amplitude, Rate(rate))
+                : text.Format("ecg12.result", lead, elapsed, amplitude);
+        }
         return display.Result is null ? text.Format("ecg12.preview", readout) : readout;
     }
 

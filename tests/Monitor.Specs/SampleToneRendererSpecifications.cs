@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.CompilerServices;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Specs;
@@ -73,14 +74,34 @@ internal static class SampleToneRendererSpecifications
         bool rejected = false;
         try { renderer.DiscardForDiscontinuity(0); } catch (ArgumentOutOfRangeException) { rejected = true; }
         Check.That(rejected && renderer.Position == 34000, "rewind rejects atomically; new stream needs new owner");
-        renderer.Schedule(3, TonePreset.BeatAudition, 34000, 46000); renderer.Render(data);
-        renderer.Schedule(4, TonePreset.BeatAudition, renderer.Position, renderer.Position + 12000);
-        long before = GC.GetAllocatedBytesForCurrentThread(); renderer.Render(data);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Check.That(allocated == 0 && data.Any(v => v != 0), "prepared voices render without managed allocations");
+        // Warm the complete measurement path, including voice completion and
+        // the silent tail. Scheduling intentionally stays outside the counter.
+        for (int i = 0; i < 32; i++)
+        {
+            renderer.Schedule(3, TonePreset.BeatAudition, renderer.Position, renderer.Position + 12000);
+            MeasureRenderAllocations(renderer, data);
+        }
+        for (int i = 0; i < 8; i++)
+        {
+            Check.That(renderer.Schedule(4, TonePreset.BeatAudition, renderer.Position, renderer.Position + 12000) == ToneScheduleResult.Accepted,
+                "allocation check starts with a prepared voice");
+            long allocated = MeasureRenderAllocations(renderer, data);
+            Check.That(allocated == 0, $"prepared voices render without managed allocations; pass {i} observed {allocated} bytes");
+            Check.That(data.Any(v => v != 0), "prepared voices produce audible samples");
+        }
         var exhausted = new SampleToneRenderer(long.MaxValue);
         rejected = false;
         try { exhausted.Render(data); } catch (OverflowException) { rejected = true; }
         Check.That(rejected && exhausted.Position == long.MaxValue, "frame overflow rejects before changing state");
+    }
+
+    // Keep the counter boundary separate from the test's setup, assertions and
+    // tiered loop compilation. Render itself retains its normal runtime policy.
+    [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.AggressiveOptimization)]
+    private static long MeasureRenderAllocations(SampleToneRenderer renderer, Span<float> destination)
+    {
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        renderer.Render(destination);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 }

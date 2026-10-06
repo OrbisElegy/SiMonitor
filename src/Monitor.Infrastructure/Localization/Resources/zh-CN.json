@@ -812,5 +812,21 @@
   "vitals.paVariation": "PA 随机波动（约 ±mmHg，0–5；0 关闭）",
   "vitals.abpVariationField": "ABP 随机波动",
   "vitals.paVariationField": "PA 随机波动",
-  "validation.pressureVariation": "未应用：当前压力水平或波形模板不支持该随机波动幅度；请减小波动或提高压力目标。原运行与画面保持不变。"
+  "validation.pressureVariation": "未应用：当前压力水平或波形模板不支持该随机波动幅度；请减小波动或提高压力目标。原运行与画面保持不变。",
+  "ecg12.measure": "手动测量",
+  "ecg12.clear": "清除测量",
+  "ecg12.idle": "在同一导联上点击两点，拖动端点调整。",
+  "ecg12.result": "{0}  Δt {1} ms  ΔV {2} mV",
+  "ecg12.resultRate": "{0}  Δt {1} ms  ΔV {2} mV  频率 {3} 次/分",
+  "ecg12.rhythmLead": "II（节律条）",
+  "ecg12.disabled": "当前不允许手动测量。",
+  "ecg12.courseLocked": "课程已锁定手动测量。",
+  "ecg12.overlay": "十二导联手动测量",
+  "ecg12.placing": "{0} · 点击第二点完成测量",
+  "ecg12.title": "12 导联 ECG",
+  "ecg12.fit": "适应窗口",
+  "ecg12.viewport": "12 导联波形，滚轮缩放",
+  "ecg12.preview": "{0} · 预览",
+  "ecg12.pan": "抓手：拖动平移",
+  "ecg12.actualSize": "100%（1:1）"
 }

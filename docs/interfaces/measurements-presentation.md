@@ -456,6 +456,25 @@ view/zoom 包装层还检查当前页、槽、准入和变换，pointer 方法�
 保存记录导航、选定槽和可选完整 cursor pair，并可扩展主题/zoom；恢复必须重新提供当前
 context 和各策略。权限、显示像素、正在拖动的手势不属于保存状态。
 
+### 十二导联纸图手动测量
+
+[Ecg12PaperLayout](../../src/Monitor.Application/Presentation/Ecg12PaperLayout.cs) 是十二导联纸图的
+唯一几何：25 mm/s、10 mm/mV、每毫米 4 px，3 × 4 或 6 × 2 短导联加底部长 II。桌面纸图绘制和卡尺
+共用它，保证指针落点与绘制的导联、时间一致。导联序号 0–11 按 `EcgLead` 顺序，12 为长 II 节律条
+（`SourceLead` 为 II）。每列前 30 px 为定标脉冲，不属于任何导联；`HitTest` 在定标、页边和行间空白返回 null。
+
+`Ecg12PaperMeasurement(layout, blocks, channelOfLead, policy, allowAuxiliaryRate=true)` 在一份冻结纸图上放置
+手动测量点：`Hover` 把悬停点吸附到指针下导联的最近实际采样（放置第二点时停留在第一点的导联并夹在其首尾采样），
+`EndHover` 移除悬停点；`Place` 依次放置第一点和第二点，第二点放置后再次 `Place` 开始新的测量。`Nudge` 以整采样
+移动最近放置或拖动选中的端点，`Clear` 移除。`BeginDrag(x, y, tolerance)` 命中端点后，
+`DragTo(x)` 在原导联内移动该端点（交叉后身份不变），`EndDrag()` 结束拖动。桌面入口位于波形区域
+右上角；标定信息、结果与图标工具栏悬浮于全尺寸 ECG 视口上。滚轮围绕指针缩放，抓手通过指针捕获平移视口，
+切换抓手与测量保留卡尺；1:1 恢复 100% 显示比例，四角框适应窗口，垃圾桶清除测量。纸图和卡尺使用同一显示变换，
+缩放和平移不改变采样时间和幅值。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。`Display` 按时间排序
+两点（不论先放哪一点），用 `EcgManualMeasurement.Calculate` 给出 Δt（水平距离）、较晚一点减较早一点的 ΔV（垂直
+距离）和可选辅助频率；只有第一点时 `HoverResult` 给出按悬停点放置的预览。`ReasonCode` 为 Idle、Placing、Ready、
+Disabled 或 CourseLocked。策略非 Enabled 时撤除测量点并拒绝新操作。不识别波形起止点，不保存测量点，也不写回记录。
+
 ### 主题、zoom 与 SVG 发布
 
 [Ecg12ThemeSelection](../../src/Monitor.Domain/Presentation/Ecg12ThemeSelection.cs) 支持

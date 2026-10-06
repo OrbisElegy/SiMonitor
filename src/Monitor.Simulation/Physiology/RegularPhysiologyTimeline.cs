@@ -86,10 +86,16 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
     public SeededCardiacRate? SeededRate { get; init; }
+    public CardiacRateAdjustment? RateAdjustment { get; init; }
+    public SeededRhythmSchedule? RhythmSchedule { get; init; }
     // Irregular sources expose a conservative interval for pulse support and
     // indexed pressure bounds. Their event times come from their own visitor.
-    internal Int128 AtrialPeriodNs => SeededRate is { } rate ? rate.MinimumPeriodNs : ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VentricularBigeminyIllustration ? 1_600_000_000 : PrematureJunctionalReference.IsPattern(ConductionPattern) ? PrematureJunctionalReference.MinimumAtrialIntervalNs(ConductionPattern) : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 400_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : HeartPeriodNs;
-    internal Int128 VentricularPeriodNs => SeededRate is { } rate ? rate.MinimumPeriodNs : ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VtCaptureIllustration ? 330_000_000 : ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? 400_000_000 : PrematureVentricularReference.IsPattern(ConductionPattern) ? PrematureVentricularReference.MinimumRrNs(ConductionPattern) : PrematureJunctionalReference.IsPattern(ConductionPattern) ? 500_000_000 : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 800_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : AtrialFibrillationReference.IsPattern(ConductionPattern)
+    internal Int128 AtrialPeriodNs => RateAdjustment is { } adjustment
+        ? adjustment.MinimumPeriodNs(this, true) : ReferenceAtrialPeriodNs;
+    internal Int128 VentricularPeriodNs => RateAdjustment is { } adjustment
+        ? adjustment.MinimumPeriodNs(this, false) : ReferenceVentricularPeriodNs;
+    internal Int128 ReferenceAtrialPeriodNs => SeededRate is { } rate ? rate.MinimumPeriodNs : ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VentricularBigeminyIllustration ? 1_600_000_000 : PrematureJunctionalReference.IsPattern(ConductionPattern) ? PrematureJunctionalReference.MinimumAtrialIntervalNs(ConductionPattern) : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 400_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : HeartPeriodNs;
+    internal Int128 ReferenceVentricularPeriodNs => SeededRate is { } rate ? rate.MinimumPeriodNs : ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? 600_000_000 : ConductionPattern == AvConductionPattern.VtCaptureIllustration ? 330_000_000 : ConductionPattern == AvConductionPattern.VariableAtrialFlutterIllustration ? 400_000_000 : PrematureVentricularReference.IsPattern(ConductionPattern) ? PrematureVentricularReference.MinimumRrNs(ConductionPattern) : PrematureJunctionalReference.IsPattern(ConductionPattern) ? 500_000_000 : ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration ? 800_000_000 : PrematureAtrialReference.IsPattern(ConductionPattern) ? PrematureAtrialReference.MinimumRrNs : AtrialFibrillationReference.IsPattern(ConductionPattern)
         ? AtrialFibrillationReference.MinimumRrNs : IndependentVentricularPeriodNs ?? (Int128)HeartPeriodNs * (ConductedBeatsPerGroup > 1 ? 1 : VentricularConductionRatio);
 }
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs);
@@ -215,6 +221,9 @@ public sealed class RegularPhysiologyTimeline
                 (Int128)plan.EpochAnchorSimTimeNs + ((Int128)plan.ActivityAfterBreaths.Value + duration) * plan.BreathPeriodNs > long.MaxValue)) ||
             state.CursorSimTimeNs < plan.EpochAnchorSimTimeNs)
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidState", nameof(state)); }
+        if (plan.RhythmSchedule is not null && !SeededRhythmSchedule.Supports(plan.ConductionPattern))
+        { throw new PhysiologyTimelineException("SeededRhythm.UnsupportedPattern", nameof(state)); }
+        plan.RateAdjustment?.Validate(plan);
         _plan = plan;
         _cursor = state.CursorSimTimeNs;
     }
@@ -296,11 +305,17 @@ public sealed class RegularPhysiologyTimeline
             plan.MechanicalAfterCycles, resume, plan.MechanicalEveryCycles);
     }
 
-    private static void VisitCycles(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
+    internal static void VisitCycles(RegularPhysiologyPlan plan, PhysiologyCycleEventKind kind,
         long period, long offset, long inclusiveSimTimeNs, Int128 exclusiveSimTimeNs, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.RateAdjustment is { } adjustment && CardiacRateAdjustment.IsTimedEvent(kind))
+        {
+            adjustment.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents,
+                visitor, cycleLimit, cycleResume, cycleStride, cancellationToken);
+            return;
+        }
         if (plan.SeededRate is { } seeded && kind is PhysiologyCycleEventKind.AtrialElectrical or PhysiologyCycleEventKind.AtrialMechanical or PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)
         {
             seeded.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);

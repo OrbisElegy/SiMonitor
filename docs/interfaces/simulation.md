@@ -278,6 +278,28 @@ static PhysiologyTransportSource PhysiologyIllustrationSource.CreateTransport(
 `AdvanceBefore(long exclusiveSimTimeNs, int maximumEvents, CancellationToken cancellationToken = default)`。
 plan 明确心房周期、电/机械偏移、呼吸周期与暂停、传导比和模式、独立心室周期、机械开关/时间段。
 `HeartPeriodNs` 通常是心房周期；命名 AF 插图用它表示作者心室时间网格，特殊节律有各自约束。
+`RateAdjustment` 可附加 `CardiacRateAdjustment(rateBpm, atrialRateBpm, seedHex, variationPermille)`，
+在原始预设通过校验后重排心脏源事件。基础频率控制范围为 20–600 bpm、波动为 0–50‰；
+实际可用频率还受各波形及机械响应的有限支撑约束，不能将控件范围理解为所有模板均可接受。
+存在独立心室周期时 `rateBpm` 为室率，`atrialRateBpm` 必填；否则房率参数须为空，
+基础频率控制原心房网格（AF 为平均心室网格）。三度阻滞沿用预设的逸搏边界：
+室性 20–40 bpm、交界性 40–60 bpm，含波动的房率须高于室率。室扑、室颤及全心静止不接受调整。
+
+调速保留事件种类、周期身份、漏搏及机械延迟，不直接写入测得 HR。
+R-on-T 保留 500/200 ms 联律间期；房扑通过 `EventWaveformBand.CycleDurationRate`
+让每段 F 波延续到下一心房事件。其余 ECG 分量保留原宽度，新增重叠超过原支撑预算时拒绝配置；压力脉冲按实际间期允许有界重叠。
+`RhythmSchedule` 可附加 `SeededRhythmSchedule(seedHex, pauseDurationNs, conductionPercent)`。
+桌面所有随机过程复用生命体征页的全局种子，各自派生命名子流；节律时序不依赖心率调整开关或慢波动幅度。
+窦性停搏的正常 PP 随心率改变，停搏间隔保持指定的 1200–10000 ms（须长于含波动的正常 PP）；
+每四个间期中的停顿位置由种子决定。停搏间隔定义为相邻有效搏动的起点间隔，不是额外叠加的延时。
+变比例房扑在 240 次下传间隔中分配目标平均比例（10–50%，取整误差小于 0.1 个百分点），
+下传间隔为 2–12 个房周期，不引入异步 QRS。50% 达到最短支持边界，因而退化为固定 2:1。
+窦性不齐及房颤也使用种子序列；房颤差传及脉搏短绌选择共享实际种子间期，灌注使用调速后的 RR。
+未附加 `RhythmSchedule` 的底层参考工厂保留原有固定插图，桌面默认预览使用固定的默认全局种子。
+这不是新的患者血流动力学模型。
+索引查询与恢复不消耗随机数。若调速映射要求访问超出 Int64 时间域的原序列，
+抛出 `PhysiologyTimeline.TimeOutOfRange`，不静默截断源事件。
+
 输出 `PhysiologyCycleEvent(SimTimeNs, Kind, CycleIndex)` 是源事件，不是检测到的 QRS、呼吸或报警。
 时间不回退，事件预算最多 1,000,000；具体命名模式的允许组合以该类型构造校验为准。
 

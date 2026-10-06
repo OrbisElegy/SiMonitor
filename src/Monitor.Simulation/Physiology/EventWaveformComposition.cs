@@ -14,7 +14,13 @@ public readonly record struct VentricularCyclePattern(int Length, ulong Included
 // Optional TriggerCycleResume reopens contributions at that original cycle index.
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs,
     long DurationNs, IReadOnlyList<long> TableQ32,
-    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null, AtrialFibrillationBeatSelection? AfBeatSelection = null);
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null, AtrialFibrillationBeatSelection? AfBeatSelection = null)
+{
+    // Continuous flutter cycles use the exact next atrial interval, including
+    // seeded variation. DurationNs remains the conservative lookback bound.
+    public RegularPhysiologyPlan? AfTiming { get; init; }
+    public SeededCardiacRate? CycleDurationRate { get; init; }
+}
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
 public sealed class EventWaveformException(string reason, string parameter) : ArgumentException(reason, parameter)
@@ -51,6 +57,8 @@ public sealed class EventWaveformComposition
                 (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureBeatPerfusion.IsPattern(perfusion))) { throw Invalid(); }
             if (band.AfBeatSelection is { } af && (!Enum.IsDefined(af) ||
                 band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || band.VentricularCycles is not null)) { throw Invalid(); }
+            if (band.CycleDurationRate is { } rate && (band.Trigger != PhysiologyCycleEventKind.AtrialElectrical ||
+                band.DelayNs != 0 || band.DurationNs < rate.PeriodNs * (1000 + rate.VariationPermille) / 1000)) { throw Invalid(); }
             long[] table = band.TableQ32.ToArray();
             if (band.VentricularCycles is { } cycles &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularElectrical || cycles.Length is < 1 or > 64 ||
@@ -123,7 +131,8 @@ public sealed class EventWaveformComposition
                 EventWaveformBand band = _bands[index];
                 if (!Accepts(band, item)) { continue; }
                 long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
-                long duration = band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs;
+                long duration = band.CycleDurationRate is { } rate ? rate.FollowingIntervalNs(item.CycleIndex) :
+                    band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs;
                 if (elapsed < 0 || elapsed >= duration) { continue; }
                 // Equal adjacent table indices hold phase while time advances.
                 // Integer phase maps the finite support into one frozen LUT cycle.
@@ -142,7 +151,7 @@ public sealed class EventWaveformComposition
     }
 
     private static bool Accepts(EventWaveformBand band, PhysiologyCycleEvent item) => band.Trigger == item.Kind &&
-        (band.AfBeatSelection is not { } af || AtrialFibrillationReference.IsLongShortBeat(item.CycleIndex) == (af == AtrialFibrillationBeatSelection.LongShort)) &&
+        (band.AfBeatSelection is not { } af || (band.AfTiming is { } timing ? AtrialFibrillationReference.IsLongShortBeat(timing, item.CycleIndex) : AtrialFibrillationReference.IsLongShortBeat(item.CycleIndex)) == (af == AtrialFibrillationBeatSelection.LongShort)) &&
         (band.VentricularCycles is not { } cycles || (cycles.IncludedSlots & (1UL << (int)(item.CycleIndex % (ulong)cycles.Length))) != 0) &&
         (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value ||
          (band.TriggerCycleResume is { } resume && item.CycleIndex >= resume));

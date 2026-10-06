@@ -9,6 +9,9 @@ internal sealed partial class DesignPreviewSettings
     private Dictionary<string, NumericUpDown> GeneratorNumbers() => new()
     {
         ["HeartRate"] = HeartRate,
+        ["AtrialRate"] = AtrialRate,
+        ["PauseDuration"] = PauseDuration,
+        ["ConductionPercent"] = ConductionPercent,
         ["RateVariation"] = RateVariation,
         ["RespiratoryRate"] = RespiratoryRate,
         ["InspirationPercent"] = InspirationPercent,
@@ -80,7 +83,7 @@ internal sealed partial class DesignPreviewSettings
     // pulse factors. Every earlier field must be present.
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
-        "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
+        "AtrialRate", "PauseDuration", "ConductionPercent", "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
     };
     private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)
     {

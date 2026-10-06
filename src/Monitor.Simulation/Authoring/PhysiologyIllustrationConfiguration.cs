@@ -84,6 +84,8 @@ public sealed record PhysiologyIllustrationConfiguration(
     public VascularPressureVariation? PressureVariation { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
+    public CardiacRateAdjustment? RateAdjustment { get; init; }
+    public SeededRhythmSchedule? RhythmSchedule { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
     public static PhysiologyIllustrationConfiguration SinusArrhythmiaPreset { get; } = Default with { ConductionPattern = AvConductionPattern.SinusArrhythmiaIllustration };
@@ -154,6 +156,18 @@ public sealed record PhysiologyIllustrationConfiguration(
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (RhythmSchedule is { } rhythm)
+        {
+            var plan = (this with { RhythmSchedule = null }).ResolvePlan() with { RhythmSchedule = rhythm };
+            _ = RegularPhysiologyTimeline.Start(plan);
+            return plan;
+        }
+        if (RateAdjustment is { } adjustment)
+        {
+            var adjusted = (this with { RateAdjustment = null }).ResolvePlan() with { RateAdjustment = adjustment };
+            _ = RegularPhysiologyTimeline.Start(adjusted);
+            return adjusted;
+        }
         if (Infarction is not null || Zones is not null)
         {
             if ((Infarction is not null && Zones is not null) || TContour is not null || VentricularShape != EcgVentricularIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference ||

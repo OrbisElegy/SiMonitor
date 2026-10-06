@@ -65,7 +65,7 @@ public static class PhysiologyIllustrationSource
         bool variablePerfusion = beatPerfusion || fibrillation;
         bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
-        long PulseDuration(long normal) => configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        long PulseDuration(long normal) => plan.RateAdjustment is not null ? Math.Min(normal, (long)plan.VentricularPeriodNs - 80_000_000) : configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         PhysiologyWaveformChannelPlan[] channels =
@@ -120,7 +120,11 @@ public static class PhysiologyIllustrationSource
              ((fixedPerfusion?.Venous ?? new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null || plan.RateAdjustment is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+        if (fibrillation)
+        { channels[0] = channels[0] with { Bands = Array.AsReadOnly(channels[0].Bands.Select(b => b.AfBeatSelection is null ? b : b with { AfTiming = plan }).ToArray()) }; }
+        if (plan.RateAdjustment is { } adjustment)
+        { channels[0] = channels[0] with { Bands = adjustment.AdjustBands(plan, channels[0].Bands) }; }
         if (ventilation is not null)
         {
             channels[1] = VentilationWaveformCoupling.Respiration(channels[1], ventilation);
@@ -194,6 +198,24 @@ public static class PhysiologyIllustrationSource
     // Select the bundle once so Pleth/ABP/PA/CVP cannot drift into separate
     // per-channel rhythm mappings. Existing configuration validation runs first.
     private static FixedPerfusionPreset? ResolveFixedPerfusion(
+        PhysiologyIllustrationConfiguration configuration, RegularPhysiologyPlan plan)
+    {
+        var preset = ResolveReferencePerfusion(configuration, plan);
+        if (preset is null || plan.RateAdjustment is null) { return preset; }
+        VascularPressurePlan WithOverlap(VascularPressurePlan pressure) => pressure with
+        {
+            Morphology = pressure.Morphology! with
+            { MaximumPulseOverlap = (int)((pressure.Morphology!.DurationNs + plan.VentricularPeriodNs - 1) / plan.VentricularPeriodNs) }
+        };
+        return preset with
+        {
+            Arterial = WithOverlap(preset.Arterial),
+            Pulmonary = WithOverlap(preset.Pulmonary),
+            Venous = preset.Venous with { MaximumComponentOverlap = 8 }
+        };
+    }
+
+    private static FixedPerfusionPreset? ResolveReferencePerfusion(
         PhysiologyIllustrationConfiguration configuration, RegularPhysiologyPlan plan)
     {
         if (plan.ConductionPattern == AvConductionPattern.SinusArrestIllustration || configuration.AtrialEscape)

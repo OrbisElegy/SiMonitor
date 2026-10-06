@@ -13,7 +13,7 @@ internal static class GeneratorPreferenceSmokeChecks
         string path = Path.Combine(directory, "settings.json");
         try
         {
-            foreach (int selection in new[] { 0, 107, 137, 2 })
+            foreach (int selection in new[] { 0, 1, 19, 107, 137, 2 })
             {
                 var window = new DesignPreviewWindow();
                 MonitorGeneratorPreferences expected;
@@ -22,6 +22,8 @@ internal static class GeneratorPreferenceSmokeChecks
                 try
                 {
                     Configure(window.Settings, selection);
+                    window.Settings.PauseDuration.Value = 2700;
+                    window.Settings.ConductionPercent.Value = 40;
                     window.RestartSettings(); original = window.Session;
                     appliedParameters = [window.Settings.AppliedEcgParameters.Text, window.Settings.AppliedRespirationParameters.Text, window.Settings.AppliedEjectionParameters.Text];
                     expected = window.Settings.CaptureGenerator();
@@ -60,6 +62,17 @@ internal static class GeneratorPreferenceSmokeChecks
                 finally { reopened.Close(); }
             }
             string valid = File.ReadAllText(path);
+            var legacy = JsonNode.Parse(valid)!.AsObject();
+            legacy["Generator"]!["Numbers"]!.AsObject().Remove("AtrialRate");
+            File.WriteAllText(path, legacy.ToJsonString());
+            var olderSettings = new DesignPreviewWindow(path);
+            try
+            {
+                Require(!olderSettings.PreferenceNotice.IsVisible && olderSettings.Settings.AtrialRate.Value == 75,
+                    "older preferences without an independent atrial rate retain the default");
+            }
+            finally { olderSettings.Close(); }
+
             foreach (var edit in new Action<JsonObject>[] {
                 g => g["EcgName"] = "unknown template",
                 g => g["Numbers"]!.AsObject().Remove("RespiratoryRate"),
@@ -98,6 +111,13 @@ internal static class GeneratorPreferenceSmokeChecks
         {
             settings.CardiacRateEnabled.IsChecked = true; settings.HeartRate.Value = 90;
             settings.RateVariation.Value = 5; settings.EtCo2Variation.Value = 2;
+        }
+        if (selection == 19)
+        {
+            settings.CardiacRateEnabled.IsChecked = true;
+            settings.HeartRate.Value = 35;
+            settings.AtrialRate.Value = 90;
+            settings.RateVariation.Value = 3;
         }
         if (selection == 107)
         { settings.TContourParameters.Crossing.Value = 35; settings.TContourParameters.SecondPeak.Value = 180; }

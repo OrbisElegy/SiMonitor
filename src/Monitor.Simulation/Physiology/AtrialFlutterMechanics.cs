@@ -18,13 +18,16 @@ public static class AtrialFlutterMechanics
         Int128 currentNs = CardiacFillingPerfusion.MechanicalTimeNs(plan, ordinal);
         long intervalNs = CardiacFillingPerfusion.PrecedingIntervalNs(plan, ordinal);
         Int128 startNs = currentNs - intervalNs + nonFillingDurationNs;
-        Int128 atrialIndex = (currentNs - plan.AtrialMechanicalOffsetNs) / plan.HeartPeriodNs;
+        Int128 atrialRelativeNs = currentNs - plan.AtrialMechanicalOffsetNs;
+        Int128 atrialIndex = (plan.RateAdjustment is { } adjustment
+            ? adjustment.Unmap(plan, true, atrialRelativeNs) : atrialRelativeNs) / plan.HeartPeriodNs;
         long overlapNs = 0;
-        // At most four 200ms atrial periods fit the capped 800ms history.
-        for (int offset = 0; offset < 4; offset++)
+        // The adjustable grid admits up to eight 100ms atrial intervals.
+        for (int offset = 0; offset < 9; offset++)
         {
             if (atrialIndex - offset < 0) { continue; }
-            Int128 atrialNs = (atrialIndex - offset) * plan.HeartPeriodNs + plan.AtrialMechanicalOffsetNs;
+            Int128 cycleNs = (atrialIndex - offset) * plan.HeartPeriodNs;
+            Int128 atrialNs = (plan.RateAdjustment is { } rate ? rate.Map(plan, true, cycleNs) : cycleNs) + plan.AtrialMechanicalOffsetNs;
             overlapNs += (long)Int128.Max(0, Int128.Min(currentNs, atrialNs + ContractionDurationNs) - Int128.Max(startNs, atrialNs));
         }
         // Multiple flutter contractions cannot stack into several normal kicks.

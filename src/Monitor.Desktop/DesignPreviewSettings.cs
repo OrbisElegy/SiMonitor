@@ -100,6 +100,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             InfarctionParameters.Reset(value is >= 115 and <= 164 ? InfarctionProductPreset.Create((value - 115) % 10,
                 (Monitor.Simulation.Physiology.InfarctionTerritory)((value - 115) / 10 + 1)) : null);
             RefreshShapeSummary();
+            RefreshCardiacRate();
         }
     }
     private int _respirationSelection;
@@ -200,7 +201,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal CheckBox OpticalEnabled { get; } = new() { IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; }
     internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
-    internal NumericUpDown HeartRate { get; } = new() { Minimum = 30, Maximum = 180, Value = 75, Increment = 1, Width = 180 };
+    internal NumericUpDown HeartRate { get; } = new() { Minimum = 20, Maximum = 600, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal Button GenerateSeed { get; } = new() { MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
@@ -450,8 +451,25 @@ internal sealed partial class DesignPreviewSettings : UserControl
     {
         var panel = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
         panel.Children.Add(CardiacRateEnabled);
-        Add("vitals.heartRate", HeartRate);
+        panel.Children.Add(CardiacRateLabel);
+        HeartRate.HorizontalAlignment = HorizontalAlignment.Left;
+        panel.Children.Add(HeartRate);
+        panel.Children.Add(AtrialRateLabel);
+        panel.Children.Add(AtrialRate);
+        panel.Children.Add(PauseDurationLabel);
+        panel.Children.Add(PauseDuration);
+        panel.Children.Add(ConductionPercentLabel);
+        panel.Children.Add(ConductionPercent);
+        PauseDuration.ValueChanged += (_, _) => RefreshCardiacRate();
+        ConductionPercent.ValueChanged += (_, _) => RefreshCardiacRate();
         Add("vitals.rateVariation", RateVariation);
+        panel.Children.Add(CardiacRateStatus);
+        CardiacRateEnabled.IsCheckedChanged += (_, _) => RefreshCardiacRate();
+        HeartRate.ValueChanged += (_, _) => RefreshCardiacRate();
+        AtrialRate.ValueChanged += (_, _) => RefreshCardiacRate();
+        RateVariation.ValueChanged += (_, _) => RefreshCardiacRate();
+        RateSeed.TextChanged += (_, _) => RefreshCardiacRate();
+        RefreshCardiacRate();
         Add("vitals.respiratoryRate", RespiratoryRate);
         Add("vitals.inspirationPercent", InspirationPercent);
         panel.Children.Add(BreathingTiming);
@@ -553,7 +571,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         }
         var states = new (CheckBox? Toggle, Func<bool> Valid)[]
         {
-            (CardiacRateEnabled, () => Filled(HeartRate, RateVariation)),
+            (CardiacRateEnabled, CardiacRateValid),
             (null, BreathingValid),
             (OpticalEnabled, OxygenationValid),
             (null, () => Filled(CvpBaseline, AbpVariation, PaVariation) &&
@@ -576,7 +594,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             }
         }
         var patient = Oxygenation.Patient;
-        var vitalFields = new[] { HeartRate, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
+        var vitalFields = new[] { HeartRate, AtrialRate, PauseDuration, ConductionPercent, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
             OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, AbpSystolic, AbpDiastolic, PaSystolic, PaDiastolic,
             AbpVariation, PaVariation,
             Co2DeadSpace, Co2Rise, Co2Fall,

@@ -46,6 +46,7 @@ public sealed class ElectrodeSignalGenerator
         _electrodes = ElectrodeWaveformComposition.Restore(new(state.Electrodes, [], state.Placement)).CaptureState().Electrodes;
         if (_electrodes.SelectMany(e => e.Bands).Any(b => b.AfBeatSelection is not null) &&
             !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
+        state.Timeline.Plan.RateAdjustment?.ValidateBands(state.Timeline.Plan, _electrodes.SelectMany(e => e.Bands));
         _placement = state.Placement;
         _lookbackNs = _electrodes.SelectMany(item => item.Bands).Max(band => checked(band.DelayNs + band.DurationNs));
     }

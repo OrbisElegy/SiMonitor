@@ -84,7 +84,7 @@ public sealed class PlethRunoffSource
             RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo, MaximumHistoryEvents, beat =>
             {
                 int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
-                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
                     _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
                     _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
                         _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;

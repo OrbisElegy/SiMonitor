@@ -27,6 +27,21 @@ public static class AtrialFibrillationReference
             GridNs + previous - Jitter(ordinal - 2) >= 900_000_000;
     }
 
+    public static bool IsLongShortBeat(RegularPhysiologyPlan plan, ulong ordinal)
+    {
+        if (ordinal < 2) { return false; }
+        long previous = plan.RhythmSchedule?.AfJitterNs(ordinal - 1) ?? Jitter(ordinal - 1);
+        return GridNs + (plan.RhythmSchedule?.AfJitterNs(ordinal) ?? Jitter(ordinal)) - previous < 600_000_000 &&
+            GridNs + previous - (plan.RhythmSchedule?.AfJitterNs(ordinal - 2) ?? Jitter(ordinal - 2)) >= 900_000_000;
+    }
+
+    internal static long PrecedingIntervalNs(RegularPhysiologyPlan plan, ulong ordinal)
+    {
+        Int128 end = (Int128)ordinal * GridNs + (plan.RhythmSchedule?.AfJitterNs(ordinal) ?? Jitter(ordinal));
+        Int128 start = ordinal == 0 ? end - GridNs : (Int128)(ordinal - 1) * GridNs + (plan.RhythmSchedule?.AfJitterNs(ordinal - 1) ?? Jitter(ordinal - 1));
+        return checked((long)(plan.RateAdjustment is { } rate ? rate.Map(plan, false, end) - rate.Map(plan, false, start) : end - start));
+    }
+
     // Stateless integer mixing of beat identity. No mutable PRNG or origin scan;
     // every event and pressure reconstruction uses exactly the same timestamps.
     internal static long Jitter(ulong beat)
@@ -63,7 +78,7 @@ public static class AtrialFibrillationReference
             Int128 time = At(index);
             if (time >= inclusive && time < exclusive) { visitor(new((long)time, kind, (ulong)index)); }
         }
-        Int128 At(Int128 index) => start + index * GridNs + Jitter((ulong)index);
+        Int128 At(Int128 index) => start + index * GridNs + (plan.RhythmSchedule?.AfJitterNs((ulong)index) ?? Jitter((ulong)index));
         PhysiologyTimelineException Limit() => new("PhysiologyTimeline.EventLimitExceeded", nameof(maximumEvents));
     }
 

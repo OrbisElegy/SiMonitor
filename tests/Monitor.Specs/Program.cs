@@ -74,6 +74,7 @@ internal static class Program
             .. MeanPressureMeasurementSpecifications.All,
             .. MonitorAlertSpecifications.All,
             .. SeededRateSpecifications.All,
+            .. CardiacRateAdjustmentSpecifications.All,
             .. SeededCo2Specifications.All,
             .. MeasuredLimitSpecifications.All,
             .. PressureLimitSpecifications.All,

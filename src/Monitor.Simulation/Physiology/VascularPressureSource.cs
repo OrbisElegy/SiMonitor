@@ -45,7 +45,7 @@ public sealed class VascularPressureSource
         if (plan.IllustrateAfSystemicPulseDeficit && !plan.UseAtrialFibrillationPerfusion) { throw Invalid(); }
         if (plan.UseCardiacFillingPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
             plan.UseConductedFlutterPerfusion || !CardiacFillingPerfusion.Supports(physiology))) { throw Invalid(); }
-        Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern) : physiology.VentricularPeriodNs;
+        Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? (physiology.RateAdjustment?.MinimumEjectingIntervalNs(physiology) ?? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern)) : physiology.VentricularPeriodNs;
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
         Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
         if (plan.ModelId != VascularPressurePlan.EvidenceId ||
@@ -68,7 +68,7 @@ public sealed class VascularPressureSource
         // contour. Schedules with altered stroke strength need linear shaping.
         long atrialLeadNs = physiology.VentricularMechanicalOffsetNs - physiology.AtrialMechanicalOffsetNs;
         _useLinearStrokeMorphology = plan.UseAtrialFibrillationPerfusion || plan.UseConductedFlutterPerfusion ||
-            plan.UseCardiacFillingPerfusion && (physiology.SeededRate is not null ||
+            plan.UseCardiacFillingPerfusion && (physiology.RateAdjustment is not null || physiology.SeededRate is not null ||
                 physiology.VentricularPeriodNs < CardiacFillingPerfusion.ReferencePeriodNs ||
                 physiology.IndependentVentricularPeriodNs is { } independent && independent != (Int128)physiology.HeartPeriodNs * physiology.VentricularConductionRatio ||
                 physiology.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
@@ -288,7 +288,7 @@ public sealed class VascularPressureSource
             InitialPressureCentiMmHg = plan.AsymptoticPressureCentiMmHg
         });
         long period = plan.UsePrematureBeatPerfusion
-            ? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern)
+            ? (physiology.RateAdjustment?.MinimumEjectingIntervalNs(physiology) ?? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern))
             : (long)physiology.VentricularPeriodNs;
         long input = kernel.EjectionCoefficient(period);
         if (input <= 0) { throw Invalid(); }
@@ -401,7 +401,7 @@ public sealed class VascularPressureSource
 
     private int RhythmGainPermille(ulong cycleIndex) =>
         _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, cycleIndex) :
-        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology.ConductionPattern, cycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology, cycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
         _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, cycleIndex) :
         _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, cycleIndex) :
             _physiology.SeededRate?.EjectionGainPermille(cycleIndex) ?? 1000;

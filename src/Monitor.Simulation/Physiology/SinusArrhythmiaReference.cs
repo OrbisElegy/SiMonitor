@@ -26,6 +26,11 @@ public static class SinusArrhythmiaReference
         long offset, long inclusive, Int128 exclusive, int maximumEvents,
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken)
     {
+        if (plan.RhythmSchedule is { } rhythm)
+        {
+            rhythm.Visit(plan, kind, offset, inclusive, exclusive, maximumEvents, visitor, cancellationToken);
+            return;
+        }
         IndexedCardiacSchedule.Visit(plan, kind, offset, inclusive, exclusive,
             maximumEvents, visitor, GroupDurationNs, CycleOffsetsNs, cancellationToken);
     }

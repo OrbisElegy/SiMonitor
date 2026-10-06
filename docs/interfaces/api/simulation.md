@@ -595,6 +595,8 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public VascularPressureVariation? PressureVariation { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
+    public CardiacRateAdjustment? RateAdjustment { get; init; }
+    public SeededRhythmSchedule? RhythmSchedule { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; }
     public static PhysiologyIllustrationConfiguration SinusArrhythmiaPreset { get; }
     public static PhysiologyIllustrationConfiguration SinusArrestPreset { get; }
@@ -935,6 +937,7 @@ public static class AtrialFibrillationPerfusion
 {
     public const string EvidenceId = "AtrialFibrillationPerfusionIllustration@3";
     public static int GainPermille(AvConductionPattern pattern, ulong ordinal, bool systemicPulseDeficit = false);
+    public static int GainPermille(RegularPhysiologyPlan plan, ulong ordinal, bool systemicPulseDeficit = false);
 }
 ```
 
@@ -952,6 +955,7 @@ public static class AtrialFibrillationReference
     public static bool IsPattern(AvConductionPattern pattern);
     public static RegularPhysiologyPlan CreatePlan(bool fine = false);
     public static bool IsLongShortBeat(ulong ordinal);
+    public static bool IsLongShortBeat(RegularPhysiologyPlan plan, ulong ordinal);
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool fine = false, bool aberrancy = false);
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool fine = false, bool aberrancy = false);
 }
@@ -1083,6 +1087,21 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
     public SeededExpirationPressure? SeededPressure { get; init; }
     public const string EvidenceId = "InfirmaryCapnogramDraft@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
+}
+```
+
+## Physiology/CardiacRateAdjustment.cs
+
+源码：[CardiacRateAdjustment.cs](../../../src/Monitor.Simulation/Physiology/CardiacRateAdjustment.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record CardiacRateAdjustment
+{
+    public SeededCardiacRate Rate { get; }
+    public SeededCardiacRate? AtrialRate { get; }
+    public CardiacRateAdjustment(int rateBpm, int? atrialRateBpm, string seedHex, int variationPermille);
+    public static bool Supports(RegularPhysiologyPlan plan);
+    public void Validate(RegularPhysiologyPlan plan);
 }
 ```
 
@@ -1597,6 +1616,8 @@ public readonly record struct VentricularCyclePattern(int Length, ulong Included
 }
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs, long DurationNs, IReadOnlyList<long> TableQ32, IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null, AtrialFibrillationBeatSelection? AfBeatSelection = null)
 {
+    public RegularPhysiologyPlan? AfTiming { get; init; }
+    public SeededCardiacRate? CycleDurationRate { get; init; }
 }
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands, IReadOnlyList<PhysiologyCycleEvent> Events)
 {
@@ -2211,6 +2232,8 @@ public enum AvConductionPattern
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs, long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs, long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs, long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
     public SeededCardiacRate? SeededRate { get; init; }
+    public CardiacRateAdjustment? RateAdjustment { get; init; }
+    public SeededRhythmSchedule? RhythmSchedule { get; init; }
 }
 public sealed record RegularPhysiologyState(RegularPhysiologyPlan Plan, long CursorSimTimeNs)
 {
@@ -2541,5 +2564,22 @@ public static class WpwReference
     public static RegularPhysiologyPlan CreatePlan();
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(bool negativeV1 = false, bool smallerDelta = false);
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(bool negativeV1 = false, bool smallerDelta = false);
+}
+```
+
+## Physiology/SeededRhythmSchedule.cs
+
+源码：[SeededRhythmSchedule.cs](../../../src/Monitor.Simulation/Physiology/SeededRhythmSchedule.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record SeededRhythmSchedule
+{
+    public string SeedHex { get; }
+    public IReadOnlyList<DeterministicStreamState> PreparedStates { get; }
+    public static SeededRhythmSchedule Default { get; }
+    public long PauseDurationNs { get; }
+    public int ConductionPercent { get; }
+    public SeededRhythmSchedule(string seedHex, long pauseDurationNs = 2_000_000_000, int conductionPercent = 33);
+    public static bool Supports(AvConductionPattern pattern);
 }
 ```

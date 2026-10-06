@@ -44,6 +44,23 @@ public static class CardiacFillingPerfusion
         if (!Supports(plan)) { throw new ArgumentException("CardiacFilling.UnsupportedPlan", nameof(plan)); }
         long nonFillingNs = plan.SeededRate is not null || plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration
             ? FillingLimitedEjection.NonFillingDurationNs : NonFillingDurationNs;
+        if (plan.RateAdjustment is not null)
+        {
+            Int128 adjustedCurrentNs = MechanicalTimeNs(plan, cycleIndex);
+            long adjustedIntervalNs = PrecedingIntervalNs(plan, cycleIndex);
+            Int128 adjustedStartNs = adjustedCurrentNs - Math.Min(adjustedIntervalNs, ReferencePeriodNs) + nonFillingNs;
+            long contributionNs = 0;
+            if (adjustedStartNs < adjustedCurrentNs && plan.CardiacActivity == CardiacActivity.AtrialAndVentricular)
+            {
+                Int128 originNs = plan.EpochAnchorSimTimeNs;
+                RegularPhysiologyTimeline.VisitCycles(plan, PhysiologyCycleEventKind.AtrialMechanical,
+                    plan.HeartPeriodNs, plan.AtrialMechanicalOffsetNs,
+                    (long)Int128.Max(originNs, originNs + adjustedStartNs - AtrialContractionDurationNs), originNs + adjustedCurrentNs, 100,
+                    item => contributionNs += (long)Int128.Max(0, Int128.Min(adjustedCurrentNs, item.SimTimeNs - originNs + AtrialContractionDurationNs) -
+                        Int128.Max(adjustedStartNs, item.SimTimeNs - originNs)), CancellationToken.None);
+            }
+            return StrokeVolumePermille(adjustedIntervalNs, Math.Min(contributionNs, AtrialContractionDurationNs), nonFillingNs);
+        }
         Int128 currentNs = MechanicalTimeNs(plan, cycleIndex);
         long periodNs = PrecedingIntervalNs(plan, cycleIndex);
         // Bound the late filling window as well as the passive volume. Extra
@@ -90,6 +107,8 @@ public static class CardiacFillingPerfusion
             return (long)Int128.Min(ReferencePeriodNs, MechanicalTimeNs(plan, cycleIndex) - MechanicalTimeNs(plan, index));
         }
         if (cycleIndex > 0) { return ReferencePeriodNs; }
+        if (plan.RateAdjustment is { } adjustment)
+        { return (long)Int128.Min(ReferencePeriodNs, adjustment.Map(plan, false, plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs)); }
         if (plan.SeededRate is { } seeded) { return seeded.PrecedingIntervalNs(cycleIndex); }
         return plan.ConductionPattern is AvConductionPattern.VariableAtrialFlutterIllustration or
             AvConductionPattern.SinusArrhythmiaIllustration or AvConductionPattern.SinusArrestIllustration
@@ -99,6 +118,11 @@ public static class CardiacFillingPerfusion
 
     internal static Int128 MechanicalTimeNs(RegularPhysiologyPlan plan, ulong index)
     {
+        if (plan.RateAdjustment is { } adjustment)
+        {
+            Int128 reference = MechanicalTimeNs(plan with { RateAdjustment = null }, index) - plan.VentricularMechanicalOffsetNs;
+            return adjustment.Map(plan, false, reference) + plan.VentricularMechanicalOffsetNs;
+        }
         Int128 cycleNs;
         if (plan.SeededRate is not null || plan.ConductionPattern is AvConductionPattern.SinusArrhythmiaIllustration or
             AvConductionPattern.SinusArrestIllustration or AvConductionPattern.VariableAtrialFlutterIllustration)
@@ -119,6 +143,7 @@ public static class CardiacFillingPerfusion
     {
         if (plan.SeededRate is { } rate)
         { return (Int128)(index / (ulong)rate.Slots.Length) * rate.PeriodNs * rate.Slots.Length + rate.Slots[index % (ulong)rate.Slots.Length]; }
+        if (plan.RhythmSchedule is { } rhythm) { return rhythm.CycleStartNs(plan.ConductionPattern, index); }
         ReadOnlySpan<long> slots = plan.ConductionPattern switch
         {
             AvConductionPattern.SinusArrhythmiaIllustration => SinusArrhythmiaReference.CycleOffsetsNs,

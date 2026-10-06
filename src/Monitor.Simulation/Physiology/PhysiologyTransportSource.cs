@@ -99,7 +99,7 @@ public sealed class PhysiologyTransportSource
                 {
                     StrokeVolumeResponse.CardiacFilling => CardiacFillingPerfusion.GainPermille(physiology, beat.CycleIndex),
                     StrokeVolumeResponse.PrematureBeat => PrematureBeatPerfusion.GainPermille(physiology.ConductionPattern, beat.CycleIndex),
-                    StrokeVolumeResponse.AtrialFibrillation => AtrialFibrillationPerfusion.GainPermille(physiology.ConductionPattern, beat.CycleIndex, flow.IllustrateAfSystemicPulseDeficit),
+                    StrokeVolumeResponse.AtrialFibrillation => AtrialFibrillationPerfusion.GainPermille(physiology, beat.CycleIndex, flow.IllustrateAfSystemicPulseDeficit),
                     StrokeVolumeResponse.ConductedFlutter => ConductedFlutterPerfusion.GainPermille(physiology, beat.CycleIndex),
                     StrokeVolumeResponse.SeededRate => physiology.SeededRate!.EjectionGainPermille(beat.CycleIndex),
                     _ => 1000,

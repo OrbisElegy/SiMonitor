@@ -83,6 +83,7 @@ public sealed class PhysiologySignalGenerator
         else
         {
             _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
+            state.Timeline.Plan.RateAdjustment?.ValidateBands(state.Timeline.Plan, _bands);
             if (_bands.Any(b => b.EjectionIllustration is { } mode && mode != state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             if (_bands.Any(b => b.AfBeatSelection is not null) && !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));

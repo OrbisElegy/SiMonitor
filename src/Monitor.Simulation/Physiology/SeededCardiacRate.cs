@@ -17,8 +17,11 @@ public sealed record SeededCardiacRate
     public long PeriodNs { get; }
     public long MinimumPeriodNs { get; }
     public SeededCardiacRate(int heartRateBpm, string seedHex, int variationPermille)
+        : this(heartRateBpm, seedHex, variationPermille, false) { }
+
+    internal SeededCardiacRate(int heartRateBpm, string seedHex, int variationPermille, bool extendedRange)
     {
-        if (heartRateBpm is < 30 or > 180 || variationPermille is < 0 or > 50)
+        if (heartRateBpm < (extendedRange ? 20 : 30) || heartRateBpm > (extendedRange ? 600 : 180) || variationPermille is < 0 or > 50)
         { throw new ArgumentException("SeededRate.InvalidRange"); }
         using var factory = DeterministicStreamFactory.FromLowercaseHex(seedHex);
         var random = factory.CreateStream("physiology.cardiac.rate");
@@ -62,6 +65,7 @@ public sealed record SeededCardiacRate
         int index = (int)(ordinal % (ulong)Slots.Length);
         return index == 0 ? PeriodNs * Slots.Length - Slots[^1] : Slots[index] - Slots[index - 1];
     }
+    internal long FollowingIntervalNs(ulong ordinal) => PrecedingIntervalNs(ordinal % (ulong)Slots.Length + 1);
     // Teaching morphology support, not patient-specific QT adaptation.
     public EcgCycleTiming Timing
     {

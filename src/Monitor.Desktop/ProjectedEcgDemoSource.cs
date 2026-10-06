@@ -67,6 +67,8 @@ internal sealed record ProjectedEcgDemoConfiguration(
     bool AtrialEscape = false)
 {
     internal SeededCardiacRate? SeededRate { get; init; }
+    internal CardiacRateAdjustment? RateAdjustment { get; init; }
+    internal SeededRhythmSchedule? RhythmSchedule { get; init; }
     internal static ProjectedEcgDemoConfiguration Default { get; } = new(75, 400, null);
 
     internal static ProjectedEcgDemoConfiguration CalciumPreset(CalciumIllustration mode)
@@ -221,6 +223,8 @@ internal sealed record ProjectedEcgDemoConfiguration(
 
     internal EcgCycleTiming ResolveTiming()
     {
+        if (RhythmSchedule is not null) { return (this with { RhythmSchedule = null }).ResolveTiming(); }
+        if (RateAdjustment is not null) { return (this with { RateAdjustment = null }).ResolveTiming(); }
         if (SeededRate is { } seeded) { return seeded.Timing; }
         if (ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration)
         {
@@ -503,6 +507,21 @@ internal static class ProjectedEcgDemoSource
         if (configuration.Aivr) { plan = AcceleratedVentricularReference.CreatePlan(); }
         if (configuration.Vt) { plan = VentricularTachycardiaReference.CreatePlan(configuration.VtCapture); }
         if (configuration.Svt) { plan = SupraventricularTachycardiaReference.CreatePlan(); }
+        plan = plan with { RateAdjustment = configuration.RateAdjustment, RhythmSchedule = configuration.RhythmSchedule };
+        if (AtrialFibrillationReference.IsPattern(plan.ConductionPattern))
+        {
+            electrodes = Array.AsReadOnly(electrodes.Select(e => e with
+            { Bands = Array.AsReadOnly(e.Bands.Select(b => b.AfBeatSelection is null ? b : b with { AfTiming = plan }).ToArray()) }).ToArray());
+        }
+        if (configuration.RateAdjustment is { } adjustment && AtrialFlutterReference.IsPattern(plan.ConductionPattern))
+        {
+            electrodes = Array.AsReadOnly(electrodes.Select(electrode => electrode with
+            {
+                Bands = Array.AsReadOnly(electrode.Bands.Select(band => band.Trigger == PhysiologyCycleEventKind.AtrialElectrical
+                    ? band with { CycleDurationRate = adjustment.Rate, DurationNs = adjustment.Rate.PeriodNs * (1000 + adjustment.Rate.VariationPermille) / 1000 }
+                    : band).ToArray())
+            }).ToArray());
+        }
         return ElectrodeWaveformGroup.Start(Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
             Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), 1, 1, 1, 0, 16, plan, electrodes,
             Enum.GetValues<EcgLead>().Select(lead => new ElectrodeChannelPlan(lead, ChannelId(lead), 10, 0)).ToArray(), configuration.Placement);

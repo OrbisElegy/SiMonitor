@@ -320,6 +320,12 @@ internal sealed class DesignPreviewWindow : Window
             Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
         { throw new ArgumentException("GeneratorPreferences.InvalidSelection"); }
         var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+        if (SeededRhythmSchedule.Supports(config.ConductionPattern))
+        {
+            var rhythm = Settings.ReadRhythm(config.ConductionPattern);
+            config = config with { RhythmSchedule = rhythm };
+            ecgConfig = ecgConfig with { RhythmSchedule = rhythm };
+        }
         var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
         var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
         config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
@@ -353,11 +359,21 @@ internal sealed class DesignPreviewWindow : Window
         };
         if (Settings.CardiacRateEnabled.IsChecked == true)
         {
-            if (Settings.EcgSelection != 0 || Settings.EjectionSelection == 2)
-            { throw new ArgumentException("Preview.CardiacRateRequiresSinus"); }
-            var rate = new SeededCardiacRate(DesignPreviewSettings.ReadVitalValue(Settings.HeartRate, 1, "vitals.heartRateField"),
-                Settings.RateSeed.Text ?? "", DesignPreviewSettings.ReadVitalValue(Settings.RateVariation, 10, "vitals.rateVariationField"));
-            config = config with { SeededRate = rate }; ecgConfig = ecgConfig with { SeededRate = rate };
+            var adjustment = Settings.ReadCardiacRate();
+            if (adjustment is not null)
+            {
+                if (Settings.EcgSelection == 0 && Settings.EjectionSelection != 2 && adjustment.Rate.HeartRateBpm is >= 30 and <= 180)
+                {
+                    var rate = new SeededCardiacRate(adjustment.Rate.HeartRateBpm, adjustment.Rate.SeedHex, adjustment.Rate.VariationPermille);
+                    config = config with { SeededRate = rate };
+                    ecgConfig = ecgConfig with { SeededRate = rate };
+                }
+                else
+                {
+                    config = config with { RateAdjustment = adjustment };
+                    ecgConfig = ecgConfig with { RateAdjustment = adjustment };
+                }
+            }
         }
         int co2AmplitudeCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "vitals.etco2VariationField");
         if (co2AmplitudeCentiMmHg > 0 && co2BaselineMmHg != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
@@ -443,8 +459,8 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.alarmLimits"); }
         catch (ArgumentException exception) when (exception.ParamName == "rootSeedHex")
         { SetStatus("validation.seed"); }
-        catch (ArgumentException exception) when (exception.Message == "Preview.CardiacRateRequiresSinus")
-        { SetStatus("validation.cardiacRate"); }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("CardiacRate.", StringComparison.Ordinal))
+        { SetStatus("validation." + exception.Message); }
         catch (ArgumentException exception) when (exception.Message == "SeededCo2.InvalidRange")
         { SetStatus("validation.co2Range"); }
         catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
@@ -568,6 +584,11 @@ internal sealed class DesignPreviewWindow : Window
             ecgConfig = ecgConfig with { VentricularConductionRatio = 2 };
         }
         if (ejection == 3) { config = config with { VentricularMechanicalEnabled = false }; }
+        if (SeededRhythmSchedule.Supports(config.ConductionPattern))
+        {
+            config = config with { RhythmSchedule = SeededRhythmSchedule.Default };
+            ecgConfig = ecgConfig with { RhythmSchedule = SeededRhythmSchedule.Default };
+        }
         return (config, ecgConfig);
     }
     internal static LocalMonitorPreviewSession CreateStylePreview(int ecg, int resp, int ejection)

@@ -311,8 +311,9 @@ internal static class DesignPreviewSmokeChecks
             }
             window.Settings.RateSeed.Text = new string('1', 64);
             window.Settings.CardiacRateEnabled.IsChecked = true;
-            window.Settings.EcgSelection = 1; Reject("关闭生命体征 → 心率");
-            window.Settings.EcgSelection = 0; window.Settings.EjectionSelection = 2; Reject("1:1 下传");
+            window.Settings.EcgSelection = 19; Reject("20–40 bpm");
+            window.Settings.EcgSelection = 0; window.Settings.HeartRate.Value = null; Reject("心率目标");
+            window.Settings.HeartRate.Value = 75;
             window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = false;
             window.Settings.OpticalEnabled.IsChecked = false; window.Settings.EtCo2Variation.Value = 1;
             foreach (int target in new[] { 5, 80 })
@@ -914,6 +915,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyIntegratedWindow);
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
+        NativeSmokePartition.Run(CardiacRateSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureTargetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureTargetSmokeChecks.VerifyDriftApply);
         NativeSmokePartition.Run(VerifyUiRefinement);
@@ -1328,8 +1330,8 @@ internal static class DesignPreviewSmokeChecks
                 {
                     if (choice == 39)
                     {
-                        Require(rates.Count > 1 && rates.All(rate => rate is >= 95000 and <= 105000),
-                            "variable flutter preserves finite-window measured ventricular rate fluctuations");
+                        Require(rates.Count > 1 && rates.All(rate => rate is >= 25000 and <= 150000),
+                            "seeded variable flutter HR fluctuates within the 2–12 atrial-cycle conduction bounds");
                     }
                     else
                     {
@@ -1398,8 +1400,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "atrial shape paper retains full twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 101; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for atrial shape");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "atrial shape permits independent no-ejection setting");
         }
@@ -1434,8 +1436,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "ventricular shape paper retains full twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 106; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for ventricular shape");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "ventricular shape permits independent no-ejection setting");
         }
@@ -1475,8 +1477,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "T contour paper retains full twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 114; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for T contour");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "T contour permits independent no-ejection setting");
             window.Settings.EjectionSelection = 0;
@@ -1593,8 +1595,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "regional snapshot paper retains full twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 164; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for regional snapshot");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "regional snapshot permits independent no-ejection setting");
             window.Settings.EjectionSelection = 0;
@@ -1799,8 +1801,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "fusion paper retains complete twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 98; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace fusion source");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "fusion supports independent disabled ejection");
         }
@@ -1844,8 +1846,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "quinidine paper retains full twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 97; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing quinidine source");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "quinidine retains independent no-ejection control");
         }
@@ -1888,8 +1890,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "digitalis paper has complete twelve-lead record"); window.SelectPage(0);
             }
             window.Settings.EcgSelection = 87; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without changing digitalis source");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "digitalis permits independent disabled ejection");
         }
@@ -1933,8 +1935,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             window.Settings.EcgSelection = 84; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects atomically for calcium template");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "calcium template retains independent no-ejection option");
         }
@@ -1980,8 +1982,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             window.Settings.EcgSelection = 80; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate cannot replace T-U template");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "low-potassium template permits independent absent ejection");
         }
@@ -2036,8 +2038,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             window.Settings.EcgSelection = 75; window.RestartSettings(); var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "unsupported variable rate rejects without replacing high-T source");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 3; window.RestartSettings();
             Require(!ReferenceEquals(live, window.Session), "independent disabled ejection remains supported with high T");
         }
@@ -2194,8 +2196,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate controls reject for irregular AF");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak ejection rejects for AF");
         }
@@ -2241,10 +2243,10 @@ internal static class DesignPreviewSmokeChecks
             }
             window.Settings.EcgSelection = 59; window.RestartSettings();
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only variable rate rejects without changing preexcitation timing");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override cannot replace preexcitation");
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }
@@ -2288,8 +2290,8 @@ internal static class DesignPreviewSmokeChecks
             }
             window.Settings.EcgSelection = 53; window.RestartSettings();
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only variable timing cannot silently replace fixed bundle preset");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak ejection rejects for isolated conduction morphology");
         }
@@ -2372,10 +2374,10 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot alter PVC group timing");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false; window.Settings.EjectionSelection = 2; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only2:1 override rejects for PVC groups");
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }
@@ -2429,8 +2431,8 @@ internal static class DesignPreviewSmokeChecks
             var live = window.Session;
             window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only weak-ejection option cannot replace PJC session");
-            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot override authored premature timing");
+            window.Settings.EjectionSelection = 0; window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }
@@ -2482,8 +2484,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate controls cannot silently replace automatic rhythm timing");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
             window.Settings.CardiacRateEnabled.IsChecked = false;
             window.Settings.EjectionSelection = 1; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session), "PVC-only ejection rejects atomically for automatic rhythms");
@@ -2551,8 +2553,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate override cannot alter VT");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }
@@ -2588,8 +2590,8 @@ internal static class DesignPreviewSmokeChecks
                 window.SelectPage(0);
             }
             var live = window.Session;
-            window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus-only rate control cannot alter SVT timing");
+            window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }
@@ -2648,8 +2650,8 @@ internal static class DesignPreviewSmokeChecks
                 Require(window.CurrentPaper!.BlockCount == 55, "block twelve-lead capture is complete");
                 window.SelectPage(0);
             }
-            var live = window.Session; window.Settings.CardiacRateEnabled.IsChecked = true; window.RestartSettings();
-            Require(ReferenceEquals(live, window.Session), "sinus rate override cannot overwrite block timing");
+            var live = window.Session; window.Settings.CardiacRateEnabled.IsChecked = true; window.Settings.HeartRate.Value = null; window.RestartSettings();
+            Require(ReferenceEquals(live, window.Session), "incomplete rate draft is rejected without replacing the active waveform");
         }
         finally { window.Close(); }
     }

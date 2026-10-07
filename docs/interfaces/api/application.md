@@ -796,16 +796,36 @@ public sealed class AlarmAttentionJournal
 ```csharp
 public enum AlarmConditionState
 {
-    Unobserved, Disabled, Normal, PendingTrigger, Active, PendingRecovery, Indeterminate
+    Unobserved,
+    Disabled,
+    Normal,
+    PendingTrigger,
+    Active,
+    PendingRecovery,
+    Indeterminate,
+    Suppressed
 }
 public enum AlarmTransitionKind
 {
-    StateChanged, Started, SeverityChanged, Ended
+    StateChanged,
+    Started,
+    SeverityChanged,
+    Ended
 }
 public enum AlarmTransitionReason
 {
-    None, Confirmed, Recovered, Disabled, ConfigurationChanged, InvalidConfiguration,
-    DataUnavailable, ObservationGap, ClockRewind, SignalSegmentChanged, SessionReset
+    None,
+    Confirmed,
+    Recovered,
+    Disabled,
+    ConfigurationChanged,
+    InvalidConfiguration,
+    DataUnavailable,
+    ObservationGap,
+    ClockRewind,
+    SignalSegmentChanged,
+    SessionReset,
+    Superseded
 }
 public sealed record AlarmEpisodeId(string ConditionId, ulong Occurrence);
 public sealed record AlarmConditionSnapshot(string ConditionId, AlarmConditionState State, AlarmEpisodeId? Episode, MonitorNoticeLevel? Level, long ChangedAtNs, AlarmTransitionReason Reason);
@@ -816,11 +836,12 @@ public sealed class AlarmLifecycleJournal
     public AlarmAttentionJournal Attention { get; }
     public ulong DroppedNotificationCount { get; private set; }
     public IReadOnlyList<AlarmNotificationRecord> NotificationRecords { get; }
-    public AlarmNotificationPolicy NotificationPolicyFor(string conditionId);
-    public void ConfigureNotifications(string conditionId, AlarmNotificationPolicy policy);
     public ulong DroppedTransitionCount { get; private set; }
     public IReadOnlyList<AlarmConditionSnapshot> Conditions { get; }
     public IReadOnlyList<AlarmLifecycleTransition> Transitions { get; }
+
+    public AlarmNotificationPolicy NotificationPolicyFor(string conditionId);
+    public void ConfigureNotifications(string conditionId, AlarmNotificationPolicy policy);
 }
 ```
 
@@ -1418,6 +1439,28 @@ public sealed class EcgStripWorkPump
 }
 ```
 
+## Presentation/EcgAlarmNotices.cs
+
+源码：[EcgAlarmNotices.cs](../../../src/Monitor.Application/Presentation/EcgAlarmNotices.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record EcgAlarmDescriptor(string Id, string Text, string MessageKey, MonitorNoticeLevel Level, EcgMonitoringConditions Condition = EcgMonitoringConditions.None)
+{
+    public TextMessage Message { get; }
+    public AlarmNotificationSettings DefaultNotification { get; }
+}
+public sealed class EcgAlarmNotices
+{
+    public const long OccurrenceDisplayNs = 10_000_000_000;
+    public static IReadOnlyList<EcgAlarmDescriptor> Descriptors { get; }
+    public AlarmLifecycleJournal Lifecycle { get; }
+
+    public EcgAlarmNotices();
+    public void Reset(AlarmTransitionReason reason = AlarmTransitionReason.SessionReset);
+    public IReadOnlyList<MonitorNotice> Evaluate(bool enabled, LiveMeasurementSnapshot snapshot, IReadOnlyList<DetectedEcgMonitoringEvent>? monitoringEvents = null, IReadOnlyList<DetectedEcgRhythmEvent>? rhythmEvents = null);
+}
+```
+
 ## Presentation/LocalMonitorPreviewSession.cs
 
 源码：[LocalMonitorPreviewSession.cs](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -1514,14 +1557,18 @@ public sealed record AlarmNotificationSettings(int RepeatSuppressionMilliseconds
 ```csharp
 public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool SpO2Enabled, int? SpO2Warning, int? SpO2Critical, bool NoExpirationEnabled, int? NoExpirationSeconds, IReadOnlyDictionary<MonitorNumeric, MeasurementLimits> Additional, bool NoticeColorEnabled)
 {
+    public bool EcgMonitoringEnabled { get; init; }
     public IReadOnlyDictionary<MonitorNumeric, MeasurementConfirmationTiming> ConfirmationTimings { get; init; }
     public BoundaryConfirmationTiming NoExpirationConfirmation { get; init; }
     public AlarmPlaybackMode PlaybackMode { get; init; }
     public IReadOnlyDictionary<string, AlarmNotificationSettings> Notifications { get; init; }
     public static IReadOnlyList<string> NotificationConditionIds { get; }
+
     public AlarmNotificationSettings NotificationFor(string conditionId);
+    public static AlarmNotificationSettings DefaultNotificationFor(string conditionId);
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric);
     public static MonitorAlarmPreferences Default { get; }
+
     public void Validate();
 }
 ```

@@ -65,6 +65,8 @@ internal sealed class AlarmNotificationController
             Reset();
             return null;
         }
+        // A superseded indication has no episode, but retains its repeat timer.
+        // Only unavailable/disabled/reset observations discard that history.
         if (condition.Episode is not { } episode || condition.Level is not { } level)
         {
             _episode = null;

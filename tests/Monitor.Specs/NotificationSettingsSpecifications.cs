@@ -16,7 +16,7 @@ internal static class NotificationSettingsSpecifications
     private static void NotificationSettingsValidateAllConditions()
     {
         var owners = Enum.GetValues<MonitorNumeric>().Select(n => new ConfirmedLimitNotice(n).Lifecycle)
-            .Append(new ConfirmedNoExpirationNotice().Lifecycle).ToArray();
+            .Append(new ConfirmedNoExpirationNotice().Lifecycle).Append(new EcgAlarmNotices().Lifecycle).ToArray();
         Check.That(MonitorAlarmPreferences.NotificationConditionIds.SequenceEqual(owners.SelectMany(j => j.Conditions)
             .Select(c => c.ConditionId).Order(StringComparer.Ordinal)), "saved condition registry matches all live owners exactly");
         Check.That(AlarmNotificationSettings.Default.ToPolicy() == AlarmNotificationPolicy.Default &&
@@ -61,15 +61,25 @@ internal static class NotificationSettingsSpecifications
             var settings = MonitorAlarmPreferences.NotificationConditionIds.Select((id, index) =>
                 (Id: id, Value: new AlarmNotificationSettings(index * 123, index % 2 == 0, index + 1) { SoundMode = (AlarmSoundMode)(index % 3), LatchingMode = (AlarmLatchingMode)(index % 2) }))
                 .ToDictionary(e => e.Id, e => e.Value);
-            var alarms = MonitorAlarmPreferences.Default with { PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings };
+            var alarms = MonitorAlarmPreferences.Default with { PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings, EcgMonitoringEnabled = false };
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms)), "save notification configuration");
             string valid = File.ReadAllText(path);
             var loaded = store.Load(out bool rejected);
-            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 11 &&
-                loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications &&
+            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 12 &&
+                loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications && !loaded.Alarms.EcgMonitoringEnabled &&
                 settings.All(e => loaded.Alarms.NotificationFor(e.Key) == e.Value) &&
                 !valid.Contains("Occurrence", StringComparison.Ordinal) && !valid.Contains("NotificationSequence", StringComparison.Ordinal),
                 "all notification settings round trip without episodes, cursors or requests");
+            var versionEleven = JsonNode.Parse(valid)!.AsObject();
+            versionEleven["Version"] = 11;
+            versionEleven["Alarms"]!.AsObject().Remove("EcgMonitoringEnabled");
+            foreach (var descriptor in EcgAlarmNotices.Descriptors)
+            { versionEleven["Alarms"]!["Notifications"]!.AsObject().Remove(descriptor.Id); }
+            File.WriteAllText(path, versionEleven.ToJsonString());
+            var migratedEleven = store.Load(out rejected);
+            Check.That(!rejected && migratedEleven.Alarms!.EcgMonitoringEnabled && !migratedEleven.Alarms.HeartRate.Enabled &&
+                EcgAlarmNotices.Descriptors.All(d => migratedEleven.Alarms.NotificationFor(d.Id) == d.DefaultNotification),
+                "old preferences enable the new ECG group with its defaults while preserving existing HR settings");
             var versionNine = JsonNode.Parse(valid)!.AsObject();
             versionNine["Version"] = 9;
             foreach (var item in versionNine["Alarms"]!["Notifications"]!.AsObject()) { item.Value!.AsObject().Remove("LatchingMode"); }
@@ -100,7 +110,7 @@ internal static class NotificationSettingsSpecifications
                 var migrated = store.Load(out rejected);
                 Check.That(!rejected && migrated.Alarms!.PlaybackMode == AlarmPlaybackMode.Continuous &&
                     migrated.Alarms.Notifications.Count == 0 &&
-                    MonitorAlarmPreferences.NotificationConditionIds.All(id => migrated.Alarms.NotificationFor(id) == AlarmNotificationSettings.Default) &&
+                    MonitorAlarmPreferences.NotificationConditionIds.All(id => migrated.Alarms.NotificationFor(id) == MonitorAlarmPreferences.DefaultNotificationFor(id)) &&
                     !migrated.Alarms.HeartRate.Enabled, "legacy files keep continuous sound, default policies and alarm opt-in");
             }
             foreach (var edit in new Action<JsonObject>[]

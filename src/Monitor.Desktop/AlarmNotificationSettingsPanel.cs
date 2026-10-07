@@ -24,6 +24,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
     internal AlarmPlaybackMode EffectiveMode { get; private set; }
     internal event Action? ModeChanged;
     internal event Action<MonitorNumeric>? ParameterRequested;
+    internal event Action? EcgRequested;
     private readonly TextBlock _errors = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly string[] _ids;
     private readonly Dictionary<string, string> _summaries = new(StringComparer.Ordinal);
@@ -43,9 +44,10 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             .Prepend(MeasuredLimitNotice.HeartRateDescriptor)
             .SelectMany(d => (d.Numeric == MonitorNumeric.SpO2 ? LowOnly : BothDirections)
                 .Select(low => (Id: d.Id + (low ? "-low" : "-high"), Label: AlarmText.ConditionLabel(d, low))))
-            .Append((Id: "co2-no-expiration", Label: new TextMessage("alarm.noExpirationLabel"))).ToArray();
+            .Append((Id: "co2-no-expiration", Label: new TextMessage("alarm.noExpirationLabel")))
+            .Concat(EcgAlarmNotices.Descriptors.Select(d => (d.Id, Label: d.Message))).ToArray();
         _ids = labels.Select(l => l.Id).ToArray();
-        Editors = labels.ToDictionary(l => l.Id, l => new ConditionEditor(l.Label, _localization), StringComparer.Ordinal);
+        Editors = labels.ToDictionary(l => l.Id, l => new ConditionEditor(l.Label, _localization) { Defaults = MonitorAlarmPreferences.DefaultNotificationFor(l.Id) }, StringComparer.Ordinal);
         _localization.SetChoices(Mode, "alarm.modeContinuous", "alarm.modeNotifications");
         _localization.Bind(Mode, AutomationProperties.NameProperty, "alarm.modeName");
         Children.Add(Text("alarm.modeLabel"));
@@ -61,7 +63,9 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         foreach (var (id, editor) in Editors)
         {
             var journal = journals.Single(j => j.Conditions.Any(c => c.ConditionId == id));
-            _effective[id] = AlarmNotificationSettings.Default;
+            _effective[id] = MonitorAlarmPreferences.DefaultNotificationFor(id);
+            editor.Restore(_effective[id]);
+            journal.Attention.Configure(id, _effective[id].LatchingMode);
             journal.ConfigureNotifications(id, _effective[id].ToPolicy(EffectiveMode));
             editor.SetDefaultMode(EffectiveMode);
             editor.Changed += () =>
@@ -139,6 +143,28 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         return page;
     }
 
+    internal Control CreateEcgPage()
+    {
+        var selector = new ComboBox { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
+        _localization.Bind(selector, AutomationProperties.NameProperty, "alarm.ecgSelect");
+        _localization.SetChoices(selector, EcgAlarmNotices.Descriptors
+            .Select(d => new Func<ITextLocalizer, string>(d.Message.Render)).ToArray());
+        var content = new ContentControl();
+        selector.SelectionChanged += (_, _) =>
+        {
+            if (selector.SelectedIndex >= 0) { content.Content = Editors[EcgAlarmNotices.Descriptors[selector.SelectedIndex].Id]; }
+        };
+        selector.SelectedIndex = 0;
+        var page = new StackPanel { Spacing = 12 };
+        page.Children.Add(selector);
+        page.Children.Add(content);
+        var overview = new Button { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
+        _localization.Bind(overview, ContentControl.ContentProperty, "alarm.ecgPage");
+        overview.Click += (_, _) => EcgRequested?.Invoke();
+        _overview.Children.Add(overview);
+        return page;
+    }
+
     internal string SummaryFor(string id) => _summaries[id];
 
     private static string DirectionKey(string id) =>
@@ -171,7 +197,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         if (Mode.SelectedIndex is not (0 or 1)) { throw new ArgumentException("AlarmNotification.InvalidDraft"); }
         var settings = Editors.ToDictionary(e => e.Key, e => e.Value.Read(), StringComparer.Ordinal);
         return ((AlarmPlaybackMode)Mode.SelectedIndex,
-            settings.Where(e => e.Value != AlarmNotificationSettings.Default).ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal));
+            settings.Where(e => e.Value != MonitorAlarmPreferences.DefaultNotificationFor(e.Key)).ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal));
     }
 
     internal void Restore(MonitorAlarmPreferences preferences, IReadOnlyList<AlarmLifecycleJournal> journals)
@@ -209,6 +235,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
         private readonly DesktopLocalization _localization;
         private readonly Func<ITextLocalizer, string> _label;
         // The condition label in the selected language.
+        internal AlarmNotificationSettings Defaults { get; init; } = AlarmNotificationSettings.Default;
         internal string Label => _label(_localization.Current);
         internal IReadOnlyList<RadioButton> SoundChoices { get; }
         internal int SelectedSoundMode
@@ -299,7 +326,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             var reset = new Button { MinHeight = 44 };
             _localization.Bind(reset, ContentControl.ContentProperty, "alarm.resetEvent");
             _localization.Bind(reset, AutomationProperties.NameProperty, text => text.Format("alarm.qualified", _label(text), text.GetString("alarm.resetEventName")));
-            reset.Click += (_, _) => Restore(AlarmNotificationSettings.Default);
+            reset.Click += (_, _) => Restore(Defaults);
             var actions = new WrapPanel { Orientation = Orientation.Horizontal };
             actions.Children.Add(reset);
             var effect = new TextBlock { Margin = new Thickness(12, 10, 0, 0), TextWrapping = TextWrapping.Wrap };

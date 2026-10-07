@@ -1,6 +1,6 @@
 # 通知意图到声音执行接口
 
-`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面始终绑定已登记条件以处理用户确认；“报警 → 通知策略”设置默认方式，各测量参数的“声音”分组设置独立短／长覆盖。产品默认仍为持续播放，默认方式、条件覆盖和视觉保持通过版本 11 偏好保存。声音输出开关不随偏好恢复。
+`AlarmNotificationSoundRouter` 消费[通知决策](alarm-notification-policy.md)，产生短警报单组或长警报持续请求，并与未注册提示的持续声音仲裁；`MonitorAlarmSequencer` 执行请求并提供有界排程记录。桌面 `SoundSettingsPanel.UseNotificationPlayback(journals)` 接通此通道，传入 null 恢复原持续模式。桌面始终绑定已登记条件以处理用户确认；“报警 → 通知策略”设置默认方式，各测量参数的“声音”分组设置独立短／长覆盖。产品默认仍为持续播放，默认方式、条件覆盖和视觉保持通过版本 12 偏好保存。声音输出开关不随偏好恢复。
 
 ## 请求与单组排程
 
@@ -70,3 +70,5 @@ Selected 和 RenderWindowElapsed 只描述软件排程选择及渲染窗口，�
 此边界是既有软件输出状态反馈，没有新增物理扬声器交付确认或自动重连。通知设置与保存映射见[通知策略接口](alarm-notification-policy.md)；用户确认及视觉保持已接入，规则见[确认与保持接口](alarm-attention.md)。
 
 路由 `Update` 可接收 `retiredNotificationSequence` 软件退役水位，须不高于该 owner 已发布序号，非法值在消费游标前拒绝。已确认活动条件仅允许确认后的新提醒；已完成的提醒释放优先级，恢复后保持提示不参与声音。播放 worker 以单调、线程可见的水位汇报 sequencer 渲染窗口结束，包含组内合并请求，不能作为设备交付或用户确认凭证。
+
+默认 ECG 监测组另外登记检测器条件，危急项默认持续声音，其余项默认单组声音；可逐项覆盖。组开关、实测读数与旧偏好迁移见 [ECG 增强监测接口](ecg-monitoring.md)。

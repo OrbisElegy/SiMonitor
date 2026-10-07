@@ -82,7 +82,7 @@ public sealed class AlarmAttentionJournal
     {
         _lastObservationNs = sampleTimeNs;
         var previous = Find(condition.ConditionId);
-        if (condition.State is AlarmConditionState.Unobserved or AlarmConditionState.Disabled or AlarmConditionState.Indeterminate)
+        if (condition.State is AlarmConditionState.Unobserved or AlarmConditionState.Disabled or AlarmConditionState.Indeterminate or AlarmConditionState.Suppressed)
         {
             Publish(Clear(previous), AlarmAttentionKind.Interrupted, condition.Reason);
             return;

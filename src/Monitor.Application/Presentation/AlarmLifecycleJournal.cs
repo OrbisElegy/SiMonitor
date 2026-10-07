@@ -9,7 +9,8 @@ public enum AlarmConditionState
     PendingTrigger,
     Active,
     PendingRecovery,
-    Indeterminate
+    Indeterminate,
+    Suppressed
 }
 
 public enum AlarmTransitionKind
@@ -32,7 +33,8 @@ public enum AlarmTransitionReason
     ObservationGap,
     ClockRewind,
     SignalSegmentChanged,
-    SessionReset
+    SessionReset,
+    Superseded
 }
 
 // Identity is scoped to the owning live confirmation filter, not globally unique.
@@ -114,13 +116,19 @@ public sealed class AlarmLifecycleJournal
 
     internal void Interrupt(long sampleTimeNs, AlarmTransitionReason reason)
     {
+        foreach (string id in _conditions.Keys.ToArray()) { Interrupt(id, sampleTimeNs, reason); }
+    }
+
+    internal void Interrupt(string id, long sampleTimeNs, AlarmTransitionReason reason)
+    {
         var state = reason switch
         {
+            AlarmTransitionReason.Superseded => AlarmConditionState.Suppressed,
             AlarmTransitionReason.Disabled => AlarmConditionState.Disabled,
             AlarmTransitionReason.ConfigurationChanged or AlarmTransitionReason.SessionReset => AlarmConditionState.Unobserved,
             _ => AlarmConditionState.Indeterminate
         };
-        foreach (string id in _conditions.Keys.ToArray()) { Set(id, state, null, sampleTimeNs, reason); }
+        Set(id, state, null, sampleTimeNs, reason);
     }
 
     private void Set(string id, AlarmConditionState state, MonitorNoticeLevel? level, long sampleTimeNs, AlarmTransitionReason reason)

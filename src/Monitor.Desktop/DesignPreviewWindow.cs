@@ -162,6 +162,7 @@ internal sealed class DesignPreviewWindow : Window
         }
         BindAlarmAttention();
         Settings.Alerts.NotificationSettings.ModeChanged += UpdateNotificationMode;
+        Settings.Alerts.EcgMonitoringEnabled.IsCheckedChanged += (_, _) => UpdateNotificationMode();
         UpdateNotificationMode();
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
@@ -545,7 +546,9 @@ internal sealed class DesignPreviewWindow : Window
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)
     {
-        foreach (var notice in Settings.Alerts.Notices(snapshot)) { yield return notice; }
+        foreach (var notice in Settings.Alerts.Notices(snapshot,
+            _session.Measurements?.SampleTimeNs == snapshot.SampleTimeNs ? _session.DetectedMonitoringEvents : null,
+            _session.Measurements?.SampleTimeNs == snapshot.SampleTimeNs ? _session.DetectedRhythmEvents : null)) { yield return notice; }
         if (Settings.Sound.OutputNotice is { } fault) { yield return fault; }
         if (Settings.Sound.PitchNotice is { } pitch) { yield return pitch; }
     }

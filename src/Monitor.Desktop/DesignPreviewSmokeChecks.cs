@@ -934,6 +934,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(NotificationSettingsSmokeChecks.Verify);
         NativeSmokePartition.Run(AlarmAttentionPresentationSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgAlarmSmokeChecks.Verify);
+        NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.Verify);
         EcgTemplateDetectionSmokeChecks.Register();
         NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
         NativeSmokePartition.Run(RealtimeOxygenationSmokeChecks.Verify);
@@ -1161,7 +1162,7 @@ internal static class DesignPreviewSmokeChecks
                 !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries with their state");
             var alarmHeaders = alarmGroups.Sections.Items.Cast<ListBoxItem>().Where(item => !item.IsEnabled).ToArray();
             Require(alarmHeaders.Select(item => ((TextBlock)item.Content!).Text).SequenceEqual(["测量参数", "提示与声音"]) &&
-                alarmHeaders.All(item => !item.Focusable) && alarmGroups.DetailFor(0) == "关",
+                alarmHeaders.All(item => !item.Focusable) && alarmGroups.DetailFor(0) == "开",
                 "alarm navigation separates measurements from shared prompt and sound settings");
             window.Settings.Alerts.NoExpirationEnabled.IsChecked = true;
             Require(alarmGroups.DetailFor(window.Settings.Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(MonitorNumeric.EtCo2)) == "开",
@@ -1172,7 +1173,7 @@ internal static class DesignPreviewSmokeChecks
             var heartRateGroups = window.Settings.Alerts.HeartRateConfirmation;
             var originalConfirmation = heartRateGroups.Read();
             Require(string.Join(" / ", heartRateGroups.Groups.Items.Cast<TabItem>().Select(item => item.Header?.ToString())) ==
-                "阈值 / 触发确认 / 恢复确认 / 声音", "alarm parameters use the existing advanced-page tab pattern");
+                "阈值 / 触发确认 / 恢复确认 / 声音 / ECG 检测项", "alarm parameters use the existing advanced-page tab pattern");
             heartRateGroups.Groups.SelectedIndex = 1;
             heartRateGroups.Fields[0].Value = 1.25m;
             Capture(window, "ui-preview-alarm-trigger-groups.png");

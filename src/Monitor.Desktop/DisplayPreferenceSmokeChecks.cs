@@ -199,7 +199,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 11", "\"Version\": 119"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 12", "\"Version\": 129"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

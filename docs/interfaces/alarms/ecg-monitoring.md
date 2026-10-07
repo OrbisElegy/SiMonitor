@@ -18,6 +18,8 @@ var reading = detector.ReadMonitoring(asOfSampleTimeNs);
 `reading.LastBeat` 中给出最近一搏的 `Label`、采样形态宽度（ms）和模板差异（千分比）。
 标签包含学习中、正常、室上性早搏候选、室性候选、起搏和未知。
 形态判定等待峰后至少 160 ms 的完整轮廓；QRS 提示时刻不变。
+采样宽度只覆盖检测峰附近的波瓣，跨越短于 40 ms 的阈下间隔以保留多相 QRS；
+被更长阈下间隔隔开的 P/T 波不延长 QRS 宽度，避免切换到右室肥厚等低幅形态后误报室性心律。
 这不是诊断性 QRS 时限，也不把所有宽 QRS 自动解释为室性心搏。
 
 `LiveWaveformMeasurements` 的新构造重载接受 ECG 设置；完整 `Consume` 重载额外返回

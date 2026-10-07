@@ -14,6 +14,7 @@ internal static class EcgMonitoringSpecifications
     public static Specification[] All =>
     [
         new(nameof(EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence), EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence),
+        new(nameof(EcgHypertrophyDoesNotProduceVentricularRuns), EcgHypertrophyDoesNotProduceVentricularRuns),
         new(nameof(EcgPauseAndAsystoleUseLiveSamples), EcgPauseAndAsystoleUseLiveSamples),
         new(nameof(EcgVentricularPatternsRequireLearnedMorphology), EcgVentricularPatternsRequireLearnedMorphology),
         new(nameof(EcgVentricularRunsRespectRateAndLength), EcgVentricularRunsRespectRateAndLength),
@@ -37,6 +38,34 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgReferenceRecoveryRestoresAndRejectsAtomically), EcgReferenceRecoveryRestoresAndRejectsAtomically),
         new(nameof(EcgReferenceRecoveryPreservesVentricularAndSvtDetection), EcgReferenceRecoveryPreservesVentricularAndSvtDetection),
     ];
+
+    private static void EcgHypertrophyDoesNotProduceVentricularRuns()
+    {
+        short[] normal = Acquire(PhysiologyIllustrationConfiguration.Default, 25);
+        foreach (var shape in Enum.GetValues<EcgVentricularIllustration>())
+        {
+            short[] samples = Acquire(PhysiologyIllustrationConfiguration.Default with { VentricularShape = shape }, 40);
+            foreach (bool transition in new[] { false, true })
+            {
+                short[] acquired = transition ? normal.Concat(samples).ToArray() : samples;
+                var result = Run(acquired);
+                Check.That(result.Reading.LastBeat is { Label: EcgBeatLabel.Normal, QrsWidthMilliseconds: < 100 },
+                    "separate atrial deflections must not widen the acquired QRS: " + shape + "/" + transition);
+                var restored = Run(acquired, 37, restore: true);
+                Check.That(restored.Reading == result.Reading && restored.Events.SequenceEqual(result.Events) &&
+                    restored.Beats.SequenceEqual(result.Beats), "hypertrophy morphology survives packet partition and checkpoints");
+                var inverted = Run(acquired.Select(value => checked((short)(600 - value))).ToArray());
+                Check.That(inverted.Reading.LastBeat?.Label == result.Reading.LastBeat?.Label &&
+                    inverted.Reading.LastBeat?.QrsWidthMilliseconds == result.Reading.LastBeat?.QrsWidthMilliseconds &&
+                    inverted.Events.SequenceEqual(result.Events) && inverted.Reading.PvcsLastMinute == 0,
+                    "QRS boundaries do not depend on lead polarity or a constant baseline offset: " + shape + "/" + transition);
+                Check.That(result.Reading.PvcsLastMinute == 0 && result.Events.All(e => e.Condition is not
+                    (EcgMonitoringConditions.VentricularRhythm or EcgMonitoringConditions.VentricularTachycardia or
+                    EcgMonitoringConditions.RunPvcs or EcgMonitoringConditions.PvcsPerMinuteHigh)),
+                    "hypertrophy contour must not create ventricular runs: " + shape + "/" + transition + ": " + result.Reading);
+            }
+        }
+    }
 
     private static void EcgPauseAndAsystoleUseLiveSamples()
     {

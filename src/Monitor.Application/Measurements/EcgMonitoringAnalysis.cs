@@ -377,9 +377,15 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         int magnitude = values.Max(v => Math.Abs(v));
         if (magnitude < 150) { return null; }
         int threshold = Math.Max(50, magnitude / 5);
-        int first = Array.FindIndex(values, v => Math.Abs(v) > threshold);
-        int last = Array.FindLastIndex(values, v => Math.Abs(v) > threshold);
-        int width = (last - first + 1) * 4;
+        // Measure the complex surrounding the detected peak. Separate P/T
+        // deflections in the window must not extend QRS across a quiet segment.
+        // Bridge crossings shorter than 40 ms so separated QRS lobes remain included.
+        int[] lobes = Enumerable.Range(0, values.Length).Where(i => Math.Abs(values[i]) > threshold).ToArray();
+        int peak = Enumerable.Range(0, lobes.Length).MinBy(i => Math.Abs(lobes[i] - 30));
+        int first = peak, last = peak;
+        while (first > 0 && lobes[first] - lobes[first - 1] <= 10) { first--; }
+        while (last < lobes.Length - 1 && lobes[last + 1] - lobes[last] <= 10) { last++; }
+        int width = (lobes[last] - lobes[first] + 1) * 4;
         return new(width, values.Select(v => v * 1000 / magnitude).ToArray());
     }
 

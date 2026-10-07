@@ -13,6 +13,7 @@ internal static class EcgMonitoringSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(0);
     public static Specification[] All =>
     [
+        new(nameof(EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence), EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence),
         new(nameof(EcgPauseAndAsystoleUseLiveSamples), EcgPauseAndAsystoleUseLiveSamples),
         new(nameof(EcgVentricularPatternsRequireLearnedMorphology), EcgVentricularPatternsRequireLearnedMorphology),
         new(nameof(EcgVentricularRunsRespectRateAndLength), EcgVentricularRunsRespectRateAndLength),
@@ -314,6 +315,41 @@ internal static class EcgMonitoringSpecifications
             "short coupling alone cannot confirm R-on-T until the compensatory interval is observed");
         var noPause = Run(samples.Take(5400).ToArray());
         Check.That(noPause.Events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc), "unobserved following beat cannot prove the compensatory pause");
+    }
+
+    private static void EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence()
+    {
+        short[] samples = Acquire(PhysiologyIllustrationConfiguration.AberrantPrematureAtrial, 40);
+        var result = Run(samples);
+        Check.That(result.Reading.LastBeat is { Label: EcgBeatLabel.SupraventricularPremature, QrsWidthMilliseconds: >= 100 } &&
+            result.Reading.PvcsLastMinute == 0 && result.Events.All(e => e.Condition != EcgMonitoringConditions.PvcsPerMinuteHigh),
+            "acquired premature P with RBBB conduction is supraventricular despite its wide QRS: " + result.Reading);
+        var restored = Run(samples, 37, true);
+        Check.That(result.Events.SequenceEqual(restored.Events) && result.Reading == restored.Reading,
+            "atrial classification is independent of packet boundaries and checkpoint restoration");
+        var inverted = Run(samples.Select(value => (short)-value).ToArray());
+        Check.That(inverted.Reading.LastBeat == result.Reading.LastBeat && inverted.Reading.PvcsLastMinute == 0,
+            "atrial evidence accepts either lead polarity");
+        // Alter only acquired P samples; the wide QRS and timing stay identical.
+        foreach (bool spike in new[] { false, true })
+        {
+            short[] absentP = (short[])samples.Clone();
+            for (int start = 525; start + 20 < absentP.Length; start += 775)
+            {
+                Array.Clear(absentP, start, 20);
+                if (spike) { absentP[start + 10] = -180; }
+            }
+            var rejected = Run(absentP);
+            Check.That(rejected.Reading.LastBeat?.Label == EcgBeatLabel.Ventricular && rejected.Reading.PvcsLastMinute > 0,
+                "missing P or a sharp artifact cannot override ventricular morphology");
+        }
+        short[] ventricular = Acquire(PhysiologyIllustrationConfiguration.PrematureVentricular, 40);
+        // Even a P-like wave before a true PVC must not bypass QRS evidence.
+        for (int peak = 590; peak < ventricular.Length; peak += 800)
+        {
+            Array.Copy(samples, 525, ventricular, peak - 47, 20);
+        }
+        Check.That(Run(ventricular).Reading.PvcsLastMinute > 0, "a coincident P-like wave alone does not turn true PVCs into atrial beats");
     }
 
     private static void EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs()

@@ -208,6 +208,12 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             bool continuesSvt = _svtRun > 0 && intervalNs > 0 && 60_000_000_000L > intervalNs * settings.SvtHeartRate;
             label = matches ? (premature || continuesSvt ? EcgBeatLabel.SupraventricularPremature : EcgBeatLabel.Normal)
                 : width >= 100 && (width >= template.Width + 24 || premature) ? EcgBeatLabel.Ventricular : EcgBeatLabel.Unknown;
+            if (label == EcgBeatLabel.Ventricular && premature && intervalNs >= 400_000_000 &&
+                template.Width < 100 && width <= 160 &&
+                _beats.LastOrDefault() is { Label: EcgBeatLabel.Normal or EcgBeatLabel.Learning, Shape.Width: < 100 } preceding &&
+                Difference(preceding.Shape, template) < 450 &&
+                HasConductedAtrialEvidence(beat.PeakTimeNs, shape, template))
+            { label = EcgBeatLabel.SupraventricularPremature; }
         }
         if (settings.PacedMode && _learningBeats >= TemplateBeatCount)
         {
@@ -375,6 +381,36 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         int last = Array.FindLastIndex(values, v => Math.Abs(v) > threshold);
         int width = (last - first + 1) * 4;
         return new(width, values.Select(v => v * 1000 / magnitude).ToArray());
+    }
+
+    // A wide premature complex can be conducted from the atria. Require both
+    // a preserved initial QRS contour and a discrete, smooth pre-QRS P-like
+    // deflection; width alone cannot distinguish aberrancy from ventricular
+    // ectopy. This bounded single-lead screen does not diagnose a bundle block.
+    private bool HasConductedAtrialEvidence(long peakNs, Shape shape, Shape template)
+    {
+        int initialDifference = shape.Values.Skip(20).Take(16)
+            .Zip(template.Values.Skip(20).Take(16), (a, b) => Math.Abs(a - b)).Sum() / 16;
+        if (initialDifference >= 180) { return false; }
+        long fromNs = peakNs - 220_000_000;
+        if (fromNs < _timeNs - (_count - 1) * StepNs) { return false; }
+        int[] samples = Enumerable.Range(0, 41).Select(i => ValueAt(fromNs + i * StepNs)).ToArray();
+        int[] edges = samples.Take(4).Concat(samples.TakeLast(4)).ToArray();
+        if (edges.Max() - edges.Min() > 30) { return false; }
+        int baseline = edges.Sum() / edges.Length;
+        int[] values = samples.Select(value => value - baseline).ToArray();
+        int peak = Enumerable.Range(0, values.Length).MaxBy(i => Math.Abs(values[i]));
+        int amplitude = Math.Abs(values[peak]);
+        if (amplitude is < 50 or > 300) { return false; }
+        int sign = Math.Sign(values[peak]);
+        int threshold = Math.Max(20, amplitude / 5);
+        int first = Array.FindIndex(values, value => value * sign > threshold);
+        int last = Array.FindLastIndex(values, value => value * sign > threshold);
+        int durationMilliseconds = (last - first + 1) * 4;
+        return first >= 4 && last <= values.Length - 5 && durationMilliseconds is >= 32 and <= 120 &&
+            values.All(value => value * sign >= -30) &&
+            values.Skip(first).Take(last - first + 1).All(value => value * sign > threshold) &&
+            !values.Zip(values.Skip(1), (a, b) => Math.Abs(a - b)).Any(change => change > 40);
     }
 
     private static int Difference(Shape a, Shape b) => a.Values.Zip(b.Values, (x, y) => Math.Abs(x - y)).Sum() / a.Values.Length;

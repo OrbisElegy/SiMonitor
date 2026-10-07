@@ -167,6 +167,34 @@ internal static class EcgMonitoringAlarmSmokeChecks
         finally { window.Close(); }
     }
 
+    internal static void VerifyAberrantAtrialBeats()
+    {
+        var window = new DesignPreviewWindow();
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.AberrantPrematureAtrial,
+            MonitorDisplayConfiguration.Default(), true);
+        var view = new LiveMonitorView(new LiveMonitorTrace(session))
+        {
+            AdditionalNotices = sample => window.Settings.Alerts.Notices(sample, session.DetectedMonitoringEvents, session.DetectedRhythmEvents)
+        };
+        window.Show();
+        window.Pause();
+        try
+        {
+            bool atrialBeat = false;
+            for (int frame = 0; frame < 350; frame++)
+            {
+                session.Advance(200_000_000);
+                view.Refresh();
+                var reading = session.Measurements!.EcgMonitoring;
+                atrialBeat |= reading.LastBeat is { Label: EcgBeatLabel.SupraventricularPremature, QrsWidthMilliseconds: >= 100 };
+                Require(reading.PvcsLastMinute is null or 0 && !view.ActiveNotices.Any(n => n.Id is "ecg-pvc-rate" or "ecg-ron-t"),
+                    "aberrant atrial beats neither accumulate PVC counts nor reach the skin as ventricular notices");
+            }
+            Require(atrialBeat, "default live monitor receives wide supraventricular premature labels");
+        }
+        finally { window.Close(); }
+    }
+
     private static void Require(bool condition, string message)
     {
         if (!condition) { throw new InvalidOperationException("ECG monitoring UI: " + message); }

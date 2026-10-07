@@ -15,19 +15,31 @@ public sealed class EcgHeartRateMeasurement
     public const long RateWindowNs = 20_000_000_000;
     public const int MaximumRateIntervals = 8;
     private const long ExpiryNs = 5_000_000_000;
-    private State _state = new();
+    private State _state;
+    public EcgMonitoringSettings MonitoringSettings { get; }
     public Guid ChannelId { get; }
-    public EcgHeartRateMeasurement(Guid channelId)
+    public EcgHeartRateMeasurement(Guid channelId) : this(channelId, new EcgMonitoringSettings()) { }
+    public EcgHeartRateMeasurement(Guid channelId, EcgMonitoringSettings monitoringSettings)
     {
         if (channelId == Guid.Empty) { throw new ArgumentException("EcgMeasurement.EmptyChannel", nameof(channelId)); }
+        ArgumentNullException.ThrowIfNull(monitoringSettings);
+        monitoringSettings.Validate();
+        MonitoringSettings = monitoringSettings;
+        _state = new(monitoringSettings);
         ChannelId = channelId;
     }
     public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire)
         => Consume(wire, out _);
 
     public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents)
+        => Consume(wire, out rhythmEvents, out _);
+
+    public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire,
+        out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents,
+        EcgPacingEvidence? pacingEvidence = null)
     {
         rhythmEvents = [];
+        monitoringEvents = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         var plane = block.Planes.SingleOrDefault(p => p.ChannelId == ChannelId)
             ?? throw new ArgumentException("EcgMeasurement.ChannelMissing", nameof(wire));
@@ -36,6 +48,11 @@ public sealed class EcgHeartRateMeasurement
             (long)plane.Samples.Count * StepNs != block.DurationNs)
         { throw new ArgumentException("EcgMeasurement.UnsupportedSampling", nameof(wire)); }
         long end = checked(block.StartSimTimeNs + block.DurationNs);
+        long[]? pacingPulses = pacingEvidence?.PulseTimesNs?.ToArray();
+        if (pacingEvidence is not null && (pacingPulses is null || pacingPulses.Any(t => t < block.StartSimTimeNs || t >= end ||
+            (t - block.StartSimTimeNs) % StepNs != 0) || pacingPulses.Zip(pacingPulses.Skip(1), (a, b) => a >= b).Any(v => v)))
+        { throw new ArgumentException("EcgMeasurement.InvalidPacingEvidence", nameof(pacingEvidence)); }
+        int pulseIndex = 0;
         ulong nextIndex = checked(plane.FirstSampleIndex + (ulong)plane.Samples.Count);
         var identity = new Identity(block.SessionId, block.InstanceId, block.TimebaseEpoch, block.StreamEpoch, block.ConfigurationRevision);
         if (_state.Identity is { } old && old.Session == identity.Session && old.Instance == identity.Instance &&
@@ -50,13 +67,15 @@ public sealed class EcgHeartRateMeasurement
         if (sameClock && (block.StartSimTimeNs < _state.NextTime || block.BlockSequence <= _state.Sequence || plane.FirstSampleIndex < _state.NextIndex))
         { throw new ArgumentException("EcgMeasurement.OutOfOrder", nameof(wire)); }
         var next = same && block.StartSimTimeNs == _state.NextTime && plane.FirstSampleIndex == _state.NextIndex &&
-            _state.Sequence != ulong.MaxValue && block.BlockSequence == _state.Sequence + 1 ? Copy(_state) : new State();
+            _state.Sequence != ulong.MaxValue && block.BlockSequence == _state.Sequence + 1 ? Copy(_state) : new State(MonitoringSettings);
         List<DetectedEcgBeat> events = [];
         List<DetectedEcgRhythmEvent> transitions = [];
+        List<DetectedEcgMonitoringEvent> monitoring = [];
         if (next.Identity is null && _state.Identity is not null)
         {
             var interrupted = _state.Rhythm.Copy();
             interrupted.Interrupt(_state.NextTime, EcgRhythmInterruption.StreamDiscontinuity, transitions);
+            _state.Monitoring.Copy().Interrupt(_state.NextTime, EcgRhythmInterruption.StreamDiscontinuity, monitoring);
         }
         for (int i = 0; i < plane.Samples.Count; i++)
         {
@@ -69,6 +88,10 @@ public sealed class EcgHeartRateMeasurement
             long timeNs = block.StartSimTimeNs + i * StepNs;
             int before = events.Count;
             Sample(next, timeNs, value, usable, events);
+            bool pulse = pacingPulses is not null && pulseIndex < pacingPulses.Length && pacingPulses[pulseIndex] == timeNs;
+            if (pulse) { pulseIndex++; }
+            next.Monitoring.Sample(timeNs, value, usable && !next.Poor,
+                events.Count > before ? events[^1] : null, next.Start, next.LastActive, next.Active, pacingPulses is not null, pulse, monitoring);
             bool analyzable = usable && !next.Poor && !next.Uncountable &&
                 timeNs - (next.LastBeat ?? next.FirstSample!.Value) < ExpiryNs;
             next.Rhythm.Sample(timeNs, value, analyzable, transitions);
@@ -77,6 +100,7 @@ public sealed class EcgHeartRateMeasurement
         next.Identity = identity; next.NextTime = end; next.NextIndex = nextIndex; next.Sequence = block.BlockSequence;
         _state = next;
         rhythmEvents = transitions.AsReadOnly();
+        monitoringEvents = monitoring.AsReadOnly();
         return events.AsReadOnly();
     }
 
@@ -101,19 +125,35 @@ public sealed class EcgHeartRateMeasurement
 
     public EcgRhythmReading ReadRhythm(long asOfSampleTimeNs) => _state.Rhythm.Read(Read(asOfSampleTimeNs).Status);
 
-    public Checkpoint Capture() => new(ChannelId, Copy(_state));
+    public EcgMonitoringReading ReadMonitoring(long asOfSampleTimeNs) => _state.Monitoring.Read(Read(asOfSampleTimeNs).Status, asOfSampleTimeNs);
+
+    public IReadOnlyList<DetectedEcgMonitoringEvent> Relearn(out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents)
+    {
+        var next = Copy(_state);
+        List<DetectedEcgMonitoringEvent> monitoring = [];
+        List<DetectedEcgRhythmEvent> rhythms = [];
+        long timeNs = next.LastSample ?? 0;
+        next.Monitoring.Interrupt(timeNs, EcgRhythmInterruption.Relearning, monitoring);
+        next.Rhythm.Interrupt(timeNs, EcgRhythmInterruption.Relearning, rhythms);
+        _state = next;
+        rhythmEvents = rhythms.AsReadOnly();
+        return monitoring.AsReadOnly();
+    }
+
+    public Checkpoint Capture() => new(ChannelId, MonitoringSettings, Copy(_state));
     public static EcgHeartRateMeasurement Restore(Checkpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        return new(checkpoint.Channel) { _state = Copy(checkpoint.Value) };
+        return new(checkpoint.Channel, checkpoint.Settings) { _state = Copy(checkpoint.Value) };
     }
     public sealed class Checkpoint
     {
         internal Guid Channel { get; }
         internal State Value { get; }
-        internal Checkpoint(Guid channel, State value) { Channel = channel; Value = value; }
+        internal EcgMonitoringSettings Settings { get; }
+        internal Checkpoint(Guid channel, EcgMonitoringSettings settings, State value) { Channel = channel; Settings = settings; Value = value; }
     }
-    private static State Copy(State s) => s with { History = (int[])s.History.Clone(), Rhythm = s.Rhythm.Copy() };
+    private static State Copy(State s) => s with { History = (int[])s.History.Clone(), Rhythm = s.Rhythm.Copy(), Monitoring = s.Monitoring.Copy() };
 
     private static void Sample(State s, long time, int raw, bool usable, List<DetectedEcgBeat> events)
     {
@@ -178,11 +218,18 @@ public sealed class EcgHeartRateMeasurement
         // Compare candidate starts for T-like slope suppression: a changing
         // dominant lobe can move the peak within a wide QRS without moving the
         // next QRS onset. Peak spacing alone would discard that weaker beat.
-        if (interval < 200_000_000 || s.Start - s.LastQrsStartNs < 360_000_000 && (long)s.MaxSlope * 3 < (long)s.LastSlope * 2) { return; }
+        // A newly wide, high-amplitude complex after a learned narrow rhythm
+        // can be an early PVC. Do not discard it solely because its broad slope
+        // is slower than the preceding narrow QRS (needed for R-on-T evidence).
+        bool widePremature = s.Monitoring.HasNarrowTemplate && width >= 100_000_000 &&
+            s.Max - s.Min >= Math.Max(750, s.LastQrsAmplitude * 3 / 4) && s.MaxSlope >= 180;
+        if (interval < 200_000_000 || s.Start - s.LastQrsStartNs < 360_000_000 &&
+            (long)s.MaxSlope * 3 < (long)s.LastSlope * 2 && !widePremature) { return; }
         s.Peaks = interval <= ExpiryNs ? s.Peaks.Append(s.PeakTime).TakeLast(MaximumRateIntervals + 1).ToArray() : [s.PeakTime];
         s.LastBeat = s.PeakTime;
         s.LastSlope = s.MaxSlope;
         s.LastQrsStartNs = s.Start;
+        s.LastQrsAmplitude = s.Max - s.Min;
         if (s.Peaks.Length >= 2) { s.Uncountable = false; }
         events.Add(new(s.PeakTime, time));
     }
@@ -198,9 +245,10 @@ public sealed class EcgHeartRateMeasurement
         s.Peaks[^1] - s.Peaks[^2] <= 600_000_000 && s.Peaks[^2] - s.Peaks[^3] <= 600_000_000;
 
     internal sealed record Identity(Guid Session, Guid Instance, ulong Timebase, ulong Stream, ulong Revision);
-    internal sealed record State
+    internal sealed record State(EcgMonitoringSettings Settings)
     {
-        internal EcgRhythmAnalysis Rhythm = new();
+        internal EcgRhythmAnalysis Rhythm = new(Settings.RhythmEndDelayMilliseconds);
+        internal EcgMonitoringAnalysis Monitoring = new(Settings);
         internal Identity? Identity;
         internal long NextTime, Start, LastActive, PeakTime, LastQrsStartNs;
         internal ulong NextIndex, Sequence;
@@ -208,7 +256,7 @@ public sealed class EcgHeartRateMeasurement
         internal long[] Peaks = [];
         internal int[] History = new int[250];
         internal int Cursor, Count, FilterCount, Previous1, Previous2, GoodCount;
-        internal int Baseline, Min, Max, MaxSlope, LastSlope, PeakDistance;
+        internal int Baseline, Min, Max, MaxSlope, LastSlope, PeakDistance, LastQrsAmplitude;
         internal bool Poor, Uncountable, Active;
     }
 }

@@ -9,7 +9,8 @@ public enum EcgRhythmInterruption
     SignalUnavailable,
     StreamDiscontinuity,
     InsufficientAtrialEvidence,
-    InsufficientRrEvidence
+    InsufficientRrEvidence,
+    Relearning
 }
 
 // EvidenceFromNs is the beginning of the analysis window, not a reconstructed
@@ -24,7 +25,7 @@ public sealed record EcgRhythmReading(WaveformMeasurementStatus Status, bool? Ir
 // Conservative single-lead teaching screen. It recognizes irregular ventricular
 // activation with non-coherent atrial activity, not all forms of AF. In particular
 // absent P evidence alone is insufficient. No source labels enter this analyzer.
-internal sealed class EcgRhythmAnalysis
+internal sealed class EcgRhythmAnalysis(int endDelayMilliseconds = 5000)
 {
     internal const long WindowNs = 30_000_000_000;
     private const long PersistenceNs = 5_000_000_000;
@@ -41,7 +42,7 @@ internal sealed class EcgRhythmAnalysis
 
     internal EcgRhythmAnalysis Copy()
     {
-        var copy = new EcgRhythmAnalysis
+        var copy = new EcgRhythmAnalysis(endDelayMilliseconds)
         {
             _cursor = _cursor,
             _count = _count,
@@ -187,7 +188,7 @@ internal sealed class EcgRhythmAnalysis
         return low;
     }
 
-    private static void UpdateEpisode(Episode episode, EcgRhythmEventKind kind, bool positive,
+    private void UpdateEpisode(Episode episode, EcgRhythmEventKind kind, bool positive,
         long evidenceFromNs, long confirmedAtNs, List<DetectedEcgRhythmEvent> events)
     {
         episode.UnknownSinceNs = null;
@@ -201,7 +202,7 @@ internal sealed class EcgRhythmAnalysis
             episode.PendingSinceNs = confirmedAtNs;
             episode.EvidenceFromNs = evidenceFromNs;
         }
-        if (confirmedAtNs - episode.PendingSinceNs < PersistenceNs) { return; }
+        if (confirmedAtNs - episode.PendingSinceNs < (positive ? PersistenceNs : endDelayMilliseconds * 1_000_000L)) { return; }
         episode.Active = positive;
         episode.PendingSinceNs = null;
         events.Add(new(kind, positive ? EcgRhythmTransition.Started : EcgRhythmTransition.Ended,

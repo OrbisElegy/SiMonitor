@@ -403,27 +403,122 @@ public sealed class CapnographyMeasurement
 源码：[EcgHeartRateMeasurement.cs](../../../src/Monitor.Application/Measurements/EcgHeartRateMeasurement.cs) · 命名空间：`Monitor.Application.Measurements`
 
 ```csharp
-public sealed record DetectedEcgBeat(long PeakTimeNs, long ConfirmedAtNs)
-{
-}
-public sealed record EcgHeartRateReading(WaveformMeasurementStatus Status, int? MilliBeatsPerMinute, long? LastBeatTimeNs)
-{
-}
+public sealed record DetectedEcgBeat(long PeakTimeNs, long ConfirmedAtNs);
+public sealed record EcgHeartRateReading(WaveformMeasurementStatus Status, int? MilliBeatsPerMinute, long? LastBeatTimeNs);
 public sealed class EcgHeartRateMeasurement
 {
     public const long RateWindowNs = 20_000_000_000;
     public const int MaximumRateIntervals = 8;
+    public EcgMonitoringSettings MonitoringSettings { get; }
     public Guid ChannelId { get; }
+
     public EcgHeartRateMeasurement(Guid channelId);
+    public EcgHeartRateMeasurement(Guid channelId, EcgMonitoringSettings monitoringSettings);
     public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire);
     public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents);
+    public IReadOnlyList<DetectedEcgBeat> Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null);
     public EcgHeartRateReading Read(long asOfSampleTimeNs);
     public EcgRhythmReading ReadRhythm(long asOfSampleTimeNs);
+    public EcgMonitoringReading ReadMonitoring(long asOfSampleTimeNs);
+    public IReadOnlyList<DetectedEcgMonitoringEvent> Relearn(out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents);
     public Checkpoint Capture();
     public static EcgHeartRateMeasurement Restore(Checkpoint checkpoint);
     public sealed class Checkpoint
     {
     }
+}
+```
+
+## Measurements/EcgMonitoring.cs
+
+源码：[EcgMonitoring.cs](../../../src/Monitor.Application/Measurements/EcgMonitoring.cs) · 命名空间：`Monitor.Application.Measurements`
+
+```csharp
+public enum EcgBeatLabel
+{
+    Learning,
+    Normal,
+    SupraventricularPremature,
+    Ventricular,
+    Paced,
+    Unknown
+}
+public enum EcgMonitoringTransition
+{
+    Started,
+    Ended,
+    Interrupted,
+    Occurred
+}
+public enum EcgQtCorrectionMethod
+{
+    Bazett,
+    Fridericia
+}
+[Flags]
+public enum EcgMonitoringConditions : ulong
+{
+    None = 0,
+    Asystole = 1UL << 0,
+    SuspectedVentricularFibrillation = 1UL << 1,
+    ExtremeBradycardia = 1UL << 2,
+    ExtremeTachycardia = 1UL << 3,
+    HeartRateLow = 1UL << 4,
+    HeartRateHigh = 1UL << 5,
+    Pause = 1UL << 6,
+    MissedBeat = 1UL << 7,
+    VentricularTachycardia = 1UL << 8,
+    NonSustainedVentricularTachycardia = 1UL << 9,
+    VentricularRhythm = 1UL << 10,
+    RunPvcs = 1UL << 11,
+    PairPvcs = 1UL << 12,
+    VentricularBigeminy = 1UL << 13,
+    VentricularTrigeminy = 1UL << 14,
+    MultiformPvcs = 1UL << 15,
+    PvcsPerMinuteHigh = 1UL << 16,
+    RonTPvc = 1UL << 17,
+    SupraventricularTachycardia = 1UL << 18,
+    StHigh = 1UL << 19,
+    StLow = 1UL << 20,
+    QtcHigh = 1UL << 21,
+    DeltaQtcHigh = 1UL << 22,
+    PacerNotCaptured = 1UL << 23,
+    PacerNotPacing = 1UL << 24
+}
+public sealed record EcgPacingEvidence(IReadOnlyList<long> PulseTimesNs);
+public sealed record EcgBeatMorphology(EcgBeatLabel Label, int QrsWidthMilliseconds, int TemplateDifferencePermille);
+public sealed record DetectedEcgMonitoringEvent(EcgMonitoringConditions Condition, EcgMonitoringTransition Transition, long EvidenceFromNs, long ConfirmedAtNs, EcgRhythmInterruption Interruption = EcgRhythmInterruption.None);
+public sealed record EcgRepolarizationReading(WaveformMeasurementStatus StStatus, int? StMicrovolts, WaveformMeasurementStatus QtStatus, int? QtMilliseconds, int? QtcMilliseconds, int? DeltaQtcMilliseconds);
+public sealed record EcgMonitoringReading(WaveformMeasurementStatus Status, bool Learning, EcgMonitoringConditions ActiveConditions, int? PvcsLastMinute, EcgBeatMorphology? LastBeat, EcgRepolarizationReading Repolarization)
+{
+    public bool PacingEvidenceAvailable { get; init; }
+    public static EcgMonitoringReading NoData { get; }
+}
+public sealed record EcgMonitoringSettings
+{
+    public bool PacedMode { get; init; }
+    public int AsystoleMilliseconds { get; init; }
+    public int PauseMilliseconds { get; init; }
+    public int LowHeartRate { get; init; }
+    public int HighHeartRate { get; init; }
+    public int ExtremeLowHeartRate { get; init; }
+    public int ExtremeHighHeartRate { get; init; }
+    public int VtachHeartRate { get; init; }
+    public int VtachRunBeats { get; init; }
+    public int VentricularRhythmRunBeats { get; init; }
+    public int SvtHeartRate { get; init; }
+    public int SvtRunBeats { get; init; }
+    public int PvcsPerMinuteLimit { get; init; }
+    public int StLowMicrovolts { get; init; }
+    public int StHighMicrovolts { get; init; }
+    public int StOffsetMilliseconds { get; init; }
+    public int QtcHighMilliseconds { get; init; }
+    public int DeltaQtcHighMilliseconds { get; init; }
+    public int? QtcBaselineMilliseconds { get; init; }
+    public EcgQtCorrectionMethod QtCorrection { get; init; }
+    public int RhythmEndDelayMilliseconds { get; init; }
+
+    public void Validate();
 }
 ```
 
@@ -449,17 +544,12 @@ public enum EcgRhythmInterruption
     SignalUnavailable,
     StreamDiscontinuity,
     InsufficientAtrialEvidence,
-    InsufficientRrEvidence
+    InsufficientRrEvidence,
+    Relearning
 }
-public sealed record DetectedEcgRhythmEvent(EcgRhythmEventKind Kind, EcgRhythmTransition Transition, long EvidenceFromNs, long ConfirmedAtNs, EcgRhythmInterruption Interruption = EcgRhythmInterruption.None)
-{
-}
-public sealed record EcgRhythmEvidence(int RrIntervalCount, int IrregularChangesPermille, int RrBinCount, int AtrialWindowCount, int AtrialCoherencePermille, int AtrialRmsMicrovolts)
-{
-}
-public sealed record EcgRhythmReading(WaveformMeasurementStatus Status, bool? IrregularRhythm, bool? SuspectedAtrialFibrillation, EcgRhythmEvidence? Evidence)
-{
-}
+public sealed record DetectedEcgRhythmEvent(EcgRhythmEventKind Kind, EcgRhythmTransition Transition, long EvidenceFromNs, long ConfirmedAtNs, EcgRhythmInterruption Interruption = EcgRhythmInterruption.None);
+public sealed record EcgRhythmEvidence(int RrIntervalCount, int IrregularChangesPermille, int RrBinCount, int AtrialWindowCount, int AtrialCoherencePermille, int AtrialRmsMicrovolts);
+public sealed record EcgRhythmReading(WaveformMeasurementStatus Status, bool? IrregularRhythm, bool? SuspectedAtrialFibrillation, EcgRhythmEvidence? Evidence);
 ```
 
 ## Measurements/ImpedanceRespirationMeasurement.cs
@@ -496,16 +586,19 @@ public sealed class ImpedanceRespirationMeasurement
 ```csharp
 public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateReading HeartRate, ImpedanceRespirationReading ImpedanceRespiration, PlethPulseRateReading PulseRate, CapnographyResult Capnography, OpticalSaturationReading SpO2, MeanPressureReading AbpMean, MeanPressureReading PaMean, MeanPressureReading CvpMean)
 {
+    public EcgMonitoringReading EcgMonitoring { get; init; }
     public EcgRhythmReading EcgRhythm { get; init; }
 }
 public sealed class LiveWaveformMeasurements
 {
     public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration);
+    public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration, EcgMonitoringSettings ecgSettings);
     public static LiveWaveformMeasurements CreateIllustration();
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents);
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null);
     public LiveMeasurementSnapshot Read(long asOfSampleTimeNs);
     public Checkpoint Capture();
     public static LiveWaveformMeasurements Restore(Checkpoint checkpoint);
@@ -1341,6 +1434,7 @@ public sealed class LocalMonitorPreviewSession
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; }
+    public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; }
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; }
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; }
     public IReadOnlyList<WaveformEnvelope> Blocks { get; }
@@ -1348,6 +1442,7 @@ public sealed class LocalMonitorPreviewSession
     public MonitorSweepRanges Ranges { get; private set; }
     public RealtimeOxygenationSnapshot? Oxygenation { get; }
     public OxygenReservoirParameters? OxygenationParameters { get; private set; }
+
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();

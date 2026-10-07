@@ -8,6 +8,8 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 
 仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。
 
+ECG 检测能力与皮肤集成边界见 [ECG 增强监测接口](docs/interfaces/alarms/ecg-monitoring.md)。
+
 技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
 

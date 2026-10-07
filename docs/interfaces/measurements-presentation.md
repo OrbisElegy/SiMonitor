@@ -124,6 +124,12 @@ static LiveWaveformMeasurements Restore(LiveWaveformMeasurements.Checkpoint chec
 代替 PR。相关模型说明见 [氧合报告](oxygenation/oxygenation-reporting.md)、
 [氧合传输](oxygenation/oxygenation-transport.md)。
 
+### ECG 增强监测
+
+`ReadMonitoring`、`LiveMeasurementSnapshot.EcgMonitoring` 和独立监测事件批次提供
+逐搏分类、停搏／间歇、室性／室上性事件、可信起搏证据及单导联 ST/QT 趋势。
+配置、质量门槛、事件语义与能力限制见 [ECG 增强监测接口](alarms/ecg-monitoring.md)。
+
 ### ECG 节律证据与事件
 
 [EcgRhythmAnalysis](../../src/Monitor.Application/Measurements/EcgRhythmAnalysis.cs) 的分析器是

@@ -14,6 +14,8 @@ See the [documentation index](../README.md) for the organized technical referenc
 
 See the [interface reference](../interfaces/README.md) (Chinese) for current module contracts, data formats, native audio ABI, command-line entry points, and complete C# public declarations.
 
+ECG event integration and capability limits: [enhanced monitoring interface](../interfaces/alarms/ecg-monitoring.md) and [reference notes](../research/physiology/ecg-monitoring.md).
+
 ## Screenshots
 
 **Main monitor view**

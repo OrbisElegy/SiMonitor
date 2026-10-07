@@ -415,7 +415,9 @@ internal sealed class DesignPreviewWindow : Window
         var editor = Settings;
         if (background)
         {
-            editor.IsEnabled = false;
+            editor.Apply.IsEnabled = false;
+            editor.Restart.IsEnabled = false;
+            editor.ResetAll.IsEnabled = false;
             SetStatus("settings.preparing");
         }
         try
@@ -424,6 +426,7 @@ internal sealed class DesignPreviewWindow : Window
             var alarms = _preferences is null ? null : Settings.Alerts.CapturePreferences();
             var sound = _preferences is null ? null : Settings.Sound.CapturePreferences(Settings.Alerts);
             int paperLayout = Settings.PaperLayout.SelectedIndex;
+            bool measurementMillimeters = Settings.MeasurementUnits.SelectedIndex == 1;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
             var build = CaptureSourceBuilder();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
@@ -445,7 +448,8 @@ internal sealed class DesignPreviewWindow : Window
                 _session = next;
                 _pendingPresentation = null;
                 _ecg = ecg;
-                Settings.MarkParametersApplied(ecgConfig, physiology);
+                Settings.MarkParametersApplied(ecgConfig, physiology, selection.EcgSelection,
+                    selection.RespirationSelection, selection.EjectionSelection);
                 Settings.Alerts.Reset();
                 Settings.Sound.ResetBeatSource();
                 Settings.Sound.ResetPitchState();
@@ -465,13 +469,14 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             MonitorView.Refresh();
-            SelectPage(Page);
+            if (Page is 0 or 1 || (Page == 2 && !ReferenceEquals(_workspace.Content, Settings)))
+            { SelectPage(Page); }
             if (restart) { SetStatus("settings.restarted"); }
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
             if (_preferences is not null)
             {
-                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, Settings.MeasurementUnits.SelectedIndex == 1));
+                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters));
                 PreferenceNotice.IsVisible = !saved;
                 Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
                 if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
@@ -541,7 +546,9 @@ internal sealed class DesignPreviewWindow : Window
         finally
         {
             _applying = false;
-            editor.IsEnabled = true;
+            editor.Apply.IsEnabled = true;
+            editor.Restart.IsEnabled = true;
+            editor.ResetAll.IsEnabled = true;
         }
     }
     private IEnumerable<MonitorNotice> CurrentNotices(Monitor.Application.Measurements.LiveMeasurementSnapshot snapshot)

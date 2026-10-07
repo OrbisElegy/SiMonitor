@@ -26,6 +26,8 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgAcquiredPresetsProduceVentricularEvidence), EcgAcquiredPresetsProduceVentricularEvidence),
         new(nameof(EcgPacingRequiresAcquiredPulseEvidence), EcgPacingRequiresAcquiredPulseEvidence),
         new(nameof(EcgRonTWaitsForItsCompensatoryPause), EcgRonTWaitsForItsCompensatoryPause),
+        new(nameof(EcgRonTRequiresUnfinishedTAndConfirmation), EcgRonTRequiresUnfinishedTAndConfirmation),
+        new(nameof(EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs), EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs),
         new(nameof(EcgRelearningAndPvcWindowExpireEvidence), EcgRelearningAndPvcWindowExpireEvidence),
         new(nameof(EcgMonitoringSettingsRejectInvalidCombinations), EcgMonitoringSettingsRejectInvalidCombinations),
         new(nameof(EcgRepolarizationRecoversAfterAbnormalStartup), EcgRepolarizationRecoversAfterAbnormalStartup),
@@ -312,6 +314,57 @@ internal static class EcgMonitoringSpecifications
             "short coupling alone cannot confirm R-on-T until the compensatory interval is observed");
         var noPause = Run(samples.Take(5400).ToArray());
         Check.That(noPause.Events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc), "unobserved following beat cannot prove the compensatory pause");
+    }
+
+    private static void EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs()
+    {
+        foreach (var pattern in new[] { AvConductionPattern.RonTLongQtPvcIllustration, AvConductionPattern.ShortCoupledRonTPvcIllustration })
+        {
+            short[] samples = Acquire(PhysiologyIllustrationConfiguration.PrematureVentricular with { ConductionPattern = pattern }, 40);
+            var result = Run(samples);
+            Check.That(result.Events.Any(e => e.Condition == EcgMonitoringConditions.RonTPvc), "actual acquired R-on-T preset is detected: " + pattern);
+            var restored = Run(samples, 37, true);
+            Check.That(result.Events.SequenceEqual(restored.Events) && result.Reading == restored.Reading,
+                "R-on-T evidence survives packets and checkpoints: " + pattern);
+            var inverted = Run(samples.Select(value => (short)-value).ToArray());
+            Check.That(result.Events.SequenceEqual(inverted.Events), "R-on-T evidence is independent of lead polarity");
+        }
+        var ordinary = Run(Acquire(PhysiologyIllustrationConfiguration.PrematureVentricular, 40));
+        Check.That(ordinary.Reading.PvcsLastMinute > 0 && ordinary.Events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc),
+            "identical PVC schedule without the preceding prolonged T must not produce R-on-T");
+    }
+
+    private static void EcgRonTRequiresUnfinishedTAndConfirmation()
+    {
+        short[] Samples(int tEndMilliseconds, bool plateau = false)
+        {
+            short[] samples = Normal(21, tEndMilliseconds: tEndMilliseconds).Concat(new short[500]).ToArray();
+            if (plateau) { Array.Fill(samples, (short)200, 5084, 100); }
+            Qrs(samples, 5200, 20);
+            Qrs(samples, 5575, 8);
+            return samples;
+        }
+        short[] overlap = Samples(640);
+        var result = Run(overlap);
+        var occurrence = result.Events.Single(e => e.Condition == EcgMonitoringConditions.RonTPvc);
+        Check.That(occurrence.ConfirmedAtNs > 5575 * StepNs, "longer coupling retains compensatory-pause confirmation");
+        Check.That(Run(overlap.Take(5400).ToArray()).Events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc),
+            "unfinished T alone does not announce before confirmation");
+        foreach (short[] control in new[] { Samples(0), Samples(440), Samples(0, true) })
+        {
+            Check.That(Run(control).Events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc),
+                "absent T, T projected to end before R, and a flat ST plateau are not overlap evidence");
+        }
+        // Interrupt between the preceding normal beat and the ectopic complex.
+        var interrupted = Run(overlap.Take(5150).ToArray());
+        interrupted.Detector.Consume(Wire(overlap.Skip(5150).Take(1).ToArray(), 5150, interrupted.Sequence++, true), out _, out _);
+        List<DetectedEcgMonitoringEvent> events = [];
+        for (int start = 5151; start < overlap.Length; start += 37)
+        {
+            interrupted.Detector.Consume(Wire(overlap.Skip(start).Take(37).ToArray(), start, interrupted.Sequence++), out _, out var batch);
+            events.AddRange(batch);
+        }
+        Check.That(events.All(e => e.Condition != EcgMonitoringConditions.RonTPvc), "quality interruption discards the preceding T and pending R-on-T evidence");
     }
 
     private static void EcgRelearningAndPvcWindowExpireEvidence()

@@ -140,6 +140,33 @@ internal static class EcgMonitoringAlarmSmokeChecks
         finally { host.Close(); }
     }
 
+    internal static void VerifyLongQtRonT()
+    {
+        var window = new DesignPreviewWindow();
+        var alerts = window.Settings.Alerts;
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.PrematureVentricular with
+        { ConductionPattern = AvConductionPattern.RonTLongQtPvcIllustration }, MonitorDisplayConfiguration.Default(), true);
+        var view = new LiveMonitorView(new LiveMonitorTrace(session))
+        {
+            AdditionalNotices = sample => alerts.Notices(sample, session.DetectedMonitoringEvents, session.DetectedRhythmEvents)
+        };
+        window.Show();
+        try
+        {
+            bool announced = false;
+            for (int frame = 0; frame < 2400; frame++)
+            {
+                session.Advance(16_666_667);
+                view.Refresh();
+                if (!view.ActiveNotices.Any(n => n.Id == "ecg-ron-t")) { continue; }
+                announced = true;
+                Require(!view.ActiveNotices.Any(n => n.Id == "ecg-pvc-rate"), "R-on-T suppresses the lower PVC-frequency notice");
+            }
+            Require(announced, "acquired long-QT R-on-T preset reaches the default skin at ordinary frame cadence");
+        }
+        finally { window.Close(); }
+    }
+
     private static void Require(bool condition, string message)
     {
         if (!condition) { throw new InvalidOperationException("ECG monitoring UI: " + message); }

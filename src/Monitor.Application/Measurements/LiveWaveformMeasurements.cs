@@ -9,6 +9,7 @@ public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateRead
     CapnographyResult Capnography, OpticalSaturationReading SpO2, MeanPressureReading AbpMean,
     MeanPressureReading PaMean, MeanPressureReading CvpMean)
 {
+    public EcgMonitoringReading EcgMonitoring { get; init; } = EcgMonitoringReading.NoData;
     public EcgRhythmReading EcgRhythm { get; init; } = new(WaveformMeasurementStatus.NoData, null, null, null);
 }
 
@@ -16,7 +17,7 @@ public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateRead
 // Presentation/review never feeds this class. No generator target enters it.
 public sealed class LiveWaveformMeasurements
 {
-    private EcgHeartRateMeasurement _ecg = new(PhysiologyIllustrationSource.ChannelId(0));
+    private EcgHeartRateMeasurement _ecg;
     private ImpedanceRespirationMeasurement _resp = new(PhysiologyIllustrationSource.ChannelId(1));
     private PlethPulseRateMeasurement _pleth = new(PhysiologyIllustrationSource.ChannelId(2));
     private CapnographyMeasurement _co2 = new(PhysiologyIllustrationSource.ChannelId(4));
@@ -27,9 +28,11 @@ public sealed class LiveWaveformMeasurements
     private readonly OpticalSaturationMeasurement _calibration;
     private long? _lastSampleTime;
 
-    public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration)
+    public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration) : this(calibration, new EcgMonitoringSettings()) { }
+    public LiveWaveformMeasurements(OpticalSaturationMeasurement calibration, EcgMonitoringSettings ecgSettings)
     {
         ArgumentNullException.ThrowIfNull(calibration);
+        _ecg = new(PhysiologyIllustrationSource.ChannelId(0), ecgSettings);
         _calibration = calibration;
         _optical = NewOptical();
     }
@@ -46,7 +49,12 @@ public sealed class LiveWaveformMeasurements
         => Consume(wire, out detectedBeats, out detectedPulses, out _);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats,
         out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents)
+        => Consume(wire, out detectedBeats, out detectedPulses, out rhythmEvents, out _);
+    public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats,
+        out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents,
+        out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null)
     {
+        monitoringEvents = [];
         detectedBeats = [];
         detectedPulses = [];
         rhythmEvents = [];
@@ -70,7 +78,7 @@ public sealed class LiveWaveformMeasurements
         var pa = MeanPressureMeasurement.Restore(_pa.Capture());
         var cvp = MeanPressureMeasurement.Restore(_cvp.Capture());
         var optical = red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
-        var beats = ecg.Consume(wire, out var transitions);
+        var beats = ecg.Consume(wire, out var transitions, out var monitoring, pacingEvidence);
         resp.Consume(wire);
         var pulses = pleth.Consume(wire);
         co2.Consume(wire);
@@ -80,7 +88,7 @@ public sealed class LiveWaveformMeasurements
         cvp.Consume(wire);
         var snapshot = new LiveMeasurementSnapshot(sampleTime, ecg.Read(sampleTime), resp.Read(sampleTime),
             pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime))
-        { EcgRhythm = ecg.ReadRhythm(sampleTime) };
+        { EcgRhythm = ecg.ReadRhythm(sampleTime), EcgMonitoring = ecg.ReadMonitoring(sampleTime) };
         _ecg = ecg;
         _resp = resp;
         _pleth = pleth;
@@ -93,6 +101,7 @@ public sealed class LiveWaveformMeasurements
         detectedBeats = beats;
         detectedPulses = pulses;
         rhythmEvents = transitions;
+        monitoringEvents = monitoring;
         return snapshot;
     }
 
@@ -103,7 +112,7 @@ public sealed class LiveWaveformMeasurements
         return new(asOfSampleTimeNs, _ecg.Read(asOfSampleTimeNs), _resp.Read(asOfSampleTimeNs),
             _pleth.Read(asOfSampleTimeNs), _co2.Read(asOfSampleTimeNs), _optical.Read(asOfSampleTimeNs),
             _abp.Read(asOfSampleTimeNs), _pa.Read(asOfSampleTimeNs), _cvp.Read(asOfSampleTimeNs))
-        { EcgRhythm = _ecg.ReadRhythm(asOfSampleTimeNs) };
+        { EcgRhythm = _ecg.ReadRhythm(asOfSampleTimeNs), EcgMonitoring = _ecg.ReadMonitoring(asOfSampleTimeNs) };
     }
 
     public Checkpoint Capture() => new(_calibration, _ecg.Capture(), _resp.Capture(), _pleth.Capture(), _co2.Capture(), _optical.Capture(),

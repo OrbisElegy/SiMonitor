@@ -62,6 +62,7 @@ internal static class Program
             .. EcgHeartRateMeasurementSpecifications.All,
             .. EcgDetectionRegressionSpecifications.All,
             .. EcgRhythmSpecifications.All,
+            .. EcgMonitoringSpecifications.All,
             .. PlethMeasurementSpecifications.All,
             .. PulseOximeterChainSpecifications.All,
             .. OxygenationTransportSpecifications.All,

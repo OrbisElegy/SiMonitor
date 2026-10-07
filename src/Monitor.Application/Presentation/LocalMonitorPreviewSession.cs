@@ -37,6 +37,7 @@ public sealed class LocalMonitorPreviewSession
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
+    public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; } = [];
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; } = [];
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
@@ -196,6 +197,8 @@ public sealed class LocalMonitorPreviewSession
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
         List<DetectedEcgBeat> beats = [];
+        List<DetectedEcgMonitoringEvent> monitoringEvents = [];
+        DetectedMonitoringEvents = [];
         List<DetectedEcgRhythmEvent> rhythmEvents = [];
         DetectedRhythmEvents = [];
         List<DetectedPlethPulse> pulses = [];
@@ -250,7 +253,8 @@ public sealed class LocalMonitorPreviewSession
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
                         }));
                     }
-                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses, out var detectedRhythmEvents);
+                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses, out var detectedRhythmEvents, out var detectedMonitoringEvents);
+                    monitoringEvents.AddRange(detectedMonitoringEvents);
                     rhythmEvents.AddRange(detectedRhythmEvents);
                     _measurementFrontier = measured.SampleTimeNs;
                     if (measured.HeartRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp)
@@ -272,6 +276,7 @@ public sealed class LocalMonitorPreviewSession
             deltaNs -= chunk;
         }
         DetectedRhythmEvents = rhythmEvents.AsReadOnly();
+        DetectedMonitoringEvents = monitoringEvents.AsReadOnly();
         DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
     }

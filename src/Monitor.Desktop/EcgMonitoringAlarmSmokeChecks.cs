@@ -116,6 +116,30 @@ internal static class EcgMonitoringAlarmSmokeChecks
         finally { window.Close(); }
     }
 
+    internal static void VerifyRepolarizationRecovery()
+    {
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.VtPreset, MonitorDisplayConfiguration.Default(), true);
+        var view = new LiveMonitorView(new LiveMonitorTrace(session));
+        var host = new Window { Content = view, Width = 1180, Height = 800 };
+        host.Show();
+        try
+        {
+            void AdvanceTo(long targetNs)
+            {
+                while (session.SimulationTimeNs < targetNs) { session.Advance(200_000_000); view.Refresh(); }
+            }
+            AdvanceTo(30_000_000_000);
+            Require(view.NumericBlocks[1].Text!.Contains("-?-", StringComparison.Ordinal), "abnormal startup exposes unavailable repolarization");
+            session.ScheduleSource(new(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true), 0);
+            AdvanceTo(75_000_000_000);
+            Require(session.Measurements!.EcgMonitoring is
+            { LastBeat.Label: EcgBeatLabel.Normal, Repolarization.StStatus: WaveformMeasurementStatus.Valid, Repolarization.QtStatus: WaveformMeasurementStatus.Valid } &&
+                !view.NumericBlocks[1].Text!.Contains("-?-", StringComparison.Ordinal) && !view.NumericBlocks[1].Text!.Contains("---", StringComparison.Ordinal),
+                "continuing the same live monitor with sinus rhythm restores actual ST/QT numbers without restart");
+        }
+        finally { host.Close(); }
+    }
+
     private static void Require(bool condition, string message)
     {
         if (!condition) { throw new InvalidOperationException("ECG monitoring UI: " + message); }

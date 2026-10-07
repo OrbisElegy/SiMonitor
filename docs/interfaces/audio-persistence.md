@@ -3,7 +3,7 @@
 [接口总览](README.md) · 公开声明：[Infrastructure](api/infrastructure.md)。
 
 本文记录 `Monitor.Infrastructure.Audio`、`Preferences` 和 `native/sim_audio_native` 的当前契约。
-音频是显式启用的本地输出/试听链；身份 SQLite 与加密备份见
+监护音频是随桌面窗口启动的本地输出链，试听由用户触发；身份 SQLite 与加密备份见
 [权威、身份与恢复接口](authority-identity-recovery.md)。公开声明之外的桌面 UI 行为以调用方为准。
 
 ## 时间线与线程所有权
@@ -159,7 +159,7 @@ Status / PeriodSnapshot 在无 device 时为 null；Open 后的诊断字段见�
 `StreamPath` 依次为 None、MixFormat、ShortEnginePeriod、WindowsConversion；`BufferFrames`、`PeriodFrames`、
 `QueueTargetFrames` 以 48 kHz frame 计，无流时为 null。staged PCM 先 drain，新 PCM 只补到目标；运行中的流
 padding 为 0 时仍可补充 PCM，不把系统刚取走最后一包数据误报成欠载。WASAPI 的 padding 查询不能确认实际缺帧，当前适配器不提供确切欠载计数。默认设备切换、设备移除或停用、流失效时退役，
-不自动重连。Start 为 owner 线程申请 MMCSS "Pro Audio"，Stop 撤销；Dispose 会先关闭仍打开的流而不抛异常。
+适配器不自行重连，由监护播放 owner 关闭旧流并自动打开新流。Start 为 owner 线程申请 MMCSS "Pro Audio"，Stop 撤销；Dispose 会先关闭仍打开的流而不抛异常。
 该实现尚未在 Windows 实机上验证延迟与欠载余量。
 `AlsaAudioOutput(int queueTargetMilliseconds=20)` 是 Linux 的托管输出：通过系统 `libasound.so.2` 打开 48 kHz 单声道 float
 流，PCM 名称默认 `default`（也经由 PipeWire、PulseAudio 的 ALSA 插件），缺少库、设备或格式时 Open 返回 null。
@@ -175,21 +175,35 @@ NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequenc
 `Nominal48kElapsedFrames` 只有 Result=0、HResult=0、frequency 非零且转换不溢出时才非空，
 按 `position * 48000 / frequency` 向下取整。它只是名义设备累计时间，不能直接当 renderer frontier。
 
+`AudioOutputDevices.Enumerate()` 在 Windows 枚举活动播放端点，返回 `AudioOutputDeviceInfo(Id, Name)`；
+其他平台返回空列表。名称取端点友好名称，ID 原样传给音频后端。桌面展开设备下拉框时刷新列表，
+已选择但不可用的设备保留在列表中；“系统默认”独立于具体设备 ID。
+Windows 枚举与属性读取遵循 [Microsoft Core Audio 设备属性接口](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-properties)。
+
 ## 本地试听与报警播放入口
 
 源码：[MonitorAlarmPlayback](../../src/Monitor.Infrastructure/Audio/MonitorAlarmPlayback.cs)。
 
 `SoundPreviewPlayback(Func<IPumpedAudioOutput>).PlayAsync(int volumePercent, CancellationToken)`
-在专用 owner 线程播放三段设置试听、运行约 2.4 s；volume 0–100，并发调用抛 AlreadyPlaying。
+在专用 owner 线程播放三段设置试听、运行约 2.4 s；
+SetOutput(string? deviceId, int volumePercent, bool muted) 设置所选设备和实时主增益；桌面切换设备时取消当前试听。volume 0–100，并发调用抛 AlreadyPlaying。
 `MonitorAlarmPlayback(Func<IPumpedAudioOutput>)` 提供
+SetOutputDevice(string? deviceId)、SetVolume(int volumePercent, bool muted)、
 SetHeartbeatEnabled(bool)、SubmitHeartbeat(int volumePercent, int pitchPercent=97)、
 SetRequest(MonitorAlarmSoundRequest?)、RunAsync(CancellationToken)。
 请求包含 Level、VolumePercent、MonitorSoundTiming；null 清除报警音请求。
 新增 NotificationSequence：0 沿用持续播放，正值指定 owner 内的一次声音组身份。
-RunAsync 仅允许一个 worker；SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
+RunAsync 仅允许一个 worker；设备失败后在同一 owner 线程关闭旧流，每 250 ms 重试，取消可立即结束等待。
+null 设备 ID 表示系统默认，每次重开重新解析；具体 ID 保持固定，不回退默认设备。关闭失败保留所有权并终止重连。
+重连保留已退役通知序号，恢复当前持续请求或未完成的当前组，丢弃断开期间的心搏 mailbox，不排队补播。
+Reconnecting 表示正在等待恢复，OutputActive 仅在成功 Pump 后为真。
+SetVolume 设置 0–100 主音量与静音；AudioRenderSession.Gain（0–1）在 PCM 离开托管缓冲时缩放，
+同时影响已渲染的报警、心搏和试听，硬件队列中的少量 PCM 仍按原音量播放。桌面请求使用满幅报警与相对心搏音量，避免重复缩放。
+SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
 两个入口的专用 owner 线程以 Highest 优先级运行，每次 Pump 后调用 `WaitForQueueSpace(10)` 等待下一次 consumer
 运行，而不是固定 sleep；请求和心搏 cue 最迟在下一次唤醒时进入排程。
 OutputActive 只表示曾成功 pumping 且 worker 尚活动，不保证物理出声或已达到延迟目标。
+监护入口在暂时失败时保持运行，直到取消或关闭失败；试听入口不自动重播。
 返回 SoundPreviewResult：Completed（试听正常结束）、Stopped（取消）、Unavailable（打开/加载不可用）、
 Interrupted（Pump/健康失败）、StopFailed（关闭失败，优先保留资源所有权）。
 
@@ -201,7 +215,7 @@ Interrupted（Pump/健康失败）、StopFailed（关闭失败，优先保留资
 `AlarmNotificationSoundRouter` 提供来源事件绑定、最高等级合并、暂停/恢复及有界路由记录；
 sequencer 提供有界 Dispatches、DroppedDispatchCount 与 MissedNotificationCount。
 混合路由使用完整提示快照，已注册条件遵循独立短／长策略；未注册的可听信息、技术及测试提示保留持续声音，同级由持续来源承担，静音输出故障不参与仲裁。软件排程记录不等同于物理交付，产品模式与完整行为见[通知声音执行接口](alarms/alarm-notification-sound.md)。
-该链没有网络报警 director、全局事件去重、权威 epoch 接入或自动设备重连。
+该链没有网络报警 director、全局事件去重或权威 epoch 接入。
 
 ## native/sim_audio_native ABI 1
 
@@ -291,8 +305,8 @@ bool Save(DisplayPreferences preferences);
 ```
 
 path 为调用者指定路径，Save 规范化成绝对路径并创建父目录；没有内建默认位置。
-存储只包含显示/报警/声音配置和可选生成器编辑输入，不保存波形状态、活动报警、测试 notice 或声音启用授权。
-Sound.HeartbeatEnabled 是偏好值，不能替代运行时显式启用本地输出。
+存储只包含显示/报警/声音配置和可选生成器编辑输入，不保存波形状态、活动报警、测试 notice。
+Sound.HeartbeatEnabled 控制心搏音；输出随窗口启动，主音量与静音不关闭播放服务。
 
 文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；最多读取 32768 bytes、最大深度 8。
 未配置字符串枚举 converter，普通 enum 属性以整数表示；字典键按 System.Text.Json 的键表示规则。
@@ -307,14 +321,14 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5–10 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–13 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
 
-Save 总是写 Version=10；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=13；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
 Alarms.PlaybackMode 默认 Continuous（0），Notifications（1）表示默认短警报；它只作用于跟随默认的条件。
 Alarms.Notifications 按已注册条件 ID 保存 AlarmNotificationSettings 覆盖项，缺省为空。
 各项保存 SoundMode（Inherit=0、SingleGroup=1、Continuous=2）、RepeatSuppressionMilliseconds、ReminderEnabled、ReminderMilliseconds；关闭提醒或切成长警报仍保留短警报配置。版本 8 缺少 SoundMode 时使用 Inherit，保持原默认模式。
-版本 1–7 缺少新字段时保留持续声音及默认通知策略，不恢复活动事件、计时、通知记录或音频 opt-in。
+版本 1–7 缺少新字段时保留持续声音及默认通知策略，不恢复活动事件、计时或通知记录。
 完整范围及桌面映射见[通知策略接口](alarms/alarm-notification-policy.md)。
 Alarms.ConfirmationTimings 是以 MonitorNumeric 为键的可选覆盖字典，旧文件省略时得到空字典；
 每项包含 CriticalLow/WarningLow/WarningHigh/CriticalHigh，各自 TriggerMilliseconds/RecoveryMilliseconds 为 0–600000。
@@ -325,6 +339,8 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 此时间不包含原有 NoExpirationSeconds 呼吸等待时限，且不复用 RR·CO₂ 数值覆盖。
 其余报警阈值倍率随各 MeasurementLimits 描述定义，不能把存储整数当 UI 显示单位。
 
+版本 13 增加 Sound.OutputDeviceId（null 表示系统默认）和 Muted（默认 false）；旧版本缺省时使用这两个默认值。
+设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
 Sound 保存 Volume/HeartbeatVolume（0–100）、HeartbeatEnabled、BeatSource（0–2）、PitchSource（0–1）、
 PauseSeconds（1–3600）、Timing；Timing 周期单位 ms，Info 5000–120000、Notice 1500–60000、
 Warning 3500–60000、Critical 250–2000，另有 InfoTone。

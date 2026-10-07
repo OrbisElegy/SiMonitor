@@ -7,7 +7,7 @@ namespace Monitor.Infrastructure.Preferences;
 
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false);
 
-// Local preferences and generator inputs; no runtime waveform state or audio opt-in.
+// Local preferences and generator inputs; no runtime waveform or playback state.
 public sealed class DisplayPreferenceStore(string path)
 {
     private const int MaximumBytes = 32768;
@@ -44,7 +44,7 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
@@ -70,7 +70,7 @@ public sealed class DisplayPreferenceStore(string path)
         preferences.Generator?.Validate();
         var data = new Document
         {
-            Version = 12,
+            Version = 13,
             Generator = preferences.Generator,
             Sound = sound,
             Alarms = alarms,

@@ -39,7 +39,7 @@ internal static class DefaultResetSmokeChecks
             Require(!confirm.IsDefault, "destructive confirmation is not activated by an accidental Return");
             confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Require(window.Settings.Sound.AlarmEnabled.IsChecked == false, "reset leaves monitoring audio disabled");
+            Require(!window.Settings.Sound.Muted && window.Settings.Sound.OutputStarted, "reset restarts unmuted monitoring audio");
             var saved = new DisplayPreferenceStore(path).Load(out bool rejected);
             Require(!rejected && saved.Display.Skin == MonitorSkin.FiveRows && saved.PaperLayout == 0, "reset persists default display");
             Require(Equal(saved.Alarms, MonitorAlarmPreferences.Default) && Equal(saved.Sound, MonitorSoundPreferences.Default), "reset clears alarm and sound overrides");

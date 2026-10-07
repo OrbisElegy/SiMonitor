@@ -10,6 +10,17 @@ public sealed class AudioRenderSession
     private readonly AudioPcmBuffer _buffer;
     private readonly float[] _scratch;
     private int _retired;
+    private float _gain = 1;
+
+    public float Gain
+    {
+        get => Volatile.Read(ref _gain);
+        set
+        {
+            if (!float.IsFinite(value) || value is < 0 or > 1) { throw new ArgumentOutOfRangeException(nameof(value)); }
+            Volatile.Write(ref _gain, value);
+        }
+    }
     private long _underrunFrames;
 
     public AudioRenderSession(long initialFrame = 0, int capacityMilliseconds = 40)
@@ -64,6 +75,8 @@ public sealed class AudioRenderSession
         }
         if (RequiresReplacement && frames == destination.Length)
         { destination.Clear(); return 0; }
+        float gain = Gain;
+        for (int i = 0; i < frames; i++) { destination[i] *= gain; }
         return frames;
     }
 

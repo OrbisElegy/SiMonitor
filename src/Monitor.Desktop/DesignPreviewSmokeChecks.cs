@@ -751,10 +751,37 @@ internal static class DesignPreviewSmokeChecks
         CancellationToken token = default; int calls = 0;
         var panel = new SoundSettingsPanel((volume, cancellation) =>
         { Require(volume == 50, "volume passed to output"); calls++; token = cancellation; return completion.Task; });
-        Require(panel.AlarmEnabled.IsChecked == false && panel.HeartbeatEnabled.IsChecked == true &&
-            new MonitorAlertSettings().CriticalInterval.Value == 1.5m, "selected mixing defaults preserve explicit master sound opt-in");
+        Require(!panel.Muted && panel.HeartbeatEnabled.IsChecked == true &&
+            new MonitorAlertSettings().CriticalInterval.Value == 1.5m, "monitor sound defaults to unmuted");
+        var devices = new List<Monitor.Infrastructure.Audio.AudioOutputDeviceInfo> { new("test-speaker", "Test speakers") };
+        var controls = new SoundSettingsPanel(enumerateDevices: () => devices);
+        var alertSettings = new MonitorAlertSettings();
+        Require(controls.OutputDevice.SelectedIndex == 0 && controls.OutputDevice.ItemCount == 2 &&
+            controls.Children.OfType<CheckBox>().Single() == controls.HeartbeatEnabled,
+            "system default selected and no master enable checkbox remains");
+        controls.Volume.Value = 73;
+        controls.Mute.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(controls.Muted && controls.Volume.Value == 73 && controls.EffectiveHeartbeatVolume == 0,
+            "speaker mute preserves slider volume and silences heartbeat");
+        controls.OutputDevice.SelectedIndex = 1;
+        var soundPreferences = controls.CapturePreferences(alertSettings);
+        devices.Clear(); controls.RefreshDevices();
+        Require(controls.CapturePreferences(alertSettings) == soundPreferences && controls.OutputDevice.ItemCount == 2,
+            "removed selected device remains selected without falling back to default");
+        controls.Mute.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(!controls.Muted && controls.Volume.Value == 73 && controls.EffectiveHeartbeatVolume == 73,
+            "speaker unmute restores volume");
+        controls.Volume.Value = 0;
+        controls.Mute.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Require(controls.Volume.Value == 73 && !controls.Muted, "speaker restores last nonzero slider volume");
+        controls.RestorePreferences(soundPreferences, alertSettings);
+        Require(controls.Muted && controls.CapturePreferences(alertSettings) == soundPreferences,
+            "device and mute restore together with volume");
+        controls.Volume.Value = 42;
+        Require(!controls.Muted && controls.EffectiveHeartbeatVolume == 42, "raising the slider unmutes");
+        controls.Close();
         var pending = panel.PreviewAsync();
-        Require(!panel.Audition.IsEnabled && !panel.Volume.IsEnabled && panel.Stop.IsEnabled, "preview locks settings until output joined");
+        Require(!panel.Audition.IsEnabled && panel.Volume.IsEnabled && panel.Stop.IsEnabled, "preview keeps volume available and prevents duplicate auditions");
         panel.PreviewAsync().GetAwaiter().GetResult();
         Require(calls == 1, "double click does not start second output");
         panel.StopPreview(); Require(token.IsCancellationRequested, "stop requests background cancellation");
@@ -956,7 +983,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Sound.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Require(window.MonitorView.AudioPauseStatus.Text == "", "explicit resume clears persistent header");
             Require(window.MonitorView.NumericTexts.All(t => t == "---"), "no configured targets displayed before acquisition");
-            Require(window.Title!.Contains("Standalone", StringComparison.Ordinal) && window.Settings.Sound.AlarmEnabled.IsChecked == false,
+            Require(window.Title!.Contains("Standalone", StringComparison.Ordinal) && !window.Settings.Sound.Muted,
                 "standalone starts with explicit sound opt-in and truthful development title");
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }

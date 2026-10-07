@@ -206,6 +206,7 @@ internal static class Program
             .. AudioRenderSessionSpecifications.All,
             .. AudioOutputLifecycleSpecifications.All,
             .. SoundPreviewSpecifications.All,
+            .. AudioRecoverySpecifications.All,
             .. NativeAudioCommandSpecifications.All,
             .. EndpointAudioOutputSpecifications.All,
             .. WasapiStreamSpecifications.All,

@@ -1747,6 +1747,8 @@ public static class MonitorSoundPattern
 ```csharp
 public sealed record MonitorSoundPreferences(int Volume, int HeartbeatVolume, bool HeartbeatEnabled, int BeatSource, int PitchSource, int PauseSeconds, MonitorSoundTiming Timing)
 {
+    public string? OutputDeviceId { get; init; }
+    public bool Muted { get; init; }
     public static MonitorSoundPreferences Default { get; }
     public void Validate();
 }

@@ -18,6 +18,16 @@ public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
 {
     private const int PumpWaitMilliseconds = 10;
     private int _busy;
+    private string? _deviceId;
+    private float _gain = 1;
+    public void SetOutput(string? deviceId, int volumePercent, bool muted)
+    {
+        if (deviceId is not null && (string.IsNullOrWhiteSpace(deviceId) || deviceId.Contains('\0')))
+        { throw new ArgumentException("AudioOutput.InvalidDevice", nameof(deviceId)); }
+        if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
+        Volatile.Write(ref _deviceId, deviceId);
+        Volatile.Write(ref _gain, muted ? 0 : volumePercent / 100f);
+    }
     private IPumpedAudioOutput? _output;
     private AudioOutputLifecycle? _owner;
 
@@ -43,7 +53,7 @@ public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
             if (_owner is not null && !Close()) { return SoundPreviewResult.StopFailed; }
             if (cancellationToken.IsCancellationRequested) { return SoundPreviewResult.Stopped; }
             _output = createOutput(); _owner = new(_output);
-            if (_owner.Replace(null, 0))
+            if (_owner.Replace(Volatile.Read(ref _deviceId), 0))
             {
                 var session = _owner.Session!;
                 var tone = TonePreset.BeatAudition with { GainQ15 = TonePreset.BeatAudition.GainQ15 * volume / 100 };
@@ -54,6 +64,7 @@ public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
                 while (Stopwatch.GetElapsedTime(start) < TimeSpan.FromSeconds(2.4))
                 {
                     if (cancellationToken.IsCancellationRequested) { result = SoundPreviewResult.Stopped; break; }
+                    session.Gain = Volatile.Read(ref _gain);
                     if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
                     _output.WaitForQueueSpace(PumpWaitMilliseconds);
                 }

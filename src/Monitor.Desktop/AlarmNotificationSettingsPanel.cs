@@ -25,6 +25,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
     internal event Action? ModeChanged;
     internal event Action<MonitorNumeric>? ParameterRequested;
     internal event Action? EcgRequested;
+    internal EcgAlarmSettingsPage? EcgBrowser { get; private set; }
     private readonly TextBlock _errors = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly string[] _ids;
     private readonly Dictionary<string, string> _summaries = new(StringComparer.Ordinal);
@@ -145,24 +146,12 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
 
     internal Control CreateEcgPage()
     {
-        var selector = new ComboBox { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
-        _localization.Bind(selector, AutomationProperties.NameProperty, "alarm.ecgSelect");
-        _localization.SetChoices(selector, EcgAlarmNotices.Descriptors
-            .Select(d => new Func<ITextLocalizer, string>(d.Message.Render)).ToArray());
-        var content = new ContentControl();
-        selector.SelectionChanged += (_, _) =>
-        {
-            if (selector.SelectedIndex >= 0) { content.Content = Editors[EcgAlarmNotices.Descriptors[selector.SelectedIndex].Id]; }
-        };
-        selector.SelectedIndex = 0;
-        var page = new StackPanel { Spacing = 12 };
-        page.Children.Add(selector);
-        page.Children.Add(content);
+        EcgBrowser = new(this, _localization);
         var overview = new Button { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
         _localization.Bind(overview, ContentControl.ContentProperty, "alarm.ecgPage");
         overview.Click += (_, _) => EcgRequested?.Invoke();
         _overview.Children.Add(overview);
-        return page;
+        return EcgBrowser;
     }
 
     internal string SummaryFor(string id) => _summaries[id];
@@ -190,6 +179,7 @@ internal sealed class AlarmNotificationSettingsPanel : StackPanel
             summary.Text = string.Join("  ·  ", ids.Select(id => _localization.Get(DirectionKey(id)) + " " + _summaries[id]));
             AutomationProperties.SetName(row, _localization.Format("alarm.eventRowName", DesktopLocalization.Label(_localization.Current, title), summary.Text));
         }
+        EcgBrowser?.Refresh();
     }
 
     internal (AlarmPlaybackMode Mode, IReadOnlyDictionary<string, AlarmNotificationSettings> Overrides) Read()

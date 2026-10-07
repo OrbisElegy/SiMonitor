@@ -886,5 +886,22 @@
   "alarm.ecgEnabled": "ECG 监测警报",
   "alarm.ecgPage": "ECG 检测项",
   "alarm.ecgSelect": "检测项",
-  "monitor.ecgRepolarizationName": "实测 ST、QT 和 QTc"
+  "monitor.ecgRepolarizationName": "实测 ST、QT 和 QTc",
+  "alarm.ecgSearch": "搜索检测项，如 室早 / QTc",
+  "alarm.ecgClearFilters": "清除筛选",
+  "alarm.ecgBack": "‹ 返回检测项",
+  "alarm.ecgNoResults": "未找到匹配的检测项，请更换关键词或清除筛选。",
+  "alarm.ecgAll": "全部",
+  "alarm.ecgGroupCritical": "危急心律",
+  "alarm.ecgGroupPauses": "停搏与漏搏",
+  "alarm.ecgGroupVentricular": "室性节律与室早",
+  "alarm.ecgGroupAtrial": "房性与室上性",
+  "alarm.ecgGroupRepolarization": "ST / QT",
+  "alarm.ecgGroupPacing": "起搏",
+  "alarm.ecgCount": "显示 {0} / {1} 项",
+  "alarm.ecgRetained": "恢复后保留提示",
+  "alarm.ecgFilter": "筛选检测项",
+  "alarm.ecgFilterActive": "筛选检测项（已启用）",
+  "alarm.ecgCategory": "分类",
+  "alarm.ecgFilterDone": "完成"
 }

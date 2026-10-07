@@ -961,6 +961,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(NotificationSettingsSmokeChecks.Verify);
         NativeSmokePartition.Run(AlarmAttentionPresentationSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgAlarmSmokeChecks.Verify);
+        NativeSmokePartition.Run(EcgAlarmSettingsSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.Verify);
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyRepolarizationRecovery);
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyLongQtRonT);

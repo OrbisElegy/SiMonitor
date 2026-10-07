@@ -6,6 +6,7 @@ namespace Monitor.Application.Measurements;
 // deliberately bounded teaching heuristics, with unavailable results explicit.
 internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
 {
+    private const int TemplateBeatCount = 15;
     private const long StepNs = 4_000_000;
     private const long MinuteNs = 60_000_000_000;
     private int[] _samples = new int[500];
@@ -15,6 +16,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private Observation[] _beats = [];
     private Shape[] _learning = [];
     private Shape? _template;
+    private RecoveryBeat[] _recovery = [];
     private EcgBeatMorphology? _lastMorphology;
     private int _ventricularRun, _svtRun;
     private long _runStartNs, _svtStartNs;
@@ -48,6 +50,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         _beats = _beats,
         _learning = _learning,
         _template = _template,
+        _recovery = _recovery,
         _lastMorphology = _lastMorphology,
         _ventricularRun = _ventricularRun,
         _svtRun = _svtRun,
@@ -85,6 +88,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         _validFromNs = _lastPeakNs = _vfFromNs = _lastPulseNs = _pulseEvidenceFromNs = _averageRrNs = null;
         _beats = [];
         _learning = [];
+        _recovery = [];
         _template = null;
         _count = _learningBeats = _ventricularRun = _svtRun = 0;
         _lastMorphology = null;
@@ -180,14 +184,14 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         int width = shape?.Width ?? (int)((endNs - startNs) / 1_000_000);
         EcgBeatLabel label = EcgBeatLabel.Unknown;
         int difference = _template is null || shape is null ? 0 : Difference(shape, _template);
-        if (_learningBeats < 15)
+        if (_learningBeats < TemplateBeatCount)
         {
             label = EcgBeatLabel.Learning;
             if (shape is not null)
             {
                 _learning = _learning.Append(shape).ToArray();
                 _learningBeats++;
-                if (_learningBeats == 15)
+                if (_learningBeats == TemplateBeatCount)
                 {
                     // Medoid of acquired complexes, independent of input labels.
                     _template = _learning.MinBy(s => _learning.Sum(other => Difference(s, other) + Math.Abs(s.Width - other.Width) * 10));
@@ -203,11 +207,16 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             label = matches ? (premature || continuesSvt ? EcgBeatLabel.SupraventricularPremature : EcgBeatLabel.Normal)
                 : width >= 100 && (width >= template.Width + 24 || premature) ? EcgBeatLabel.Ventricular : EcgBeatLabel.Unknown;
         }
-        if (settings.PacedMode && _learningBeats >= 15)
+        if (settings.PacedMode && _learningBeats >= TemplateBeatCount)
         {
             if (_pulseEvidenceFromNs is null) { label = EcgBeatLabel.Unknown; }
             else if (_lastPulseNs is { } pulseNs && pulseNs <= beat.PeakTimeNs && beat.PeakTimeNs - pulseNs <= 200_000_000)
             { label = EcgBeatLabel.Paced; }
+        }
+        if (RecoverNormalReference(label, shape, intervalNs))
+        {
+            label = EcgBeatLabel.Normal;
+            difference = Difference(shape!, _template!);
         }
         var morphology = new EcgBeatMorphology(label, width, difference);
         _lastMorphology = morphology;
@@ -273,6 +282,33 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         if (label == EcgBeatLabel.Normal && width < 120 && intervalNs >= 400_000_000 && intervalNs <= 2_000_000_000)
         { _pending = new(beat.PeakTimeNs, startNs - 20_000_000, endNs - 20_000_000, intervalNs); }
         else { InvalidateRepolarization(beat.ConfirmedAtNs, events, EcgRhythmInterruption.InsufficientRrEvidence); }
+    }
+
+    // An initial dominant abnormal shape or an obsolete normal RR must not
+    // permanently exclude later measurable beats. Confirm a fresh reference
+    // only from consecutive, consistent narrow beats below the SVT threshold;
+    // never relearn merely because ST/QT is unavailable or a timer expired.
+    private bool RecoverNormalReference(EcgBeatLabel label, Shape? shape, long intervalNs)
+    {
+        if (settings.PacedMode || label is not (EcgBeatLabel.Unknown or EcgBeatLabel.SupraventricularPremature) ||
+            shape is not { Width: < 100 } || intervalNs is < 400_000_000 or > 2_000_000_000 ||
+            60_000_000_000L > intervalNs * settings.SvtHeartRate)
+        {
+            _recovery = [];
+            return false;
+        }
+        if (_recovery.Any(b => Difference(shape, b.Shape) >= 250 || Math.Abs(shape.Width - b.Shape.Width) >= 20 ||
+            Math.Abs(intervalNs - b.RrNs) * 10 > b.RrNs))
+        { _recovery = []; }
+        _recovery = _recovery.Append(new(shape, intervalNs)).ToArray();
+        if (_recovery.Length < TemplateBeatCount) { return false; }
+        // Candidate arrays are replaced, never mutated, so checkpoints retain
+        // an independent, bounded history even halfway through confirmation.
+        _template = _recovery.MinBy(b => _recovery.Sum(other => Difference(b.Shape, other.Shape) +
+            Math.Abs(b.Shape.Width - other.Shape.Width) * 10))!.Shape;
+        _averageRrNs = _recovery.Sum(b => b.RrNs) / _recovery.Length;
+        _recovery = [];
+        return true;
     }
 
     private void UpdateRate(long timeNs, List<DetectedEcgMonitoringEvent> events)
@@ -404,6 +440,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     }
     private static int Index(EcgMonitoringConditions condition) => System.Numerics.BitOperations.TrailingZeroCount((ulong)condition);
     private sealed record Shape(int Width, int[] Values);
+    private sealed record RecoveryBeat(Shape Shape, long RrNs);
     private sealed record Observation(long PeakNs, EcgBeatLabel Label, Shape? Shape);
     private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs);
     private sealed record PendingRepolarization(long PeakNs, long StartNs, long EndNs, long RrNs);

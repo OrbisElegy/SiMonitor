@@ -28,6 +28,11 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgRonTWaitsForItsCompensatoryPause), EcgRonTWaitsForItsCompensatoryPause),
         new(nameof(EcgRelearningAndPvcWindowExpireEvidence), EcgRelearningAndPvcWindowExpireEvidence),
         new(nameof(EcgMonitoringSettingsRejectInvalidCombinations), EcgMonitoringSettingsRejectInvalidCombinations),
+        new(nameof(EcgRepolarizationRecoversAfterAbnormalStartup), EcgRepolarizationRecoversAfterAbnormalStartup),
+        new(nameof(EcgRepolarizationRecoversAfterStableRateChange), EcgRepolarizationRecoversAfterStableRateChange),
+        new(nameof(EcgReferenceRecoveryRequiresConsistentNarrowBeats), EcgReferenceRecoveryRequiresConsistentNarrowBeats),
+        new(nameof(EcgReferenceRecoveryRestoresAndRejectsAtomically), EcgReferenceRecoveryRestoresAndRejectsAtomically),
+        new(nameof(EcgReferenceRecoveryPreservesVentricularAndSvtDetection), EcgReferenceRecoveryPreservesVentricularAndSvtDetection),
     ];
 
     private static void EcgPauseAndAsystoleUseLiveSamples()
@@ -337,6 +342,112 @@ internal static class EcgMonitoringSpecifications
             catch (ArgumentException) { rejected = true; }
             Check.That(rejected, "invalid complete configuration is rejected before state exists");
         }
+    }
+
+    private static void EcgRepolarizationRecoversAfterAbnormalStartup()
+    {
+        short[] abnormal = Acquire(PhysiologyIllustrationConfiguration.VtPreset, 30);
+        short[] sinus = Acquire(PhysiologyIllustrationConfiguration.Default, 60);
+        var initial = Run(abnormal);
+        Check.That(initial.Reading.Repolarization.QtMilliseconds is null, "wide startup does not supply a false QT reading");
+        var recovered = Run(abnormal.Concat(sinus).ToArray());
+        var reference = Run(sinus);
+        Check.That(recovered.Reading.LastBeat?.Label == EcgBeatLabel.Normal &&
+            recovered.Reading.Repolarization == reference.Reading.Repolarization,
+            "later acquired sinus beats recover the same measured ST/QT as a clean sinus startup: " + recovered.Reading);
+        var noT = Run(Normal(25).Concat(Normal(40, tEndMilliseconds: 440)).ToArray());
+        Check.That(noT.Reading.Repolarization.QtStatus == WaveformMeasurementStatus.Valid,
+            "an early unmeasurable T wave is retried without replacing a valid QRS template");
+    }
+
+    private static void EcgRepolarizationRecoversAfterStableRateChange()
+    {
+        short[] normal = Normal(60, tEndMilliseconds: 440);
+        short[] faster = Enumerable.Range(0, 60).SelectMany(i => normal.Skip(i * 250).Take(175)).ToArray();
+        var recovered = Run(Normal(30, tEndMilliseconds: 440).Concat(faster).ToArray());
+        var reference = Run(faster);
+        Check.That(recovered.Reading.LastBeat?.Label == EcgBeatLabel.Normal &&
+            recovered.Reading.Repolarization == reference.Reading.Repolarization,
+            "a stable faster non-SVT rhythm updates its RR reference instead of staying permanently premature: " + recovered.Reading);
+    }
+
+    private static short[] WideStartup()
+    {
+        short[] samples = new short[30 * 250];
+        for (int second = 0; second < 30; second++) { Qrs(samples, second * 250 + 75, 20); }
+        return samples;
+    }
+
+    private static void EcgReferenceRecoveryRequiresConsistentNarrowBeats()
+    {
+        short[] wide = WideStartup();
+        var shortRun = Run(wide.Concat(Normal(8, tEndMilliseconds: 440)).ToArray());
+        Check.That(shortRun.Reading.LastBeat?.Label == EcgBeatLabel.Unknown && shortRun.Reading.Repolarization.QtMilliseconds is null,
+            "a brief narrow run cannot replace the old template");
+        short[] source = Normal(60, tEndMilliseconds: 440);
+        short[] irregular = Enumerable.Range(0, 60).SelectMany(i => source.Skip(i * 250).Take(i % 2 == 0 ? 175 : 250)).ToArray();
+        var unstable = Run(wide.Concat(irregular).ToArray());
+        Check.That(unstable.Reading.LastBeat?.Label == EcgBeatLabel.Unknown && unstable.Reading.Repolarization.QtMilliseconds is null,
+            "irregular narrow intervals never accumulate a normal reference");
+        var paced = Run(wide.Concat(source).ToArray(), settings: new() { PacedMode = true });
+        Check.That(paced.Reading.LastBeat?.Label == EcgBeatLabel.Unknown && paced.Reading.Repolarization.QtMilliseconds is null,
+            "automatic recovery cannot bypass missing pacing evidence");
+        shortRun.Detector.Relearn(out _);
+        short[] afterRelearn = Normal(8, tEndMilliseconds: 440);
+        for (int start = 0; start < afterRelearn.Length; start += 50)
+        {
+            shortRun.Detector.Consume(Wire(afterRelearn.Skip(start).Take(50).ToArray(), wide.Length + 8 * 250 + start,
+                shortRun.Sequence + (ulong)(start / 50)), out _, out _);
+        }
+        Check.That(shortRun.Detector.ReadMonitoring((wide.Length + 16 * 250 - 1) * StepNs).Learning,
+            "manual relearning discards an incomplete recovery cohort");
+    }
+
+    private static void EcgReferenceRecoveryRestoresAndRejectsAtomically()
+    {
+        short[] prefix = WideStartup().Concat(Normal(8, tEndMilliseconds: 440)).ToArray();
+        short[] samples = prefix.Concat(Normal(35, stMicrovolts: 160, tEndMilliseconds: 540)).ToArray();
+        var settings = new EcgMonitoringSettings { QtcBaselineMilliseconds = 350 };
+        var expected = Run(samples, settings: settings);
+        foreach (int size in new[] { 7, 125, 750 })
+        {
+            var actual = Run(samples, size, restore: true, settings: settings);
+            Check.That(actual.Reading == expected.Reading && actual.Events.SequenceEqual(expected.Events) &&
+                actual.Beats.SequenceEqual(expected.Beats), "recovery cohort and updated reference survive arbitrary packetization and checkpoint restore");
+        }
+        var partial = Run(prefix, settings: settings);
+        var checkpoint = partial.Detector.Capture();
+        byte[] next = Wire(samples.Skip(prefix.Length).Take(50).ToArray(), prefix.Length, partial.Sequence);
+        var restored = EcgHeartRateMeasurement.Restore(checkpoint);
+        var expectedBeats = restored.Consume(next, out _, out var expectedEvents);
+        IReadOnlyList<DetectedEcgMonitoringEvent> rejected = [];
+        bool failed = false;
+        try { partial.Detector.Consume(next, out _, out rejected, new([-StepNs])); }
+        catch (ArgumentException) { failed = true; }
+        Check.That(failed && rejected.Count == 0 && partial.Detector.ReadMonitoring((prefix.Length - 1) * StepNs) == partial.Reading,
+            "invalid acquisition evidence cannot consume recovery candidates");
+        Check.That(partial.Detector.Consume(next, out _, out var events).SequenceEqual(expectedBeats) && events.SequenceEqual(expectedEvents) &&
+            partial.Detector.ReadMonitoring((prefix.Length + 49) * StepNs) == restored.ReadMonitoring((prefix.Length + 49) * StepNs),
+            "retry after rejection exactly matches the captured recovery branch");
+        Check.That(expected.Reading.Repolarization is { QtStatus: WaveformMeasurementStatus.Valid, DeltaQtcMilliseconds: > 60 } &&
+            expected.Reading.Repolarization.DeltaQtcMilliseconds == expected.Reading.Repolarization.QtcMilliseconds - 350 &&
+            expected.Events.All(e => e.Condition is not (EcgMonitoringConditions.StHigh or EcgMonitoringConditions.QtcHigh or EcgMonitoringConditions.DeltaQtcHigh)),
+            "recovery preserves the configured QTc baseline without bypassing ST/QT alarm persistence");
+    }
+
+    private static void EcgReferenceRecoveryPreservesVentricularAndSvtDetection()
+    {
+        var vt = Run(Acquire(PhysiologyIllustrationConfiguration.Default, 30)
+            .Concat(Acquire(PhysiologyIllustrationConfiguration.VtPreset, 45)).ToArray());
+        Check.That(vt.Reading.LastBeat?.Label == EcgBeatLabel.Ventricular &&
+            vt.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia) && vt.Reading.Repolarization.QtMilliseconds is null,
+            "sustained VT is not learned away while attempting measurement recovery");
+        short[] fast = Normal(20).Concat(new short[12000]).ToArray();
+        for (int peak = 5125; peak < fast.Length - 10; peak += 75) { Qrs(fast, peak, 8); }
+        var svt = Run(fast);
+        Check.That(svt.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.SupraventricularTachycardia) &&
+            svt.Reading.LastBeat?.Label == EcgBeatLabel.SupraventricularPremature && svt.Reading.Repolarization.QtMilliseconds is null,
+            "sustained fast narrow rhythm remains SVT instead of becoming a recovery reference");
     }
 
     private static short[] Normal(int seconds, int stMicrovolts = 0, int tEndMilliseconds = 0)

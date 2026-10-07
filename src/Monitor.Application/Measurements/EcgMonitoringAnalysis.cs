@@ -123,15 +123,16 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         {
             // Finish the previous beat only if its T end was already observed;
             // an overlapping QRS is never silently used as a T wave.
+            var previousRepolarization = _pending;
             FinishRepolarization(beat.PeakTimeNs - 80_000_000, events);
             _lastPeakNs = beat.PeakTimeNs;
-            _pendingBeat = new(beat, qrsStartNs, qrsEndNs);
+            _pendingBeat = new(beat, qrsStartNs, qrsEndNs, previousRepolarization);
         }
         // QRS cue timing stays unchanged. Morphology waits for the complete
         // contour instead of mistaking the fast detector's steep lobe for QRS.
         if (_pendingBeat is { } candidate && timeNs >= candidate.Beat.PeakTimeNs + 160_000_000)
         {
-            Beat(candidate.Beat with { ConfirmedAtNs = timeNs }, candidate.StartNs, candidate.EndNs, events);
+            Beat(candidate.Beat with { ConfirmedAtNs = timeNs }, candidate.StartNs, candidate.EndNs, candidate.PreviousRepolarization, events);
             _pendingBeat = null;
         }
         if (_pending is { } pending && timeNs - pending.PeakNs >= 700_000_000)
@@ -175,7 +176,8 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             Math.Max(_validFromNs.Value, timeNs - MinuteNs), timeNs, events);
     }
 
-    private void Beat(DetectedEcgBeat beat, long startNs, long endNs, List<DetectedEcgMonitoringEvent> events)
+    private void Beat(DetectedEcgBeat beat, long startNs, long endNs, PendingRepolarization? previousRepolarization,
+        List<DetectedEcgMonitoringEvent> events)
     {
         long? previous = _beats.LastOrDefault()?.PeakNs;
         long intervalNs = previous is { } p ? beat.PeakTimeNs - p : 0;
@@ -226,7 +228,9 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         { Occur(EcgMonitoringConditions.RonTPvc, candidate, beat.ConfirmedAtNs, events); }
         _ronTCandidateNs = null;
         if (label == EcgBeatLabel.Ventricular && average is { } mean && mean > 600_000_000 &&
-            intervalNs > 0 && intervalNs < 333_000_000 && intervalNs * 3 < mean)
+            intervalNs > 0 && (intervalNs < 333_000_000 && intervalNs * 3 < mean ||
+                intervalNs * 5 < mean * 4 && width <= 160 && previousRepolarization?.PeakNs == previous &&
+                HasUnfinishedT(previousRepolarization, beat.PeakTimeNs)))
         {
             if (_previousRonTNs is { } ronT && beat.PeakTimeNs - ronT <= 5 * MinuteNs)
             { Occur(EcgMonitoringConditions.RonTPvc, ronT, beat.ConfirmedAtNs, events); }
@@ -442,7 +446,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private sealed record Shape(int Width, int[] Values);
     private sealed record RecoveryBeat(Shape Shape, long RrNs);
     private sealed record Observation(long PeakNs, EcgBeatLabel Label, Shape? Shape);
-    private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs);
+    private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs, PendingRepolarization? PreviousRepolarization);
     private sealed record PendingRepolarization(long PeakNs, long StartNs, long EndNs, long RrNs);
 
     private void FinishRepolarization(long availableUntilNs, List<DetectedEcgMonitoringEvent> events)
@@ -488,6 +492,39 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
                 ref _deltaHighFromNs, 5 * MinuteNs, events);
         }
         else { InvalidateQt(_timeNs, events, EcgRhythmInterruption.InsufficientRrEvidence); }
+    }
+
+    // Additional teaching screen for longer coupling: inspect this preceding
+    // normal beat, never a historical QT or a generator label. Keep the PVC's
+    // entire sampled contour out of the T window and project only its smooth
+    // terminal trend. This is evidence of unfinished repolarization, not a
+    // measured T end hidden under the ectopic QRS.
+    private bool HasUnfinishedT(PendingRepolarization? previous, long peakNs)
+    {
+        if (previous is not { } pending || peakNs - pending.PeakNs is < 350_000_000 or > 650_000_000)
+        { return false; }
+        long baselineStart = pending.StartNs - 60_000_000;
+        long searchStart = pending.EndNs + 80_000_000;
+        long end = peakNs - 140_000_000;
+        if (baselineStart < _timeNs - (_count - 1) * StepNs || end - searchStart < 100_000_000)
+        { return false; }
+        int[] baselineSamples = Enumerable.Range(0, 10).Select(i => ValueAt(baselineStart + i * StepNs)).ToArray();
+        if (baselineSamples.Max() - baselineSamples.Min() > 50) { return false; }
+        int baseline = baselineSamples.Sum() / baselineSamples.Length;
+        int[] t = Enumerable.Range(0, (int)((end - searchStart) / StepNs) + 1)
+            .Select(i => ValueAt(searchStart + i * StepNs) - baseline).ToArray();
+        int sign = Math.Sign(t[^1]);
+        int[] contour = t.Select(value => value * sign).ToArray();
+        int maximum = contour.Max();
+        int threshold = Math.Max(20, maximum / 5);
+        int st = Enumerable.Range(-2, 5).Sum(i => ValueAt(pending.EndNs + 60_000_000 + i * StepNs) - baseline) / 5;
+        if (maximum < 80 || maximum - st * sign < 50 || contour.Any(value => value < -20) ||
+            contour.TakeLast(20).Any(value => value <= threshold) ||
+            t.Zip(t.Skip(1), (a, b) => Math.Abs(b - a)).Any(change => change > 40))
+        { return false; }
+        // A descending T which would end before the PVC is not an overlap.
+        long projected = contour[^1] + (long)(contour[^1] - contour[^11]) * (peakNs - end) / (10 * StepNs);
+        return projected > threshold;
     }
 
     private static int CorrectQt(int qtMilliseconds, long rrMilliseconds, EcgQtCorrectionMethod method)

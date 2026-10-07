@@ -127,7 +127,7 @@ internal static class DisplayPreferenceSmokeChecks
                 Require(display.Skin == MonitorSkin.ThreeRows && display.Slots[0] == new MonitorDisplaySlot(4, false, new(-2.5, 90), 125) &&
                     reopened.Settings.ReadDisplay().Slots.SequenceEqual(display.Slots) && reopened.Settings.PaperLayout.SelectedIndex == 1 && reopened.Settings.MeasurementUnits.SelectedIndex == 1,
                     "restart restores applied configuration in source display and editors, ignoring uncommitted draft");
-                Require(reopened.Settings.EcgSelection == 0 && reopened.Settings.Sound.AlarmEnabled.IsChecked == false &&
+                Require(reopened.Settings.EcgSelection == 0 && !reopened.Settings.Sound.Muted &&
                     reopened.Settings.OpticalEnabled.IsChecked == false, "display recovery does not restore physiology or audio opt-in");
                 reopened.SelectPage(1); Require(reopened.CurrentPaper?.SixRows == true, "saved paper layout is available");
             }
@@ -199,7 +199,7 @@ internal static class DisplayPreferenceSmokeChecks
                 File.WriteAllText(path, incomplete.ToJsonString()); store.Load(out rejected);
                 Require(rejected, "missing alarm configuration members are rejected");
             }
-            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 12", "\"Version\": 129"),
+            foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 13", "\"Version\": 139"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {

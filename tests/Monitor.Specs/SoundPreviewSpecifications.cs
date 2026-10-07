@@ -141,16 +141,22 @@ internal static class SoundPreviewSpecifications
                 else
                 {
                     sawActive |= player.OutputActive;
-                    if (fail) { output.FailPump = true; }
+                    if (fail) { output.FailPump = true; cancel.Cancel(); }
                 }
             };
             var result = player.RunAsync(cancel.Token).GetAwaiter().GetResult();
-            Check.That(sawActive && !player.OutputActive && result == (fail ? SoundPreviewResult.Interrupted : SoundPreviewResult.Stopped),
+            Check.That(sawActive && !player.OutputActive && result == SoundPreviewResult.Stopped,
                 "healthy pump is observable; both stop and interruption clear health");
         }
-        var missing = new MonitorAlarmPlayback(() => throw new DllNotFoundException());
-        Check.That(missing.RunAsync(CancellationToken.None).GetAwaiter().GetResult() == SoundPreviewResult.Unavailable && !missing.OutputActive,
-            "missing backend never reports active output");
+        using var missingCancel = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        int attempts = 0;
+        var missing = new MonitorAlarmPlayback(() =>
+        {
+            if (++attempts == 2) { missingCancel.Cancel(); }
+            throw new DllNotFoundException();
+        });
+        Check.That(missing.RunAsync(missingCancel.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && !missing.OutputActive && attempts == 2,
+            "missing backend retries without reporting healthy output and cancellation stops retries");
     }
     private sealed class Output(CancellationTokenSource cancel) : IPumpedAudioOutput, IAudioOutputDevice
     {

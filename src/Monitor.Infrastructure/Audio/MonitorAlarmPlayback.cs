@@ -28,7 +28,7 @@ public enum AlarmSoundDispatchStage
 
 public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmSoundDispatchStage Stage, long RenderFrame);
 
-// Explicitly enabled local preview sound. One worker owns the native stream;
+// Always-on local monitor sound. One worker owns the native stream;
 // banner rotation never changes the highest active audible priority.
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
@@ -43,6 +43,21 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     public ulong RetiredNotificationSequence => Volatile.Read(ref _retiredNotificationSequence);
     // Reports successful output pumping, not physical sound or latency.
     public bool OutputActive => Volatile.Read(ref _outputActive);
+    private string? _deviceId;
+    private float _gain = 1;
+    private int _reconnecting;
+    public bool Reconnecting => Volatile.Read(ref _reconnecting) != 0;
+    public void SetOutputDevice(string? deviceId)
+    {
+        if (deviceId is not null && (string.IsNullOrWhiteSpace(deviceId) || deviceId.Contains('\0')))
+        { throw new ArgumentException("AudioOutput.InvalidDevice", nameof(deviceId)); }
+        Volatile.Write(ref _deviceId, deviceId);
+    }
+    public void SetVolume(int volumePercent, bool muted)
+    {
+        if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
+        Volatile.Write(ref _gain, muted ? 0 : volumePercent / 100f);
+    }
     private BeatSubmission? _beat;
     private sealed record BeatSubmission(int Volume, int PitchPercent, long SubmittedAt);
     public void SetHeartbeatEnabled(bool enabled)
@@ -77,28 +92,48 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
         {
             if (!Close()) { return SoundPreviewResult.StopFailed; }
             if (cancellationToken.IsCancellationRequested) { return SoundPreviewResult.Stopped; }
-            _output = createOutput(); _owner = new(_output);
-            if (_owner.Replace(null, 0))
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var sequencer = new MonitorAlarmSequencer(_owner.Session!);
-                result = SoundPreviewResult.Stopped;
-                while (!cancellationToken.IsCancellationRequested)
+                string? deviceId = Volatile.Read(ref _deviceId);
+                try
                 {
-                    sequencer.Update(Volatile.Read(ref _request));
-                    Volatile.Write(ref _retiredNotificationSequence, Math.Max(RetiredNotificationSequence, sequencer.RetiredNotificationSequence));
-                    var beat = Interlocked.Exchange(ref _beat, null);
-                    int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
-                    sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
-                    if (!_output.Pump() || !_owner.CheckHealth()) { result = SoundPreviewResult.Interrupted; break; }
-                    Volatile.Write(ref _outputActive, true);
-                    _output.WaitForQueueSpace(PumpWaitMilliseconds);
+                    _output = createOutput();
+                    _owner = new(_output);
+                    if (_owner.Replace(deviceId, 0))
+                    {
+                        var session = _owner.Session!;
+                        var sequencer = new MonitorAlarmSequencer(session, RetiredNotificationSequence);
+                        while (!cancellationToken.IsCancellationRequested && deviceId == Volatile.Read(ref _deviceId))
+                        {
+                            session.Gain = Volatile.Read(ref _gain);
+                            sequencer.Update(Volatile.Read(ref _request));
+                            Volatile.Write(ref _retiredNotificationSequence, Math.Max(RetiredNotificationSequence, sequencer.RetiredNotificationSequence));
+                            var beat = Interlocked.Exchange(ref _beat, null);
+                            int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
+                            sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
+                            if (!_output.Pump() || !_owner.CheckHealth()) { break; }
+                            Volatile.Write(ref _outputActive, true);
+                            Volatile.Write(ref _reconnecting, 0);
+                            _output.WaitForQueueSpace(PumpWaitMilliseconds);
+                        }
+                    }
                 }
+                catch (Exception error) when (error is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException or InvalidOperationException)
+                {
+                    // A missing backend or endpoint can recover while the app remains open.
+                }
+                Volatile.Write(ref _outputActive, false);
+                if (!Close()) { return SoundPreviewResult.StopFailed; }
+                Interlocked.Exchange(ref _beat, null);
+                Volatile.Write(ref _reconnecting, 1);
+                // Device selection changes reconnect immediately; outages use bounded backoff.
+                if (deviceId == Volatile.Read(ref _deviceId)) { cancellationToken.WaitHandle.WaitOne(250); }
             }
+            result = SoundPreviewResult.Stopped;
         }
-        catch (Exception error) when (error is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException or InvalidOperationException)
-        { result = SoundPreviewResult.Unavailable; }
         finally
         {
+            Volatile.Write(ref _reconnecting, 0);
             Volatile.Write(ref _outputActive, false);
             if (!Close()) { result = SoundPreviewResult.StopFailed; }
             Interlocked.Exchange(ref _beat, null);
@@ -113,7 +148,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     }
 }
 
-public sealed class MonitorAlarmSequencer(AudioRenderSession session)
+public sealed class MonitorAlarmSequencer(AudioRenderSession session, ulong retiredNotificationSequence = 0)
 {
     private MonitorAlarmSoundRequest? _request;
     private long _origin, _lastTarget = -1, _key;
@@ -121,8 +156,8 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session)
     private readonly Queue<long> _beatKeys = new();
     private long _beatKey;
     private IReadOnlyList<int> _onsets = [];
-    private ulong _latestNotificationSequence;
-    public ulong RetiredNotificationSequence { get; private set; }
+    private ulong _latestNotificationSequence = retiredNotificationSequence;
+    public ulong RetiredNotificationSequence { get; private set; } = retiredNotificationSequence;
     private long _singleGroupEndFrame;
     private bool _singleGroupFinished;
     private readonly Queue<AlarmSoundDispatchRecord> _dispatches = new();

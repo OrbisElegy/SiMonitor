@@ -62,14 +62,23 @@ internal static class NotificationSettingsSpecifications
                 (Id: id, Value: new AlarmNotificationSettings(index * 123, index % 2 == 0, index + 1) { SoundMode = (AlarmSoundMode)(index % 3), LatchingMode = (AlarmLatchingMode)(index % 2) }))
                 .ToDictionary(e => e.Id, e => e.Value);
             var alarms = MonitorAlarmPreferences.Default with { PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings, EcgMonitoringEnabled = false };
-            Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms)), "save notification configuration");
+            var sound = MonitorSoundPreferences.Default with { Volume = 37, Muted = true, OutputDeviceId = "speaker-endpoint" };
+            Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms, sound)), "save notification configuration");
             string valid = File.ReadAllText(path);
             var loaded = store.Load(out bool rejected);
-            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 12 &&
-                loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications && !loaded.Alarms.EcgMonitoringEnabled &&
+            Check.That(!rejected && JsonNode.Parse(valid)!["Version"]!.GetValue<int>() == 13 &&
+                loaded.Sound == sound && loaded.Alarms!.PlaybackMode == AlarmPlaybackMode.Notifications && !loaded.Alarms.EcgMonitoringEnabled &&
                 settings.All(e => loaded.Alarms.NotificationFor(e.Key) == e.Value) &&
                 !valid.Contains("Occurrence", StringComparison.Ordinal) && !valid.Contains("NotificationSequence", StringComparison.Ordinal),
                 "all notification settings round trip without episodes, cursors or requests");
+            var oldSound = JsonNode.Parse(valid)!.AsObject();
+            oldSound["Version"] = 12;
+            oldSound["Sound"]!.AsObject().Remove("Muted");
+            oldSound["Sound"]!.AsObject().Remove("OutputDeviceId");
+            File.WriteAllText(path, oldSound.ToJsonString());
+            var migratedSound = store.Load(out rejected);
+            Check.That(!rejected && migratedSound.Sound is { Muted: false, OutputDeviceId: null, Volume: 37 },
+                "old sound preferences retain volume and default to unmuted system output");
             var versionEleven = JsonNode.Parse(valid)!.AsObject();
             versionEleven["Version"] = 11;
             versionEleven["Alarms"]!.AsObject().Remove("EcgMonitoringEnabled");

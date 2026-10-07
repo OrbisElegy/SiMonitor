@@ -73,6 +73,10 @@ class DistributionTests(unittest.TestCase):
         info = (self.output / "distribution-info.txt").read_text(encoding="utf-8")
         self.assertIn("Seele's SiMonitor 1.2.3-test standalone candidate", info)
         self.assertNotIn("V0.5", info)
+        self.assertNotIn("Sound remains off", info)
+        self.assertIn("default master volume is 50%", info)
+        self.assertIn("sound is unmuted", info)
+        self.assertIn("saved settings are restored", info)
         self.assertIn("Linux audio uses the system ALSA library", info)
         self.assertIn("macOS currently has no sound output", info)
 

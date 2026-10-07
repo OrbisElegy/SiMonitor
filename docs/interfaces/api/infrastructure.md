@@ -38,6 +38,18 @@ public sealed class AudioClockBridge
 }
 ```
 
+## Audio/AudioOutputDevices.cs
+
+源码：[AudioOutputDevices.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputDevices.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed record AudioOutputDeviceInfo(string Id, string Name);
+public static partial class AudioOutputDevices
+{
+    public static IReadOnlyList<AudioOutputDeviceInfo> Enumerate();
+}
+```
+
 ## Audio/AudioOutputSelection.cs
 
 源码：[AudioOutputSelection.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputSelection.cs) · 命名空间：`Monitor.Infrastructure.Audio`
@@ -128,6 +140,7 @@ public sealed class AudioPcmBuffer
 public sealed class AudioRenderSession
 {
     public AudioRenderSession(long initialFrame = 0, int capacityMilliseconds = 40);
+    public float Gain { get; set; }
     public bool RequiresReplacement { get; }
     public long UnderrunFrames { get; }
     public int CapacityFrames { get; }
@@ -182,13 +195,16 @@ public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmS
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
     public bool OutputActive { get; }
+    public bool Reconnecting { get; }
+    public void SetOutputDevice(string? deviceId);
+    public void SetVolume(int volumePercent, bool muted);
     public ulong RetiredNotificationSequence { get; }
     public void SetHeartbeatEnabled(bool enabled);
     public void SubmitHeartbeat(int volumePercent, int pitchPercent = 97);
     public void SetRequest(MonitorAlarmSoundRequest? request);
     public Task<SoundPreviewResult> RunAsync(CancellationToken cancellationToken);
 }
-public sealed class MonitorAlarmSequencer(AudioRenderSession session)
+public sealed class MonitorAlarmSequencer(AudioRenderSession session, ulong retiredNotificationSequence = 0)
 {
     public ulong RetiredNotificationSequence { get; private set; }
     public ulong MissedNotificationCount { get; private set; }
@@ -302,6 +318,7 @@ public enum SoundPreviewResult
 }
 public sealed class SoundPreviewPlayback(Func<IPumpedAudioOutput> createOutput)
 {
+    public void SetOutput(string? deviceId, int volumePercent, bool muted);
     public Task<SoundPreviewResult> PlayAsync(int volumePercent, CancellationToken cancellationToken);
 }
 ```

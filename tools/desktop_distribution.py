@@ -111,7 +111,9 @@ def assemble(directory, source, rid, provenance):
 Offline launch: run {executable} without arguments; keep this directory intact.
 No .NET SDK installation is required for this self-contained package.
 Windows audio: keep sim_audio_native.dll beside the executable.
-Sound remains off at startup; enable it explicitly in Settings > Sound.
+Monitor sound starts automatically; the default master volume is 50% and
+sound is unmuted. Adjust volume, mute or the output in Settings > Sound;
+saved settings are restored on startup.
 Linux audio uses the system ALSA library, including PipeWire/PulseAudio routing.
 macOS currently has no sound output.
 

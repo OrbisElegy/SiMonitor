@@ -110,7 +110,7 @@ internal static class AlarmAttentionPresentationSmokeChecks
             var saved = alerts.CapturePreferences();
             alerts.RestorePreferences(saved);
             Require(editor.LatchUntilAcknowledged.IsChecked == true && State().LatchingMode == AlarmLatchingMode.UntilAcknowledged &&
-                State().State == AlarmAttentionState.None && window.Settings.Sound.AlarmEnabled.IsChecked == false,
+                State().State == AlarmAttentionState.None && !window.Settings.Sound.Muted,
                 "restoration retains the visual policy without active attention or audio opt-in");
         }
         finally { window.Close(); }

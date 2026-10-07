@@ -84,7 +84,7 @@ internal static class NotificationSettingsSmokeChecks
             try { alerts.RestorePreferences(saved with { Notifications = null! }); } catch (ArgumentException) { invalidRestore = true; }
             Require(invalidRestore && journal.Conditions.Single(c => c.ConditionId == "hr-high").Episode == beforeMode,
                 "invalid saved policy is rejected before resetting live state");
-            Require(sound.AlarmEnabled.IsChecked == false, "selecting notification mode never opts into hardware audio");
+            Require(!sound.Muted, "selecting notification mode preserves master mute preference");
 
             high.SoundChoices[1].IsChecked = true;
             panel.Mode.SelectedIndex = 0;

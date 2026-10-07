@@ -144,7 +144,7 @@ internal sealed class DesignPreviewWindow : Window
             Child = _workspace
         };
         Grid.SetRow(card, 1); main.Children.Add(card); Content = root;
-        Opened += (_, _) => Start(); Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
+        Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         SelectPage(0); UpdateState();
     }
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
@@ -152,6 +152,7 @@ internal sealed class DesignPreviewWindow : Window
             () => new WaveformDemoWindow(projected: true).Show(this), Localization);
     private void ConnectSettings()
     {
+        if (IsVisible) { Settings.Sound.StartOutput(); }
         Settings.LanguageChanged += SelectLanguage;
         Settings.MeasurementUnits.SelectionChanged += (_, _) => EcgPage?.SetMeasurementUnits(Settings.MeasurementUnits.SelectedIndex == 1);
         void UpdateNotificationMode()

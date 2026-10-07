@@ -886,5 +886,22 @@
   "alarm.ecgEnabled": "ECG monitoring alarms",
   "alarm.ecgPage": "ECG events",
   "alarm.ecgSelect": "Detection",
-  "monitor.ecgRepolarizationName": "Measured ST, QT and QTc"
+  "monitor.ecgRepolarizationName": "Measured ST, QT and QTc",
+  "alarm.ecgSearch": "Search events, e.g. PVC / QTc",
+  "alarm.ecgClearFilters": "Clear filters",
+  "alarm.ecgBack": "‹ Back to events",
+  "alarm.ecgNoResults": "No matching events. Try another term or clear the filters.",
+  "alarm.ecgAll": "All",
+  "alarm.ecgGroupCritical": "Critical rhythms",
+  "alarm.ecgGroupPauses": "Pauses and missed beats",
+  "alarm.ecgGroupVentricular": "Ventricular rhythms and PVCs",
+  "alarm.ecgGroupAtrial": "Atrial and supraventricular",
+  "alarm.ecgGroupRepolarization": "ST / QT",
+  "alarm.ecgGroupPacing": "Pacing",
+  "alarm.ecgCount": "Showing {0} of {1} events",
+  "alarm.ecgRetained": "Retain after recovery",
+  "alarm.ecgFilter": "Filter events",
+  "alarm.ecgFilterActive": "Filter events (active)",
+  "alarm.ecgCategory": "Category",
+  "alarm.ecgFilterDone": "Done"
 }

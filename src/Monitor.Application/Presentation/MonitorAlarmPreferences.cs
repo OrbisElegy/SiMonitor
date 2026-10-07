@@ -6,6 +6,7 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
     int? SpO2Warning, int? SpO2Critical, bool NoExpirationEnabled, int? NoExpirationSeconds,
     IReadOnlyDictionary<MonitorNumeric, MeasurementLimits> Additional, bool NoticeColorEnabled)
 {
+    public bool EcgMonitoringEnabled { get; init; } = true;
     public IReadOnlyDictionary<MonitorNumeric, MeasurementConfirmationTiming> ConfirmationTimings { get; init; } =
         new Dictionary<MonitorNumeric, MeasurementConfirmationTiming>();
 
@@ -16,14 +17,17 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
     public static IReadOnlyList<string> NotificationConditionIds { get; } = Array.AsReadOnly(
         MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.HeartRateDescriptor)
             .SelectMany(d => new[] { d.Id + "-low", d.Id + "-high" })
-            .Concat(new[] { "spo2-low", "co2-no-expiration" }).Order(StringComparer.Ordinal).ToArray());
+            .Concat(new[] { "spo2-low", "co2-no-expiration" }).Concat(EcgAlarmNotices.Descriptors.Select(d => d.Id)).Order(StringComparer.Ordinal).ToArray());
 
     public AlarmNotificationSettings NotificationFor(string conditionId)
     {
         if (!NotificationConditionIds.Contains(conditionId, StringComparer.Ordinal))
         { throw new ArgumentException("AlarmNotification.UnknownCondition", nameof(conditionId)); }
-        return Notifications.TryGetValue(conditionId, out var settings) ? settings : AlarmNotificationSettings.Default;
+        return Notifications.TryGetValue(conditionId, out var settings) ? settings : DefaultNotificationFor(conditionId);
     }
+
+    public static AlarmNotificationSettings DefaultNotificationFor(string conditionId) =>
+        EcgAlarmNotices.Descriptors.SingleOrDefault(d => d.Id == conditionId)?.DefaultNotification ?? AlarmNotificationSettings.Default;
 
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric) =>
         ConfirmationTimings.TryGetValue(numeric, out var timing) ? timing : MeasurementConfirmationTiming.DefaultFor(numeric);

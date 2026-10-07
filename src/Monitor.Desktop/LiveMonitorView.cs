@@ -94,10 +94,11 @@ internal sealed class LiveMonitorView : UserControl
                 _ => "monitor.labelCvp"
             };
             var primary = new TextBlock { Text = "---", FontSize = 52, FontWeight = FontWeight.SemiBold, Foreground = color };
-            var secondary = new TextBlock { FontSize = 17, Foreground = color, IsVisible = slot.Channel is 2 or 3 or 4 or 5 };
+            var secondary = new TextBlock { FontSize = slot.Channel == 0 ? 13 : 17, Foreground = color, IsVisible = slot.Channel is 0 or 2 or 3 or 4 or 5 };
             _localization.Bind(primary, AutomationProperties.NameProperty, label);
             _localization.Bind(secondary, AutomationProperties.NameProperty, slot.Channel switch
             {
+                0 => "monitor.ecgRepolarizationName",
                 2 => "monitor.secondaryPr",
                 3 => "monitor.secondaryAbp",
                 5 => "monitor.secondaryPa",
@@ -158,7 +159,8 @@ internal sealed class LiveMonitorView : UserControl
         }
         // Numeric updates follow acquisition cadence, not the 60Hz sweep.
         long bucket = _trace.Session.SimulationTimeNs / 200_000_000;
-        if (bucket == _lastMeasurementBucket) { RefreshNotice(); return; }
+        if (bucket == _lastMeasurementBucket && _trace.Session.DetectedMonitoringEvents.Count == 0 &&
+            _trace.Session.DetectedRhythmEvents.Count == 0) { RefreshNotice(); return; }
         _lastMeasurementBucket = bucket;
         var snapshot = _trace.Session.Measurements;
         if (snapshot is null) { return; }
@@ -196,7 +198,9 @@ internal sealed class LiveMonitorView : UserControl
             switch (channel)
             {
                 case 0:
-                    primary.Text = Value(MeasurementSource.Ecg, snapshot.HeartRate.Status, snapshot.HeartRate.MilliBeatsPerMinute, 1000, "HR"); break;
+                    primary.Text = Value(MeasurementSource.Ecg, snapshot.HeartRate.Status, snapshot.HeartRate.MilliBeatsPerMinute, 1000, "HR");
+                    secondary.Text = RepolarizationText(snapshot.EcgMonitoring);
+                    break;
                 case 1:
                     primary.Text = Value(MeasurementSource.ImpedanceRespiration, snapshot.ImpedanceRespiration.Status, snapshot.ImpedanceRespiration.MilliBreathsPerMinute, 1000, "RR"); break;
                 case 2:
@@ -224,6 +228,22 @@ internal sealed class LiveMonitorView : UserControl
         _rawNotices = notices.DistinctBy(notice => notice.Id).Concat(AdditionalNotices?.Invoke(snapshot) ?? []).ToArray();
         RefreshAttention();
     }
+    private static string RepolarizationText(EcgMonitoringReading reading)
+    {
+        string Value(WaveformMeasurementStatus status, int? value, bool voltage = false)
+        {
+            if (reading.Learning || reading.Status != WaveformMeasurementStatus.Valid) { return "---"; }
+            if (status == WaveformMeasurementStatus.Uncountable) { return "-?-"; }
+            if (status != WaveformMeasurementStatus.Valid || value is null) { return "---"; }
+            return voltage ? ((decimal)value.Value / 1000).ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture)
+                : value.Value.ToString(CultureInfo.InvariantCulture);
+        }
+        var repolarization = reading.Repolarization;
+        return "ST " + Value(repolarization.StStatus, repolarization.StMicrovolts, true) + " mV\nQT " +
+            Value(repolarization.QtStatus, repolarization.QtMilliseconds) + " / QTc " +
+            Value(repolarization.QtStatus, repolarization.QtcMilliseconds) + " ms";
+    }
+
     private void RefreshNotice()
     {
         _rotation.Update(_notices, _trace.Session.SimulationTimeNs);

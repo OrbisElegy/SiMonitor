@@ -16,6 +16,7 @@ internal static class EcgAlarmSmokeChecks
         try
         {
             var alerts = window.Settings.Alerts;
+            alerts.EcgMonitoringEnabled.IsChecked = false;
             alerts.HeartRateEnabled.IsChecked = true;
             alerts.WarningLowHeartRate.Value = 50;
             alerts.CriticalLowHeartRate.Value = 40;

@@ -15,6 +15,9 @@ internal sealed class MonitorAlertSettings : StackPanel
     private string? _noExpirationErrorKey;
     private readonly ConfirmedLimitNotice _heartRateNotice = new(MonitorNumeric.HeartRate);
     private readonly ConfirmedLimitNotice _spO2Notice = new(MonitorNumeric.SpO2);
+    private readonly EcgAlarmNotices _ecgNotices = new();
+    internal CheckBox EcgMonitoringEnabled { get; } = new() { IsChecked = true };
+    internal TabItem EcgMonitoringPage { get; private set; } = null!;
     private readonly ConfirmedNoExpirationNotice _noExpirationNotice = new();
     private readonly TextBlock _noExpirationError = new() { Foreground = Avalonia.Media.Brushes.OrangeRed, TextWrapping = Avalonia.Media.TextWrapping.Wrap, IsVisible = false };
     internal AlarmConfirmationEditor HeartRateConfirmation { get; }
@@ -41,7 +44,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal NumericUpDown WarningInterval { get; } = Number(5, 3.5m, 60);
     internal NumericUpDown CriticalInterval { get; } = Number(1.5m, .25m, 2);
     internal IReadOnlyList<AlarmLifecycleJournal> AlarmLifecycles =>
-        new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
+        new[] { _heartRateNotice.Lifecycle, _spO2Notice.Lifecycle, _noExpirationNotice.Lifecycle, _ecgNotices.Lifecycle }.Concat(AdditionalLimits.Lifecycles).ToArray();
     internal AlarmNotificationSettingsPanel NotificationSettings { get; }
     // Titles are catalog keys.
     internal IReadOnlyList<(MonitorNumeric Numeric, string Title)> Parameters { get; } =
@@ -57,6 +60,9 @@ internal sealed class MonitorAlertSettings : StackPanel
         HeartRateConfirmation = new(MeasuredLimitNotice.HeartRateDescriptor, _localization);
         SpO2Confirmation = new(MeasuredLimitNotice.SpO2Descriptor, _localization);
         AdditionalLimits = new(_localization);
+        _localization.Bind(EcgMonitoringEnabled, ContentControl.ContentProperty, "alarm.ecgEnabled");
+        EcgMonitoringEnabled.IsCheckedChanged += (_, _) => _ecgNotices.Reset(EcgMonitoringEnabled.IsChecked == true
+            ? AlarmTransitionReason.ConfigurationChanged : AlarmTransitionReason.Disabled);
         _localization.Bind(HeartRateEnabled, ContentControl.ContentProperty, "alarm.hrEnabled");
         _localization.Bind(SpO2Enabled, ContentControl.ContentProperty, "alarm.spo2Enabled");
         _localization.Bind(NoExpirationEnabled, ContentControl.ContentProperty, "alarm.noExpirationEnabled");
@@ -164,6 +170,11 @@ internal sealed class MonitorAlertSettings : StackPanel
             };
             _soundPages[numeric] = ConfirmationFor(numeric).AddPage("alarm.pageSound", NotificationSettings.CreateEventPage(numeric, title, ids));
         }
+        var ecgPage = new StackPanel { Spacing = 12 };
+        ecgPage.Children.Add(EcgMonitoringEnabled);
+        ecgPage.Children.Add(NotificationSettings.CreateEcgPage());
+        ecgPage.Children.Add(DesktopInformationPages.Help("ecg-monitoring-alarms"));
+        EcgMonitoringPage = HeartRateConfirmation.AddPage("alarm.ecgPage", ecgPage);
     }
     internal AlarmConfirmationEditor ConfirmationFor(MonitorNumeric numeric) => numeric switch
     {
@@ -173,7 +184,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     };
     internal IReadOnlyList<CheckBox> SwitchesFor(MonitorNumeric numeric) => numeric switch
     {
-        MonitorNumeric.HeartRate => [HeartRateEnabled],
+        MonitorNumeric.HeartRate => [HeartRateEnabled, EcgMonitoringEnabled],
         MonitorNumeric.SpO2 => [SpO2Enabled],
         MonitorNumeric.EtCo2 => [AdditionalLimits.Editors[numeric].Enabled, NoExpirationEnabled],
         _ => [AdditionalLimits.Editors[numeric].Enabled]
@@ -198,6 +209,7 @@ internal sealed class MonitorAlertSettings : StackPanel
                     Read(editor.WarningLow, d.Divisor), Read(editor.WarningHigh, d.Divisor), Read(editor.CriticalHigh, d.Divisor));
             }), NoticeColorEnabled.IsChecked == true)
         {
+            EcgMonitoringEnabled = EcgMonitoringEnabled.IsChecked == true,
             PlaybackMode = notifications.Mode,
             Notifications = notifications.Overrides,
             NoExpirationConfirmation = ReadNoExpirationTiming(),
@@ -220,6 +232,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         HeartRateConfirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.HeartRate));
         SpO2Confirmation.Restore(preferences.ConfirmationFor(MonitorNumeric.SpO2));
         HeartRateEnabled.IsChecked = preferences.HeartRate.Enabled;
+        EcgMonitoringEnabled.IsChecked = preferences.EcgMonitoringEnabled;
         CriticalLowHeartRate.Value = preferences.HeartRate.CriticalLow / 1000m;
         WarningLowHeartRate.Value = preferences.HeartRate.WarningLow / 1000m;
         WarningHeartRate.Value = preferences.HeartRate.WarningHigh / 1000m;
@@ -257,6 +270,12 @@ internal sealed class MonitorAlertSettings : StackPanel
         }
         foreach (var state in attention.Values.Where(c => c.State == AlarmAttentionState.RecoveredUnacknowledged))
         {
+            if (EcgAlarmNotices.Descriptors.SingleOrDefault(d => d.Id == state.ConditionId) is { } ecg)
+            {
+                yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, ecg.Text + " · 已恢复，待确认")
+                { Audible = false, Message = new("alarm.recoveredUnacknowledged", ecg.Message) };
+                continue;
+            }
             bool low = state.ConditionId.EndsWith("-low", StringComparison.Ordinal);
             var descriptor = state.ConditionId == "co2-no-expiration" ? null :
                 MeasuredLimitNotice.Descriptors.Prepend(MeasuredLimitNotice.HeartRateDescriptor).Prepend(MeasuredLimitNotice.SpO2Descriptor)
@@ -268,8 +287,13 @@ internal sealed class MonitorAlertSettings : StackPanel
         }
     }
 
-    internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot)
+    internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot) => Notices(snapshot, null, null);
+
+    internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot,
+        IReadOnlyList<DetectedEcgMonitoringEvent>? monitoringEvents = null, IReadOnlyList<DetectedEcgRhythmEvent>? rhythmEvents = null)
     {
+        foreach (var notice in _ecgNotices.Evaluate(EcgMonitoringEnabled.IsChecked == true, snapshot, monitoringEvents, rhythmEvents))
+        { yield return notice; }
         if (EvaluatePrimary(MonitorNumeric.HeartRate, snapshot) is { } heartRate) { yield return heartRate; }
         if (EvaluatePrimary(MonitorNumeric.SpO2, snapshot) is { } saturation) { yield return saturation; }
         foreach (var notice in AdditionalLimits.Notices(snapshot)) { yield return notice; }
@@ -284,6 +308,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     }
     internal void Reset(AlarmTransitionReason reason = AlarmTransitionReason.SessionReset)
     {
+        _ecgNotices.Reset(reason);
         _heartRateNotice.Reset(reason);
         _spO2Notice.Reset(reason);
         _noExpirationNotice.Reset(reason);

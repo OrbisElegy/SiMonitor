@@ -86,6 +86,7 @@ internal static class Program
             .. AlarmNotificationSpecifications.All,
             .. NotificationSoundSpecifications.All,
             .. NotificationSettingsSpecifications.All,
+            .. EcgAlarmNoticeSpecifications.All,
             .. TextbookEcgReferenceSpecifications.All,
             .. EcgElectrodeProjectionSpecifications.All,
             .. ElectrodeSignalGeneratorSpecifications.All,

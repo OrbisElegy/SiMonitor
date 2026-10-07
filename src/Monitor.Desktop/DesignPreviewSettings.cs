@@ -330,6 +330,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
             foreach (var toggle in switches) { toggle.IsCheckedChanged += (_, _) => RefreshState(); }
             RefreshState();
         }
+        Alerts.NotificationSettings.EcgRequested += () =>
+        {
+            Alerts.HeartRateConfirmation.Groups.SelectedItem = Alerts.EcgMonitoringPage;
+            alarmSections.SelectedSection = 0;
+        };
         Alerts.NotificationSettings.ParameterRequested += numeric =>
         {
             Alerts.ShowSoundPage(numeric);

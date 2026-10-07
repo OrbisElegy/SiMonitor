@@ -10,6 +10,7 @@ internal static class MonitorContinuationSpecifications
 {
     internal static readonly Specification[] All =
     [
+        new(nameof(AtrialFibrillationContinuationAppliesTheCurrentSegmentImmediately), AtrialFibrillationContinuationAppliesTheCurrentSegmentImmediately),
         new(nameof(ApplyContinuesAtTheOldSourcesLastMoment), ApplyContinuesAtTheOldSourcesLastMoment),
         new(nameof(PendingChangesReplaceAndRejectAtomically), PendingChangesReplaceAndRejectAtomically),
         new(nameof(StartupDiscardDoesNotPublishTransientSamples), StartupDiscardDoesNotPublishTransientSamples),
@@ -26,6 +27,56 @@ internal static class MonitorContinuationSpecifications
     private static void Advance(LocalMonitorPreviewSession session, long target)
     {
         while (session.SimulationTimeNs < target) { session.Advance(Math.Min(50_000_000, target - session.SimulationTimeNs)); }
+    }
+
+    private static void AtrialFibrillationContinuationAppliesTheCurrentSegmentImmediately()
+    {
+        foreach (long boundary in new[] { 6_052_000_000, AtrialFibrillationReference.SegmentDurationNs - 100_000_000 })
+            foreach (var shape in new[] { EcgVentricularIllustration.Reference, EcgVentricularIllustration.RightHypertrophyWithStrain,
+                EcgVentricularIllustration.SevereRightQr, EcgVentricularIllustration.PulmonaryHeartSigns })
+            {
+                var source = PhysiologyIllustrationSource.Create(PhysiologyIllustrationConfiguration.Default with
+                { VentricularShape = shape });
+                long cursor = 0;
+                while (cursor < boundary)
+                {
+                    cursor = Math.Min(cursor + 50_000_000, boundary);
+                    source.AdvanceTo(cursor, 50, 1, 100);
+                }
+                foreach (var configuration in new[] { PhysiologyIllustrationConfiguration.Fibrillation(), PhysiologyIllustrationConfiguration.Fibrillation(),
+                    PhysiologyIllustrationConfiguration.Fibrillation(true), PhysiologyIllustrationConfiguration.Default,
+                    PhysiologyIllustrationConfiguration.Fibrillation() })
+                {
+                    source.ContinueWith(PhysiologyIllustrationSource.Create(configuration));
+                    var state = source.CaptureState().Channels.Single(c => c.ChannelId == PhysiologyIllustrationSource.ChannelId(0)).Generator;
+                    var actual = PhysiologySignalGenerator.Restore(state).GenerateBefore(cursor + 200_000_000, 50, 1000);
+                    // Remove only f activity: all old triggered P/QRS/T tails and new
+                    // irregular QRS events remain an independent control signal.
+                    var withoutF = PhysiologySignalGenerator.Restore(state with
+                    {
+                        Bands = state.Bands.Where(b => b.Trigger != PhysiologyCycleEventKind.AtrialFibrillationSegment).ToArray(),
+                        History = state.History.Select(h => h with
+                        { Bands = h.Bands.Where(b => b.Trigger != PhysiologyCycleEventKind.AtrialFibrillationSegment).ToArray() }).ToArray()
+                    }).GenerateBefore(cursor + 200_000_000, 50, 1000);
+                    var fBands = state.Bands.Where(b => b.Trigger == PhysiologyCycleEventKind.AtrialFibrillationSegment).ToArray();
+                    var expectedF = fBands.Length == 0 ? null : PhysiologySignalGenerator.Restore(state with
+                    { Bands = fBands, ActiveFromEventTimeNs = null, History = [] }).GenerateBefore(cursor + 200_000_000, 50, 1000);
+                    Check.That(actual.Count == 50 && actual.Select((sample, index) => sample.ValueQ32 - withoutF[index].ValueQ32)
+                        .SequenceEqual(expectedF?.Select(sample => sample.ValueQ32) ?? Enumerable.Repeat(0L, 50)),
+                        "f activity follows the new definition from its first sample, without missing, doubled or outgoing segments");
+                    if (expectedF is not null)
+                    { Check.That(expectedF.Any(sample => sample.ValueQ32 != 0), "the transition window contains measurable f activity"); }
+                    var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
+                    for (int step = 0; step < 8; step++)
+                    {
+                        cursor += 50_000_000;
+                        var expected = source.AdvanceTo(cursor, 50, 1, 100);
+                        var replay = restored.AdvanceTo(cursor, 50, 1, 100);
+                        Check.That(expected.Count == replay.Count && expected.Zip(replay).All(p => p.First.SequenceEqual(p.Second)),
+                            "rapid AF transitions preserve buffered samples and checkpoint replay");
+                    }
+                }
+            }
     }
 
     private static void ApplyContinuesAtTheOldSourcesLastMoment()

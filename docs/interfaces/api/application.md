@@ -485,13 +485,21 @@ public enum EcgMonitoringConditions : ulong
     PacerNotCaptured = 1UL << 23,
     PacerNotPacing = 1UL << 24
 }
-public sealed record EcgPacingEvidence(IReadOnlyList<long> PulseTimesNs);
+public enum EcgPacingEvidenceOrigin { Acquisition, Simulation }
+public sealed record EcgPacingEvidence(IReadOnlyList<long> PulseTimesNs)
+{
+    public IReadOnlyList<long> AtrialPulseTimesNs { get; init; }
+    public EcgPacingEvidenceOrigin Origin { get; init; }
+    public bool VentricularPacingExpected { get; init; }
+    public long? ExpectedVentricularIntervalNs { get; init; }
+}
 public sealed record EcgBeatMorphology(EcgBeatLabel Label, int QrsWidthMilliseconds, int TemplateDifferencePermille);
 public sealed record DetectedEcgMonitoringEvent(EcgMonitoringConditions Condition, EcgMonitoringTransition Transition, long EvidenceFromNs, long ConfirmedAtNs, EcgRhythmInterruption Interruption = EcgRhythmInterruption.None);
 public sealed record EcgRepolarizationReading(WaveformMeasurementStatus StStatus, int? StMicrovolts, WaveformMeasurementStatus QtStatus, int? QtMilliseconds, int? QtcMilliseconds, int? DeltaQtcMilliseconds);
 public sealed record EcgMonitoringReading(WaveformMeasurementStatus Status, bool Learning, EcgMonitoringConditions ActiveConditions, int? PvcsLastMinute, EcgBeatMorphology? LastBeat, EcgRepolarizationReading Repolarization)
 {
     public bool PacingEvidenceAvailable { get; init; }
+    public EcgPacingEvidenceOrigin? PacingEvidenceOrigin { get; init; }
     public static EcgMonitoringReading NoData { get; }
 }
 public sealed record EcgMonitoringSettings

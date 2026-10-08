@@ -38,6 +38,7 @@ internal static class Program
             .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. PacingWaveformSpecifications.All,
+            .. PacingAlarmSpecifications.All,
             .. AssessmentSpecifications.All,
             .. IdentitySpecifications.All,
             .. AuthenticationSpecifications.All,

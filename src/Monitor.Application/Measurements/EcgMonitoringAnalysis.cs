@@ -23,7 +23,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private bool _runHasLeftBoundary;
     private long? _ronTCandidateNs, _previousRonTNs;
     private long _ronTAverageNs;
-    private long? _lastPulseNs, _pulseEvidenceFromNs, _averageRrNs;
+    private long? _lastPulseNs, _unconfirmedPulseNs, _pulseEvidenceFromNs, _averageRrNs;
     private long[] _episodeStarts = new long[25];
     private EcgMonitoringConditions _active;
     private PendingRepolarization? _pending;
@@ -32,11 +32,30 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private long? _stTimeNs, _qtTimeNs, _baselineFromNs;
     private long? _stHighFromNs, _stLowFromNs, _qtHighFromNs, _deltaHighFromNs;
 
+    private bool _ventricularPacing = settings.PacedMode;
+    private EcgPacingEvidenceOrigin? _pacingOrigin;
+    private long? _expectedVentricularIntervalNs;
+
+    internal void ConfigurePacing(bool ventricularPacing, EcgPacingEvidenceOrigin? origin, long? expectedIntervalNs,
+        long timeNs, List<DetectedEcgMonitoringEvent> events)
+    {
+        if (_ventricularPacing != ventricularPacing || _expectedVentricularIntervalNs != expectedIntervalNs ||
+            _pacingOrigin is not null && origin is not null && _pacingOrigin != origin)
+        { Interrupt(timeNs, EcgRhythmInterruption.Relearning, events); }
+        _ventricularPacing = ventricularPacing;
+        _pacingOrigin = origin;
+        _expectedVentricularIntervalNs = expectedIntervalNs;
+    }
+
     internal bool HasNarrowTemplate => _template is { Width: < 100 };
 
     internal EcgMonitoringAnalysis Copy() => new(settings)
     {
+        _ventricularPacing = _ventricularPacing,
+        _pacingOrigin = _pacingOrigin,
+        _expectedVentricularIntervalNs = _expectedVentricularIntervalNs,
         _lastPulseNs = _lastPulseNs,
+        _unconfirmedPulseNs = _unconfirmedPulseNs,
         _pulseEvidenceFromNs = _pulseEvidenceFromNs,
         _averageRrNs = _averageRrNs,
         _samples = (int[])_samples.Clone(),
@@ -85,7 +104,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             { events.Add(new(condition, EcgMonitoringTransition.Interrupted, _episodeStarts[Index(condition)], timeNs, reason)); }
         }
         _active = EcgMonitoringConditions.None;
-        _validFromNs = _lastPeakNs = _vfFromNs = _lastPulseNs = _pulseEvidenceFromNs = _averageRrNs = null;
+        _validFromNs = _lastPeakNs = _vfFromNs = _lastPulseNs = _unconfirmedPulseNs = _pulseEvidenceFromNs = _averageRrNs = null;
         _beats = [];
         _learning = [];
         _recovery = [];
@@ -110,11 +129,15 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         if (pacingAvailable) { _pulseEvidenceFromNs ??= timeNs; }
         else
         {
-            _pulseEvidenceFromNs = _lastPulseNs = null;
+            _pulseEvidenceFromNs = _lastPulseNs = _unconfirmedPulseNs = null;
             Set(EcgMonitoringConditions.PacerNotCaptured, false, timeNs, timeNs, events, EcgRhythmInterruption.SignalUnavailable);
             Set(EcgMonitoringConditions.PacerNotPacing, false, timeNs, timeNs, events, EcgRhythmInterruption.SignalUnavailable);
         }
-        if (pacingPulse) { _lastPulseNs = timeNs; }
+        if (pacingPulse)
+        {
+            _lastPulseNs = timeNs;
+            _unconfirmedPulseNs ??= timeNs;
+        }
         _validFromNs ??= timeNs;
         _samples[_cursor] = microvolts;
         _cursor = (_cursor + 1) % _samples.Length;
@@ -126,13 +149,14 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             var previousRepolarization = _pending;
             FinishRepolarization(beat.PeakTimeNs - 80_000_000, events);
             _lastPeakNs = beat.PeakTimeNs;
-            _pendingBeat = new(beat, qrsStartNs, qrsEndNs, previousRepolarization);
+            if (_unconfirmedPulseNs <= beat.PeakTimeNs) { _unconfirmedPulseNs = null; }
+            _pendingBeat = new(beat, qrsStartNs, qrsEndNs, previousRepolarization, _lastPulseNs);
         }
         // QRS cue timing stays unchanged. Morphology waits for the complete
         // contour instead of mistaking the fast detector's steep lobe for QRS.
         if (_pendingBeat is { } candidate && timeNs >= candidate.Beat.PeakTimeNs + 160_000_000)
         {
-            Beat(candidate.Beat with { ConfirmedAtNs = timeNs }, candidate.StartNs, candidate.EndNs, candidate.PreviousRepolarization, events);
+            Beat(candidate.Beat with { ConfirmedAtNs = timeNs }, candidate.StartNs, candidate.EndNs, candidate.PreviousRepolarization, candidate.PulseNs, events);
             _pendingBeat = null;
         }
         if (_pending is { } pending && timeNs - pending.PeakNs >= 700_000_000)
@@ -161,13 +185,25 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             timeNs - silenceNs, timeNs, events);
         long? average = _averageRrNs;
         long missedNs = average is { } rr ? (rr >= 500_000_000 ? rr * 7 / 4 : 1_000_000_000) : long.MaxValue;
-        Set(EcgMonitoringConditions.MissedBeat, learned && !settings.PacedMode && !AwaitingQrs(EcgMonitoringConditions.MissedBeat) && !asystole && !vf && silenceNs > missedNs,
+        Set(EcgMonitoringConditions.MissedBeat, learned && !_ventricularPacing && !AwaitingQrs(EcgMonitoringConditions.MissedBeat) && !asystole && !vf && silenceNs > missedNs,
             timeNs - silenceNs, timeNs, events);
-        bool pacingFailure = settings.PacedMode && average is { } pacingRr && _lastPeakNs is { } pacedLast &&
-            _pulseEvidenceFromNs is { } pulseFrom && pulseFrom <= pacedLast && !candidateActive && !asystole && !vf && silenceNs > pacingRr * 7 / 4;
-        bool pulseSinceBeat = _lastPulseNs is { } pace && pace > (_lastPeakNs ?? timeNs);
-        Set(EcgMonitoringConditions.PacerNotCaptured, pacingFailure && pulseSinceBeat, timeNs - silenceNs, timeNs, events);
-        Set(EcgMonitoringConditions.PacerNotPacing, pacingFailure && !pulseSinceBeat, timeNs - silenceNs, timeNs, events);
+        // A declared simulation interval permits startup failure detection even
+        // when no QRS has ever occurred. It never populates HR or an RR sample.
+        long? pacingInterval = _expectedVentricularIntervalNs is { } expected
+            ? Math.Min(average ?? expected, expected) : average;
+        bool pacingFailure = _ventricularPacing && pacingInterval is { } pacingRr &&
+            _pulseEvidenceFromNs is { } pulseFrom && timeNs - pulseFrom > pacingRr * 7 / 4 &&
+            !candidateActive && !asystole && !vf && silenceNs > pacingRr * 7 / 4;
+        bool pulseSinceBeat = _lastPulseNs is { } pace && pace >= (_lastPeakNs ?? _validFromNs.Value);
+        // A returning stimulus needs time for QRS confirmation. Do not briefly
+        // relabel an output pause as noncapture at the instant output resumes.
+        bool awaitingCapture = pulseSinceBeat && _unconfirmedPulseNs is { } firstPulse &&
+            timeNs - firstPulse <= 250_000_000 && !asystole && !vf;
+        if (!awaitingCapture)
+        {
+            Set(EcgMonitoringConditions.PacerNotCaptured, pacingFailure && pulseSinceBeat, timeNs - silenceNs, timeNs, events);
+            Set(EcgMonitoringConditions.PacerNotPacing, pacingFailure && !pulseSinceBeat, timeNs - silenceNs, timeNs, events);
+        }
         if (_lastPeakNs is { } last && timeNs - last > 3_000_000_000)
         {
             ClearBeatConditions(timeNs, events);
@@ -176,7 +212,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             Math.Max(_validFromNs.Value, timeNs - MinuteNs), timeNs, events);
     }
 
-    private void Beat(DetectedEcgBeat beat, long startNs, long endNs, PendingRepolarization? previousRepolarization,
+    private void Beat(DetectedEcgBeat beat, long startNs, long endNs, PendingRepolarization? previousRepolarization, long? pulseNs,
         List<DetectedEcgMonitoringEvent> events)
     {
         long? previous = _beats.LastOrDefault()?.PeakNs;
@@ -215,10 +251,10 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
                 HasConductedAtrialEvidence(beat.PeakTimeNs, shape, template))
             { label = EcgBeatLabel.SupraventricularPremature; }
         }
-        if (settings.PacedMode && _learningBeats >= TemplateBeatCount)
+        if (_ventricularPacing)
         {
             if (_pulseEvidenceFromNs is null) { label = EcgBeatLabel.Unknown; }
-            else if (_lastPulseNs is { } pulseNs && pulseNs <= beat.PeakTimeNs && beat.PeakTimeNs - pulseNs <= 200_000_000)
+            else if (pulseNs is { } pulse && pulse <= startNs && startNs - pulse <= 150_000_000)
             { label = EcgBeatLabel.Paced; }
         }
         if (RecoverNormalReference(label, shape, intervalNs))
@@ -300,7 +336,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     // never relearn merely because ST/QT is unavailable or a timer expired.
     private bool RecoverNormalReference(EcgBeatLabel label, Shape? shape, long intervalNs)
     {
-        if (settings.PacedMode || label is not (EcgBeatLabel.Unknown or EcgBeatLabel.SupraventricularPremature) ||
+        if (_ventricularPacing || label is not (EcgBeatLabel.Unknown or EcgBeatLabel.SupraventricularPremature) ||
             shape is not { Width: < 100 } || intervalNs is < 400_000_000 or > 2_000_000_000 ||
             60_000_000_000L > intervalNs * settings.SvtHeartRate)
         {
@@ -344,7 +380,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             new(stValid ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.Uncountable, stValid ? _st : null,
                 qtValid ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.Uncountable,
                 qtValid ? _qt : null, qtValid ? _qtc : null, qtValid ? _qtc - _baseline : null))
-        { PacingEvidenceAvailable = _pulseEvidenceFromNs is not null };
+        { PacingEvidenceAvailable = _pulseEvidenceFromNs is not null, PacingEvidenceOrigin = _pulseEvidenceFromNs is null ? null : _pacingOrigin };
     }
 
     private bool Pattern(int[] pattern)
@@ -436,7 +472,9 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             minimum = Math.Min(minimum, value);
             maximum = Math.Max(maximum, value);
         }
-        return maximum - minimum < 100;
+        // Low-amplitude atrial activity may persist during ventricular standstill.
+        // Do not let P waves or rejected display impulses mask that alarm.
+        return maximum - minimum < (_ventricularPacing ? 300 : 100);
     }
 
     private bool FibrillatoryWindow()
@@ -488,7 +526,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private sealed record Shape(int Width, int[] Values);
     private sealed record RecoveryBeat(Shape Shape, long RrNs);
     private sealed record Observation(long PeakNs, EcgBeatLabel Label, Shape? Shape);
-    private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs, PendingRepolarization? PreviousRepolarization);
+    private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs, PendingRepolarization? PreviousRepolarization, long? PulseNs);
     private sealed record PendingRepolarization(long PeakNs, long StartNs, long EndNs, long RrNs);
 
     private void FinishRepolarization(long availableUntilNs, List<DetectedEcgMonitoringEvent> events)

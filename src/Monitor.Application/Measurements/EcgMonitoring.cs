@@ -50,10 +50,19 @@ public enum EcgMonitoringConditions : ulong
     PacerNotPacing = 1UL << 24
 }
 
-// Sideband from the acquisition device, covering the entire current packet.
-// Null means no pulse detector is available; an empty list means it observed no
-// pulses. Timestamps are acquired sample-clock times, never authored source cues.
-public sealed record EcgPacingEvidence(IReadOnlyList<long> PulseTimesNs);
+public enum EcgPacingEvidenceOrigin { Acquisition, Simulation }
+
+// Complete packet sideband on the acquired sample clock. Null means unavailable;
+// empty ventricular pulses means available with no ventricular output observed.
+// Simulation provenance is explicit and never represents device detection.
+public sealed record EcgPacingEvidence(IReadOnlyList<long> PulseTimesNs)
+{
+    public IReadOnlyList<long> AtrialPulseTimesNs { get; init; } = [];
+    public EcgPacingEvidenceOrigin Origin { get; init; }
+    public bool VentricularPacingExpected { get; init; } = true;
+    // Simulation-only startup reference; never substitutes for measured HR.
+    public long? ExpectedVentricularIntervalNs { get; init; }
+}
 
 public sealed record EcgBeatMorphology(EcgBeatLabel Label, int QrsWidthMilliseconds, int TemplateDifferencePermille);
 public sealed record DetectedEcgMonitoringEvent(EcgMonitoringConditions Condition, EcgMonitoringTransition Transition,
@@ -65,6 +74,7 @@ public sealed record EcgMonitoringReading(WaveformMeasurementStatus Status, bool
     EcgRepolarizationReading Repolarization)
 {
     public bool PacingEvidenceAvailable { get; init; }
+    public EcgPacingEvidenceOrigin? PacingEvidenceOrigin { get; init; }
     public static EcgMonitoringReading NoData { get; } = new(WaveformMeasurementStatus.NoData, true,
         EcgMonitoringConditions.None, null, null, new(WaveformMeasurementStatus.NoData, null,
             WaveformMeasurementStatus.NoData, null, null, null));

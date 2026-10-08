@@ -14,7 +14,8 @@ public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateRead
 }
 
 // Serialized acquired-packet owner for the local illustration channel binding.
-// Presentation/review never feeds this class. No generator target enters it.
+// Presentation/review never feeds this class. Measured values use samples;
+// simulated pulse sideband and its startup reference have explicit provenance.
 public sealed class LiveWaveformMeasurements
 {
     private EcgHeartRateMeasurement _ecg;

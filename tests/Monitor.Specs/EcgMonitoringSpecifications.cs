@@ -27,6 +27,7 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgMonitoringFlowsThroughLivePreview), EcgMonitoringFlowsThroughLivePreview),
         new(nameof(EcgAcquiredPresetsProduceVentricularEvidence), EcgAcquiredPresetsProduceVentricularEvidence),
         new(nameof(EcgPacingRequiresAcquiredPulseEvidence), EcgPacingRequiresAcquiredPulseEvidence),
+        new(nameof(EcgSimulatedPacingRestoresAndRejectsInvalidEvidence), EcgSimulatedPacingRestoresAndRejectsInvalidEvidence),
         new(nameof(EcgRonTWaitsForItsCompensatoryPause), EcgRonTWaitsForItsCompensatoryPause),
         new(nameof(EcgRonTRequiresUnfinishedTAndConfirmation), EcgRonTRequiresUnfinishedTAndConfirmation),
         new(nameof(EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs), EcgRonTAcquiredPresetsDistinguishLongQtFromOrdinaryPvcs),
@@ -330,6 +331,86 @@ internal static class EcgMonitoringSpecifications
         try { invalid.Consume(Wire(new short[50], 0, 0), out _, out _, new([-StepNs])); }
         catch (ArgumentException) { rejected = true; }
         Check.That(rejected && invalid.Read(0).Status == WaveformMeasurementStatus.NoData, "out-of-packet pulse evidence rejects entire packet");
+    }
+
+    private static void EcgSimulatedPacingRestoresAndRejectsInvalidEvidence()
+    {
+        short[] samples = new short[1500];
+        for (int cycle = 0; cycle < 6; cycle++)
+        {
+            samples[cycle * 250 + 1] = 600;
+            samples[cycle * 250 + 51] = 1200;
+        }
+        EcgPacingEvidence Evidence(int start, int count) => new(Enumerable.Range(start, count)
+            .Where(i => i % 250 == 50).Select(i => i * StepNs).ToArray())
+        {
+            AtrialPulseTimesNs = Enumerable.Range(start, count).Where(i => i % 250 == 0).Select(i => i * StepNs).ToArray(),
+            Origin = EcgPacingEvidenceOrigin.Simulation,
+            ExpectedVentricularIntervalNs = 1_000_000_000
+        };
+        List<DetectedEcgMonitoringEvent>? expectedEvents = null;
+        EcgMonitoringReading? expectedReading = null;
+        foreach (int packet in new[] { 50, 1, 7 })
+        {
+            var detector = new EcgHeartRateMeasurement(Channel);
+            List<DetectedEcgMonitoringEvent> events = [];
+            for (int start = 0, sequence = 0; start < samples.Length; sequence++)
+            {
+                int count = Math.Min(packet, samples.Length - start);
+                var beats = detector.Consume(Wire(samples.Skip(start).Take(count).ToArray(), start, (ulong)sequence),
+                    out _, out var batch, Evidence(start, count));
+                Check.That(beats.Count == 0, "display impulses never become acquired QRS");
+                events.AddRange(batch);
+                detector = EcgHeartRateMeasurement.Restore(detector.Capture());
+                start += count;
+            }
+            var reading = detector.ReadMonitoring(1499 * StepNs);
+            if (expectedEvents is null) { expectedEvents = events; expectedReading = reading; }
+            else { Check.That(events.SequenceEqual(expectedEvents) && reading == expectedReading, "pulse blanking/timers restore across one-sample packet boundaries"); }
+            Check.That(events.Any(e => e.Condition == EcgMonitoringConditions.PacerNotCaptured && e.Transition == EcgMonitoringTransition.Started) &&
+                (reading.ActiveConditions & EcgMonitoringConditions.Asystole) != 0, "no-QRS startup raises failure then critical standstill");
+        }
+        var rapid = new EcgHeartRateMeasurement(Channel);
+        bool rapidFailure = false;
+        for (int start = 0; start < 1500; start += 50)
+        {
+            var evidence = new EcgPacingEvidence([start * StepNs])
+            {
+                Origin = EcgPacingEvidenceOrigin.Simulation,
+                ExpectedVentricularIntervalNs = 200_000_000
+            };
+            rapid.Consume(Wire(new short[50], start, (ulong)(start / 50)), out _, out var events, evidence);
+            rapidFailure |= events.Any(e => e.Condition == EcgMonitoringConditions.PacerNotCaptured && e.Transition == EcgMonitoringTransition.Started);
+        }
+        Check.That(rapidFailure, "repeated fast pulses cannot extend QRS confirmation grace indefinitely");
+        var hardware = new EcgHeartRateMeasurement(Channel, new() { PacedMode = true });
+        for (int start = 0; start < 1500; start += 50)
+        { hardware.Consume(Wire(new short[50], start, (ulong)(start / 50)), out _, out _, new([])); }
+        hardware.Consume(Wire(new short[50], 1500, 30), out _, out _, null);
+        var withoutSideband = hardware.ReadMonitoring(1549 * StepNs);
+        Check.That(!withoutSideband.PacingEvidenceAvailable && (withoutSideband.ActiveConditions & EcgMonitoringConditions.Asystole) != 0,
+            "loss of hardware pulse sideband cannot reset an ECG-confirmed critical alarm");
+        var invalid = new EcgHeartRateMeasurement(Channel);
+        var valid = Evidence(0, 50);
+        foreach (var evidence in new[]
+        {
+            valid with { AtrialPulseTimesNs = [0, 0] },
+            valid with { AtrialPulseTimesNs = [1] },
+            valid with { AtrialPulseTimesNs = [200_000_000] },
+            valid with { Origin = (EcgPacingEvidenceOrigin)99 },
+            valid with { Origin = EcgPacingEvidenceOrigin.Acquisition },
+            valid with { ExpectedVentricularIntervalNs = long.MaxValue },
+            valid with { VentricularPacingExpected = false }
+        })
+        {
+            bool rejected = false;
+            try { invalid.Consume(Wire(samples.Take(50).ToArray(), 0, 0), out _, out _, evidence); }
+            catch (ArgumentException) { rejected = true; }
+            Check.That(rejected && invalid.Read(0).Status == WaveformMeasurementStatus.NoData, "invalid sideband is atomic");
+        }
+        invalid.Consume(Wire(samples.Take(50).ToArray(), 0, 0), out _, out _, valid);
+        invalid.Consume(Wire(samples.Skip(50).Take(50).ToArray(), 50, 1, poor: true), out _, out _, Evidence(50, 50));
+        Check.That(!invalid.ReadMonitoring(99 * StepNs).PacingEvidenceAvailable, "quality loss invalidates pulse claims");
     }
 
     private static void EcgRonTWaitsForItsCompensatoryPause()

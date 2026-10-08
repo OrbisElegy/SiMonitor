@@ -18,6 +18,7 @@ public sealed class LocalMonitorPreviewSession
     private readonly RealtimeOxygenationConfiguration? _realtimeConfiguration;
     private LocalMonitorPreviewSession? _pendingSource;
     private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
+    private readonly List<(long ToExclusiveSourceTimeNs, PhysiologyIllustrationConfiguration Configuration)> _previousPacingSources = [];
     public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
@@ -172,6 +173,7 @@ public sealed class LocalMonitorPreviewSession
             oxygenation.ChangeTransport(transport, sourceTime, config.OxygenDemandMultiplier);
         }
         _previousOpticalSources.Add((sourceTime, _opticalSource));
+        _previousPacingSources.Add((sourceTime, _configuration));
         _source = source;
         _realtimeOxygenation = oxygenation;
         _configuration = definition._configuration;
@@ -256,7 +258,7 @@ public sealed class LocalMonitorPreviewSession
                             Planes = original.Planes.Concat(optical.Planes.Where(p => p.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
                         }));
                     }
-                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses, out var detectedRhythmEvents, out var detectedMonitoringEvents);
+                    var measured = _measurements.Consume(measurementWire, out var detected, out var detectedPulses, out var detectedRhythmEvents, out var detectedMonitoringEvents, PacingEvidence(WaveformEnvelopeCodec.Decode(wire)));
                     monitoringEvents.AddRange(detectedMonitoringEvents);
                     rhythmEvents.AddRange(detectedRhythmEvents);
                     _measurementFrontier = measured.SampleTimeNs;
@@ -270,6 +272,7 @@ public sealed class LocalMonitorPreviewSession
                 _blocks = _blocks.Concat(wires.Select(b => Rebase(WaveformEnvelopeCodec.Decode(b)))).TakeLast(RetainedBlockCount).ToArray();
                 long acquiredEnd = WaveformEnvelopeCodec.Decode(wires[^1]).StartSimTimeNs + 200_000_000;
                 _previousOpticalSources.RemoveAll(p => p.ToExclusiveSourceTimeNs <= acquiredEnd);
+                _previousPacingSources.RemoveAll(p => p.ToExclusiveSourceTimeNs <= acquiredEnd);
                 DataRevision++;
             }
             SimulationTimeNs = next;
@@ -283,6 +286,30 @@ public sealed class LocalMonitorPreviewSession
         DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
     }
+    private EcgPacingEvidence? PacingEvidence(WaveformEnvelope block)
+    {
+        var configuration = _configuration;
+        foreach (var previous in _previousPacingSources)
+        {
+            if (block.StartSimTimeNs >= previous.ToExclusiveSourceTimeNs) { continue; }
+            configuration = previous.Configuration;
+            break;
+        }
+        if (configuration.Pacing is not { } mode) { return null; }
+        var timeline = RegularPhysiologyTimeline.Restore(new(configuration.ResolvePlan(), block.StartSimTimeNs));
+        var events = timeline.AdvanceBefore(checked(block.StartSimTimeNs + block.DurationNs), 100);
+        long[] Times(PhysiologyCycleEventKind kind) => events.Where(e => e.Kind == kind)
+            .Select(e => e.SimTimeNs - _sourceTimeOffsetNs).ToArray();
+        bool ventricular = mode != PacingIllustration.AtrialAai;
+        return new(Times(PhysiologyCycleEventKind.VentricularPacingPulse))
+        {
+            AtrialPulseTimesNs = Times(PhysiologyCycleEventKind.AtrialPacingPulse),
+            Origin = EcgPacingEvidenceOrigin.Simulation,
+            VentricularPacingExpected = ventricular,
+            ExpectedVentricularIntervalNs = ventricular ? PacingReference.Timing(mode).RrIntervalNs : null
+        };
+    }
+
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs)
     {
         Guid id = PhysiologyIllustrationSource.ChannelId(channel);

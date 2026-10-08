@@ -8,7 +8,8 @@ public sealed record DetectedEcgBeat(long PeakTimeNs, long ConfirmedAtNs);
 public sealed record EcgHeartRateReading(WaveformMeasurementStatus Status, int? MilliBeatsPerMinute, long? LastBeatTimeNs);
 
 // Single-channel teaching detector, input physical unit microvolts.
-// No source settings/events, rhythm labels or display state enter this class.
+// QRS and HR use sampled ECG only; pulse sideband carries explicit provenance.
+// No source capture/failure labels enter the detector.
 public sealed class EcgHeartRateMeasurement
 {
     private const long StepNs = 4_000_000;
@@ -49,10 +50,14 @@ public sealed class EcgHeartRateMeasurement
         { throw new ArgumentException("EcgMeasurement.UnsupportedSampling", nameof(wire)); }
         long end = checked(block.StartSimTimeNs + block.DurationNs);
         long[]? pacingPulses = pacingEvidence?.PulseTimesNs?.ToArray();
-        if (pacingEvidence is not null && (pacingPulses is null || pacingPulses.Any(t => t < block.StartSimTimeNs || t >= end ||
-            (t - block.StartSimTimeNs) % StepNs != 0) || pacingPulses.Zip(pacingPulses.Skip(1), (a, b) => a >= b).Any(v => v)))
+        long[]? atrialPulses = pacingEvidence?.AtrialPulseTimesNs?.ToArray();
+        bool Invalid(long[]? pulses) => pulses is null || pulses.Any(t => t < block.StartSimTimeNs || t >= end ||
+            (t - block.StartSimTimeNs) % StepNs != 0) || pulses.Zip(pulses.Skip(1), (a, b) => a >= b).Any(v => v);
+        if (pacingEvidence is not null && (Invalid(pacingPulses) || Invalid(atrialPulses) || !Enum.IsDefined(pacingEvidence.Origin) ||
+            pacingEvidence.ExpectedVentricularIntervalNs is { } expected &&
+            (pacingEvidence.Origin != EcgPacingEvidenceOrigin.Simulation || !pacingEvidence.VentricularPacingExpected || expected is < 200_000_000 or > 3_000_000_000)))
         { throw new ArgumentException("EcgMeasurement.InvalidPacingEvidence", nameof(pacingEvidence)); }
-        int pulseIndex = 0;
+        int pulseIndex = 0, atrialIndex = 0;
         ulong nextIndex = checked(plane.FirstSampleIndex + (ulong)plane.Samples.Count);
         var identity = new Identity(block.SessionId, block.InstanceId, block.TimebaseEpoch, block.StreamEpoch, block.ConfigurationRevision);
         if (_state.Identity is { } old && old.Session == identity.Session && old.Instance == identity.Instance &&
@@ -77,6 +82,10 @@ public sealed class EcgHeartRateMeasurement
             interrupted.Interrupt(_state.NextTime, EcgRhythmInterruption.StreamDiscontinuity, transitions);
             _state.Monitoring.Copy().Interrupt(_state.NextTime, EcgRhythmInterruption.StreamDiscontinuity, monitoring);
         }
+        bool ventricularPacing = pacingEvidence?.Origin == EcgPacingEvidenceOrigin.Simulation
+            ? pacingEvidence.VentricularPacingExpected : MonitoringSettings.PacedMode;
+        next.Monitoring.ConfigurePacing(ventricularPacing, pacingEvidence?.Origin,
+            pacingEvidence?.ExpectedVentricularIntervalNs, block.StartSimTimeNs, monitoring);
         for (int i = 0; i < plane.Samples.Count; i++)
         {
             Int128 numerator = ((Int128)plane.Samples[i] * plane.ScaleNumerator * plane.OffsetDenominator +
@@ -86,13 +95,22 @@ public sealed class EcgHeartRateMeasurement
             bool usable = plane.Samples[i] is not (short.MinValue or short.MaxValue) && value is >= -10000 and <= 10000 &&
                 !plane.QualityRanges.Any(r => (uint)i >= r.FirstSampleOffset && (ulong)i < (ulong)r.FirstSampleOffset + r.Count && r.QualityFlags != 0);
             long timeNs = block.StartSimTimeNs + i * StepNs;
+            bool pulse = pacingPulses is not null && pulseIndex < pacingPulses.Length && pacingPulses[pulseIndex] == timeNs;
+            bool atrialPulse = atrialPulses is not null && atrialIndex < atrialPulses.Length && atrialPulses[atrialIndex] == timeNs;
+            if (pulse) { pulseIndex++; }
+            if (atrialPulse) { atrialIndex++; }
+            // Only the authored 8 ms display impulse has a known support here.
+            // Hardware pulse rejection belongs to its high-rate acquisition stage.
+            if (pacingEvidence?.Origin == EcgPacingEvidenceOrigin.Simulation && (pulse || atrialPulse))
+            { next.DisplayPulseEndNs = timeNs + 8_000_000; }
+            if (usable && pacingEvidence?.Origin == EcgPacingEvidenceOrigin.Simulation && timeNs < next.DisplayPulseEndNs)
+            { value = next.BeforeDisplayPulse; }
+            else { next.BeforeDisplayPulse = usable ? value : 0; }
             int before = events.Count;
             Sample(next, timeNs, value, usable, events);
-            bool pulse = pacingPulses is not null && pulseIndex < pacingPulses.Length && pacingPulses[pulseIndex] == timeNs;
-            if (pulse) { pulseIndex++; }
             next.Monitoring.Sample(timeNs, value, usable && !next.Poor,
                 events.Count > before ? events[^1] : null, next.Start, next.LastActive, next.Active, pacingPulses is not null, pulse, monitoring);
-            bool analyzable = usable && !next.Poor && !next.Uncountable &&
+            bool analyzable = !ventricularPacing && usable && !next.Poor && !next.Uncountable &&
                 timeNs - (next.LastBeat ?? next.FirstSample!.Value) < ExpiryNs;
             next.Rhythm.Sample(timeNs, value, analyzable, transitions);
             if (analyzable && events.Count > before) { next.Rhythm.Beat(events[^1], transitions); }
@@ -250,7 +268,8 @@ public sealed class EcgHeartRateMeasurement
         internal EcgRhythmAnalysis Rhythm = new(Settings.RhythmEndDelayMilliseconds);
         internal EcgMonitoringAnalysis Monitoring = new(Settings);
         internal Identity? Identity;
-        internal long NextTime, Start, LastActive, PeakTime, LastQrsStartNs;
+        internal long NextTime, Start, LastActive, PeakTime, LastQrsStartNs, DisplayPulseEndNs;
+        internal int BeforeDisplayPulse;
         internal ulong NextIndex, Sequence;
         internal long? FirstSample, LastSample, LastBeat;
         internal long[] Peaks = [];

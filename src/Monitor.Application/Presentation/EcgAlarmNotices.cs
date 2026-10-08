@@ -11,7 +11,8 @@ public sealed record EcgAlarmDescriptor(string Id, string Text, string MessageKe
     public AlarmNotificationSettings DefaultNotification => AlarmNotificationSettings.Default with
     {
         SoundMode = Level == MonitorNoticeLevel.Critical ? AlarmSoundMode.Continuous : AlarmSoundMode.SingleGroup,
-        LatchingMode = AlarmLatchingMode.NonLatching
+        LatchingMode = AlarmLatchingMode.NonLatching,
+        RepeatSuppressionMilliseconds = Condition is EcgMonitoringConditions.PacerNotCaptured or EcgMonitoringConditions.PacerNotPacing ? 30000 : 0
     };
 }
 
@@ -244,7 +245,8 @@ public sealed class EcgAlarmNotices
         if (descriptor.Condition is EcgMonitoringConditions.StHigh or EcgMonitoringConditions.StLow && reading.Repolarization.StStatus != WaveformMeasurementStatus.Valid ||
             descriptor.Condition is EcgMonitoringConditions.QtcHigh or EcgMonitoringConditions.DeltaQtcHigh && reading.Repolarization.QtStatus != WaveformMeasurementStatus.Valid)
         { return null; }
-        if (reading.Learning && descriptor.Condition is not (EcgMonitoringConditions.Asystole or EcgMonitoringConditions.SuspectedVentricularFibrillation))
+        if (reading.Learning && descriptor.Condition is not (EcgMonitoringConditions.Asystole or EcgMonitoringConditions.SuspectedVentricularFibrillation or
+            EcgMonitoringConditions.PacerNotCaptured or EcgMonitoringConditions.PacerNotPacing))
         { return null; }
         return (reading.ActiveConditions & descriptor.Condition) != 0;
     }

@@ -1,0 +1,34 @@
+{
+  "model": "PaddleSpeech FastSpeech2 AISHELL-3 ONNX 1.1.0",
+  "vocoder": "PaddleSpeech Parallel WaveGAN AISHELL-3 ONNX 1.1.0",
+  "source": "https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/tts3",
+  "source_revision": "6b25a400008d393f9c3af837b3c692b17f29ee1a",
+  "model_urls": [
+    "https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/fastspeech2/fastspeech2_aishell3_onnx_1.1.0.zip",
+    "https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/pwgan/pwgan_aishell3_onnx_1.1.0.zip"
+  ],
+  "hashes": {
+    "fastspeech2_aishell3_onnx_1.1.0/fastspeech2_aishell3.onnx": "eebd3598fb5cdc26b88a747c1fdc23afe16a177d355e344fdaafde718d9f7798",
+    "pwgan_aishell3_onnx_1.1.0/pwgan_aishell3.onnx": "cf152b9d8279249b7f34019d7167e4c3bcb5a1ba529e2171e2a37dd3c05b832f",
+    "fastspeech2_aishell3_onnx_1.1.0/phone_id_map.txt": "c0344e3b4ff334d1632634925a96e8e475e96d31d18b1046b51f9be677e65807",
+    "fastspeech2_aishell3_onnx_1.1.0/speaker_id_map.txt": "a23b90a20c23516a2e00abb2c92d448d8188854f0a33c22ddf513192d6cff54a",
+    "spk-info.txt": "86148f95beab318ad9d08bf945b1d56ffba8c97b09137ae784cc62b0cd6539ef",
+    "source/paddlespeech/t2s/frontend/tone_sandhi.py": "61a11983e42b98c3d6ddcae1108d1f628f439e44569382932b68f68f23dc3e51"
+  },
+  "engine": "onnxruntime",
+  "engine_version": "1.30.0",
+  "native_rate": 24000,
+  "output_rate": 48000,
+  "processing": "Resample to 48 kHz, active RMS -26 dBFS with peak cap 0.55; no pitch or speed editing",
+  "pronunciation_overrides": {
+    "分析": "fen1 xi1; preserve standard tone instead of automatic neutral tone"
+  },
+  "metadata_source": "https://huggingface.co/datasets/AISHELL/AISHELL-3/blob/main/spk-info.txt",
+  "speaker": "SSB0534",
+  "speaker_id": 57,
+  "runtime_changed": false,
+  "asset_policy": "Checked-in approved WAVs are canonical; audition generators verify text, format and hashes before copying; they do not resynthesize this voice",
+  "synthesis": "ONNX Runtime CPU; four intra-op threads, one inter-op thread; seed 1986 at session start. First six accepted clips and subsequent 16 core clips were generated in separate sessions.",
+  "frontend": "pypinyin 0.53.0 with PaddleSpeech ToneSandhi; standard first tone retained for 分析; no pitch or timing edits",
+  "license_status": "PaddleSpeech code and AISHELL-3 dataset: Apache-2.0; weight archives have no separate license text; generated audio not relicensed under project code license; weight/output release scope remains to be confirmed"
+}

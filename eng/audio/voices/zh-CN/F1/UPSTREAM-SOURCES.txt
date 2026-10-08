@@ -1,0 +1,7 @@
+PaddleSpeech FastSpeech2 / AISHELL-3
+声学模型与推理说明：https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/tts3
+声码器：https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/voc1
+数据集与许可：https://www.openslr.org/93/
+说话人资料：https://huggingface.co/datasets/AISHELL/AISHELL-3/blob/main/spk-info.txt
+SSB0534：female，年龄组 C（26–40），north；模型 speaker_id=57。
+具体权重下载地址、哈希和处理参数见 generation-provenance.json。

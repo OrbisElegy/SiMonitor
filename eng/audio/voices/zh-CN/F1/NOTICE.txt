@@ -1,0 +1,12 @@
+F1 中文 AED 固定提示音
+当前音色：FastSpeech2-A / AISHELL-3 SSB0534（speaker_id=57）。F1 为项目兼容标识。
+声学模型：PaddleSpeech FastSpeech2 AISHELL-3 ONNX 1.1.0。
+声码器：PaddleSpeech Parallel WaveGAN AISHELL-3 ONNX 1.1.0。
+模型说明：https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/tts3
+数据来源：https://www.openslr.org/93/ （北京希尔贝壳科技有限公司，Apache-2.0）。
+PaddleSpeech 代码采用 Apache-2.0，许可原文见 PaddleSpeech-LICENSE.txt；上游来源链接见 UPSTREAM-SOURCES.txt。
+下载的权重包未附单独许可文本，生成 WAV 不自动继承项目代码许可证；权重及输出的公开分发范围仍需核实。
+用户已选定并授权替换本地项目资源；尚未接入运行时播放。
+音频为 48 kHz 单声道 PCM16；原始 24 kHz，重采样并统一音量，未修改音高或语速。
+生成来源和音素输入见 generation-provenance.json、phonemes.json。
+后续试听从本目录读取已确认 WAV，校验入口：tools/selected_therapy_voice.py。

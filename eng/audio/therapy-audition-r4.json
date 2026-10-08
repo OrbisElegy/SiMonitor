@@ -1,0 +1,69 @@
+{
+  "selections": {
+    "pacer": {
+      "candidate": "P7",
+      "label": "微型继电器开启",
+      "source": "R2/P7-single.wav",
+      "timbre_accepted": true
+    },
+    "cpr": {
+      "candidate": "C2",
+      "label": "干短点击",
+      "source": "R2/C2-single.wav",
+      "timbre_accepted": true,
+      "rate_bpm": 110,
+      "rate_status": "unchanged D3 reference, not a new user rate choice"
+    },
+    "english": {
+      "trials": [
+        "E1 native VITS",
+        "E2 native Matcha LJS + Vocos"
+      ],
+      "candidate": "E1",
+      "voice_accepted": true,
+      "full_listening_pending": false
+    },
+    "charge": "R1 continuous accepted",
+    "ready": "R1 870 Hz double accepted",
+    "heartbeat": "SelectedTones/Heartbeat.pcm",
+    "chinese": {
+      "future_preference": "mature female; avoid familiar novel-narration voices",
+      "candidate": "F1",
+      "project_inclusion_authorized": true,
+      "full_listening_pending": false,
+      "voice_accepted": true,
+      "model": "FastSpeech2 AISHELL-3",
+      "speaker": "SSB0534",
+      "audition_variant": "FastSpeech2-A"
+    }
+  },
+  "runtime_changed": false,
+  "schema": "Monitor.TherapyAudition@4",
+  "status": "E1/F1 selected; combined workflow listening pending",
+  "rejected": [
+    "R3 English dynamic filtering",
+    "R3 Chinese Z1",
+    "R3 Chinese Z2",
+    "R3 Chinese Z3"
+  ],
+  "focus_prompts": [
+    "AED_MODE_ADULT",
+    "AED_CPR_STOP",
+    "AED_READY",
+    "AED_CPR_START"
+  ],
+  "reference_voice": {
+    "id": "F1",
+    "model": "FastSpeech2 AISHELL-3 + Parallel WaveGAN",
+    "speed": 1.0,
+    "license": "PaddleSpeech code and AISHELL-3 dataset: Apache-2.0; weight archives have no separate license text; generated audio not relicensed under project code license; weight/output release scope remains to be confirmed",
+    "release_candidate": false,
+    "source": "https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/tts3",
+    "project_candidate": true,
+    "output_redistribution_status": "Weight/output release scope remains to be confirmed; no new output license assigned",
+    "asset_directory": "eng/audio/voices/zh-CN/F1",
+    "speaker": "SSB0534",
+    "speaker_id": 57
+  },
+  "english_source": "https://k2-fsa.github.io/sherpa/onnx/tts/all/English/matcha-icefall-en_US-ljspeech.html"
+}

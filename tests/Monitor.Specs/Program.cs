@@ -54,6 +54,7 @@ internal static class Program
             .. PhysiologySignalGeneratorSpecifications.All,
             .. PhysiologyWaveformGroupSpecifications.All,
             .. PhysiologyIllustrationSpecifications.All,
+            .. ManualVitalSpecifications.All,
             .. MonitorDisplaySpecifications.All,
             .. MonitorContinuationSpecifications.All,
             .. CapnographyMeasurementSpecifications.All,

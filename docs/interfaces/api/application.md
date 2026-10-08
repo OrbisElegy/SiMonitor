@@ -1473,6 +1473,7 @@ public sealed class LocalMonitorPreviewSession
     public const long StartupDiscardNs = 12_000_000_000;
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
+    public ManualVitalSigns ManualVitals { get; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
@@ -1486,7 +1487,7 @@ public sealed class LocalMonitorPreviewSession
     public RealtimeOxygenationSnapshot? Oxygenation { get; }
     public OxygenReservoirParameters? OxygenationParameters { get; private set; }
 
-    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null);
+    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
@@ -1628,6 +1629,36 @@ public sealed class MonitorBeatSource
     public void Reset();
     public bool Update(MonitorBeatMode mode, WaveformMeasurementStatus ecg, WaveformMeasurementStatus pleth, long nowNs);
     public bool Accept(MonitorBeatOrigin source, long confirmedAtNs);
+}
+```
+
+## Presentation/ManualVitalSigns.cs
+
+源码：[ManualVitalSigns.cs](../../../src/Monitor.Application/Presentation/ManualVitalSigns.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record ManualNibp
+{
+    public int SystolicMmHg { get; }
+    public int DiastolicMmHg { get; }
+    public int MeanMmHg { get; }
+    public ManualNibp(int systolicMmHg, int diastolicMmHg, int meanMmHg);
+}
+public sealed record ManualCustomVital
+{
+    public string Name { get; }
+    public decimal Value { get; }
+    public string Unit { get; }
+    public ManualCustomVital(string name, decimal value, string unit);
+}
+public sealed record ManualVitalSigns
+{
+    public static ManualVitalSigns Empty { get; }
+    public ManualNibp? Nibp { get; }
+    public int? TemperatureDeciCelsius { get; }
+    public ManualCustomVital? Custom1 { get; }
+    public ManualCustomVital? Custom2 { get; }
+    public ManualVitalSigns(ManualNibp? nibp = null, int? temperatureDeciCelsius = null, ManualCustomVital? custom1 = null, ManualCustomVital? custom2 = null);
 }
 ```
 

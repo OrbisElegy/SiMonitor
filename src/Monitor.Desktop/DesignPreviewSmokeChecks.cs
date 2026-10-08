@@ -937,6 +937,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyCo2TimingEditing);
         NativeSmokePartition.Run(VerifyCo2LevelEditing);
         NativeSmokePartition.Run(VerifyRespirationPageReset);
+        NativeSmokePartition.Run(ManualVitalSmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyVitalInputPrecision);
         NativeSmokePartition.Run(VerifyVariationRejectionMessages);
         NativeSmokePartition.Run(VerifyIntegratedWindow);

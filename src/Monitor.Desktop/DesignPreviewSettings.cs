@@ -201,6 +201,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal CheckBox OpticalEnabled { get; } = new() { IsChecked = false };
     internal OxygenationSettingsPanel Oxygenation { get; }
     internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
+    internal ManualVitalSettings ManualVitals { get; private set; } = null!;
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 20, Maximum = 600, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal Button GenerateSeed { get; } = new() { MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -298,6 +299,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         display.Children.Add(DesktopInformationPages.Help("topic-2"));
         display.Children.Add(DesktopInformationPages.Help("settings-detail-3"));
         Skin.SelectionChanged += (_, _) => BuildRows(); BuildRows();
+        ManualVitals = new(Localization);
         var vitals = (StackPanel)VitalSigns();
         Control Before(StackPanel panel, Control control) => panel.Children[panel.Children.IndexOf(control) - 1];
         var paper = new StackPanel { Spacing = 16 };
@@ -343,7 +345,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         SectionPages[5] = SettingsSections.Split(Localization, "settings.vitals", vitals,
             ("vitals.sectionHeartRate", vitals.Children[0]), ("vitals.sectionBreathing", Before(vitals, RespiratoryRate)),
             ("vitals.sectionOximetry", Oxygenation), ("vitals.sectionPressure", Before(vitals, AbpPulseGain)),
-            ("vitals.sectionSeed", Before(vitals, RateSeed)));
+            ("vitals.sectionSeed", Before(vitals, RateSeed)), ("manual.section", ManualVitals));
         TrackVitalSections(SectionPages[5]);
         var advancedGroups = new List<(string Title, Control Content)>
         { ("generation.ecg", _advancedEcg), ("generation.respiration", _advancedRespiration), ("generation.ejection", _advancedEjection) };
@@ -552,6 +554,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         RateSeed.TextChanged += (_, _) => SeedError.IsVisible = !IsSeedFormatValid(RateSeed.Text);
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-4"));
+        panel.Children.Add(ManualVitals);
         return panel;
     }
     // Mirrors DeterministicStreamFactory.FromLowercaseHex so the draft can be corrected before apply.
@@ -582,7 +585,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             (null, () => Filled(CvpBaseline, AbpVariation, PaVariation) &&
                 (AbpTargetEnabled.IsChecked == true ? PressureTargetValid(AbpSystolic, AbpDiastolic) : Filled(AbpPulseGain)) &&
                 (PaTargetEnabled.IsChecked == true ? PressureTargetValid(PaSystolic, PaDiastolic) : Filled(PaPulseGain))),
-            (null, () => IsSeedFormatValid(RateSeed.Text))
+            (null, () => IsSeedFormatValid(RateSeed.Text)),
+            (null, () => ManualVitals.ErrorKey() is null)
         };
         void Refresh()
         {
@@ -598,6 +602,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
                 }
             }
         }
+        ManualVitals.DraftChanged += Refresh;
         var patient = Oxygenation.Patient;
         var vitalFields = new[] { HeartRate, AtrialRate, PauseDuration, ConductionPercent, RateVariation, RespiratoryRate, InspirationPercent, EtCo2Target, EtCo2Variation, OpticalTarget,
             OpticalVariation, OpticalModulation, AbpPulseGain, PaPulseGain, CvpBaseline, AbpSystolic, AbpDiastolic, PaSystolic, PaDiastolic,

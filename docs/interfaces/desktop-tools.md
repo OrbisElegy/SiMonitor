@@ -54,6 +54,24 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 `Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
 会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
 
+## 手动生命体征与皮肤读数
+
+“设置 → 生命体征 → 手动体征”提供 NIBP、体温与两个独立的自定义槽位，各项默认关闭。
+NIBP 的收缩压、舒张压、平均压均手动输入，单位 mmHg，要求
+`0 ≤ 舒张压 ≤ 平均压 ≤ 收缩压 ≤ 300`；平均压不自动计算，也不与 ABP 联动。
+体温范围为 0–50 ℃、一位小数。这些范围是编辑器输入边界，不代表临床参考范围。
+自定义项支持 1–24 字名称、可空的 0–12 字单位，以及 -99999–99999、最多两位小数的值。
+控制字符和空白名称无效，禁用项目的草稿不参与校验。
+
+皮肤可通过 `LocalMonitorPreviewSession.ManualVitals` 读取不可变的
+`ManualVitalSigns`：`Nibp`、`TemperatureDeciCelsius`、`Custom1`、`Custom2`。
+`null` 表示禁用；零是有效读数。体温以十分之一摄氏度存储，自定义数值采用 `decimal`。
+槽位身份固定，不随名称变化。这组数据独立于 `Measurements`，不伪造采样、测量时间或报警输入。
+当前监护界面在底部显示启用的项目，并标记“手动体征”。
+
+应用前完整校验；普通应用与延时应用沿用 `ScheduleSource` 的仿真时间边界，暂停时不推进；
+重新开始使用新会话的手动值，恢复默认设置关闭所有项目。手动值仅在当前会话中保留，不写入本地偏好。
+
 ## 记录呈现与原生输入
 
 | 公开入口 | 输入／输出 | 调用约束 |

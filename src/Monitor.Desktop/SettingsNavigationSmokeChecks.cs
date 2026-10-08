@@ -82,8 +82,8 @@ internal static class SettingsNavigationSmokeChecks
         settings.Tabs.SelectedIndex = 5;
         var vitals = settings.SectionPages[5];
         string?[] names = vitals.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已关闭", "压力", "随机种子"]),
-            "vital sections list measurements first and the shared seed last, with switch state: " + string.Join(" / ", names));
+        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已关闭", "压力", "随机种子", "手动体征"]),
+            "vital sections include manual values after the shared seed, with switch state: " + string.Join(" / ", names));
         settings.CardiacRateEnabled.IsChecked = true;
         Require(vitals.DetailFor(0) == "开", "heart-rate state follows its switch");
         string? seed = settings.RateSeed.Text;

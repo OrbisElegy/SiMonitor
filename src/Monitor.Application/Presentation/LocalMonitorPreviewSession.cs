@@ -33,6 +33,7 @@ public sealed class LocalMonitorPreviewSession
     private static readonly long AcquisitionLatencyNs = FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs;
     public LiveMeasurementSnapshot? Measurements => _measurements?.Read(Math.Max(_measurementFrontier,
         Math.Max(0, SimulationTimeNs - AcquisitionLatencyNs)));
+    public ManualVitalSigns ManualVitals { get; private set; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
     public ulong DataRevision { get; private set; }
@@ -49,9 +50,10 @@ public sealed class LocalMonitorPreviewSession
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
         bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
         SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
-        RealtimeOxygenationConfiguration? realtimeOxygenation = null)
+        RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null)
     {
         ArgumentNullException.ThrowIfNull(display);
+        ManualVitals = manualVitals ?? ManualVitalSigns.Empty;
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
@@ -173,6 +175,7 @@ public sealed class LocalMonitorPreviewSession
         _source = source;
         _realtimeOxygenation = oxygenation;
         _configuration = definition._configuration;
+        ManualVitals = definition.ManualVitals;
         _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;
         _opticalModulationPermille = definition._opticalModulationPermille;

@@ -16,6 +16,10 @@ namespace Monitor.Desktop;
 internal sealed class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
+    private readonly WrapPanel _manualPanel = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 4) };
+    internal IReadOnlyList<string> ManualNumericTexts => _manualPanel.Children.OfType<TextBlock>().Select(text => text.Text ?? "").ToArray();
+    private ManualVitalSigns? _shownManualVitals;
+    private string? _shownManualCaption;
     private readonly DesktopLocalization _localization;
     private long _lastMeasurementBucket = -1;
     private readonly List<(int Channel, TextBlock Primary, TextBlock Secondary)> _rows = [];
@@ -64,7 +68,7 @@ internal sealed class LiveMonitorView : UserControl
             RefreshLanguage();
         };
         DetachedFromVisualTree += (_, _) => _localization.LocaleChanged -= RefreshLanguage;
-        var root = new Grid { RowDefinitions = new("Auto,*"), Background = Brush.Parse("#101B25") };
+        var root = new Grid { RowDefinitions = new("Auto,*,Auto"), Background = Brush.Parse("#101B25") };
         var header = new Grid { ColumnDefinitions = new("*,2*,*"), Margin = new Thickness(12, 10) };
         Clock.Margin = new Thickness(0, 0, 20, 0);
         header.Children.Add(Clock);
@@ -135,6 +139,8 @@ internal sealed class LiveMonitorView : UserControl
             };
             Grid.SetRow(border, row); numbers.Children.Add(border); _rows.Add((slot.Channel, primary, secondary));
         }
+        Grid.SetRow(_manualPanel, 2);
+        root.Children.Add(_manualPanel);
         Content = root; Refresh();
     }
     private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(0), Child = text };
@@ -146,8 +152,43 @@ internal sealed class LiveMonitorView : UserControl
         RefreshNotice();
     }
 
+    private void RefreshManualVitals()
+    {
+        var values = _trace.Session.ManualVitals;
+        string caption = _localization.Get("manual.caption");
+        if (values == _shownManualVitals && caption == _shownManualCaption) { return; }
+        _shownManualVitals = values;
+        _shownManualCaption = caption;
+        _manualPanel.Children.Clear();
+        if (values == ManualVitalSigns.Empty) { _manualPanel.IsVisible = false; return; }
+        _manualPanel.IsVisible = true;
+        Add(caption);
+        if (values.Nibp is { } nibp) { Add($"NIBP {nibp.SystolicMmHg}/{nibp.DiastolicMmHg} ({nibp.MeanMmHg}) mmHg"); }
+        if (values.TemperatureDeciCelsius is { } temperature)
+        { Add(_localization.Get("manual.temperatureLabel") + " " + (temperature / 10m).ToString("0.0", CultureInfo.InvariantCulture) + " °C"); }
+        foreach (var custom in new[] { values.Custom1, values.Custom2 })
+        {
+            if (custom is not null) { Add(custom.Name + " " + custom.Value.ToString("0.##", CultureInfo.InvariantCulture) + (custom.Unit.Length == 0 ? "" : " " + custom.Unit)); }
+        }
+        void Add(string value)
+        {
+            var text = new TextBlock
+            {
+                Text = value,
+                Foreground = Brushes.White,
+                FontSize = 18,
+                Margin = new Thickness(0, 4, 24, 4),
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 440
+            };
+            AutomationProperties.SetName(text, value);
+            _manualPanel.Children.Add(text);
+        }
+    }
+
     internal void Refresh()
     {
+        RefreshManualVitals();
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
         string clock = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
         Clock.Text = _localization.Format("monitor.clock", clock) + (BeatSourceText is null ? "" : "\n" + BeatSourceText());

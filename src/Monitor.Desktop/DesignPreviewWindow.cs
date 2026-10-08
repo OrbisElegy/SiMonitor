@@ -393,6 +393,7 @@ internal sealed class DesignPreviewWindow : Window
             int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
+        var manualVitals = Settings.ManualVitals.Read();
         var display = Settings.ReadDisplay();
         int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
         var oxygenation = Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
@@ -401,7 +402,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             var next = new LocalMonitorPreviewSession(config, display, enableMeasurements: true,
                 opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: modulation,
-                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation);
+                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals);
             return (next, ecgConfig, CapturePaper(ecgConfig), config);
         };
     }
@@ -501,6 +502,8 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.co2Range"); }
         catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
         { SetStatus("validation.co2Regular"); }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("ManualVitals.", StringComparison.Ordinal))
+        { SetStatus(exception.Message); }
         catch (VitalValueException exception)
         {
             Localization.Bind(Settings.Status, TextBlock.TextProperty, text => text.Format("validation.vitalValue",

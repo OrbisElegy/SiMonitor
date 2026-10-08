@@ -1,0 +1,306 @@
+{
+  "schema": "Monitor.TherapyAudition@1",
+  "status": "CandidateOnly; human listening and terminology review pending",
+  "sample_rate_hz": 48000,
+  "source_requirements": {
+    "除颤仪声音系统需求草案.md": "6f41dc4f6646b7bf5c3e0a7dbe8ccdccf9c3bd91c59c53f0c8e00b397e9c87e8",
+    "V1需求基线与跨域契约.md": "ff0266b4b59785b6e77e32f1bcc0a825b6d8e49bb4cdde7aadd05d30c53dd7b9"
+  },
+  "pacer_dedicated_sound": false,
+  "ta_candidates": [
+    {
+      "id": "A",
+      "label": "轻干机械",
+      "duration_ms": 32,
+      "attack_ms": 0.7,
+      "decay_ms": 6,
+      "partials": [
+        [
+          1600,
+          1
+        ],
+        [
+          2850,
+          0.42
+        ],
+        [
+          4300,
+          0.16
+        ]
+      ]
+    },
+    {
+      "id": "B",
+      "label": "厚实阀音",
+      "duration_ms": 42,
+      "attack_ms": 0.8,
+      "decay_ms": 9,
+      "partials": [
+        [
+          1050,
+          1
+        ],
+        [
+          2230,
+          0.55
+        ],
+        [
+          3550,
+          0.23
+        ]
+      ]
+    },
+    {
+      "id": "C",
+      "label": "清脆短击",
+      "duration_ms": 26,
+      "attack_ms": 0.5,
+      "decay_ms": 4.5,
+      "partials": [
+        [
+          2150,
+          1
+        ],
+        [
+          3700,
+          0.42
+        ],
+        [
+          5700,
+          0.12
+        ]
+      ]
+    }
+  ],
+  "ta_active_rms_dbfs": -26,
+  "tone_active_rms_dbfs": -25,
+  "charge_active_rms_dbfs": -31,
+  "hold_active_rms_dbfs": -34,
+  "ready_active_rms_dbfs": -22,
+  "ramp_hz": [
+    390,
+    760
+  ],
+  "ready_candidates": [
+    {
+      "id": "A",
+      "label": "第二组重复",
+      "hz": [
+        690,
+        825,
+        970,
+        690,
+        825,
+        970
+      ]
+    },
+    {
+      "id": "B",
+      "label": "第二组轻微上移",
+      "hz": [
+        690,
+        825,
+        970,
+        755,
+        895,
+        1040
+      ]
+    },
+    {
+      "id": "C",
+      "label": "第二组收拢",
+      "hz": [
+        690,
+        825,
+        970,
+        970,
+        825,
+        755
+      ]
+    }
+  ],
+  "ready_onsets_ms": [
+    0,
+    170,
+    340,
+    820,
+    990,
+    1160
+  ],
+  "ready_note_ms": 105,
+  "cpr_rate_bpm": 110,
+  "ventilation_gap_s_candidate": 5.0,
+  "voice_variants": [
+    {
+      "id": "A",
+      "label": "自然语速",
+      "speed": 1.0
+    },
+    {
+      "id": "B",
+      "label": "稍慢语速",
+      "speed": 0.9
+    }
+  ],
+  "prompts": [
+    {
+      "prompt_id": "AED_MODE_ADULT",
+      "zh_CN": "成人模式",
+      "en": "Adult mode.",
+      "trigger": "进入/切换时一次",
+      "priority": "VS2"
+    },
+    {
+      "prompt_id": "AED_MODE_PED",
+      "zh_CN": "儿童模式",
+      "en": "Pediatric mode.",
+      "trigger": "进入/切换时一次",
+      "priority": "VS2"
+    },
+    {
+      "prompt_id": "AED_CONNECT_CABLE",
+      "zh_CN": "请连接除颤电极电缆",
+      "en": "Connect the defibrillation pads cable.",
+      "trigger": "条件持续时按间隔提醒",
+      "priority": "VS1；治疗中脱落升 VS0"
+    },
+    {
+      "prompt_id": "AED_APPLY_PADS",
+      "zh_CN": "请将电极片贴于患者裸露胸部",
+      "en": "Apply the pads to the patient's bare chest.",
+      "trigger": "条件持续时按间隔提醒",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_ANALYZING",
+      "zh_CN": "正在分析心律，请勿接触患者",
+      "en": "Analyzing the heart rhythm. Do not touch the patient.",
+      "trigger": "进入分析时一次；若本次转换已有 `*_ANALYZING` 合并提示则抑制",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_MOTION",
+      "zh_CN": "检测到移动，请勿触碰或移动患者",
+      "en": "Movement detected. Do not touch or move the patient.",
+      "trigger": "伪差成立时立即；需防抖",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_PAD_CONTACT",
+      "zh_CN": "电极片接触不良，请按紧电极片",
+      "en": "Poor pad contact. Press the pads firmly.",
+      "trigger": "接触异常时立即",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_SHOCKABLE",
+      "zh_CN": "建议电击，正在充电",
+      "en": "Shock advised. Charging.",
+      "trigger": "进入 Charging 时一次",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_READY",
+      "zh_CN": "所有人离开患者，按下闪烁的电击按钮",
+      "en": "Stand clear. Press the flashing shock button.",
+      "trigger": "进入 Ready 时立即",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_SHOCK_RECORDED",
+      "zh_CN": "模拟电击已记录",
+      "en": "Simulated shock recorded.",
+      "trigger": "系列最后一次 `ShockDelivered` 后一次",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_SHOCK_RECORDED_ANALYZING",
+      "zh_CN": "模拟电击已记录，正在分析心律，请勿接触患者",
+      "en": "Simulated shock recorded. Analyzing the heart rhythm. Do not touch the patient.",
+      "trigger": "系列中间电击后一次；替代两句竞争语音",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_RHYTHM_CHANGED",
+      "zh_CN": "心律已改变，模拟电击已取消",
+      "en": "Rhythm changed. Simulated shock canceled.",
+      "trigger": "仅用于不立即回 Analyzing 的对照档；D3-Workflow 使用下方合并提示",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_AUTO_DISARM",
+      "zh_CN": "未执行模拟电击，已解除充电",
+      "en": "Simulated shock not delivered. Charge removed.",
+      "trigger": "仅用于不立即回 Analyzing 的对照档；D3-Workflow 使用下方合并提示",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_RHYTHM_CHANGED_ANALYZING",
+      "zh_CN": "心律已改变，模拟电击已取消，正在分析心律，请勿接触患者",
+      "en": "Rhythm changed. Simulated shock canceled. Analyzing the heart rhythm. Do not touch the patient.",
+      "trigger": "心律变化后直接回分析时一次",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_AUTO_DISARM_ANALYZING",
+      "zh_CN": "已解除充电，正在分析心律，请勿接触患者",
+      "en": "Charge removed. Analyzing the heart rhythm. Do not touch the patient.",
+      "trigger": "自动解除后直接回分析时一次",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_CHARGE_FAILED",
+      "zh_CN": "充电失败，请继续心肺复苏",
+      "en": "Charging failed. Continue CPR.",
+      "trigger": "故障确认时立即",
+      "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_NSA_CPR",
+      "zh_CN": "不建议电击，开始心肺复苏",
+      "en": "No shock advised. Begin CPR.",
+      "trigger": "NSA 转入 CPR 时一次",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_NSA_MONITOR",
+      "zh_CN": "不建议电击，请继续观察患者",
+      "en": "No shock advised. Continue to attend to the patient.",
+      "trigger": "NSA 转入 Monitor；之后可按间隔提醒",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_CPR_START",
+      "zh_CN": "开始胸外按压，跟随节拍",
+      "en": "Begin chest compressions. Follow the beat.",
+      "trigger": "CPR 开始时一次",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_CPR_BREATHS",
+      "zh_CN": "进行两次人工呼吸",
+      "en": "Give two breaths.",
+      "trigger": "30:2 或 15:2 的通气阶段",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_CPR_CONTINUE",
+      "zh_CN": "继续心肺复苏",
+      "en": "Continue CPR.",
+      "trigger": "长 CPR 阶段按课程需要",
+      "priority": "VS2"
+    },
+    {
+      "prompt_id": "AED_CPR_STOP",
+      "zh_CN": "停止心肺复苏，请勿接触患者",
+      "en": "Stop CPR. Do not touch the patient.",
+      "trigger": "返回分析前立即",
+      "priority": "VS0"
+    }
+  ],
+  "english_pronunciation_candidates": {
+    "compressions": "k ə m p ɹ ˈ ɛ ʃ ə n z",
+    "cpr": "s ˈ i ː p ˈ i ː ˈ ɑ ː ɹ",
+    "defibrillation": "d i ː f ˌ ɪ b ɹ ɪ l ˈ e ɪ ʃ ə n"
+  }
+}

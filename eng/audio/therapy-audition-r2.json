@@ -1,0 +1,243 @@
+{
+  "schema": "Monitor.TherapyAudition@2",
+  "status": "CandidateOnly",
+  "user_decisions": {
+    "charge": "R1 charge-continuous.wav accepted",
+    "ready": "R1 ready-double.wav (870 Hz) accepted",
+    "heartbeat": "reuse selected production Heartbeat.pcm byte-for-byte",
+    "ta": "research and audition as pacing cue; mechanical opening/latch release direction",
+    "cpr": "separate timbre candidates and rate comparisons",
+    "speech": "declarative Chinese and English; restrain sentence-final expression"
+  },
+  "scope_revision": {
+    "origin": "User feedback in this chat, 2026-10-08",
+    "pacer_sound_audition_requested": true,
+    "baseline_pacer_sound_disabled": true,
+    "runtime_mapping_changed": false,
+    "proposed_event": "PacingStimulusIssued",
+    "not_evidence_of_capture": true,
+    "supersedes_r1_ta_selection": true
+  },
+  "pacer_candidates": [
+    {
+      "id": "P1",
+      "label": "轻型卡扣开启",
+      "duration_ms": 48,
+      "body_hz": 1650,
+      "decay_ms": 5,
+      "noise_mix": 0.75,
+      "release_ms": 6,
+      "release_gain": 0.38,
+      "band_hz": [
+        650,
+        5500
+      ]
+    },
+    {
+      "id": "P2",
+      "label": "阀门弹开·偏低沉",
+      "duration_ms": 62,
+      "body_hz": 680,
+      "decay_ms": 10,
+      "noise_mix": 0.45,
+      "release_ms": 9,
+      "release_gain": 0.38,
+      "band_hz": [
+        250,
+        3500
+      ]
+    },
+    {
+      "id": "P3",
+      "label": "电磁衔铁释放",
+      "duration_ms": 40,
+      "body_hz": 2200,
+      "decay_ms": 4,
+      "noise_mix": 0.85,
+      "release_ms": 4,
+      "release_gain": 0.3,
+      "band_hz": [
+        1000,
+        6500
+      ]
+    },
+    {
+      "id": "P4",
+      "label": "塑料卡扣·干脆",
+      "duration_ms": 55,
+      "body_hz": 1100,
+      "decay_ms": 7,
+      "noise_mix": 0.6,
+      "release_ms": 7,
+      "release_gain": 0.55,
+      "band_hz": [
+        400,
+        4500
+      ]
+    },
+    {
+      "id": "P5",
+      "label": "金属阀芯·短余振",
+      "duration_ms": 68,
+      "body_hz": 1450,
+      "decay_ms": 11,
+      "noise_mix": 0.4,
+      "release_ms": 5,
+      "release_gain": 0.3,
+      "band_hz": [
+        600,
+        6500
+      ]
+    },
+    {
+      "id": "P6",
+      "label": "低沉开锁·短嗒",
+      "duration_ms": 58,
+      "body_hz": 460,
+      "decay_ms": 9,
+      "noise_mix": 0.7,
+      "release_ms": 8,
+      "release_gain": 0.35,
+      "band_hz": [
+        200,
+        2700
+      ]
+    },
+    {
+      "id": "P7",
+      "label": "微型继电器开启",
+      "duration_ms": 34,
+      "body_hz": 2800,
+      "decay_ms": 3,
+      "noise_mix": 0.9,
+      "release_ms": 3,
+      "release_gain": 0.35,
+      "band_hz": [
+        1000,
+        7500
+      ]
+    },
+    {
+      "id": "P8",
+      "label": "软阀开启·较少金属感",
+      "duration_ms": 70,
+      "body_hz": 840,
+      "decay_ms": 12,
+      "noise_mix": 0.7,
+      "release_ms": 10,
+      "release_gain": 0.25,
+      "band_hz": [
+        300,
+        3300
+      ]
+    }
+  ],
+  "cpr_candidates": [
+    {
+      "id": "C1",
+      "label": "木质节拍",
+      "hz": 1250,
+      "duration_ms": 35,
+      "kind": "wood"
+    },
+    {
+      "id": "C2",
+      "label": "干短点击",
+      "hz": 1800,
+      "duration_ms": 20,
+      "kind": "click"
+    },
+    {
+      "id": "C3",
+      "label": "短电子提示",
+      "hz": 960,
+      "duration_ms": 55,
+      "kind": "beep"
+    },
+    {
+      "id": "C4",
+      "label": "低沉节拍",
+      "hz": 650,
+      "duration_ms": 45,
+      "kind": "wood"
+    }
+  ],
+  "cpr_rates_bpm": [
+    100,
+    105,
+    110,
+    120
+  ],
+  "default_reference_cpr_bpm": 110,
+  "voice_variants": [
+    {
+      "id": "A",
+      "label": "平叙·保留字调",
+      "phrase_gain_zh": 0.35,
+      "local_gain_zh": 1.0,
+      "phrase_gain_en": 0.35,
+      "local_gain_en": 0.65
+    },
+    {
+      "id": "B",
+      "label": "更克制·对比",
+      "phrase_gain_zh": 0.15,
+      "local_gain_zh": 0.9,
+      "phrase_gain_en": 0.15,
+      "local_gain_en": 0.5
+    }
+  ],
+  "voice_processing": {
+    "engine": "sherpa-onnx 1.12.26",
+    "analysis": "pyworld 0.3.5",
+    "tts_speed": 1.0,
+    "noise_scale": 0.35,
+    "noise_scale_w": 0.3,
+    "clause_pause_s": 0.16,
+    "frame_period_ms": 5,
+    "phrase_smoothing_sigma_s": 0.22,
+    "note": "Mandarin local pitch contours retained; phrase-level trend attenuation is an engineering approximation, not linguistic tone validation"
+  },
+  "sources": [
+    {
+      "id": "D3",
+      "url": "https://www.mindray.com/content/dam/xpace/en_gb/resources/downloads/education/education-d3/BeneHeart_D3_Operators_Manual.pdf",
+      "section": "6.7.1",
+      "finding": "CPR metronome 110/min; default ratio 30:2. Does not establish a universal mechanical pacer timbre."
+    },
+    {
+      "id": "M2",
+      "url": "https://info.zoll.com/hubfs/Products/M2/Manuals/9650-000873-01-SF_C.pdf?hsLang=en-us",
+      "section": "A-10",
+      "finding": "Metronome 105 beeps/min configurable; device differences separate from clinical range."
+    },
+    {
+      "id": "AHA2025",
+      "url": "https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines/adult-basic-life-support",
+      "section": "7.3",
+      "finding": "Adult compression rate 100–120/min; no universal beep pitch or timbre specified."
+    },
+    {
+      "id": "D3-training",
+      "url": "https://www.mindray.com/content/dam/xpace/en_gb/resources/downloads/education/education-d3/MRUKC047_BeneHeart_D3_Advanced_User_Guide.pdf",
+      "section": "7",
+      "finding": "Distinguishes sensing, delivered pacing stimuli and capture; no confirmed universal mechanical ta sound."
+    },
+    {
+      "id": "LP15",
+      "url": "https://www.stryker.com/content/dam/stryker/ems/resources/operating-instructions/lifepak_15_operating_instructions_en.pdf",
+      "section": "General Maintenance and Testing p.214",
+      "finding": "Pacer LED follows delivered pulses; electrode disconnection audible alarm is separate."
+    },
+    {
+      "id": "Mandarin-prosody",
+      "url": "https://www.isca-archive.org/speechprosody_2004/cao04_speechprosody.pdf",
+      "finding": "Tone/intonation distinction motivates preserving lexical pitch rather than flattening Mandarin completely."
+    },
+    {
+      "id": "WORLD",
+      "url": "https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder",
+      "finding": "F0, spectral envelope and aperiodicity analysis/resynthesis; processing tool, not proof of speech intelligibility."
+    }
+  ]
+}

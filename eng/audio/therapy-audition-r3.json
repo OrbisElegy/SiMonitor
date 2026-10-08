@@ -1,0 +1,68 @@
+{
+  "schema": "Monitor.TherapyAudition@3",
+  "status": "CandidateOnly",
+  "selections": {
+    "pacer": {
+      "candidate": "P7",
+      "label": "微型继电器开启",
+      "source": "R2/P7-single.wav",
+      "timbre_accepted": true
+    },
+    "cpr": {
+      "candidate": "C2",
+      "label": "干短点击",
+      "source": "R2/C2-single.wav",
+      "timbre_accepted": true,
+      "rate_bpm": 110,
+      "rate_status": "unchanged D3 reference, not a new user rate choice"
+    },
+    "english": {
+      "candidate": "R2-A",
+      "voice_and_prosody_accepted": true,
+      "depop_review_pending": true
+    },
+    "charge": "R1 continuous accepted",
+    "ready": "R1 870 Hz double accepted",
+    "heartbeat": "SelectedTones/Heartbeat.pcm"
+  },
+  "chinese_candidates": [
+    {
+      "id": "Z1",
+      "sid": 49,
+      "voice": "zm_yunjian",
+      "label": "沉稳男声方向",
+      "speed": 0.94
+    },
+    {
+      "id": "Z2",
+      "sid": 52,
+      "voice": "zm_yunyang",
+      "label": "平实男声方向",
+      "speed": 0.94
+    },
+    {
+      "id": "Z3",
+      "sid": 47,
+      "voice": "zf_xiaoxiao",
+      "label": "沉静女声方向",
+      "speed": 0.94
+    }
+  ],
+  "depop": {
+    "highpass_hz": 85,
+    "low_band_hz": 180,
+    "high_band_hz": 3800,
+    "low_floor_gain": 0.3,
+    "high_floor_gain": 0.5,
+    "local_envelope_ms": 10,
+    "context_ms": 100,
+    "gain_smoothing_ms": 8,
+    "note": "Conservative dynamic band attenuation; no pitch or duration change. No digital clipping detected in R2 English.",
+    "context_filter": "centered 200 ms moving mean",
+    "gain_filter": "centered 16 ms moving mean"
+  },
+  "chinese_source": "https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_0.html",
+  "runtime_changed": false,
+  "english_focus_prompt": "AED_CPR_STOP",
+  "english_focus_text": "Stop CPR. Do not touch the patient."
+}

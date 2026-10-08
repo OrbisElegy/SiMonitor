@@ -940,5 +940,15 @@
   "ecgTemplate.t179": "间歇心室失夺获（DDD）",
   "ecgGroup.g29": "起搏方式",
   "ecgGroup.g30": "起搏失败",
-  "summary.pacing": "固定起搏示意；尖峰与心肌夺获分别生成。"
+  "summary.pacing": "固定起搏示意；尖峰与心肌夺获分别生成。",
+  "conversion.template": "当前模板：{0}",
+  "conversion.title": "电击后转复",
+  "conversion.enabled": "允许电击后转复窦律",
+  "conversion.monophasic": "单相波：能量须大于（J）",
+  "conversion.biphasic": "双相波：能量须大于（J）",
+  "conversion.synchronized": "电击方式：同步电复律",
+  "conversion.unsynchronized": "电击方式：非同步除颤",
+  "conversion.ventricular": "电击方式：有有效射血时同步，无有效射血时非同步",
+  "conversion.invalid": "请输入 0–1000 J 的整数；实际放电能量须严格大于阈值。",
+  "conversion.invalidDrafts": "有模板的电击转复阈值无效，请在 ECG 高级参数中修正为 0–1000 J 的整数。"
 }

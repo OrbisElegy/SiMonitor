@@ -940,5 +940,15 @@
   "ecgTemplate.t179": "Intermittent ventricular noncapture (DDD)",
   "ecgGroup.g29": "Pacing modes",
   "ecgGroup.g30": "Pacing failure",
-  "summary.pacing": "Fixed pacing illustration; stimuli and myocardial capture are generated separately."
+  "summary.pacing": "Fixed pacing illustration; stimuli and myocardial capture are generated separately.",
+  "conversion.template": "Current template: {0}",
+  "conversion.title": "Conversion after shock",
+  "conversion.enabled": "Allow conversion to sinus rhythm",
+  "conversion.monophasic": "Monophasic: energy must exceed (J)",
+  "conversion.biphasic": "Biphasic: energy must exceed (J)",
+  "conversion.synchronized": "Shock mode: synchronized cardioversion",
+  "conversion.unsynchronized": "Shock mode: unsynchronized defibrillation",
+  "conversion.ventricular": "Shock mode: synchronized with ejection; unsynchronized without ejection",
+  "conversion.invalid": "Enter an integer from 0 to 1000 J; delivered energy must strictly exceed the threshold.",
+  "conversion.invalidDrafts": "A template has invalid conversion thresholds. Correct them to integers from 0 to 1000 J in advanced ECG settings."
 }

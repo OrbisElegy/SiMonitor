@@ -61,3 +61,5 @@ and [third-party licenses](../../eng/licenses) before redistribution.
 The simulation models and engineering checks do not constitute clinical validation.
 
 Pacing includes fifteen fixed examples covering chamber/site choices, implant routes and output/capture/sensing failures. Defibrillation is an independent, finite current source (monophasic or biphasic), not a template or a desktop shock control. See the [research and limitations](../research/physiology/pacing-defibrillation.md).
+
+Per-template shock response, independent monophasic/biphasic thresholds and skin integration are documented in the [electrical conversion contract](../interfaces/electrical-conversion.md).

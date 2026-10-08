@@ -1479,6 +1479,7 @@ public sealed class LocalMonitorPreviewSession
     public const long PresentationLatencyNs = 2_200_000_000;
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
+    public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
     public ManualVitalSigns ManualVitals { get; }
@@ -1495,10 +1496,12 @@ public sealed class LocalMonitorPreviewSession
     public RealtimeOxygenationSnapshot? Oxygenation { get; }
     public OxygenReservoirParameters? OxygenationParameters { get; private set; }
 
-    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null);
+    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
+    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
+    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition);
     public void UpdateDisplay(MonitorDisplayConfiguration display);
     public void Advance(long deltaNs);
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
@@ -1719,6 +1722,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 ```csharp
 public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Respiration, int Ejection, string Seed, IReadOnlyDictionary<string, decimal?> Numbers, IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; }
     public decimal ApplyDelaySeconds { get; init; }
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate();
@@ -2127,5 +2131,45 @@ public sealed class SessionAuthority
 {
     public SessionAuthority(TherapyController therapy);
     public DomainResult<AuthorityCommit> CommitSafetyInputs(IEnumerable<SafetyInput> inputs);
+}
+```
+
+## Therapy/EcgElectricalTherapy.cs
+
+源码：[EcgElectricalTherapy.cs](../../../src/Monitor.Application/Therapy/EcgElectricalTherapy.cs) · 命名空间：`Monitor.Application.Therapy`
+
+```csharp
+public enum ElectricalShockRequirement { Synchronized, Unsynchronized, VentricularTachycardia }
+public enum ElectricalConversionOutcome
+{
+    Eligible,
+    ConversionScheduled,
+    NotShockable,
+    Disabled,
+    WrongMode,
+    EnergyTooLow,
+    SourceChangePending,
+    DuplicateDelivery
+}
+public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicThresholdJoules, int BiphasicThresholdJoules)
+{
+    public const int MaximumEnergyJoules = 1000;
+    public static ElectricalConversionSettings Default { get; }
+    public void Validate();
+}
+public sealed record EcgElectricalTherapyDescriptor(string TemplateId, ElectricalShockRequirement Requirement);
+public sealed record EcgElectricalTherapyProfile(string TemplateId, ElectricalConversionSettings Settings)
+{
+    public void Validate();
+}
+public sealed record DeliveredElectricalShock(ulong DeliverySequence, long DeliveredAtSimTimeNs, DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules);
+public sealed record ElectricalConversionResult(ElectricalConversionOutcome Outcome, string? TargetTemplateId = null, long? EffectiveSimTimeNs = null);
+public static class EcgElectricalTherapy
+{
+    public const string SinusTemplateId = "ecgTemplate.t000";
+    public static IReadOnlyList<EcgElectricalTherapyDescriptor> Descriptors { get; }
+    public static EcgElectricalTherapyDescriptor? Find(string templateId);
+    public static IReadOnlyDictionary<string, ElectricalConversionSettings> Snapshot(IReadOnlyDictionary<string, ElectricalConversionSettings> settings);
+    public static ElectricalConversionResult Evaluate(EcgElectricalTherapyProfile? profile, PhysiologyIllustrationConfiguration configuration, DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
 }
 ```

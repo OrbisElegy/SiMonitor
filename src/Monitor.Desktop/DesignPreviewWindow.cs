@@ -393,6 +393,7 @@ internal sealed class DesignPreviewWindow : Window
             int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
+        var electricalTherapy = Settings.ElectricalConversion.Profile(DesignPreviewSettings.EcgTemplateKey(Settings.EcgSelection));
         var manualVitals = Settings.ManualVitals.Read();
         var display = Settings.ReadDisplay();
         int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
@@ -402,7 +403,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             var next = new LocalMonitorPreviewSession(config, display, enableMeasurements: true,
                 opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: modulation,
-                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals);
+                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals, electricalTherapy: electricalTherapy);
             return (next, ecgConfig, CapturePaper(ecgConfig), config);
         };
     }
@@ -486,6 +487,8 @@ internal sealed class DesignPreviewWindow : Window
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
         { SetStatus("validation.baselineRestart"); }
+        catch (ArgumentException exception) when (exception.Message == "ElectricalConversion.InvalidDraft")
+        { SetStatus("conversion.invalidDrafts"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidApplyDelay")
         { SetStatus("validation.applyDelay"); }
         catch (ArgumentException exception) when (exception.Message is "SoundPreferences.Invalid" or "AlarmSound.InvalidTiming")

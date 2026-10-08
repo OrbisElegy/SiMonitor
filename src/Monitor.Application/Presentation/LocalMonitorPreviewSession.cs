@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Application.Measurements;
+using Monitor.Application.Therapy;
+using Monitor.Domain.Therapy;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
+using Monitor.Simulation.Therapy;
 
 namespace Monitor.Application.Presentation;
 
@@ -19,6 +22,8 @@ public sealed class LocalMonitorPreviewSession
     private LocalMonitorPreviewSession? _pendingSource;
     private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
     private readonly List<(long ToExclusiveSourceTimeNs, PhysiologyIllustrationConfiguration Configuration)> _previousPacingSources = [];
+    private ulong _lastElectricalDeliverySequence;
+    public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
@@ -51,9 +56,12 @@ public sealed class LocalMonitorPreviewSession
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display,
         bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
         SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
-        RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null)
+        RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null,
+        EcgElectricalTherapyProfile? electricalTherapy = null)
     {
         ArgumentNullException.ThrowIfNull(display);
+        electricalTherapy?.Validate();
+        ElectricalTherapy = electricalTherapy;
         ManualVitals = manualVitals ?? ManualVitalSigns.Empty;
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
@@ -149,6 +157,40 @@ public sealed class LocalMonitorPreviewSession
         return effective;
     }
 
+    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules)
+    {
+        var result = EcgElectricalTherapy.Evaluate(ElectricalTherapy, _configuration, waveform, mode, deliveredEnergyJoules);
+        return _pendingSource is not null ? new(ElectricalConversionOutcome.SourceChangePending) : result;
+    }
+
+    // Future skins supply a prepared sinus source after confirmed delivery. No
+    // charging/lease/QRS synchronization is performed by this response adapter.
+    // Accepted transitions use the existing atomic 200 ms acquisition boundary.
+    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition)
+    {
+        ArgumentNullException.ThrowIfNull(delivery);
+        if (delivery.DeliverySequence == 0 || delivery.DeliveredAtSimTimeNs != SimulationTimeNs)
+        { throw new ArgumentException("ElectricalConversion.InvalidDelivery", nameof(delivery)); }
+        var result = EvaluateElectricalShock(delivery.Waveform, delivery.Mode, delivery.EnergyJoules);
+        if (delivery.DeliverySequence <= _lastElectricalDeliverySequence) { return new(ElectricalConversionOutcome.DuplicateDelivery); }
+        if (result.Outcome != ElectricalConversionOutcome.Eligible)
+        {
+            _lastElectricalDeliverySequence = delivery.DeliverySequence;
+            return result;
+        }
+        ArgumentNullException.ThrowIfNull(sinusDefinition);
+        var plan = sinusDefinition._configuration.ResolvePlan();
+        if (sinusDefinition.ElectricalTherapy?.TemplateId != EcgElectricalTherapy.SinusTemplateId ||
+            plan.ConductionPattern != AvConductionPattern.FixedPr || plan.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+            plan.Pacing is not null || plan.VentricularConductionRatio != 1 || plan.IndependentVentricularPeriodNs is not null ||
+            sinusDefinition._configuration.Svt || sinusDefinition._configuration.Vt || sinusDefinition._configuration.Aivr ||
+            sinusDefinition._configuration.Aar || sinusDefinition._configuration.Ajr || sinusDefinition._configuration.AtrialEscape)
+        { throw new ArgumentException("ElectricalConversion.SinusTargetRequired", nameof(sinusDefinition)); }
+        long effective = ScheduleSource(sinusDefinition, 0);
+        _lastElectricalDeliverySequence = delivery.DeliverySequence;
+        return new(ElectricalConversionOutcome.ConversionScheduled, EcgElectricalTherapy.SinusTemplateId, effective);
+    }
+
     public void UpdateDisplay(MonitorDisplayConfiguration display)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -177,6 +219,7 @@ public sealed class LocalMonitorPreviewSession
         _source = source;
         _realtimeOxygenation = oxygenation;
         _configuration = definition._configuration;
+        ElectricalTherapy = definition.ElectricalTherapy;
         ManualVitals = definition.ManualVitals;
         _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;

@@ -99,7 +99,7 @@ internal sealed partial class DesignPreviewSettings
                 p => p.Value.Value is { } v && v >= p.Value.Minimum && v <= p.Value.Maximum ? (decimal?)v : null),
             GeneratorFlags().ToDictionary(p => p.Key, p => p.Value.IsChecked == true),
             GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex))
-        { ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true) };
+        { ElectricalConversions = ElectricalConversion.Capture(), ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true) };
         result.Validate();
         return result;
     }
@@ -124,6 +124,7 @@ internal sealed partial class DesignPreviewSettings
             if (saved.Choices[key] < -1 || saved.Choices[key] >= field.Items.Count)
             { throw new ArgumentException("GeneratorPreferences.Choice"); }
         }
+        ElectricalConversion.Restore(saved.ElectricalConversions);
         ApplyDelaySeconds.Value = saved.ApplyDelaySeconds;
         EcgSelection = saved.Ecg;
         RespirationSelection = saved.Respiration;

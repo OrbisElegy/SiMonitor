@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Therapy;
+
 namespace Monitor.Application.Presentation;
 
 // Explicit editor schema, not a simulation checkpoint or measured values.
@@ -6,6 +8,8 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     string Seed, IReadOnlyDictionary<string, decimal?> Numbers,
     IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; } =
+        EcgElectricalTherapy.Snapshot(new Dictionary<string, ElectricalConversionSettings>());
     public decimal ApplyDelaySeconds { get; init; } = 3;
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate()
@@ -16,5 +20,6 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }
         Oxygenation?.Validate();
+        _ = EcgElectricalTherapy.Snapshot(ElectricalConversions);
     }
 }

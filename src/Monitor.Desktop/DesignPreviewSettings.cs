@@ -87,6 +87,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ShapeEditStatus.IsVisible = true;
         }
     }
+    internal ElectricalConversionEditor ElectricalConversion { get; }
     internal TContourParameterEditor TContourParameters { get; }
     internal InfarctionParameterEditor InfarctionParameters { get; }
     internal int EcgSelection
@@ -96,6 +97,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         {
             if (_ecgSelection == value) { return; }
             _ecgSelection = value;
+            ElectricalConversion.Select(EcgTemplateKey(value));
             TContourParameters.Reset(value is >= 107 and <= 114 ? TContourProductPreset.Create(value - 107) : null);
             InfarctionParameters.Reset(value is >= 115 and <= 164 ? InfarctionProductPreset.Create((value - 115) % 10,
                 (Monitor.Simulation.Physiology.InfarctionTerritory)((value - 115) / 10 + 1)) : null);
@@ -269,6 +271,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Oxygenation = new OxygenationSettingsPanel(Localization);
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
+        ElectricalConversion = new ElectricalConversionEditor(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -699,7 +702,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         RefreshShapeSummary();
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
-        bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null;
+        if (ElectricalConversion.IsVisible) { _advancedEcg.Children.Add(ElectricalConversion); }
+        bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null || ElectricalConversion.IsVisible;
         if (!ecgEditable)
         { _advancedEcg.Children.Add(LocalizedText("advanced.ecgNoParameters")); }
         SectionPages[6].SetDetail(0, ecgEditable ? null : "advanced.noParameters", ecgEditable ? null : "advanced.noParametersName");

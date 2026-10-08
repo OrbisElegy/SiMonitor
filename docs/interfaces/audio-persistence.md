@@ -321,9 +321,9 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5–13 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–14 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
 
-Save 总是写 Version=13；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=14；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
 Alarms.PlaybackMode 默认 Continuous（0），Notifications（1）表示默认短警报；它只作用于跟随默认的条件。
 Alarms.Notifications 按已注册条件 ID 保存 AlarmNotificationSettings 覆盖项，缺省为空。
@@ -341,6 +341,9 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 
 版本 13 增加 Sound.OutputDeviceId（null 表示系统默认）和 Muted（默认 false）；旧版本缺省时使用这两个默认值。
 设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
+
+版本 14 增加 Generator.ElectricalConversions，按稳定 ECG 模板标识保存允许转复与独立的单／双相能量阈值。旧文件缺省为空映射；切换到窦律不删除原模板配置。见[电击转复接口](electrical-conversion.md)。
+
 Sound 保存 Volume/HeartbeatVolume（0–100）、HeartbeatEnabled、BeatSource（0–2）、PitchSource（0–1）、
 PauseSeconds（1–3600）、Timing；Timing 周期单位 ms，Info 5000–120000、Notice 1500–60000、
 Warning 3500–60000、Critical 250–2000，另有 InfoTone。

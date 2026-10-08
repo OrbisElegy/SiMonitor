@@ -69,7 +69,7 @@ public static class CardiacFillingPerfusion
         if (!Supports(plan)) { throw new ArgumentException("CardiacFilling.UnsupportedPlan", nameof(plan)); }
         long nonFillingNs = plan.SeededRate is not null || plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration
             ? FillingLimitedEjection.NonFillingDurationNs : NonFillingDurationNs;
-        if (plan.RateAdjustment is not null)
+        if (plan.RateAdjustment is not null || plan.Pacing is not null)
         {
             Int128 adjustedCurrentNs = MechanicalTimeNs(plan, cycleIndex);
             long adjustedIntervalNs = PrecedingIntervalNs(plan, cycleIndex);
@@ -143,6 +143,12 @@ public static class CardiacFillingPerfusion
 
     internal static Int128 MechanicalTimeNs(RegularPhysiologyPlan plan, ulong index)
     {
+        if (plan.Pacing is { } pacing)
+        {
+            Int128 cycle = pacing is PacingIllustration.VentricularOversensing or PacingIllustration.IntermittentVentricularNoncapture
+                ? (Int128)(index / 2) * 4 + index % 2 : index;
+            return cycle * 1_000_000_000 + plan.VentricularMechanicalOffsetNs;
+        }
         if (plan.RateAdjustment is { } adjustment)
         {
             Int128 reference = MechanicalTimeNs(plan with { RateAdjustment = null }, index) - plan.VentricularMechanicalOffsetNs;

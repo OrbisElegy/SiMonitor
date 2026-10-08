@@ -493,3 +493,24 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 取消通过 `OperationCanceledException` 表达；带试算副本的生成/组块调用取消或失败后不发布本批新状态。
 `Restore` 拒绝不相容、被篡改或内部游标不一致的状态；不得用捕获异常后补零/跳样来继续同一 stream。
 订阅背压和回放缺口等正常协议分支则用结果枚举表达，消费者应按状态进入恢复流程。
+
+## 起搏与除颤
+
+`PacingReference.CreatePlan(mode)` 与 `CreateElectrodes(mode)` / `CreateLeadIIBands(mode)` 必须使用同一模式。
+`RegularPhysiologyPlan.Pacing` 通过共享时间线发出独立的 `AtrialPacingPulse`、`VentricularPacingPulse`，
+成功夺获才有相应电活动和机械事件；刺激事件不等于 QRS 检测或采集证据。
+`PhysiologyIllustrationConfiguration.Pacing` 将同一模式接入七通道监护。
+冲突的心律、形态、心率调整与机械周期门控会拒绝；呼吸、血压参数和整体关闭机械射血仍可独立配置。
+已有状态缺省为 `Pacing = null`；新增枚举值追加，不改旧值。
+
+`DefibrillationWaveform.Create(DefibrillationWaveformPlan, deliveredAtSimTimeNs)` 验证后构造不可变单次源。
+`EvaluateCurrentMilliamps(simTimeNs)` 及 `Sample(fromSimTimeNs, toExclusiveSimTimeNs, samplePeriodNs, maximumSamples, cancellationToken)`
+输出放电电流。相区间左闭右开，间隔和支持区间外为零，第二相为负。
+第一／第二相支持 0.1–20 ms，间隔 0–1 ms，峰值 1–100000 mA，次相幅度比 1–1000‰；
+单相必须显式使用第二相时长零与间隔零。这些是输入边界，不是临床推荐范围。
+批次至多一百万样本，先验证数量后分配；超范围、时间溢出与取消均不发布部分结果。
+
+放电源不消费安全时钟、不依赖 Domain 或 UI。调用方在真正 Delivered 后将安全时间映射为源时间，
+再构造源；充电、等待同步、取消和过期不能据此创建放电。现有桌面未接入该触发链。
+放电电流没有 ECG 电压换算或自动复律效果。定性依据、作者参数与未实现内容见
+[起搏与除颤技术说明](../research/physiology/pacing-defibrillation.md)。

@@ -26,6 +26,7 @@ internal static class EcgTemplateDetectionSmokeChecks
         var rhythmEvents = new List<DetectedEcgRhythmEvent>();
         var expectedStatus = configuration.CardiacActivity == CardiacActivity.Absent ? WaveformMeasurementStatus.Stale :
             configuration.CardiacActivity == CardiacActivity.AtrialOnly || configuration.HyperkalemiaFusion ||
+            configuration.Pacing is PacingIllustration.VentricularNoncapture or PacingIllustration.VentricularOutputFailure ||
             VentricularDisorganizationReference.IsPattern(configuration.ConductionPattern)
                 ? WaveformMeasurementStatus.Uncountable : WaveformMeasurementStatus.Valid;
         for (int step = 1; step <= 310; step++)
@@ -67,7 +68,7 @@ internal static class EcgTemplateDetectionSmokeChecks
         {
             var matched = beats.Where(beat => beat.PeakTimeNs >= activationTimeNs &&
                 beat.PeakTimeNs < activationTimeNs + responseWindowNs).ToArray();
-            Require(matched.Length == 1, "each electrical activation has exactly one detected response");
+            Require(matched.Length == 1, $"each electrical activation has exactly one detected response at {activationTimeNs}; nearby {string.Join(",", beats.Where(b => Math.Abs(b.PeakTimeNs - activationTimeNs) < 500_000_000).Select(b => b.PeakTimeNs))}");
             Require(matched[0].ConfirmedAtNs > matched[0].PeakTimeNs && matched[0].ConfirmedAtNs <= activationTimeNs + 300_000_000,
                 "confirmation is causal and bounded");
         }

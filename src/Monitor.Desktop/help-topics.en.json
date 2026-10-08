@@ -244,5 +244,11 @@
     "Category": "Vital signs",
     "Title": "Set manual NIBP, temperature and custom vital signs",
     "Text": "In Settings → Vital signs → Manual vital signs, enable each item and apply. Enter all three NIBP values manually: 0 ≤ diastolic ≤ mean ≤ systolic ≤ 300 mmHg. Mean pressure is not calculated or linked to ABP. Temperature accepts 0–50 °C with one decimal. These are input bounds, not clinical reference ranges. Each custom slot accepts a name (1–24 characters), a value (-99999–99999, up to two decimals) and an optional unit (up to 12 characters). Readings appear at the bottom of the monitor and follow the apply delay in simulation time; paused simulation defers pending changes. Manual readings do not trigger physiological alarms. Disable and apply to hide a reading. Resetting defaults or relaunching the app clears manual items."
+  },
+  {
+    "Id": "pacing",
+    "Category": "Waveforms and display",
+    "Title": "Pacing templates and failure",
+    "Text": "Choose Pacing modes or Pacing failure under Settings → Waveform presets. Examples cover single-chamber, dual-chamber, biventricular, His bundle, left bundle branch area, leadless, epicardial and temporary transvenous pacing. Implant route alone does not determine ECG morphology. Noncapture preserves a spike without its P wave or QRS; ventricular output failure removes the ventricular spike; undersensing can produce an inappropriate spike during intrinsic QRS; oversensing intermittently inhibits output. Missing ventricular activation produces no new ejection; vascular pressure retains passive runoff. Timing is fixed and base-rate editing is unavailable. Display spikes are widened and do not represent physical pulse width. Pacing alarms still require acquired evidence. Defibrillation discharge is not a template."
   }
 ]

@@ -57,6 +57,7 @@ public sealed record PhysiologyIllustrationConfiguration(
     bool AivrCapture = false,
     bool AtrialEscape = false)
 {
+    public PacingIllustration? Pacing { get; init; }
     public EcgChestInfarctionPlan? Infarction { get; init; }
     public EcgInfarctionZones? Zones { get; init; }
     public EcgTContourPlan? TContour { get; init; }
@@ -156,6 +157,33 @@ public sealed record PhysiologyIllustrationConfiguration(
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (Pacing is { } pacing)
+        {
+            if (ConductionPattern != AvConductionPattern.FixedPr || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || IndependentVentricularPeriodMilliseconds is not null ||
+                IndependentVentricularOffsetMilliseconds is not null || MechanicalEveryCycles != 1 || MechanicalAfterCycles is not null ||
+                MechanicalDurationCycles is not null || SeededRate is not null || RateAdjustment is not null || RhythmSchedule is not null ||
+                BundleBlock != EcgBundleBlockIllustration.Reference || Infarction is not null || Zones is not null || TContour is not null ||
+                VentricularShape != EcgVentricularIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference ||
+                Quinidine != QuinidineIllustration.Reference || QuinidineNotchedP || DigitalisEffect || DigitalisShape != DigitalisTShape.FishHook ||
+                Calcium != CalciumIllustration.Reference || HypokalemiaRepolarization || HypokalemiaInvertedT || HypokalemiaTuFusion || HypokalemiaConduction ||
+                HyperkalemiaRepolarization || HyperkalemiaConduction || HyperkalemiaAbsentP || HyperkalemiaFusion ||
+                IllustrateAfSystemicPulseDeficit || IllustrateAfAberrancy || Wpw || WpwNegativeV1 || WpwSmallerDelta || ShortPr || NormalPrDelta ||
+                ProlongedPrDelta || Svt || SvtRbbb || SvtLbbb || Vt || VtFusion || VtCapture || VtBidirectional || VtTwisting ||
+                Aivr || AivrFusion || AivrCapture || Ajr || Aar || AtrialEscape)
+            { throw new ArgumentException("Pacing.ConflictingModes"); }
+            var respiration = (this with { Pacing = null }).ResolvePlan();
+            var paced = PacingReference.CreatePlan(pacing);
+            return respiration with
+            {
+                Pacing = pacing,
+                HeartPeriodNs = paced.HeartPeriodNs,
+                IndependentVentricularPeriodNs = paced.IndependentVentricularPeriodNs,
+                VentricularElectricalOffsetNs = paced.VentricularElectricalOffsetNs,
+                AtrialMechanicalOffsetNs = paced.AtrialMechanicalOffsetNs,
+                VentricularMechanicalOffsetNs = paced.VentricularMechanicalOffsetNs
+            };
+        }
         if (RhythmSchedule is { } rhythm)
         {
             var plan = (this with { RhythmSchedule = null }).ResolvePlan() with { RhythmSchedule = rhythm };

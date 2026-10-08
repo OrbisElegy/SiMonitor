@@ -55,7 +55,7 @@ internal static class DesignPreviewSmokeChecks
     private static void VerifyUiRefinement()
     {
         var groups = Enumerable.Range(0, DesignPreviewSettings.EcgChoiceCount).GroupBy(EcgChooserGroups.For).ToArray();
-        Require(groups.Sum(g => g.Count()) == 165 && groups.All(g => g.Count() <= 10) &&
+        Require(groups.Sum(g => g.Count()) == 180 && groups.All(g => g.Count() <= 10) &&
             groups.Select(g => g.Key).ToHashSet().SetEquals(EcgChooserGroups.Ordered) && EcgChooserGroups.Ordered.Distinct().Count() == EcgChooserGroups.Ordered.Count, "all ECG presets have bounded explicit groups");
         Require(EcgChooserGroups.For(2) != EcgChooserGroups.For(26) && EcgChooserGroups.For(26) != EcgChooserGroups.For(21) &&
             EcgChooserGroups.For(75) != EcgChooserGroups.For(87), "ectopy, tachycardia, fibrillation and drug groups stay distinct");
@@ -967,6 +967,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyRepolarizationRecovery);
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyLongQtRonT);
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyAberrantAtrialBeats);
+        NativeSmokePartition.Run(VerifyPacingProductStyles);
         EcgTemplateDetectionSmokeChecks.Register();
         NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
         NativeSmokePartition.Run(RealtimeOxygenationSmokeChecks.Verify);
@@ -1574,6 +1575,35 @@ internal static class DesignPreviewSmokeChecks
                 editor.ChestLeads.Select((lead, index) => (lead.IsChecked == true) == (index == 0)).All(matches => matches), "switching contour resets draft and target to selected template");
             window.Settings.EcgSelection = 0; window.RestartSettings();
             Require(!editor.IsVisible && !ReferenceEquals(live, window.Session), "incompatible template ignores stale contour edits");
+        }
+        finally { window.Close(); }
+    }
+
+    private static void VerifyPacingProductStyles()
+    {
+        var window = CreateTemplateWindow(); window.Show();
+        try
+        {
+            foreach (int choice in Enumerable.Range(165, 15).Append(0))
+            {
+                var previous = window.Session;
+                window.Settings.EcgSelection = choice;
+                window.RestartSettings();
+                Require(!ReferenceEquals(previous, window.Session), "pacing selection replaces the accepted source");
+                var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
+                Require(pair.Physiology.Pacing == pair.Ecg.Pacing, "monitor and paper select the same pacing mode");
+                var cached = StylePreviewCatalog.Get(choice, 0, 0);
+                var preview = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
+                long from = preview.FrontierNs - StylePreviewCatalog.DurationNs(choice);
+                var projected = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg,
+                    Monitor.Simulation.Physiology.EcgLead.II, from, preview.FrontierNs);
+                Require(choice == 0 || cached.Ecg.SequenceEqual(projected), $"pacing card {choice} and twelve-lead II agree; {cached.Ecg.Length}/{projected.Length}, first mismatch {cached.Ecg.Zip(projected).FirstOrDefault(p => p.First != p.Second)}");
+                for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                window.SelectPage(1);
+                Capture(window, $"ui-preview-pacing-{choice}-paper.png");
+                Require(window.CurrentPaper!.BlockCount == 55, "pacing paper contains all twelve leads");
+                window.SelectPage(0);
+            }
         }
         finally { window.Close(); }
     }

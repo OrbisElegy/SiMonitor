@@ -11,7 +11,7 @@ internal static class EcgChooserGroups
         "室性心动过速", "心室扑动与颤动", "二度房室传导阻滞", "三度房室传导阻滞",
         "室内传导阻滞", "预激与 PR 变异", "静止与电机械分离", "心房形态", "心室肥厚形态",
         "T 波形态", "钾相关形态", "钙相关形态", "洋地黄样形态", "奎尼丁样形态",
-        "下壁梗死形态", "侧壁梗死形态", "前间壁梗死形态", "前壁梗死形态", "广泛前壁梗死形态"
+        "下壁梗死形态", "侧壁梗死形态", "前间壁梗死形态", "前壁梗死形态", "广泛前壁梗死形态", "起搏方式", "起搏失败"
     });
     // Display key for a group identity; the identity itself stays Chinese.
     internal static string Key(string group)
@@ -50,6 +50,8 @@ internal static class EcgChooserGroups
         >= 135 and <= 144 => "前间壁梗死形态",
         >= 145 and <= 154 => "前壁梗死形态",
         >= 155 and <= 164 => "广泛前壁梗死形态",
+        >= 165 and <= 173 => "起搏方式",
+        >= 174 and <= 179 => "起搏失败",
         _ => throw new ArgumentOutOfRangeException(nameof(index))
     };
 }

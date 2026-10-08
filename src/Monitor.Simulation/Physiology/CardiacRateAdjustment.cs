@@ -20,7 +20,7 @@ public sealed record CardiacRateAdjustment
     }
 
     public static bool Supports(RegularPhysiologyPlan plan) =>
-        plan.CardiacActivity != CardiacActivity.Absent && !VentricularDisorganizationReference.IsPattern(plan.ConductionPattern);
+        plan.Pacing is null && plan.CardiacActivity != CardiacActivity.Absent && !VentricularDisorganizationReference.IsPattern(plan.ConductionPattern);
 
     public void Validate(RegularPhysiologyPlan plan)
     {

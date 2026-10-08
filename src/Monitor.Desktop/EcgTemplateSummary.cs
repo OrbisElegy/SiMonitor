@@ -16,6 +16,7 @@ internal static class EcgTemplateSummary
 
     internal static string Describe(ITextLocalizer text, ProjectedEcgDemoConfiguration config)
     {
+        if (config.Pacing is not null) { return text.GetString("summary.pacing"); }
         var pattern = config.ConductionPattern;
         if (config.CardiacActivity == CardiacActivity.Absent) { return text.GetString("summary.noActivity"); }
         if (VentricularDisorganizationReference.IsPattern(pattern)) { return text.GetString("summary.disorganized"); }

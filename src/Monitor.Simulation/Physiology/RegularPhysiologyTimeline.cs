@@ -14,6 +14,8 @@ public enum PhysiologyCycleEventKind
     VentricularDisorganizationSegment,
     PrematureAtrialElectrical,
     RetrogradeAtrialElectrical,
+    AtrialPacingPulse,
+    VentricularPacingPulse,
 }
 
 // Local source activity, not a detected apnea classification or device fault.
@@ -85,6 +87,7 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1,
     AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
+    public PacingIllustration? Pacing { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }
@@ -223,6 +226,7 @@ public sealed class RegularPhysiologyTimeline
         { throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidState", nameof(state)); }
         if (plan.RhythmSchedule is not null && !SeededRhythmSchedule.Supports(plan.ConductionPattern))
         { throw new PhysiologyTimelineException("SeededRhythm.UnsupportedPattern", nameof(state)); }
+        PacingReference.Validate(plan);
         plan.RateAdjustment?.Validate(plan);
         _plan = plan;
         _cursor = state.CursorSimTimeNs;
@@ -268,6 +272,11 @@ public sealed class RegularPhysiologyTimeline
             VisitVentricularMechanical(_plan, _cursor, exclusiveSimTimeNs,
                 maximumEvents - events.Count, events.Add, cancellationToken);
         }
+        if (_plan.Pacing is not null)
+        {
+            Add(PhysiologyCycleEventKind.AtrialPacingPulse, _plan.HeartPeriodNs, 0);
+            Add(PhysiologyCycleEventKind.VentricularPacingPulse, _plan.HeartPeriodNs, 0);
+        }
         if (_plan.RespiratoryActivity != RespiratoryActivity.Absent || _plan.ActivityAfterBreaths is not null)
         {
             ulong? limit = _plan.RespiratoryActivity == RespiratoryActivity.Absent ? _plan.ActivityAfterBreaths : null;
@@ -310,6 +319,11 @@ public sealed class RegularPhysiologyTimeline
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.Pacing is not null && PacingReference.IsCardiac(kind))
+        {
+            PacingReference.Visit(plan, kind, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
+            return;
+        }
         if (plan.RateAdjustment is { } adjustment && CardiacRateAdjustment.IsTimedEvent(kind))
         {
             adjustment.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents,

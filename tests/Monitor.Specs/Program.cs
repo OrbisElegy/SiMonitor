@@ -37,6 +37,7 @@ internal static class Program
             .. LocalizationSpecifications.All,
             .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
+            .. PacingWaveformSpecifications.All,
             .. AssessmentSpecifications.All,
             .. IdentitySpecifications.All,
             .. AuthenticationSpecifications.All,

@@ -99,6 +99,20 @@ python3 tools/clean.py dirclean
 ```
 
 两种清理方式都可加 `--dry-run` 预览删除范围，例如 `python3 tools/clean.py clean --dry-run`。**清理会删除整个 `artifacts/`，包括候选发布包和自行放入的文件**；执行前请将需要保留的产物移出该目录。
+
+清理后如需重新合成当前选用的语音，运行：
+
+```sh
+python3 tools/fetch_dependencies.py --tts-only
+python3 tools/fetch_dependencies.py --tts-only --check
+python3 tools/generate_selected_therapy_voices.py --offline
+```
+
+`--tts-only` 自动恢复 FastSpeech2-A（AISHELL-3 SSB0534）、PWGAN 声码器、英文 E1（VITS LJS）、词典、来源说明及独立 CPU Python 环境，默认放在 `.cache/tts/`。需要 Python 3.11+ 和可用的 pip/venv；脚本不安装 Torch/CUDA。模型下载地址、大小上限及 SHA-256 见 [`eng/audio/tts-models.json`](eng/audio/tts-models.json)，直接 Python 依赖版本见 [`eng/audio/tts-requirements.txt`](eng/audio/tts-requirements.txt)。下载和解压均校验哈希，完成后删除临时压缩包；已有完整资源不会重复下载。
+
+`--tts-cache-dir PATH` 可指定恢复位置；生成工具也需传入相同参数。`--check` 只校验，`--offline` 在资源缺失时报告错误。普通构建无需 TTS 模型；需要同时准备构建依赖和 TTS 时使用 `--tts`。默认不恢复 Qwen、Kokoro、CosyVoice 等历史候选，也不恢复旧 R1–R4 试听流程所依赖的全部缓存和中间产物。
+
+重新合成覆盖中英文各 23 条固定提示，输出到 `artifacts/therapy-selected-resynthesis/`，可用 `--language zh-CN` 只生成中文。推理存在随机性，输出需重新听审，不保证与已确认 WAV 字节一致。生成工具不会覆盖仓库中已确认的语音；这些位于 `eng/audio/voices/` 的受版本控制资源也不会被上述清理命令删除。
 脚本只处理仓库内生成内容，不卸载系统工具链，也不清理供其他项目共用的全局 NuGet 缓存。
 
 ## 许可证与归属

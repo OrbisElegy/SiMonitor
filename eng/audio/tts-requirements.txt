@@ -1,0 +1,8 @@
+# CPU-only tooling for the selected Mandarin and English voices.
+numpy==2.2.6
+scipy==1.15.3
+onnxruntime==1.30.0
+sherpa-onnx==1.12.26
+soundfile==0.14.0
+pypinyin==0.53.0
+jieba==0.42.1

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Fetch hash-pinned native sources and locked NuGet packages (Python 3.11+)."""
+"""Fetch native sources, locked NuGet packages and optional TTS tools (Python 3.11+)."""
 import argparse
 import hashlib
 import json
@@ -9,8 +9,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -102,17 +104,29 @@ def main():
         print('Python 3.11 or newer is required.', file=sys.stderr)
         return 1
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--offline', action='store_true', help='Use native/NuGet caches without network')
+    parser.add_argument('--offline', action='store_true', help='Use existing caches without network; includes TTS when selected')
     parser.add_argument('--native-only', action='store_true', help='Skip NuGet restore')
-    parser.add_argument('--check', action='store_true', help='Verify native sources without writes or network; skip NuGet')
+    parser.add_argument('--check', action='store_true', help='Verify selected native/TTS resources without writes or network; skip NuGet')
     parser.add_argument('--cache-dir', type=Path, help='Native download cache (default: .cache/downloads)')
+    tts = parser.add_mutually_exclusive_group()
+    tts.add_argument('--tts', action='store_true', help='Also restore selected TTS models and CPU Python tools')
+    tts.add_argument('--tts-only', action='store_true', help='Restore only selected TTS models and CPU Python tools')
+    parser.add_argument('--tts-cache-dir', type=Path, help='TTS cache root (default: .cache/tts)')
     args = parser.parse_args()
+    if args.tts_cache_dir and not (args.tts or args.tts_only):
+        parser.error('--tts-cache-dir requires --tts or --tts-only')
+    if args.tts_only and args.native_only:
+        parser.error('--tts-only and --native-only cannot be combined')
     try:
-        fetch_native(cache=args.cache_dir, offline=args.offline, check=args.check)
-        if not args.native_only and not args.check:
-            restore_managed(offline=args.offline)
+        if args.tts or args.tts_only:
+            from fetch_tts_models import prepare
+            prepare(cache=args.tts_cache_dir, offline=args.offline, check=args.check)
+        if not args.tts_only:
+            fetch_native(cache=args.cache_dir, offline=args.offline, check=args.check)
+            if not args.native_only and not args.check:
+                restore_managed(offline=args.offline)
         return 0
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, tarfile.TarError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         print(f'Dependency preparation failed: {error}', file=sys.stderr)
         return 1
 

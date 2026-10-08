@@ -1,0 +1,99 @@
+{
+  "schema": "Monitor.TtsModels@1",
+  "description": "Selected FastSpeech2 AISHELL-3 SSB0534 and English E1 VITS; rejected trial models are excluded",
+  "archives": [
+    {
+      "id": "fastspeech2_aishell3_onnx_1.1.0",
+      "url": "https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/fastspeech2/fastspeech2_aishell3_onnx_1.1.0.zip",
+      "format": "zip",
+      "sha256": "7c99e6ea39983925d68c8a4348a369eeee05fb7774523c8896b31c4f0b8ddfee",
+      "maximum_bytes": 139617292,
+      "members": [
+        {
+          "path": "fastspeech2_aishell3_onnx_1.1.0/fastspeech2_aishell3.onnx",
+          "sha256": "eebd3598fb5cdc26b88a747c1fdc23afe16a177d355e344fdaafde718d9f7798",
+          "maximum_bytes": 150808517
+        },
+        {
+          "path": "fastspeech2_aishell3_onnx_1.1.0/phone_id_map.txt",
+          "sha256": "c0344e3b4ff334d1632634925a96e8e475e96d31d18b1046b51f9be677e65807",
+          "maximum_bytes": 2488
+        },
+        {
+          "path": "fastspeech2_aishell3_onnx_1.1.0/speaker_id_map.txt",
+          "sha256": "a23b90a20c23516a2e00abb2c92d448d8188854f0a33c22ddf513192d6cff54a",
+          "maximum_bytes": 1978
+        }
+      ]
+    },
+    {
+      "id": "pwgan_aishell3_onnx_1.1.0",
+      "url": "https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/pwgan/pwgan_aishell3_onnx_1.1.0.zip",
+      "format": "zip",
+      "sha256": "1dc32f82ad862fda0e14be78b787a2dce27ba3600647bf3e8b813da692444298",
+      "maximum_bytes": 4961976,
+      "members": [
+        {
+          "path": "pwgan_aishell3_onnx_1.1.0/pwgan_aishell3.onnx",
+          "sha256": "cf152b9d8279249b7f34019d7167e4c3bcb5a1ba529e2171e2a37dd3c05b832f",
+          "maximum_bytes": 5401262
+        }
+      ]
+    },
+    {
+      "id": "vits-ljs",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-ljs.tar.bz2",
+      "format": "tar.bz2",
+      "sha256": "78f7df445fcd42d1dd6df2c78c66c2c2fee8b7abecc6ae255a5950097a6558bc",
+      "maximum_bytes": 109037061,
+      "members": [
+        {
+          "path": "vits-ljs/README.md",
+          "sha256": "26711a83b9cfccab716b482512ee95f53de9aaf68c3a3c4400c789ab52892a3c",
+          "maximum_bytes": 526
+        },
+        {
+          "path": "vits-ljs/lexicon.txt",
+          "sha256": "bdccfc6da71c45c48e2e0056fcf0aab760577c5f959f6c1b5eb3e3e916fd5a0e",
+          "maximum_bytes": 3708181
+        },
+        {
+          "path": "vits-ljs/tokens.txt",
+          "sha256": "5fee2c6b238d712287f2ecb08f34a8a8b413bcb7390862ef6fb6fd6f0f8d3a17",
+          "maximum_bytes": 1084
+        },
+        {
+          "path": "vits-ljs/vits-ljs.onnx",
+          "sha256": "5bbd273797a9ecf8d94bd6ec02ad16cb41cbb85f055ad98d528ced3e44c9b31a",
+          "maximum_bytes": 114124456
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "source/paddlespeech/t2s/frontend/tone_sandhi.py",
+      "sha256": "61a11983e42b98c3d6ddcae1108d1f628f439e44569382932b68f68f23dc3e51",
+      "maximum_bytes": 19376,
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleSpeech/6b25a400008d393f9c3af837b3c692b17f29ee1a/paddlespeech/t2s/frontend/tone_sandhi.py"
+    },
+    {
+      "path": "source/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "maximum_bytes": 11357,
+      "url": "https://raw.githubusercontent.com/PaddlePaddle/PaddleSpeech/6b25a400008d393f9c3af837b3c692b17f29ee1a/LICENSE"
+    },
+    {
+      "path": "spk-info.txt",
+      "url": "https://huggingface.co/datasets/AISHELL/AISHELL-3/resolve/f20d5db4a31fe779ef07bb1af4ea92da5c786622/spk-info.txt",
+      "sha256": "86148f95beab318ad9d08bf945b1d56ffba8c97b09137ae784cc62b0cd6539ef",
+      "maximum_bytes": 5029
+    },
+    {
+      "path": "vits-ljs/LICENSE",
+      "url": "https://raw.githubusercontent.com/jaywalnut310/vits/main/LICENSE",
+      "sha256": "3d8165162cef96f686f02146ac2e4ae80db5797296a99c658befa424ee64727b",
+      "maximum_bytes": 1069
+    }
+  ]
+}

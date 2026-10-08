@@ -102,6 +102,20 @@ python3 tools/clean.py dirclean
 ```
 
 Both modes accept `--dry-run` to preview what would be deleted, for example `python3 tools/clean.py clean --dry-run`. **Cleaning deletes all of `artifacts/`, including release candidates and any files you placed there yourself.** Move anything you want to keep out of that directory first.
+
+To resynthesize the selected voices after clearing caches:
+
+```sh
+python3 tools/fetch_dependencies.py --tts-only
+python3 tools/fetch_dependencies.py --tts-only --check
+python3 tools/generate_selected_therapy_voices.py --offline
+```
+
+`--tts-only` restores FastSpeech2-A (AISHELL-3 SSB0534), its PWGAN vocoder, English E1 (VITS LJS), dictionaries, source notices, and an isolated CPU Python environment under `.cache/tts/`. It requires Python 3.11+ and working pip/venv support; it does not install Torch/CUDA. Download URLs, size limits, and SHA-256 hashes are recorded in [`eng/audio/tts-models.json`](../../eng/audio/tts-models.json); direct Python dependencies are pinned in [`eng/audio/tts-requirements.txt`](../../eng/audio/tts-requirements.txt). Downloads and extracted files are hash-checked, temporary archives are removed, and valid resources are reused.
+
+Use `--tts-cache-dir PATH` on both commands to select another cache. `--check` only verifies; `--offline` fails when resources are missing. Normal builds do not require TTS models. Use `--tts` to prepare both build and TTS dependencies. Historical candidates such as Qwen, Kokoro, and CosyVoice, and all caches/intermediate outputs needed by the old R1–R4 audition workflows, are outside this restore operation.
+
+The generator writes 23 prompts per language to `artifacts/therapy-selected-resynthesis/`; `--language zh-CN` selects only Chinese. Inference is stochastic, so new audio requires listening review and may differ from approved WAVs. The generator preserves approved repository audio, and the cleaning commands preserve version-controlled resources under `eng/audio/voices/`.
 The script handles only generated files inside this repository. It does not uninstall system toolchains or clear the global NuGet cache shared with other projects.
 
 ## License and attribution

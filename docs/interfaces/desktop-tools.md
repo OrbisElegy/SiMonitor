@@ -103,7 +103,9 @@ NIBP 的收缩压、舒张压、平均压均手动输入，单位 mmHg，要求
 |---|---|---|
 | [build.py](../../tools/build.py) | `--configuration Debug\|Release`（默认 Release）、`--jobs N`、`--offline`、`--managed-only`、`--cache-dir PATH`、`--product-release` | 准备锁定依赖、核对清单、构建；jobs 为 1–32，默认 CPU 数与 32 的较小值。`--managed-only` 跳过原生编译但仍准备依赖。产品模式只允许 Release |
 | [build_release.py](../../tools/build_release.py) | 转发 `build.py` 参数并自动加入 `--product-release` | 在 `artifacts/release/` 生成本机产品候选；先完整构建临时输出再替换旧目录 |
-| [fetch_dependencies.py](../../tools/fetch_dependencies.py) | `--offline`、`--native-only`、`--check`、`--cache-dir PATH` | 默认缓存 `.cache/downloads`；`--check` 仅校验原生源码，不联网、不写文件、不恢复 NuGet；离线恢复只用已有缓存 |
+| [fetch_dependencies.py](../../tools/fetch_dependencies.py) | `--offline`、`--native-only`、`--check`、`--cache-dir PATH`、互斥的 `--tts` / `--tts-only`、`--tts-cache-dir PATH` | 原生缓存默认 `.cache/downloads`；TTS 默认 `.cache/tts`。`--tts` 追加已选语音资源；`--tts-only` 只准备 TTS，与 `--native-only` 互斥。`--check` 仅校验所选原生/TTS 资源，不联网、不写文件、不恢复 NuGet |
+| [fetch_tts_models.py](../../tools/fetch_tts_models.py) | `--cache-dir PATH`、`--offline`、`--check`、`--models-only` | TTS 下载实现，通常由上述入口调用；按 [模型清单](../../eng/audio/tts-models.json) 校验下载及成员哈希，只解出指定普通文件，不保留重复压缩包；默认准备独立 CPU 环境，`--models-only` 跳过环境 |
+| [generate_selected_therapy_voices.py](../../tools/generate_selected_therapy_voices.py) | `--tts-cache-dir PATH`、`--output PATH`、`--language both\|zh-CN\|en`、`--prompt-id ID`、`--offline` | 自动准备资源并在独立环境中合成当前固定提示；默认输出 `artifacts/therapy-selected-resynthesis/`，48 kHz 单声道 PCM16。使用记录的中文音素和英文发音词典，不依赖旧试听产物；不覆盖已确认语音，新输出需听审 |
 | [verify_dependency_ledger.py](../../tools/verify_dependency_ledger.py) | 无自定义参数 | 校验仓库依赖、资源和许可证清单 |
 | [build_native_audio.py](../../tools/build_native_audio.py) | `--windows-syntax`、`--production-only`、`--jobs N`（默认 32） | 使用已准备的原生源码；输出 `artifacts/native-audio/`，默认另构建隔离测试库 `artifacts/native-audio-test/`。Windows syntax 选项依赖 clang 和 MinGW 头文件 |
 | [publish_desktop_cross.py](../../tools/publish_desktop_cross.py) | `RID`、`--native-audio-binary PATH`、`--output PATH` | 默认新目录 `artifacts/Monitor.Desktop-RID`；拒绝已存在输出。Windows 目标必须提供名称为 `sim_audio_native.dll` 且 PE 架构匹配的生产库；离线检查必需 ABI 导出，并拒绝测试后端导出。其他 RID 必须省略该参数；发布发生在隔离副本 |

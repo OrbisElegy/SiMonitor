@@ -1,0 +1,9 @@
+{
+  "prompt_id": "AED_PAD_POSITION",
+  "text": "Incorrect pad placement. Reposition the pads as shown.",
+  "voice": "E1",
+  "file": "AED_PAD_POSITION.wav",
+  "sha256": "39619444dd85296fe074213cb99ecd2206e03b5f8ac14dd0a9f8a80f70560f95",
+  "runtime_enabled": false,
+  "wording_listening_pending": true
+}

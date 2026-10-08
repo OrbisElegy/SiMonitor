@@ -1,0 +1,13 @@
+{
+  "prompt_id": "AED_PAD_POSITION",
+  "text": "电极片位置错误，请按照图示重新贴放",
+  "voice": "F1",
+  "file": "AED_PAD_POSITION.wav",
+  "sha256": "0275e387d9ed378df6ca46a7b6883fb47f1a07c9aacb3d8b447fd71e77ecb3cf",
+  "runtime_enabled": false,
+  "wording_listening_pending": false,
+  "model": "FastSpeech2 AISHELL-3 + Parallel WaveGAN",
+  "speaker": "SSB0534",
+  "speaker_id": 57,
+  "human_approved": true
+}

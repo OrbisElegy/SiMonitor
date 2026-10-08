@@ -1,0 +1,16 @@
+{
+  "schema": "Monitor.TherapyPromptExtension@1",
+  "prompt_id": "AED_PAD_POSITION",
+  "zh_CN": "电极片位置错误，请按照图示重新贴放",
+  "en": "Incorrect pad placement. Reposition the pads as shown.",
+  "priority": "VS0",
+  "condition": "Simulator placement assessment explicitly reports the two chest pad positions swapped",
+  "source": "User clarification: chest pad positions interchanged, not reversed cable polarity",
+  "trigger": "On entry into the invalid-placement condition; do not repeat on every position update",
+  "recovery": "After placement is corrected and the therapy path is valid, request a fresh analysis; do not resume a stale Ready state",
+  "audition_scenario": "AwaitPads -> swapped positions -> correction -> Analyzing",
+  "runtime_implemented": false,
+  "hardware_detection_claim": false,
+  "voice_selection": {"en": "E1", "zh-CN": "F1"},
+  "wording_listening_pending": true
+}

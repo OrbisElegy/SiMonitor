@@ -28,7 +28,7 @@
   "speaker_id": 57,
   "runtime_changed": false,
   "asset_policy": "Checked-in approved WAVs are canonical; audition generators verify text, format and hashes before copying; they do not resynthesize this voice",
-  "synthesis": "ONNX Runtime CPU; four intra-op threads, one inter-op thread; seed 1986 at session start. First six accepted clips and subsequent 16 core clips were generated in separate sessions.",
+  "synthesis": "ONNX Runtime CPU; four intra-op threads, one inter-op thread; seed 1986 at session start. First six accepted clips and subsequent 17 additional clips were generated in separate sessions.",
   "frontend": "pypinyin 0.53.0 with PaddleSpeech ToneSandhi; standard first tone retained for 分析; no pitch or timing edits",
   "license_status": "PaddleSpeech code and AISHELL-3 dataset: Apache-2.0; weight archives have no separate license text; generated audio not relicensed under project code license; weight/output release scope remains to be confirmed"
 }

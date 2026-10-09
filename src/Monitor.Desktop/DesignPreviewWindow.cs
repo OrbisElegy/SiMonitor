@@ -51,6 +51,10 @@ internal sealed class DesignPreviewWindow : Window
     internal LiveMonitorTrace MonitorTrace => _monitor;
     private readonly DisplayPreferenceStore? _preferences;
     private readonly LanguagePreferenceStore? _languagePreferences;
+    private readonly MonitorTherapyPreferenceStore? _therapyPreferences;
+    private MonitorTherapyPreferences _therapy = MonitorTherapyPreferences.Default;
+    private WaveformEnvelope[]? _beforePacingPaper;
+    private (WaveformEnvelope[] Paper, long EffectiveNs)? _pendingPacingPaper;
     internal DesktopLocalization Localization { get; }
     internal TextBlock LanguageNotice { get; } = Text("", 12);
     private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
@@ -64,6 +68,9 @@ internal sealed class DesignPreviewWindow : Window
         FontSize = 14; FontFamily = PreviewFont; WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _preferences = preferencesPath is null ? null : new(preferencesPath);
         _languagePreferences = preferencesPath is null ? null : new(Path.ChangeExtension(preferencesPath, ".language.json"));
+        _therapyPreferences = preferencesPath is null ? null : new(Path.ChangeExtension(preferencesPath, ".therapy.json"));
+        bool therapyRejected = false;
+        _therapy = _therapyPreferences?.Load(out therapyRejected) ?? MonitorTherapyPreferences.Default;
         bool languageRejected = false;
         Localization = new(_languagePreferences?.Load(out languageRejected));
         if (ProductIdentity.DevelopmentFeatures)
@@ -71,7 +78,7 @@ internal sealed class DesignPreviewWindow : Window
         LanguageNotice.IsVisible = languageRejected;
         Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageRejected");
         bool rejected = false;
-        var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(), 0);
+        var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), 0);
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
         var defaults = BuildConfiguredSources();
@@ -97,7 +104,8 @@ internal sealed class DesignPreviewWindow : Window
                 rejected = true;
             }
         }
-        _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization);
+        _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin());
+        if (therapyRejected) { ((GenericMonitorSkin)_monitor.Skin!).ShowFeedback("skin.therapyRejected"); }
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         if (preferences.Sound is { } sound) { Settings.Sound.RestorePreferences(sound, Settings.Alerts); }
         PreferenceNotice.IsVisible = rejected;
@@ -147,6 +155,37 @@ internal sealed class DesignPreviewWindow : Window
         Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         SelectPage(0); UpdateState();
     }
+    private GenericMonitorSkin CreateSkin() => new(Localization, _therapy, SaveTherapy, SetPacing);
+
+    private void SaveTherapy(MonitorTherapyPreferences preferences)
+    {
+        preferences.Validate();
+        _therapy = preferences;
+        if (_therapyPreferences?.Save(preferences) == false && _monitor.Skin is GenericMonitorSkin skin)
+        { skin.ShowFeedback("skin.therapySaveFailed"); }
+    }
+
+    private string SetPacing(MonitorTherapyPreferences preferences, bool stop)
+    {
+        if (_applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null)
+        { return "skin.pacingPending"; }
+        if (stop)
+        {
+            if (_beforePacingPaper is null || _session.ActivePacing is null) { return "skin.pacingNotRunning"; }
+            long effective = _session.StopPacing();
+            _pendingPacingPaper = (_beforePacingPaper, effective);
+            _beforePacingPaper = null;
+            return "skin.pacingStopScheduled";
+        }
+        var output = new PacingOutputSettings(preferences.PacingRatePerMinute, preferences.PacingCurrentMilliamps);
+        var configuration = ProjectedEcgDemoConfiguration.Default with { Pacing = preferences.PacingType, PacingOutput = output };
+        var paper = CapturePaper(configuration);
+        long at = _session.SchedulePacing(preferences.PacingType, output);
+        _beforePacingPaper ??= _ecg;
+        _pendingPacingPaper = (paper, at);
+        return "skin.pacingScheduled";
+    }
+
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
             async () => await ApplySettingsAsync(), () => { if (_timer is null) { Start(); } else { Pause(); } },
             () => new WaveformDemoWindow(projected: true).Show(this), Localization);
@@ -191,6 +230,7 @@ internal sealed class DesignPreviewWindow : Window
         Localization.Bind(Settings.Status, TextBlock.TextProperty, key, arguments);
     private void BindAlarmAttention()
     {
+        Settings.Alerts.SetMonitoredChannels(_monitor.MonitoredChannels);
         var journals = Settings.Alerts.AlarmLifecycles;
         MonitorView.NoticeProjection = Settings.Alerts.ProjectAttention;
         MonitorView.AttentionFor = id =>
@@ -270,9 +310,12 @@ internal sealed class DesignPreviewWindow : Window
         Pause();
         Settings.Sound.Close();
         SelectLanguage(BuiltInLocalizations.DefaultLocale);
+        _therapy = MonitorTherapyPreferences.Default;
+        bool therapySaved = _therapyPreferences?.Save(_therapy) != false;
         Settings = CreateSettings();
         ConnectSettings();
         RestartSettings();
+        if (!therapySaved && _monitor.Skin is GenericMonitorSkin skin) { skin.ShowFeedback("skin.therapySaveFailed"); }
         if (!PreferenceNotice.IsVisible) { SetStatus("settings.resetDone"); }
     }
     internal void SelectPage(int page)
@@ -464,14 +507,17 @@ internal sealed class DesignPreviewWindow : Window
                     selection.EcgSelection, selection.RespirationSelection, selection.EjectionSelection);
                 _session.UpdateDisplay(next.Display);
             }
+            _beforePacingPaper = null;
+            _pendingPacingPaper = null;
             _monitor = new(_session, Localization);
-            MonitorView = new(_monitor, Localization);
+            MonitorView = new(_monitor, Localization, CreateSkin());
             BindAlarmAttention();
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;
             MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             MonitorView.Refresh();
+            Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
             if (Page is 0 or 1 || (Page == 2 && !ReferenceEquals(_workspace.Content, Settings)))
             { SelectPage(Page); }
             if (restart) { SetStatus("settings.restarted"); }
@@ -564,7 +610,7 @@ internal sealed class DesignPreviewWindow : Window
             _session.Measurements?.SampleTimeNs == snapshot.SampleTimeNs ? _session.DetectedMonitoringEvents : null,
             _session.Measurements?.SampleTimeNs == snapshot.SampleTimeNs ? _session.DetectedRhythmEvents : null)) { yield return notice; }
         if (Settings.Sound.OutputNotice is { } fault) { yield return fault; }
-        if (Settings.Sound.PitchNotice is { } pitch) { yield return pitch; }
+        if (Settings.Alerts.Monitors(MonitorNumeric.SpO2) && Settings.Sound.PitchNotice is { } pitch) { yield return pitch; }
     }
     internal void Start()
     {
@@ -601,6 +647,12 @@ internal sealed class DesignPreviewWindow : Window
                 _pendingPresentation = null;
                 SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
                 if (Page == 1) { SelectPage(Page); }
+            }
+            if (_pendingPacingPaper is { } pacing && _session.SimulationTimeNs >= pacing.EffectiveNs && _session.PendingSourceTimeNs is null)
+            {
+                _ecg = pacing.Paper;
+                _pendingPacingPaper = null;
+                if (Page == 1) { SelectPage(1); }
             }
             _monitor.InvalidateVisual();
             MonitorView.Refresh();

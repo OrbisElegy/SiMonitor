@@ -15,7 +15,7 @@ internal static class DisplayPreferenceSmokeChecks
         try
         {
             var store = new DisplayPreferenceStore(path);
-            Require(store.Load(out bool rejected).Display.Skin == MonitorSkin.FiveRows && !rejected, "missing file uses defaults quietly");
+            Require(store.Load(out bool rejected).Display.Skin == MonitorSkin.FourRows && !rejected, "missing file uses defaults quietly");
             Require(store.Save(new(MonitorDisplayConfiguration.Default(), 0, MeasurementMillimeters: true)) &&
                 store.Load(out rejected).MeasurementMillimeters && !rejected, "millimeter units persist");
             var legacyUnits = JsonNode.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8))!.AsObject();
@@ -204,7 +204,7 @@ internal static class DisplayPreferenceSmokeChecks
                 valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
             {
                 File.WriteAllText(path, invalid);
-                Require(store.Load(out rejected).Display.Skin == MonitorSkin.FiveRows && rejected && File.ReadAllText(path) == invalid,
+                Require(store.Load(out rejected).Display.Skin == MonitorSkin.FourRows && rejected && File.ReadAllText(path) == invalid,
                     "malformed, incompatible and oversized files fall back without overwriting evidence");
             }
             foreach (var edit in new Action<JsonObject>[] {

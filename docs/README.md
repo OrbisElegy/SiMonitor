@@ -19,7 +19,7 @@
 - [通知意图到声音执行接口](interfaces/alarms/alarm-notification-sound.md)
 - [音频输出、原生 ABI 与本地偏好接口](interfaces/audio-persistence.md)
 - [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
-- [桌面与命令行入口](interfaces/desktop-tools.md)
+- [桌面皮肤装配与命令行入口](interfaces/desktop-tools.md)
 - [本地化接口 / Localization API](interfaces/localization.md)
 - [ECG 电击转复设置与皮肤接口](interfaces/electrical-conversion.md)
 - [ECG 增强监测接口](interfaces/alarms/ecg-monitoring.md)

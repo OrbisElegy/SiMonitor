@@ -1685,7 +1685,8 @@ public enum MonitorSkin
 {
     ThreeRows,
     FiveRows,
-    SevenRows
+    SevenRows,
+    FourRows
 }
 public sealed record MonitorAmplitudeRange(double Minimum, double Maximum)
 {
@@ -2174,5 +2175,18 @@ public static class EcgElectricalTherapy
     public static EcgElectricalTherapyDescriptor? Find(string templateId);
     public static IReadOnlyDictionary<string, ElectricalConversionSettings> Snapshot(IReadOnlyDictionary<string, ElectricalConversionSettings> settings);
     public static ElectricalConversionResult Evaluate(EcgElectricalTherapyProfile? profile, PhysiologyIllustrationConfiguration configuration, DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
+}
+```
+
+## Presentation/MonitorTherapyPreferences.cs
+
+源码：[MonitorTherapyPreferences.cs](../../../src/Monitor.Application/Presentation/MonitorTherapyPreferences.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record MonitorTherapyPreferences(int EnergyJoules, int PacingRatePerMinute,
+    int PacingCurrentMilliamps, PacingIllustration PacingType)
+{
+    public static MonitorTherapyPreferences Default { get; }
+    public void Validate();
 }
 ```

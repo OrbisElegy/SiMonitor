@@ -45,9 +45,21 @@ internal static class AlarmAttentionPresentationSmokeChecks
                 window.Settings.Sound.RefreshAlarmNotices(window.MonitorView.ActiveNotices);
                 return accepted;
             }
+            void VerifyPlaceholderActions()
+            {
+                var state = State();
+                var request = window.Settings.Sound.PublishedAlarm;
+                var buttons = window.MonitorView.GetVisualDescendants().OfType<Button>()
+                    .Where(button => button.Classes.Contains("skin-dummy")).ToArray();
+                Require(buttons.Length > 0, "generic exposes placeholder controls");
+                foreach (var button in buttons) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+                Require(State() == state && window.Settings.Sound.PublishedAlarm == request,
+                    "placeholder actions cannot acknowledge alarms or silence their sound request");
+            }
             Read(0, 130000);
-            Require(!window.MonitorView.GetVisualDescendants().OfType<Button>().Any() && window.Settings.Sound.PublishedAlarm is { NotificationSequence: 0 },
-                "default monitor skin retains its display-only surface without alarm action buttons");
+            VerifyPlaceholderActions();
+            Require(window.Settings.Sound.PublishedAlarm is { NotificationSequence: 0 },
+                "default monitor retains the continuous alarm sound request");
             var old = State();
             _ = alerts.Notices(Snapshot(100, 180001)).ToArray(); // A future skin command may hold an old snapshot.
             var escalated = State();
@@ -85,8 +97,7 @@ internal static class AlarmAttentionPresentationSmokeChecks
             image.Render(root);
             Directory.CreateDirectory("artifacts/alarm-acknowledgement-validation-2026-10-04");
             image.Save("artifacts/alarm-acknowledgement-validation-2026-10-04/recovered-compact.png", PngBitmapEncoderOptions.Default);
-            Require(!window.MonitorView.GetVisualDescendants().OfType<Button>().Any(),
-                "compact retained indication never adds a confirmation button to the default skin");
+            VerifyPlaceholderActions();
             var retained = State();
             editor.LatchUntilAcknowledged.IsChecked = false;
             Require(State().State == AlarmAttentionState.None && window.Settings.Sound.PublishedAlarm is null &&

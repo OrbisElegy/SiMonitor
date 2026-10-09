@@ -16,8 +16,13 @@ namespace Monitor.Desktop;
 internal sealed class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
+    private readonly IMonitorSkin? _skin;
+    private readonly MonitorManualTile _temperature = new(), _custom1 = new(), _custom2 = new(), _nibp = new();
+    internal IReadOnlyList<MonitorManualTile> ManualTiles => [_temperature, _custom1, _custom2, _nibp];
     private readonly WrapPanel _manualPanel = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 4) };
-    internal IReadOnlyList<string> ManualNumericTexts => _manualPanel.Children.OfType<TextBlock>().Select(text => text.Text ?? "").ToArray();
+    internal IReadOnlyList<string> ManualNumericTexts => _skin is null
+        ? _manualPanel.Children.OfType<TextBlock>().Select(text => text.Text ?? "").ToArray()
+        : ManualTiles.Select(tile => tile.Reading).ToArray();
     private ManualVitalSigns? _shownManualVitals;
     private string? _shownManualCaption;
     private readonly DesktopLocalization _localization;
@@ -58,9 +63,11 @@ internal sealed class LiveMonitorView : UserControl
         Notice.FontSize = 20 * scale;
         return base.MeasureOverride(availableSize);
     }
-    internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null)
+    internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null, IMonitorSkin? skin = null)
     {
         _trace = trace;
+        _skin = skin;
+        trace.Skin = skin;
         _localization = localization ?? new DesktopLocalization();
         AttachedToVisualTree += (_, _) =>
         {
@@ -77,16 +84,19 @@ internal sealed class LiveMonitorView : UserControl
         header.Children.Add(_noticeBackground);
         Grid.SetColumn(AudioPauseStatus, 2);
         header.Children.Add(AudioPauseStatus);
-        root.Children.Add(header);
+        if (skin is null) { root.Children.Add(header); }
         var body = new Grid { ColumnDefinitions = new("*,190") };
-        Grid.SetRow(body, 1); root.Children.Add(body); body.Children.Add(trace);
+        Grid.SetRow(body, 1);
+        if (skin is null) { root.Children.Add(body); body.Children.Add(trace); }
         var numbers = new Grid();
-        Grid.SetColumn(numbers, 1); body.Children.Add(numbers);
+        Grid.SetColumn(numbers, 1);
+        if (skin is null) { body.Children.Add(numbers); }
         foreach (var slot in trace.Session.Display.Slots)
         {
-            int row = _rows.Count;
+            int row = numbers.RowDefinitions.Count;
             numbers.RowDefinitions.Add(new RowDefinition(GridLength.Star));
-            var color = Brush.Parse(LiveMonitorTrace.Colors[slot.Channel]);
+            if ((trace.MonitoredChannels & MonitorChannelMapping.ForChannel(slot.Channel)) == 0) { continue; }
+            var color = trace.ChannelBrush(slot.Channel);
             string label = slot.Channel switch
             {
                 0 => "monitor.labelHr",
@@ -97,7 +107,7 @@ internal sealed class LiveMonitorView : UserControl
                 5 => "monitor.labelPa",
                 _ => "monitor.labelCvp"
             };
-            var primary = new TextBlock { Text = "---", FontSize = 52, FontWeight = FontWeight.SemiBold, Foreground = color };
+            var primary = new TextBlock { Text = "---", FontSize = skin is null ? 52 : 64, FontWeight = FontWeight.SemiBold, Foreground = color };
             var secondary = new TextBlock { FontSize = slot.Channel == 0 ? 13 : 17, Foreground = color, IsVisible = slot.Channel is 0 or 2 or 3 or 4 or 5 };
             _localization.Bind(primary, AutomationProperties.NameProperty, label);
             _localization.Bind(secondary, AutomationProperties.NameProperty, slot.Channel switch
@@ -108,40 +118,83 @@ internal sealed class LiveMonitorView : UserControl
                 5 => "monitor.secondaryPa",
                 _ => "monitor.secondaryCo2Rate"
             });
-            var content = new StackPanel { Width = 166, Spacing = 2 };
             var caption = new TextBlock { Foreground = color, FontSize = 13 };
             _localization.Bind(caption, TextBlock.TextProperty, label);
-            content.Children.Add(caption);
+            Control primaryContent = HighlightHost(primary);
+            TextBlock? pi = null;
             if (slot.Channel == 2)
             {
-                var pair = new Grid { ColumnDefinitions = new("*,22") };
-                var bar = new PulseIndicator(); Grid.SetColumn(bar, 1); pair.Children.Add(HighlightHost(primary)); pair.Children.Add(bar); content.Children.Add(pair);
+                var pair = new Grid { ColumnDefinitions = new("*,22"), Width = 166 };
+                var bar = new PulseIndicator(color);
+                Grid.SetColumn(bar, 1);
+                pair.Children.Add(primaryContent);
+                pair.Children.Add(bar);
+                primaryContent = pair;
                 _localization.Bind(bar, AutomationProperties.NameProperty, "monitor.pulseIndicatorName");
-                var pi = new TextBlock { Text = "PI --- %", FontSize = 14, Foreground = color };
+                pi = new TextBlock { Text = "PI --- %", FontSize = 14, Foreground = color };
                 _localization.Bind(pi, AutomationProperties.NameProperty, "monitor.piName");
-                content.Children.Add(pi); _opticalRows.Add((pi, bar));
+                _opticalRows.Add((pi, bar));
             }
-            else { content.Children.Add(HighlightHost(primary)); }
-            content.Children.Add(HighlightHost(secondary));
-            var border = new Border
+            Control content;
+            if (skin is null)
             {
-                Padding = new Thickness(8, 6),
-                BorderBrush = Brush.Parse("#607080"),
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                Child = new Viewbox
+                var stack = new StackPanel { Width = 166, Spacing = 2 };
+                stack.Children.Add(caption);
+                stack.Children.Add(primaryContent);
+                if (pi is not null) { stack.Children.Add(pi); }
+                stack.Children.Add(HighlightHost(secondary));
+                content = new Viewbox
                 {
                     Stretch = Stretch.Uniform,
                     StretchDirection = StretchDirection.DownOnly,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Child = content
+                    Child = stack
+                };
+            }
+            else
+            {
+                // Keep labels at readable sizes; only digits scale into the remaining height.
+                var grid = new Grid { RowDefinitions = new("Auto,*,Auto") };
+                grid.Children.Add(caption);
+                var digits = new Viewbox
+                {
+                    Stretch = Stretch.Uniform,
+                    StretchDirection = StretchDirection.DownOnly,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Child = primaryContent
+                };
+                Grid.SetRow(digits, 1);
+                grid.Children.Add(digits);
+                secondary.FontSize = 11;
+                Control footer = HighlightHost(secondary);
+                if (pi is not null)
+                {
+                    pi.FontSize = 11;
+                    var pair = new Grid { ColumnDefinitions = new("*,*") };
+                    pair.Children.Add(footer);
+                    Grid.SetColumn(pi, 1);
+                    pair.Children.Add(pi);
+                    footer = pair;
                 }
+                Grid.SetRow(footer, 2);
+                grid.Children.Add(footer);
+                content = grid;
+            }
+            var border = new Border
+            {
+                Padding = new Thickness(8, 6),
+                BorderBrush = Brush.Parse("#607080"),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                ClipToBounds = true,
+                Child = content
             };
             Grid.SetRow(border, row); numbers.Children.Add(border); _rows.Add((slot.Channel, primary, secondary));
         }
         Grid.SetRow(_manualPanel, 2);
-        root.Children.Add(_manualPanel);
-        Content = root; Refresh();
+        if (skin is null) { root.Children.Add(_manualPanel); }
+        Content = skin?.Compose(new(header, trace, numbers, _temperature, _custom1, _custom2, _nibp)) ?? root;
+        Refresh();
     }
     private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(0), Child = text };
     internal static IBrush? NumericBackground(TextBlock text) => ((Border)text.Parent!).Background;
@@ -159,6 +212,18 @@ internal sealed class LiveMonitorView : UserControl
         if (values == _shownManualVitals && caption == _shownManualCaption) { return; }
         _shownManualVitals = values;
         _shownManualCaption = caption;
+        if (_skin is not null)
+        {
+            _nibp.Update("NIBP", values.Nibp is { } pressure ? $"{pressure.SystolicMmHg}/{pressure.DiastolicMmHg}" : "---/---",
+                values.Nibp is { } mean ? $"({mean.MeanMmHg}) mmHg" : "(---) mmHg");
+            _temperature.Update(_localization.Get("manual.temperatureLabel"),
+                values.TemperatureDeciCelsius is { } deciCelsius ? (deciCelsius / 10m).ToString("0.0", CultureInfo.InvariantCulture) : "---", "°C");
+            if (values.Nibp is null) { _nibp.Clear(); }
+            if (values.TemperatureDeciCelsius is null) { _temperature.Clear(); }
+            UpdateCustom(_custom1, values.Custom1);
+            UpdateCustom(_custom2, values.Custom2);
+            return;
+        }
         _manualPanel.Children.Clear();
         if (values == ManualVitalSigns.Empty) { _manualPanel.IsVisible = false; return; }
         _manualPanel.IsVisible = true;
@@ -184,6 +249,12 @@ internal sealed class LiveMonitorView : UserControl
             AutomationProperties.SetName(text, value);
             _manualPanel.Children.Add(text);
         }
+    }
+
+    private static void UpdateCustom(MonitorManualTile tile, ManualCustomVital? value)
+    {
+        if (value is null) { tile.Clear(); return; }
+        tile.Update(value.Name, value.Value.ToString("0.##", CultureInfo.InvariantCulture), value.Unit);
     }
 
     internal void Refresh()
@@ -332,7 +403,7 @@ internal sealed class LiveMonitorView : UserControl
         }
         foreach (var (channel, primary, secondary) in _rows)
         {
-            var normal = Brush.Parse(LiveMonitorTrace.Colors[channel]);
+            var normal = _trace.ChannelBrush(channel);
             Paint(primary, channel switch
             {
                 0 => MonitorNumeric.HeartRate,
@@ -346,7 +417,7 @@ internal sealed class LiveMonitorView : UserControl
             Paint(secondary, channel switch { 2 => MonitorNumeric.PulseRate, 4 => MonitorNumeric.Co2RespirationRate, _ => (MonitorNumeric?)null }, normal);
         }
     }
-    private sealed class PulseIndicator : Control
+    private sealed class PulseIndicator(IBrush color) : Control
     {
         internal double Level;
         public override void Render(DrawingContext context)
@@ -354,7 +425,7 @@ internal sealed class LiveMonitorView : UserControl
             base.Render(context);
             for (int i = 0; i < 12; i++)
             {
-                var brush = i < Level * 12 ? Brush.Parse(LiveMonitorTrace.Colors[2]) : Brush.Parse("#263C48");
+                var brush = i < Level * 12 ? color : Brush.Parse("#263C48");
                 context.FillRectangle(brush, new Rect(3, Bounds.Height - (i + 1) * Bounds.Height / 12 + 1, Math.Max(0, Bounds.Width - 6), Math.Max(0, Bounds.Height / 12 - 2)));
             }
         }

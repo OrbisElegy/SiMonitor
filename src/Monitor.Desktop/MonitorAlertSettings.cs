@@ -13,6 +13,24 @@ internal sealed class MonitorAlertSettings : StackPanel
 {
     private readonly DesktopLocalization _localization;
     private string? _noExpirationErrorKey;
+    internal MonitorChannels MonitoredChannels { get; private set; } = MonitorChannels.All;
+    internal bool Monitors(MonitorNumeric numeric) => (MonitoredChannels & MonitorChannelMapping.ForNumeric(numeric)) != 0;
+    internal void SetMonitoredChannels(MonitorChannels channels)
+    {
+        if (channels == MonitoredChannels) { return; }
+        MonitoredChannels = channels;
+        if (!Monitors(MonitorNumeric.HeartRate))
+        {
+            _ecgNotices.Reset(AlarmTransitionReason.Disabled);
+            _heartRateNotice.Reset(AlarmTransitionReason.Disabled);
+        }
+        if (!Monitors(MonitorNumeric.SpO2)) { _spO2Notice.Reset(AlarmTransitionReason.Disabled); }
+        if (!Monitors(MonitorNumeric.EtCo2)) { _noExpirationNotice.Reset(AlarmTransitionReason.Disabled); }
+        AdditionalLimits.SetMonitoredChannels(channels);
+        HeartRateEnabled.IsEnabled = EcgMonitoringEnabled.IsEnabled = Monitors(MonitorNumeric.HeartRate);
+        SpO2Enabled.IsEnabled = Monitors(MonitorNumeric.SpO2);
+        NoExpirationEnabled.IsEnabled = Monitors(MonitorNumeric.EtCo2);
+    }
     private readonly ConfirmedLimitNotice _heartRateNotice = new(MonitorNumeric.HeartRate);
     private readonly ConfirmedLimitNotice _spO2Notice = new(MonitorNumeric.SpO2);
     private readonly EcgAlarmNotices _ecgNotices = new();
@@ -292,7 +310,7 @@ internal sealed class MonitorAlertSettings : StackPanel
     internal IEnumerable<MonitorNotice> Notices(LiveMeasurementSnapshot snapshot,
         IReadOnlyList<DetectedEcgMonitoringEvent>? monitoringEvents = null, IReadOnlyList<DetectedEcgRhythmEvent>? rhythmEvents = null)
     {
-        foreach (var notice in _ecgNotices.Evaluate(EcgMonitoringEnabled.IsChecked == true, snapshot, monitoringEvents, rhythmEvents))
+        foreach (var notice in _ecgNotices.Evaluate(Monitors(MonitorNumeric.HeartRate) && EcgMonitoringEnabled.IsChecked == true, snapshot, monitoringEvents, rhythmEvents))
         { yield return notice; }
         if (EvaluatePrimary(MonitorNumeric.HeartRate, snapshot) is { } heartRate) { yield return heartRate; }
         if (EvaluatePrimary(MonitorNumeric.SpO2, snapshot) is { } saturation) { yield return saturation; }
@@ -346,6 +364,7 @@ internal sealed class MonitorAlertSettings : StackPanel
 
     private MonitorNotice? EvaluateNoExpiration(LiveMeasurementSnapshot snapshot)
     {
+        if (!Monitors(MonitorNumeric.EtCo2)) { _noExpirationNotice.Reset(AlarmTransitionReason.Disabled); return null; }
         try
         {
             return _noExpirationNotice.Evaluate(NoExpirationEnabled.IsChecked == true, ReadNoExpirationDelay(),
@@ -364,6 +383,7 @@ internal sealed class MonitorAlertSettings : StackPanel
         bool heartRate = numeric == MonitorNumeric.HeartRate;
         var filter = heartRate ? _heartRateNotice : _spO2Notice;
         var editor = heartRate ? HeartRateConfirmation : SpO2Confirmation;
+        if (!Monitors(numeric)) { filter.Reset(AlarmTransitionReason.Disabled); return null; }
         MeasurementConfirmationTiming timing;
         MeasurementLimits limits;
         try

@@ -998,11 +998,11 @@ internal static class DesignPreviewSmokeChecks
             double wideMonitor = window.MonitorTrace.Bounds.Width;
             DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-monitor-compact.png");
-            Require(window.MonitorTrace.Bounds.Width < wideMonitor && window.Session.Display.Slots.Count == 5, "monitor resizes but skin row count stays fixed");
+            Require(window.MonitorTrace.Bounds.Width < wideMonitor && window.Session.Display.Slots.Count == 4, "monitor resizes but skin row count stays fixed");
             DesktopViewportSmokeChecks.Layout(window);
             for (int i = 0; i < 450; i++) { window.Pulse(timer, 50_000_000); }
             Capture(window, "ui-preview-monitor-auto.png");
-            Require(window.MonitorView.NumericTexts[4] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
+            Require(window.MonitorView.NumericTexts[2] == "16" && window.MonitorView.NumericTexts[3] == "40", "independent RESP rate and CO2 amplitude reach actual visible labels");
             var liveReading = window.Session.Measurements!;
             VerifyNumericAlarmHighlights(liveReading);
             VerifyHeartRateLimits(liveReading);

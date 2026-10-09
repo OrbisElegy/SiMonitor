@@ -30,6 +30,10 @@ internal sealed class LiveMonitorTrace : Control
     private StreamGeometry?[,] _paths = new StreamGeometry?[0, 0];
     private Point[]?[,] _contours = new Point[]?[0, 0];
     internal LocalMonitorPreviewSession Session => _session;
+    internal IMonitorSkin? Skin { get; set; }
+    internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(MonitorChannels.None,
+        (channels, slot) => channels | MonitorChannelMapping.ForChannel(slot.Channel)) & (Skin?.Channels ?? MonitorChannels.All);
+    internal IBrush ChannelBrush(int channel) => Skin?.ChannelBrush(channel) ?? Brush.Parse(Colors[channel]);
     private void Build()
     {
         if (_revision == _session.DataRevision && _cycle == _session.Ranges.Cycle) { return; }
@@ -68,7 +72,7 @@ internal sealed class LiveMonitorTrace : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.FillRectangle(Brush.Parse("#101B25"), new Rect(Bounds.Size));
+        context.FillRectangle(Skin?.Background ?? Brush.Parse("#101B25"), new Rect(Bounds.Size));
         if (Bounds.Width < 200 || Bounds.Height < 60) { return; }
         Build();
         int rows = _session.Display.Slots.Count;
@@ -79,14 +83,16 @@ internal sealed class LiveMonitorTrace : Control
             long duration = _session.Display.Slots[row].DurationNs;
             double phase = (_session.FrontierNs % duration) / (double)duration;
             int channel = _session.Display.Slots[row].Channel;
-            var color = Brush.Parse(Colors[channel]);
+            if ((MonitoredChannels & MonitorChannelMapping.ForChannel(channel)) == 0) { continue; }
+            var color = ChannelBrush(channel);
             var range = _session.Ranges.Range(row);
             double top = row * rowHeight;
             context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1));
             Label(context, Names[channel], 12, top + 10, color, 14);
             Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
             string unit = Unit(_localization.Current, channel);
-            Label(context, _localization.Format(_session.Display.Slots[row].Automatic ? "monitor.rangeAutomatic" : "monitor.rangeFixed", unit), 12, top + 49, color, 11);
+            if (Skin is null || channel != 0)
+            { Label(context, _localization.Format(_session.Display.Slots[row].Automatic ? "monitor.rangeAutomatic" : "monitor.rangeFixed", unit), 12, top + 49, color, 11); }
             Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
             if (channel == 0)
             {
@@ -95,9 +101,9 @@ internal sealed class LiveMonitorTrace : Control
                     double x = left + width * 200_000_000 / duration;
                     context.DrawLine(new Pen(color, 1.2), new(x, plot.Bottom - range.Normalize(-500) * plot.Height),
                         new(x, plot.Bottom - range.Normalize(500) * plot.Height));
-                    Label(context, "1 mV", 12, top + 66, color, 11);
+                    Label(context, "1 mV", 12, top + (Skin is null ? 66 : 49), color, 11);
                 }
-                else { Label(context, _localization.Get("monitor.calibrationOffScale"), 12, top + 66, color, 11); }
+                else { Label(context, _localization.Get("monitor.calibrationOffScale"), 12, top + (Skin is null ? 66 : 49), color, 11); }
             }
             for (int age = 1; age >= 0; age--)
             {

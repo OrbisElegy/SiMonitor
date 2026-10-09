@@ -287,6 +287,15 @@ consumer 每次运行（含 underrun 退役）以及 stop/reroute/interruption �
 -4 已退役，-2 等待机制不可用。Windows 使用 auto-reset event，callback 中只调用非阻塞的 SetEvent；
 SIM_AUDIO_TEST 的非 Windows 构建以 1 ms 轮询原子标志实现，不代表唤醒延迟。
 
+## 皮肤治疗参数草稿
+
+[MonitorTherapyPreferenceStore](../../src/Monitor.Infrastructure/Preferences/MonitorTherapyPreferenceStore.cs)
+使用显示偏好同目录的 `*.therapy.json`，独立 Version=1，不改变 Version=14 显示文件。
+保存 `EnergyJoules`、`PacingRatePerMinute`、`PacingCurrentMilliamps` 和 `PacingType`，
+默认 150 J、70 ppm、0 mA、VVI；不保存运行、充电或武装状态。重启只恢复输入，不自动启动起搏。
+加载最多 1024 bytes，拒绝未知字段、缺失必需字段、版本及范围错误，回退默认并显示提示。
+保存采用同目录临时文件和原子替换；失败提示但保留当前内存草稿。
+
 ## 本地偏好文件与失败语义
 
 源码：[DisplayPreferenceStore](../../src/Monitor.Infrastructure/Preferences/DisplayPreferenceStore.cs)、
@@ -313,7 +322,7 @@ Sound.HeartbeatEnabled 控制心搏音；输出随窗口启动，主音量与静
 未配置字符串枚举 converter，普通 enum 属性以整数表示；字典键按 System.Text.Json 的键表示规则。
 未知属性拒绝，构造器必需参数必须存在。顶层必需 Version/Skin/Slots/PaperLayout，slot 必需
 Channel/Automatic/Minimum/Maximum/Speed；Speed 为 0.1 mm/s，合法值 125/250/500。
-Skin 为 ThreeRows=0/FiveRows=1/SevenRows=2，slot 数量必须分别 3/5/7；channel 0–6。
+Skin 为 ThreeRows=0/FiveRows=1/SevenRows=2/FourRows=3，slot 数量必须分别 3/5/7/4；channel 0–6。旧配置保持原有行数，旧程序不识别新增的 FourRows 值。
 PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由桌面调用方解释。
 
 | 版本 | Load 兼容规则 |

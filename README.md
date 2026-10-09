@@ -124,7 +124,7 @@ python3 tools/generate_selected_therapy_voices.py --offline
 ## Todo
 - 正式图标设计（当前为临时图标）
 - 生命体征逐项调整
-- 监护仪皮肤接口
+- Generic 皮肤治疗与工具栏按键功能接入
 - 事件驱动的生命征连续变化
 - 独立教师端、学生端
 - 教学与考试功能

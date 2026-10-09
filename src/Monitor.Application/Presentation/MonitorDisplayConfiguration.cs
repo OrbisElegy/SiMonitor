@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Application.Presentation;
 
-public enum MonitorSkin { ThreeRows, FiveRows, SevenRows }
+public enum MonitorSkin { ThreeRows, FiveRows, SevenRows, FourRows }
 public sealed record MonitorAmplitudeRange(double Minimum, double Maximum)
 {
     public double Normalize(double value) => Math.Clamp((value - Minimum) / (Maximum - Minimum), 0, 1);
@@ -23,7 +23,7 @@ public sealed class MonitorDisplayConfiguration
     public MonitorSkin Skin { get; }
     public IReadOnlyList<MonitorDisplaySlot> Slots { get; }
     public static int RowCount(MonitorSkin skin) => skin switch
-    { MonitorSkin.ThreeRows => 3, MonitorSkin.FiveRows => 5, MonitorSkin.SevenRows => 7, _ => throw new ArgumentException("MonitorDisplay.InvalidSkin") };
+    { MonitorSkin.ThreeRows => 3, MonitorSkin.FiveRows => 5, MonitorSkin.SevenRows => 7, MonitorSkin.FourRows => 4, _ => throw new ArgumentException("MonitorDisplay.InvalidSkin") };
     public static MonitorAmplitudeRange ReferenceRange(int channel) => channel switch
     {
         0 => new(-1200, 1500),
@@ -50,7 +50,7 @@ public sealed class MonitorDisplayConfiguration
     }
     public static MonitorDisplayConfiguration Default(MonitorSkin skin = MonitorSkin.FiveRows)
     {
-        int[] channels = [0, 2, 3, 4, 1, 5, 6];
+        int[] channels = skin == MonitorSkin.FourRows ? [0, 2, 1, 4] : [0, 2, 3, 4, 1, 5, 6];
         return new(skin, channels.Take(RowCount(skin)).Select(c => new MonitorDisplaySlot(c, true, ReferenceRange(c))).ToArray());
     }
 }

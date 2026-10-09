@@ -27,7 +27,7 @@ internal static class ManualVitalSmokeChecks
             Require(window.Session.ManualVitals.Custom1?.Value == 2.34m && window.Session.ManualVitals.Custom2?.Name == "ICP",
                 "both custom slots reach session");
             window.MonitorView.Refresh();
-            Require(window.MonitorView.ManualNumericTexts.Count == 5 &&
+            Require(window.MonitorView.ManualNumericTexts.Count == 4 &&
                 window.MonitorView.ManualNumericTexts.Contains("NIBP 120/80 (93) mmHg") &&
                 window.MonitorView.ManualNumericTexts.Contains("Lactate 2.34 mmol/L"), "manual values reach visible monitor");
             var prior = window.Session;

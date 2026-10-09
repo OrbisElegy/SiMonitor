@@ -59,7 +59,7 @@ public sealed class DisplayPreferenceStore(string path)
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         { rejected = true; }
-        return new(MonitorDisplayConfiguration.Default(), 0);
+        return new(MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), 0);
     }
     public bool Save(DisplayPreferences preferences)
     {

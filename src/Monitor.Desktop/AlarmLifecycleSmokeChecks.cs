@@ -9,6 +9,8 @@ internal static class AlarmLifecycleSmokeChecks
     internal static void Verify()
     {
         var window = new DesignPreviewWindow();
+        window.Settings.Skin.SelectedIndex = 2;
+        window.RestartSettings();
         window.Show();
         window.Pause();
         try

@@ -12,7 +12,7 @@
 | 声音输出、原生 ABI、偏好文件与存储 | [音频与持久化](audio-persistence.md) | [Monitor.Infrastructure](api/infrastructure.md) |
 | ECG 模板电击转复、单／双相能量与逐模板保存 | [电击转复](electrical-conversion.md) | [Monitor.Application](api/application.md) |
 | 本地化端口、中英文资源、格式校验与翻译协作 | [本地化](localization.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |
-| 桌面装配、控件、命令行、构建及开发工具 | [桌面与命令行入口](desktop-tools.md) | [Monitor.Desktop](api/desktop.md) |
+| 桌面装配、Generic 皮肤接口、控件、命令行、构建及开发工具 | [桌面与命令行入口](desktop-tools.md) | [Monitor.Desktop](api/desktop.md) |
 
 说明文档回答“怎样调用、什么时间／单位、失败后保留什么状态”。声明索引按源文件完整列出对程序集外可见的显式 `public` 声明，包含构造器、重载、属性、record 参数、枚举、端口和常量；方法实现、编译器合成成员及继承成员不重复展开。索引不是独立 SDK 或兼容性承诺。
 

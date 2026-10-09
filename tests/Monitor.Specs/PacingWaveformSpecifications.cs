@@ -54,7 +54,7 @@ internal static class PacingWaveformSpecifications
     {
         var manual = new ManualVitalSigns(temperatureDeciCelsius: 371);
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
-            MonitorDisplayConfiguration.Default(), true, realtimeOxygenation: RealtimeOxygenationConfiguration.ReferenceAdult, manualVitals: manual);
+            MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), true, realtimeOxygenation: RealtimeOxygenationConfiguration.ReferenceAdult, manualVitals: manual);
         for (int i = 0; i < 80; i++) { session.Advance(200_000_000); }
         long now = session.SimulationTimeNs;
         long frontier = session.FrontierNs;

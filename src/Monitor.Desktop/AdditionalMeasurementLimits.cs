@@ -14,6 +14,17 @@ internal sealed class AdditionalMeasurementLimits
 {
     private readonly IReadOnlyDictionary<MonitorNumeric, ConfirmedLimitNotice> _notices =
         MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => new ConfirmedLimitNotice(d.Numeric));
+    private MonitorChannels _monitoredChannels = MonitorChannels.All;
+    internal void SetMonitoredChannels(MonitorChannels channels)
+    {
+        _monitoredChannels = channels;
+        foreach (var (numeric, notice) in _notices)
+        {
+            bool monitored = (channels & MonitorChannelMapping.ForNumeric(numeric)) != 0;
+            Editors[numeric].Enabled.IsEnabled = monitored;
+            if (!monitored) { notice.Reset(AlarmTransitionReason.Disabled); }
+        }
+    }
     internal IReadOnlyDictionary<MonitorNumeric, LimitEditor> Editors { get; }
     internal IReadOnlyList<AlarmLifecycleJournal> Lifecycles => _notices.Values.Select(n => n.Lifecycle).ToArray();
 
@@ -34,6 +45,8 @@ internal sealed class AdditionalMeasurementLimits
     {
         foreach (var descriptor in MeasuredLimitNotice.Descriptors)
         {
+            if ((_monitoredChannels & MonitorChannelMapping.ForNumeric(descriptor.Numeric)) == 0)
+            { _notices[descriptor.Numeric].Reset(AlarmTransitionReason.Disabled); continue; }
             var limits = Editors[descriptor.Numeric].Limits;
             MonitorNotice? notice;
             MeasurementConfirmationTiming? timing = null;

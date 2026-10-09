@@ -12,6 +12,8 @@ internal static class PressureAlarmSmokeChecks
     {
         var window = new DesignPreviewWindow();
         window.Show();
+        window.Settings.Skin.SelectedIndex = (int)MonitorSkin.FiveRows;
+        window.RestartSettings();
         window.Pause();
         try
         {
@@ -98,6 +100,8 @@ internal static class PressureAlarmSmokeChecks
     private static void VerifyConfigurableTiming()
     {
         var window = new DesignPreviewWindow();
+        window.Settings.Skin.SelectedIndex = 2;
+        window.RestartSettings();
         window.Show();
         window.Pause();
         try

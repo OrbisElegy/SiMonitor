@@ -127,7 +127,7 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 ## To-Do
 - Final icon design (a temporary icon is in use)
 - Individual adjustment of vital signs
-- Monitor skin interface
+- Wire Generic skin therapy and toolbar actions (see the [composition contract](../interfaces/desktop-tools.md#皮肤装配接口与-generic))
 - Manual measurement tool for 12-lead ECG
 - Event-driven continuous vital sign changes
 - Separate teacher and student interfaces

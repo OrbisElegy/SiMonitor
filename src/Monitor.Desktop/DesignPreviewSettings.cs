@@ -187,7 +187,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal Button ResetAll { get; } = new() { MinHeight = 44, Padding = new Thickness(8, 0) };
     internal Button Run { get; } = new() { MinWidth = 104, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
-    internal ComboBox Skin { get; } = new() { SelectedIndex = 1, MinWidth = 220 };
+    internal ComboBox Skin { get; } = new() { SelectedIndex = 3, MinWidth = 220 };
     internal ListBox Tabs { get; } = new();
     internal Dictionary<int, SettingsSections> SectionPages { get; } = [];
     private readonly ComboBox _compactCategory = new() { MinHeight = 44, MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };

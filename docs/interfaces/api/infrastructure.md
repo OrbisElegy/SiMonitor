@@ -791,3 +791,15 @@ public sealed class SweepFrameWorker : IAsyncDisposable
     public ValueTask DisposeAsync();
 }
 ```
+
+## Preferences/MonitorTherapyPreferenceStore.cs
+
+源码：[MonitorTherapyPreferenceStore.cs](../../../src/Monitor.Infrastructure/Preferences/MonitorTherapyPreferenceStore.cs) · 命名空间：`Monitor.Infrastructure.Preferences`
+
+```csharp
+public sealed class MonitorTherapyPreferenceStore(string path)
+{
+    public MonitorTherapyPreferences Load(out bool rejected);
+    public bool Save(MonitorTherapyPreferences settings);
+}
+```

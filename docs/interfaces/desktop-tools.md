@@ -54,6 +54,34 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 `Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
 会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
 
+## 皮肤装配接口与 Generic
+
+源码：[IMonitorSkin.cs](../../src/Monitor.Desktop/IMonitorSkin.cs)、[GenericMonitorSkin.cs](../../src/Monitor.Desktop/GenericMonitorSkin.cs)。
+
+`IMonitorSkin` 是进程内桌面装配端口，当前为 `internal`，不提供外部 DLL／JSON 皮肤加载。
+宿主创建每个视图时注入皮肤；`Id` 标识样式，`Background` 与 `ChannelBrush(channel)` 同时用于
+波形、数值、脉搏指示及报警高亮恢复后的底色。`Compose(MonitorSkinContent)` 接收宿主持有的
+标题／报警区、波形、数值列、温度、两个自定义参数和 NIBP 控件，每个控件只能挂载一次。
+皮肤不持有采集会话或治疗权威，不能决定测量有效性或推进仿真时间。
+`Channels` 声明可接入的通道；宿主将其与已配置波形行取交集，作为实际监控范围。
+未接入通道的数值／ECG／无呼气报警生命周期以 Disabled 清除，包含待确认、锁存与声音；
+保存的阈值和启用偏好保留，再接入后从新证据重新确认。
+`LiveMonitorView` 继续更新读数、缺失状态、报警及本地化，`LiveMonitorTrace` 继续负责扫线与量程。
+
+默认宿主注入 Generic。首次启动及恢复默认设置采用 `MonitorSkin.FourRows = 3`：
+ECG（绿）、PLETH／SpO₂（蓝）、RESP（黄）、CO₂（白）。温度和两个自定义参数位于波形下方，
+白色 NIBP 位于数值列下方；未启用的手动参数保留空白位置，隐藏名称、数值与单位，不生成虚构读数。
+现有 3／5／7 行枚举值和保存配置不变，显示设置中可选择四行，也可逐行修改通道。
+历史枚举 `MonitorSkin` 仍表示行数配置，与新的桌面皮肤装配端口不同。
+
+Generic 右侧提供除颤能量（1–1000 J）、起搏频率（30–180 ppm）、电流（0–200 mA）及
+现有 15 种起搏波形选择。编辑保存草稿；“启动／应用起搏”在下一采集边界切换实际播放，
+运行中再次应用可改变类型与输出，“停止起搏”恢复启动前节律，保留会话时间和已有波形。
+暂停时等待继续运行才生效；普通波形设置应用会取消这次起搏覆盖。十二导联纸面同步切换。
+电流缩放教学刺激幅度，0 mA 无刺激与诱发夺获；非零电流的夺获／失败由所选示例决定，
+尚无患者特定的夺获阈值模型。能量仅保存设置，充电、放电、同步及底部工具栏仍为占位按钮。
+原侧栏设置、十二导联与帮助入口继续有效。小窗口的治疗面板可纵向滚动。
+
 ## 手动生命体征与皮肤读数
 
 “设置 → 生命体征 → 手动体征”提供 NIBP、体温与两个独立的自定义槽位，各项默认关闭。

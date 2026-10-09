@@ -1979,6 +1979,9 @@ public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySi
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels, WaveformBlockAssemblerState Assembler)
 {
 }
+public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long SourceSimTimeNs, short NormalizedValue, uint QualityFlags)
+{
+}
 public sealed class PhysiologyWaveformGroup
 {
     public PhysiologyWaveformGroup Fork();
@@ -1987,6 +1990,7 @@ public sealed class PhysiologyWaveformGroup
     public PhysiologyWaveformGroupState CaptureState();
     public static PhysiologyWaveformGroup Restore(PhysiologyWaveformGroupState state);
     public IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel, int maximumBlocks, int maximumEvents, CancellationToken cancellationToken = default);
+    public IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel, int maximumBlocks, int maximumEvents, out IReadOnlyList<PhysiologyWaveformSample> immediateSamples, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -2679,3 +2683,37 @@ public static class PacingIllustrationConfiguration
         PacingIllustration mode, PacingOutputSettings output);
 }
 ```
+
+## Authoring/SinusIllustrationConfiguration.cs
+
+源码：[SinusIllustrationConfiguration.cs](../../../src/Monitor.Simulation/Authoring/SinusIllustrationConfiguration.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public static class SinusIllustrationConfiguration
+{
+    public static PhysiologyIllustrationConfiguration Apply(PhysiologyIllustrationConfiguration current);
+}
+```
+
+恢复窦性参考心电，同时保留当前呼吸、CO₂、压力配置，供已确认放电的转复目标使用。
+
+## Therapy/DefibrillationEcgArtifact.cs
+
+源码：[DefibrillationEcgArtifact.cs](../../../src/Monitor.Simulation/Therapy/DefibrillationEcgArtifact.cs) · 命名空间：`Monitor.Simulation.Therapy`
+
+```csharp
+public sealed class DefibrillationEcgArtifact
+{
+    public const uint UnusableQualityFlag = 1;
+    public DefibrillationWaveform Discharge { get; }
+    public long DeliveredAtSimTimeNs { get; }
+    public long RecoveryEndSimTimeNs { get; }
+    public DefibrillationEcgArtifact(DefibrillationWaveformKind waveform, long deliveredAtSimTimeNs, int recoveryMilliseconds);
+    public bool Contains(long simTimeNs);
+    public int EvaluateMicrovolts(long simTimeNs);
+    public WaveformPlane Apply(WaveformPlane plane, long blockStartSimTimeNs);
+}
+```
+
+`Apply` 接收已验证的微伏 ECG 平面，保留区间外样本及既有质量标记；区间内覆盖为前端示意输出
+并标记不可判读。`EvaluateMicrovolts` 区间外返回 0，调用方用 `Contains` 区分非作用区间。

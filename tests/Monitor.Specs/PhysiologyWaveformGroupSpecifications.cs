@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text.Json;
 using Monitor.Simulation.Acquisition;
+using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
@@ -24,6 +25,8 @@ internal static class PhysiologyWaveformGroupSpecifications
         new(nameof(PhysiologyBlocksWaitForAllNativePlanes), PhysiologyBlocksWaitForAllNativePlanes),
         new(nameof(PhysiologyGroupRecoveryPreservesWire), PhysiologyGroupRecoveryPreservesWire),
         new(nameof(PhysiologyGroupRejectsFailuresAndTampering), PhysiologyGroupRejectsFailuresAndTampering),
+        new(nameof(ImmediateChannelTapPreservesAcquisitionTransaction), ImmediateChannelTapPreservesAcquisitionTransaction),
+        new(nameof(ImmediatePressureSamplesPreserveCalibration), ImmediatePressureSamplesPreserveCalibration),
     ];
 
     private static void PhysiologyBlocksWaitForAllNativePlanes()
@@ -74,6 +77,68 @@ internal static class PhysiologyWaveformGroupSpecifications
         Check.That(Snapshot(source) == Snapshot(PhysiologyWaveformGroup.Restore(state)), "pending samples and shared physiology are revalidated without corrupting valid state");
     }
     private static string Snapshot(PhysiologyWaveformGroup source) => JsonSerializer.Serialize(source.CaptureState());
+
+    private static void ImmediateChannelTapPreservesAcquisitionTransaction()
+    {
+        var source = Start();
+        var ordinary = Start();
+        List<PhysiologyWaveformSample> tapped = [];
+        for (long time = 50_000_000; time <= 400_000_000; time += 50_000_000)
+        {
+            var blocks = source.AdvanceTo(time, 50, 1, 100, out var immediate);
+            var expected = ordinary.AdvanceTo(time, 50, 1, 100);
+            tapped.AddRange(immediate);
+            Check.That(immediate.Select(sample => sample.ChannelId).Distinct().Count() == 2 && immediate.All(sample => sample.SourceSimTimeNs < time) &&
+                blocks.Count == expected.Count && blocks.Zip(expected).All(pair => pair.First.SequenceEqual(pair.Second)),
+                "immediate channel samples are available before shared blocks without changing wire bytes");
+            foreach (var block in blocks.Select(wire => WaveformEnvelopeCodec.Decode(wire)))
+            {
+                foreach (var plane in block.Planes)
+                {
+                    var samples = tapped.Where(sample => sample.ChannelId == plane.ChannelId && sample.SourceSimTimeNs >= block.StartSimTimeNs &&
+                        sample.SourceSimTimeNs < block.StartSimTimeNs + block.DurationNs).ToArray();
+                    Check.That(plane.Samples.SequenceEqual(samples.Select(sample => sample.NormalizedValue)) &&
+                        samples.All(sample => sample.QualityFlags == (sample.ChannelId == Ecg ? 1U : 3U)),
+                        "all live channels preserve the acquired samples, timestamps and quality flags");
+                }
+            }
+        }
+        string before = Snapshot(source);
+        IReadOnlyList<PhysiologyWaveformSample> rejected = tapped;
+        Reject(() => source.AdvanceTo(1_000_000_000, 150, 1, 100, out rejected), "PhysiologyGroup.BlockLimitExceeded");
+        Check.That(rejected.Count == 0 && Snapshot(source) == before && before == Snapshot(ordinary),
+            "a failed transaction publishes neither immediate samples nor source changes");
+    }
+
+    private static void ImmediatePressureSamplesPreserveCalibration()
+    {
+        var source = PhysiologyIllustrationSource.Create(abpZeroOffsetCentiMmHg: 700, paZeroOffsetCentiMmHg: -300, cvpZeroOffsetCentiMmHg: 200);
+        var reference = PhysiologyIllustrationSource.Create();
+        Dictionary<Guid, int> offsets = new()
+        {
+            [PhysiologyIllustrationSource.ChannelId(3)] = 700,
+            [PhysiologyIllustrationSource.ChannelId(5)] = -300,
+            [PhysiologyIllustrationSource.ChannelId(6)] = 200
+        };
+        List<PhysiologyWaveformSample> history = [];
+        for (long time = 50_000_000; time <= 3_000_000_000; time += 50_000_000)
+        {
+            var wires = source.AdvanceTo(time, 50, 1, 100, out var immediate);
+            reference.AdvanceTo(time, 50, 1, 100, out var baseline);
+            Check.That(immediate.Count == baseline.Count && immediate.Zip(baseline).All(pair =>
+                pair.First.SourceSimTimeNs == pair.Second.SourceSimTimeNs && pair.First.ChannelId == pair.Second.ChannelId &&
+                pair.First.NormalizedValue - pair.Second.NormalizedValue == offsets.GetValueOrDefault(pair.First.ChannelId)),
+                "live pressure uses the sensor zero offsets while other channels remain unchanged");
+            history.AddRange(immediate);
+            foreach (var block in wires.Select(wire => WaveformEnvelopeCodec.Decode(wire)))
+                foreach (var plane in block.Planes)
+                {
+                    Check.That(plane.Samples.SequenceEqual(history.Where(sample => sample.ChannelId == plane.ChannelId &&
+                        sample.SourceSimTimeNs >= block.StartSimTimeNs && sample.SourceSimTimeNs < block.StartSimTimeNs + block.DurationNs)
+                        .Select(sample => sample.NormalizedValue)), "immediate and acquired pressure have identical sensor calibration");
+                }
+        }
+    }
     private static void Reject(Action action, string reason)
     {
         bool rejected = false;

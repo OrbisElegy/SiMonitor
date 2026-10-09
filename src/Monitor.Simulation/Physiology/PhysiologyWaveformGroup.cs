@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Collections.ObjectModel;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
 
@@ -17,6 +18,7 @@ public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySi
     SignalAcquisitionDelayState Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0);
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels,
     WaveformBlockAssemblerState Assembler);
+public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long SourceSimTimeNs, short NormalizedValue, uint QualityFlags);
 
 // Serialized multi-rate generation with one shared, bounded block assembler.
 public sealed class PhysiologyWaveformGroup
@@ -166,13 +168,25 @@ public sealed class PhysiologyWaveformGroup
     }
 
     public IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel, int maximumBlocks, int maximumEvents,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        AdvanceToCore(simTimeNs, maximumSamplesPerChannel, maximumBlocks, maximumEvents, false, out _, cancellationToken);
+
+    // Live traces share one source-time frontier across all native sample rates.
+    // Publish the taps only after the complete acquisition transaction commits.
+    public IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel, int maximumBlocks, int maximumEvents,
+        out IReadOnlyList<PhysiologyWaveformSample> immediateSamples, CancellationToken cancellationToken = default) =>
+        AdvanceToCore(simTimeNs, maximumSamplesPerChannel, maximumBlocks, maximumEvents, true, out immediateSamples, cancellationToken);
+
+    private ReadOnlyCollection<byte[]> AdvanceToCore(long simTimeNs, int maximumSamplesPerChannel, int maximumBlocks, int maximumEvents,
+        bool captureImmediateSamples, out IReadOnlyList<PhysiologyWaveformSample> immediateSamples, CancellationToken cancellationToken)
     {
+        immediateSamples = [];
         cancellationToken.ThrowIfCancellationRequested();
         if (maximumBlocks is < 1 or > WaveformBlockAssembler.MaximumBufferedBlockCount)
         { throw new PhysiologyWaveformGroupException("PhysiologyGroup.InvalidBlockLimit", nameof(maximumBlocks)); }
         PhysiologyWaveformGroup trial = Fork();
         List<byte[]> output = [];
+        List<PhysiologyWaveformSample> immediate = [];
         foreach (Channel channel in trial._channels)
         {
             IReadOnlyList<PhysiologySignalSample> samples = channel.Generator.GenerateBefore(simTimeNs, maximumSamplesPerChannel, maximumEvents, cancellationToken);
@@ -189,6 +203,8 @@ public sealed class PhysiologyWaveformGroup
                 { throw new PhysiologyWaveformGroupException("PhysiologyGroup.MeasuredPressureOutOfRange", nameof(simTimeNs)); }
                 short measured = (short)measuredValue;
                 channel.Delay.Enqueue(sample.Tick, measured, channel.QualityFlags);
+                if (captureImmediateSamples)
+                { immediate.Add(new(channel.Id, sample.Tick.SimTimeNs, measured, channel.QualityFlags)); }
             }
             Release(simTimeNs);
 
@@ -206,6 +222,7 @@ public sealed class PhysiologyWaveformGroup
         cancellationToken.ThrowIfCancellationRequested();
         _channels = trial._channels;
         _assembler = trial._assembler;
+        immediateSamples = immediate.AsReadOnly();
         return output.AsReadOnly();
     }
 

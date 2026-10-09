@@ -11,6 +11,7 @@ internal static class MonitorContinuationSpecifications
     internal static readonly Specification[] All =
     [
         new(nameof(AtrialFibrillationContinuationAppliesTheCurrentSegmentImmediately), AtrialFibrillationContinuationAppliesTheCurrentSegmentImmediately),
+        new(nameof(VentricularDisorganizationContinuesWithoutGapsOrTails), VentricularDisorganizationContinuesWithoutGapsOrTails),
         new(nameof(ApplyContinuesAtTheOldSourcesLastMoment), ApplyContinuesAtTheOldSourcesLastMoment),
         new(nameof(PendingChangesReplaceAndRejectAtomically), PendingChangesReplaceAndRejectAtomically),
         new(nameof(StartupDiscardDoesNotPublishTransientSamples), StartupDiscardDoesNotPublishTransientSamples),
@@ -77,6 +78,57 @@ internal static class MonitorContinuationSpecifications
                     }
                 }
             }
+    }
+
+    private static void VentricularDisorganizationContinuesWithoutGapsOrTails()
+    {
+        foreach (long boundary in new[] { 6_052_000_000, 16_284_000_000, 16_384_000_000, 16_484_000_000 })
+        {
+            var source = PhysiologyIllustrationSource.Create();
+            long cursor = 0;
+            while (cursor < boundary)
+            {
+                cursor = Math.Min(cursor + 50_000_000, boundary);
+                source.AdvanceTo(cursor, 50, 1, 100);
+            }
+            foreach (var pattern in new[] { AvConductionPattern.VentricularFibrillationCoarseIllustration,
+                AvConductionPattern.VentricularFibrillationFineIllustration, AvConductionPattern.FixedPr,
+                AvConductionPattern.VentricularFlutterIllustration, AvConductionPattern.VentricularFibrillationCoarseIllustration,
+                AvConductionPattern.FixedPr })
+            {
+                bool disorganized = VentricularDisorganizationReference.IsPattern(pattern);
+                var configuration = PhysiologyIllustrationConfiguration.Default with
+                {
+                    ConductionPattern = pattern,
+                    CardiacActivity = disorganized ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular,
+                    VentricularMechanicalEnabled = !disorganized
+                };
+                source.ContinueWith(PhysiologyIllustrationSource.Create(configuration));
+                var state = source.CaptureState().Channels.Single(c => c.ChannelId == PhysiologyIllustrationSource.ChannelId(0)).Generator;
+                var actual = PhysiologySignalGenerator.Restore(state).GenerateBefore(cursor + 200_000_000, 50, 1000);
+                EventWaveformBand SilenceDisorganization(EventWaveformBand band) => band.Trigger == PhysiologyCycleEventKind.VentricularDisorganizationSegment
+                    ? band with { TableQ32 = band.TableQ32.Select(_ => 0L).ToArray() } : band;
+                var withoutDisorganization = PhysiologySignalGenerator.Restore(state with
+                {
+                    Bands = state.Bands.Select(SilenceDisorganization).ToArray(),
+                    History = state.History.Select(h => h with { Bands = h.Bands.Select(SilenceDisorganization).ToArray() }).ToArray()
+                }).GenerateBefore(cursor + 200_000_000, 50, 1000);
+                long[] expected = disorganized ? PhysiologySignalGenerator.Restore(state with
+                { ActiveFromEventTimeNs = null, History = [] }).GenerateBefore(cursor + 200_000_000, 50, 1000).Select(s => s.ValueQ32).ToArray() : new long[50];
+                Check.That(actual.Count == 50 && actual.Select((sample, index) => sample.ValueQ32 - withoutDisorganization[index].ValueQ32).SequenceEqual(expected),
+                    "continuous VF/flutter follows the new definition immediately, preserving beat tails without delayed, doubled or outgoing disorganization");
+                if (disorganized) { Check.That(expected.Any(value => value != 0), "the first transition block has ventricular activity"); }
+                var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
+                for (int step = 0; step < 8; step++)
+                {
+                    cursor += 50_000_000;
+                    var wires = source.AdvanceTo(cursor, 50, 1, 100);
+                    var replay = restored.AdvanceTo(cursor, 50, 1, 100);
+                    Check.That(wires.Count == replay.Count && wires.Zip(replay).All(p => p.First.SequenceEqual(p.Second)),
+                        "rapid disorganization transitions preserve acquisition buffering and checkpoint replay");
+                }
+            }
+        }
     }
 
     private static void ApplyContinuesAtTheOldSourcesLastMoment()

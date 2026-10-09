@@ -14,7 +14,7 @@ internal sealed class PhysiologySignalContinuation
     internal PhysiologySignalSegment Segment { get; }
     private readonly VascularPressureSource? _pressure;
     private readonly PlethRunoffSource? _pleth;
-    private readonly bool _hasFibrillation;
+    private readonly bool _hasContinuousActivity;
     internal long SupportNs { get; }
 
     internal PhysiologySignalContinuation(PhysiologySignalSegment segment)
@@ -43,7 +43,7 @@ internal sealed class PhysiologySignalContinuation
         {
             var owned = EventWaveformComposition.Restore(new(segment.Bands, [])).CaptureState().Bands;
             segment = segment with { Bands = owned };
-            _hasFibrillation = owned.Any(b => b.Trigger == PhysiologyCycleEventKind.AtrialFibrillationSegment);
+            _hasContinuousActivity = owned.Any(b => IsContinuousActivity(b.Trigger));
             SupportNs = owned.Max(b => checked(b.DelayNs + b.DurationNs));
         }
         Segment = segment;
@@ -60,19 +60,22 @@ internal sealed class PhysiologySignalContinuation
         }
         if (_pleth is not null)
         { return _pleth.EvaluateIntervalAt(timeNs, Segment.FromEventTimeNs, Segment.ToExclusiveEventTimeNs, cancellationToken); }
-        // f activity is continuous over the source's sample interval, rather
-        // than a beat response starting at a segment trigger. Reconstruct the
-        // current segment immediately, and never retain it as an outgoing tail.
-        bool includeFibrillation = _hasFibrillation && timeNs < Segment.ToExclusiveEventTimeNs;
-        long from = Math.Max(includeFibrillation ? Segment.Plan.EpochAnchorSimTimeNs : Segment.FromEventTimeNs,
+        // Atrial f waves and disorganized ventricular activity occupy the
+        // source's sample interval. Reconstruct the current segment immediately
+        // and stop it at the switch boundary, preserving only triggered beat tails.
+        bool includeContinuousActivity = _hasContinuousActivity && timeNs < Segment.ToExclusiveEventTimeNs;
+        long from = Math.Max(includeContinuousActivity ? Segment.Plan.EpochAnchorSimTimeNs : Segment.FromEventTimeNs,
             timeNs - SupportNs);
         long to = Math.Min(checked(timeNs + 1), Segment.ToExclusiveEventTimeNs);
         long baseline = includeBaseline ? (long)Segment.PressureBaselineCentiMmHg * FixedPointMath.Q32One : 0;
         if (from >= to) { return baseline; }
         var timeline = RegularPhysiologyTimeline.Restore(new(Segment.Plan, from));
         var events = timeline.AdvanceBefore(to, EventWaveformComposition.MaximumEventCount, cancellationToken)
-            .Where(item => item.Kind == PhysiologyCycleEventKind.AtrialFibrillationSegment
-                ? includeFibrillation : item.SimTimeNs >= Segment.FromEventTimeNs).ToArray();
+            .Where(item => IsContinuousActivity(item.Kind)
+                ? includeContinuousActivity : item.SimTimeNs >= Segment.FromEventTimeNs).ToArray();
         return checked(baseline + EventWaveformComposition.Restore(new(Segment.Bands, events)).EvaluateAt(timeNs, cancellationToken));
     }
+
+    private static bool IsContinuousActivity(PhysiologyCycleEventKind kind) => kind is
+        PhysiologyCycleEventKind.AtrialFibrillationSegment or PhysiologyCycleEventKind.VentricularDisorganizationSegment;
 }

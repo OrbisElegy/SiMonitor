@@ -337,8 +337,9 @@ void ContinueWith(PhysiologyWaveformGroup definition);
 
 `ContinueWith` 是同一流内接续：通道 ID、质量、零偏和 plane 配置必须完全一致，否则 `PhysiologyGroup.ChannelMismatch`。
 它保留样本时钟、索引、延迟队列和已组装数据，新定义仅处理当前 cursor 之后的新事件；旧事件已触发的尾部继续衰减。
-房颤 f 波属于连续活动：从生效 cursor 立即接入当前波形段，沿用既有时间轴相位；
-退出房颤或更换粗／细波定义时，旧 f 波在边界停止，不作为逐搏尾部残留或叠加。
+房颤 f 波、室颤和室扑属于连续活动：从生效 cursor 立即接入当前波形段，沿用既有时间轴相位，
+不等待下一个片段触发点。退出这些模式或更换粗／细波定义时，旧连续活动在边界停止，
+不作为逐搏尾部残留或叠加；已触发的 P／QRS／T 尾部仍按原规则保留。
 `PhysiologySignalState` 的 `ActiveFromEventTimeNs` 与 `History` 保存接续分段，外部恢复最多接收 512 个历史段。
 新参数对每个 generator 完成校验后才整体发布；需要改变通道形状、profile 或零偏时不能复用此接口。
 

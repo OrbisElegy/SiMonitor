@@ -14,11 +14,13 @@ internal static class SkinFeedbackSmokeChecks
     {
         string path = Path.Combine(Path.GetTempPath(), "skin-therapy-" + Guid.NewGuid().ToString("N") + ".json");
         var window = new DesignPreviewWindow(path);
+        window.Settings.PacingPermissions.Allowed.IsChecked = true;
+        window.RestartSettings();
         window.Show();
         try
         {
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
-            skin.Energy.Value = 200;
+            skin.Energy.SelectedItem = 200;
             skin.Rate.Value = 90;
             skin.Current.Value = 60;
             skin.PacingType.SelectedIndex = (int)PacingIllustration.DualChamberDdd;
@@ -54,6 +56,76 @@ internal static class SkinFeedbackSmokeChecks
             File.Delete(path);
             File.Delete(Path.ChangeExtension(path, ".therapy.json"));
             File.Delete(Path.ChangeExtension(path, ".language.json"));
+        }
+        VerifyTemplateSwitchClearsPacing();
+    }
+
+    private static void VerifyTemplateSwitchClearsPacing()
+    {
+        // Active output, a pending start, and a full restart must all project
+        // the new template's state rather than retain the pacing command UI.
+        for (int scenario = 0; scenario < 3; scenario++)
+        {
+            var window = new DesignPreviewWindow();
+            window.Settings.PacingPermissions.Allowed.IsChecked = true;
+            window.RestartSettings();
+            window.Show();
+            try
+            {
+                GenericMonitorSkin Skin() => (GenericMonitorSkin)window.MonitorTrace.Skin!;
+                void Advance()
+                {
+                    for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+                }
+                var skin = Skin();
+                Require(!skin.StopPacing.IsEnabled, "idle monitor cannot stop nonexistent pacing");
+                skin.Current.Value = 60;
+                skin.Rate.Value = 90;
+                skin.PacingType.SelectedIndex = (int)PacingIllustration.DualChamberDdd;
+                skin.ApplyPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(!skin.ApplyPacing.IsEnabled && !skin.StopPacing.IsEnabled, "pending pacing waits for the acquisition boundary");
+                if (scenario != 1)
+                {
+                    Advance();
+                    Require(skin.StopPacing.IsEnabled && skin.PacingStatus.Text == window.Localization.Get("skin.pacingRunning") &&
+                        !skin.Feedback.IsVisible, "running state replaces the old queued-command feedback");
+                    window.Settings.ApplyDelaySeconds.Value = null;
+                    window.ApplySettings();
+                    Require(ReferenceEquals(skin, Skin()) && skin.StopPacing.IsEnabled && window.Session.ActivePacing is not null,
+                        "rejected settings preserve the running pacing state and stop control");
+                }
+                window.SelectPage(2);
+                window.Settings.EcgSelection = 72;
+                window.Settings.PacingPermissions.Allowed.IsChecked = true;
+                window.Settings.ApplyDelaySeconds.Value = 2;
+                if (scenario == 2) { window.RestartSettings(); }
+                else
+                {
+                    window.Pause();
+                    window.ApplySettings();
+                    Require(!Skin().StopPacing.IsEnabled && !Skin().ApplyPacing.IsEnabled &&
+                        Skin().PacingStatus.Text == window.Localization.Get("skin.pacingWaiting"),
+                        "a paused template replacement shows pending state instead of active pacing controls");
+                    window.Start();
+                }
+                Advance();
+                window.SelectPage(0);
+                skin = Skin();
+                Require(window.Session.ActivePacing is null && window.Session.Measurements!.HeartRate.MilliBeatsPerMinute is null &&
+                    !skin.StopPacing.IsEnabled && skin.ApplyPacing.IsEnabled &&
+                    skin.PacingStatus.Text == window.Localization.Get("skin.pacingStopped"),
+                    "template replacement clears pacing UI and plays the newly selected flatline");
+                skin.ApplyPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Advance();
+                Require(skin.StopPacing.IsEnabled && window.Session.ActivePacing == PacingIllustration.DualChamberDdd,
+                    "pacing can start again after replacing a template");
+                skin.StopPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Advance();
+                Require(!skin.StopPacing.IsEnabled && window.Session.ActivePacing is null &&
+                    window.Session.Measurements!.HeartRate.MilliBeatsPerMinute is null,
+                    "stop restores the replacement template rather than the original pre-switch template");
+            }
+            finally { window.Close(); }
         }
     }
 

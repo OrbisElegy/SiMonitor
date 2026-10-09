@@ -2860,7 +2860,7 @@ internal static class DesignPreviewSmokeChecks
         for (int step = 0; step < 15; step++)
         {
             byte[] before = Raster(trace, 1000, 700);
-            int right = (int)(132 + 850 * session.FrontierNs / 20_000_000_000d) - 3;
+            int right = (int)(132 + 850 * session.PresentationFrontierNs(0) / 20_000_000_000d) - 3;
             session.Advance(200_000_000);
             byte[] after = Raster(trace, 1000, 700);
             foreach (int row in Enumerable.Range(0, slots.Length).Where(i => slots[i].Channel != 0))
@@ -2886,7 +2886,7 @@ internal static class DesignPreviewSmokeChecks
         Require(Math.Abs((inkRows[0] + inkRows[^1]) / 2d - baselineY) < 2,
             "monitor calibration is centered on baseline, from minus to plus 0.5mV");
         data = Raster(trace, 800, 600);
-        double phase = trace.Session.FrontierNs % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
+        double phase = trace.Session.PresentationFrontierNs(0) % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
         int headX = (int)(132 + gutter + phase * (650 - gutter));
         Require(Enumerable.Range(10, 95).Count(y => Green(headX, y) || Green(headX + 1, y)) < 12, "no vertical sweep cursor");
         Require(!Enumerable.Range(10, 95).Any(y => Green(headX + 4, y)), "erase gap contains no trace");

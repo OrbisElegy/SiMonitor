@@ -150,8 +150,9 @@ internal static class SettingsNavigationSmokeChecks
             .Select(item => ((TextBlock)item.Content!).Text).ToArray();
         Require(headers.Length == 2 && headers[0] == "当前波形" && headers[1] is "概览" or "概览与工具",
             "advanced navigation separates waveform parameters from overview pages");
-        Require(advanced.DetailFor(0) == "无参数" && advanced.DetailFor(1) is null && advanced.DetailFor(2) == "无参数",
-            "groups without editable parameters are marked in navigation");
+        Require(advanced.DetailFor(0) is null && settings.PacingPermissions.Parent is not null &&
+            advanced.DetailFor(1) is null && advanced.DetailFor(2) == "无参数",
+            "all ECG templates expose pacing permission while genuinely empty groups retain their marker");
         Capture(window, "ui-preview-advanced-groups.png");
         settings.EcgSelection = 148;
         settings.Tabs.SelectedIndex = 1;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia.Controls;
 using Avalonia.Media;
+using Monitor.Application.Therapy;
 
 namespace Monitor.Desktop;
 
@@ -8,6 +9,7 @@ namespace Monitor.Desktop;
 // acquisition, measurement validity, alarm projection and commands belong to the host.
 internal interface IMonitorSkin
 {
+    public DefibrillatorConfiguration? DefibrillatorOverride => null;
     public MonitorChannels Channels { get; }
     public string Id { get; }
     public IBrush Background { get; }

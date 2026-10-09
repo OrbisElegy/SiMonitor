@@ -31,6 +31,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal TextBlock ShapeEditStatus { get; } = Text("");
     internal TextBlock ShapeEditSummary { get; } = Text("");
     internal TextBlock AppliedEcgParameters { get; } = Text("");
+    internal int AppliedRespirationSelection { get; private set; }
     internal TextBlock AppliedRespirationParameters { get; } = Text("");
     internal TextBlock AppliedEjectionParameters { get; } = Text("");
     internal void MarkParametersApplied(ProjectedEcgDemoConfiguration configuration, PhysiologyDemoConfiguration physiology,
@@ -43,6 +44,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         int ecg = ecgSelection ?? EcgSelection;
         int respiration = respirationSelection ?? RespirationSelection;
         int ejection = ejectionSelection ?? EjectionSelection;
+        AppliedRespirationSelection = respiration;
         Localization.Bind(AppliedEcgParameters, TextBlock.TextProperty, text =>
             text.Format("advanced.appliedEcg", text.GetString(EcgTemplateKey(ecg)), EcgTemplateSummary.Describe(text, configuration)));
         Localization.Bind(AppliedRespirationParameters, TextBlock.TextProperty, text =>
@@ -88,6 +90,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         }
     }
     internal ElectricalConversionEditor ElectricalConversion { get; }
+    internal PacingPermissionEditor PacingPermissions { get; }
     internal TContourParameterEditor TContourParameters { get; }
     internal InfarctionParameterEditor InfarctionParameters { get; }
     internal int EcgSelection
@@ -98,6 +101,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (_ecgSelection == value) { return; }
             _ecgSelection = value;
             ElectricalConversion.Select(EcgTemplateKey(value));
+            PacingPermissions.Select(EcgTemplateKey(value));
             TContourParameters.Reset(value is >= 107 and <= 114 ? TContourProductPreset.Create(value - 107) : null);
             InfarctionParameters.Reset(value is >= 115 and <= 164 ? InfarctionProductPreset.Create((value - 115) % 10,
                 (Monitor.Simulation.Physiology.InfarctionTerritory)((value - 115) / 10 + 1)) : null);
@@ -258,6 +262,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly StackPanel _co2Response = new() { Spacing = 16 };
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
+    internal DefibrillatorSettingsEditor Defibrillator { get; }
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
     internal ComboBox MeasurementUnits { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     internal ComboBox PaperLayout { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
@@ -272,6 +277,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
         ElectricalConversion = new ElectricalConversionEditor(Localization);
+        PacingPermissions = new PacingPermissionEditor(Localization);
+        Defibrillator = new DefibrillatorSettingsEditor(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -358,6 +365,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         appliedParameters.Children.Add(AppliedRespirationParameters);
         appliedParameters.Children.Add(AppliedEjectionParameters);
         advancedGroups.Add(("advanced.sectionApplied", appliedParameters));
+        advancedGroups.Add(("skin.defibrillator", Defibrillator));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("advanced.sectionTools", _advancedTools)); }
         var advancedHeaders = new Dictionary<int, string> { [0] = "advanced.headerWaveform", [3] = ProductIdentity.DevelopmentFeatures ? "advanced.headerOverviewTools" : "advanced.headerOverview" };
         SectionPages[6] = new SettingsSections(Localization, "settings.advanced", advancedHeaders, advancedGroups.ToArray());
@@ -703,10 +711,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
         if (ElectricalConversion.IsVisible) { _advancedEcg.Children.Add(ElectricalConversion); }
-        bool ecgEditable = config.Ecg.TContour is not null || config.Ecg.Infarction is not null || ElectricalConversion.IsVisible;
-        if (!ecgEditable)
-        { _advancedEcg.Children.Add(LocalizedText("advanced.ecgNoParameters")); }
-        SectionPages[6].SetDetail(0, ecgEditable ? null : "advanced.noParameters", ecgEditable ? null : "advanced.noParametersName");
+        _advancedEcg.Children.Add(PacingPermissions);
+        SectionPages[6].SetDetail(0, null, null);
         _advancedEcg.Children.Add(ShapeEditStatus);
         int respirationTemplate = RespirationSelection;
         Localization.Bind(RespirationGroups, ToolTip.TipProperty, text => text.Format("advanced.currentRespiration", text.GetString(RespirationTemplateKey(respirationTemplate))));

@@ -31,6 +31,30 @@ internal sealed class LiveMonitorTrace : Control
     private Point[]?[,] _contours = new Point[]?[0, 0];
     internal LocalMonitorPreviewSession Session => _session;
     internal IMonitorSkin? Skin { get; set; }
+    private bool _synchronized;
+    private long _synchronizedSinceNs;
+    private readonly List<long> _synchronizationPeaks = [];
+    internal IReadOnlyList<long> SynchronizationPeaks => _synchronizationPeaks.AsReadOnly();
+    internal void RefreshSynchronization(bool enabled)
+    {
+        enabled &= (MonitoredChannels & MonitorChannels.Ecg) != 0;
+        if (_synchronized != enabled)
+        {
+            _synchronized = enabled;
+            _synchronizedSinceNs = _session.SimulationTimeNs;
+            _synchronizationPeaks.Clear();
+        }
+        if (enabled)
+        {
+            foreach (var beat in _session.SynchronizationBeats)
+            {
+                if (beat.PeakTimeNs >= _synchronizedSinceNs && (_synchronizationPeaks.Count == 0 || beat.PeakTimeNs > _synchronizationPeaks[^1]))
+                { _synchronizationPeaks.Add(beat.PeakTimeNs); }
+            }
+            _synchronizationPeaks.RemoveAll(peak => peak < _session.SimulationTimeNs - LocalMonitorPreviewSession.RetainedBlockCount * 200_000_000L);
+        }
+        InvalidateVisual();
+    }
     internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(MonitorChannels.None,
         (channels, slot) => channels | MonitorChannelMapping.ForChannel(slot.Channel)) & (Skin?.Channels ?? MonitorChannels.All);
     internal IBrush ChannelBrush(int channel) => Skin?.ChannelBrush(channel) ?? Brush.Parse(Colors[channel]);
@@ -53,7 +77,7 @@ internal sealed class LiveMonitorTrace : Control
                 {
                     bool started = false;
                     int channel = _session.Display.Slots[row].Channel;
-                    var samples = _session.Samples(channel, from, from + duration).ToArray();
+                    var samples = _session.PresentedSamples(channel, from, from + duration).ToArray();
                     var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
@@ -81,8 +105,9 @@ internal sealed class LiveMonitorTrace : Control
         for (int row = 0; row < rows; row++)
         {
             long duration = _session.Display.Slots[row].DurationNs;
-            double phase = (_session.FrontierNs % duration) / (double)duration;
             int channel = _session.Display.Slots[row].Channel;
+            long frontierNs = _session.PresentationFrontierNs(channel);
+            double phase = (frontierNs % duration) / (double)duration;
             if ((MonitoredChannels & MonitorChannelMapping.ForChannel(channel)) == 0) { continue; }
             var color = ChannelBrush(channel);
             var range = _session.Ranges.Range(row);
@@ -96,6 +121,8 @@ internal sealed class LiveMonitorTrace : Control
             Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
             if (channel == 0)
             {
+                if (rowHeight >= (Skin is null ? 100 : 80) && _session.ShockArtifacts.Any(artifact => artifact.Contains(frontierNs)))
+                { Label(context, _localization.Get("defib.ecgRecovering"), 12, top + (Skin is null ? 83 : 66), color, 11); }
                 if (range.Minimum <= -500 && range.Maximum >= 500)
                 {
                     double x = left + width * 200_000_000 / duration;
@@ -130,6 +157,32 @@ internal sealed class LiveMonitorTrace : Control
                 var matrix = new Matrix(plot.Width, 0, 0, plot.Height, plot.X, plot.Y);
                 if (path!.Transform is null || !path.Transform.Value.Equals(matrix)) { path.Transform = new MatrixTransform(matrix); }
                 context.DrawGeometry(null, new Pen(color, 1.2), path);
+                if (channel == 0)
+                {
+                    long cycleStart = (_session.Ranges.RowCycle(row) - age) * duration;
+                    foreach (long peak in _synchronizationPeaks)
+                    {
+                        double position = (peak - cycleStart) / (double)duration;
+                        if (position < begin || position >= end) { continue; }
+                        double x = plot.X + position * plot.Width;
+                        var marker = new StreamGeometry();
+                        using (var triangle = marker.Open())
+                        {
+                            triangle.BeginFigure(new(x - 4, plot.Y + 2), true);
+                            triangle.LineTo(new(x + 4, plot.Y + 2));
+                            triangle.LineTo(new(x, plot.Y + 10));
+                            triangle.EndFigure(true);
+                        }
+                        context.DrawGeometry(color, null, marker);
+                    }
+                    foreach (var artifact in _session.ShockArtifacts)
+                    {
+                        double position = (artifact.DeliveredAtSimTimeNs - cycleStart) / (double)duration;
+                        if (position < begin || position >= end) { continue; }
+                        double x = plot.X + position * plot.Width;
+                        Label(context, _localization.Get("defib.shockMarker"), x + 3, plot.Y + 2, color, 10);
+                    }
+                }
             }
 
         }

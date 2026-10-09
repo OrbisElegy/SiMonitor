@@ -67,7 +67,7 @@ internal static class ElectricalConversionSmokeChecks
             var conversion = window.Session.ApplyElectricalShock(new(1, window.Session.SimulationTimeNs,
                 DefibrillationWaveformKind.RectilinearBiphasic, DefibrillationMode.ManualAsynchronous, 122), sinus);
             Require(conversion.Outcome == ElectricalConversionOutcome.ConversionScheduled, "applied template response schedules automatic conversion");
-            window.Session.Advance(50_000_000);
+            window.Session.Advance(250_000_000);
             Require(window.Session.ElectricalTherapy?.TemplateId == EcgElectricalTherapy.SinusTemplateId, "automatic source switch preserves live session");
             settings.EcgSelection = 0;
             Require(!settings.ElectricalConversion.IsVisible, "sinus hides unsupported conversion settings");

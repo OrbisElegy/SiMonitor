@@ -8,7 +8,9 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 using Monitor.Domain.Presentation;
+using Monitor.Domain.Therapy;
 using Monitor.Infrastructure.Localization;
 using Monitor.Infrastructure.Preferences;
 using Monitor.Simulation.Acquisition;
@@ -52,6 +54,12 @@ internal sealed class DesignPreviewWindow : Window
     private readonly DisplayPreferenceStore? _preferences;
     private readonly LanguagePreferenceStore? _languagePreferences;
     private readonly MonitorTherapyPreferenceStore? _therapyPreferences;
+    private readonly Func<long> _safetyClock;
+    private ManualDefibrillator _defibrillator = null!;
+    private ulong _shockSequence;
+    private bool _pendingShockConversion;
+    private EcgElectricalTherapyProfile _sinusTherapy = new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default);
+    internal ManualDefibrillator Defibrillator => _defibrillator;
     private MonitorTherapyPreferences _therapy = MonitorTherapyPreferences.Default;
     private WaveformEnvelope[]? _beforePacingPaper;
     private (WaveformEnvelope[] Paper, long EffectiveNs)? _pendingPacingPaper;
@@ -59,8 +67,10 @@ internal sealed class DesignPreviewWindow : Window
     internal TextBlock LanguageNotice { get; } = Text("", 12);
     private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
-    internal DesignPreviewWindow(string? preferencesPath = null)
+    internal DesignPreviewWindow(string? preferencesPath = null, Func<long>? safetyClock = null)
     {
+        long clockStart = Stopwatch.GetTimestamp();
+        _safetyClock = safetyClock ?? (() => Stopwatch.GetElapsedTime(clockStart).Ticks * 100);
         Title = ProductIdentity.WindowTitle;
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
@@ -104,6 +114,9 @@ internal sealed class DesignPreviewWindow : Window
                 rejected = true;
             }
         }
+        Settings.Defibrillator.Restore(preferences.Defibrillator ?? DefibrillatorConfiguration.Default);
+        _defibrillator = new(Guid.NewGuid(), Settings.Defibrillator.Read(), _therapy.EnergyJoules);
+        _sinusTherapy = CaptureSinusTherapy();
         _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin());
         if (therapyRejected) { ((GenericMonitorSkin)_monitor.Skin!).ShowFeedback("skin.therapyRejected"); }
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
@@ -153,13 +166,102 @@ internal sealed class DesignPreviewWindow : Window
         };
         Grid.SetRow(card, 1); main.Children.Add(card); Content = root;
         Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
+        Deactivated += (_, _) => DisarmDefibrillator();
         SelectPage(0); UpdateState();
     }
-    private GenericMonitorSkin CreateSkin() => new(Localization, _therapy, SaveTherapy, SetPacing);
+    private GenericMonitorSkin CreateSkin()
+    {
+        var skin = new GenericMonitorSkin(Localization, _therapy, SaveTherapy, SetPacing,
+            _defibrillator.Configuration, RunDefibrillatorCommand,
+            energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
+        Settings.Defibrillator.SetDeviceOverride(skin.DefibrillatorOverride);
+        RefreshDefibrillator(skin);
+        RefreshPacingState(skin);
+        return skin;
+    }
+
+    private EcgElectricalTherapyProfile CaptureSinusTherapy() =>
+        Settings.ElectricalConversion.Profile(EcgElectricalTherapy.SinusTemplateId) with
+        { PacingAllowed = Settings.PacingPermissions.Allows(EcgElectricalTherapy.SinusTemplateId) };
+
+    private bool DefibrillatorAvailable => !_closed && !_applying && _timer is not null && Page == 0 &&
+        _session.PendingSourceTimeNs is null && _pendingPresentation is null && _pendingPacingPaper is null;
+
+    private void RefreshDefibrillator(GenericMonitorSkin? skin = null)
+    {
+        skin ??= _monitor?.Skin as GenericMonitorSkin;
+        skin?.Defibrillator.Refresh(_defibrillator, _safetyClock(), DefibrillatorAvailable);
+        _monitor?.RefreshSynchronization(_defibrillator.State.Mode == DefibrillationMode.ManualSynchronized);
+    }
+
+    private void DisarmDefibrillator()
+    {
+        if (_defibrillator is null) { return; }
+        _defibrillator.Disarm(_safetyClock());
+        RefreshDefibrillator();
+    }
+
+    internal void RunDefibrillatorCommand(DefibrillatorCommand command)
+    {
+        long now = _safetyClock();
+        if (command == DefibrillatorCommand.ReleaseShock) { _defibrillator.ReleaseShock(now); }
+        else if (command == DefibrillatorCommand.Disarm) { _defibrillator.Disarm(now); }
+        else if (!DefibrillatorAvailable)
+        { (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.unavailable"); }
+        else
+        {
+            if (_monitor.Skin is GenericMonitorSkin skin) { skin.Feedback.IsVisible = false; }
+            switch (command)
+            {
+                case DefibrillatorCommand.Charge:
+                    _defibrillator.BeginCharge(now);
+                    break;
+                case DefibrillatorCommand.PressShock:
+                    _defibrillator.PressShock(Guid.NewGuid(), now);
+                    break;
+                case DefibrillatorCommand.ToggleSync:
+                    _defibrillator.SetSynchronized(_defibrillator.State.Mode != DefibrillationMode.ManualSynchronized, now);
+                    break;
+            }
+        }
+        RefreshDefibrillator();
+    }
+
+    private void TickDefibrillator()
+    {
+        if (!DefibrillatorAvailable) { DisarmDefibrillator(); return; }
+        var delivery = _defibrillator.Tick(_safetyClock(), _session.SimulationTimeNs,
+            (_monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) ? _session.SynchronizationBeats : []).Select(beat => beat.PeakTimeNs));
+        if (delivery is null) { return; }
+        // A host-wide token survives device configuration changes on the same session.
+        delivery = delivery with { DeliverySequence = ++_shockSequence };
+        var sinus = _session.PrepareSinusAfterShock(_sinusTherapy);
+        var result = _session.ApplyElectricalShock(delivery, sinus, _defibrillator.Configuration.EcgRecoveryMilliseconds);
+        if (result.Outcome == ElectricalConversionOutcome.ConversionScheduled)
+        {
+            _pendingShockConversion = true;
+            var paperConfiguration = ProjectedEcgDemoConfiguration.Default;
+            _pendingPresentation = (paperConfiguration, sinus.Configuration, CapturePaper(paperConfiguration),
+                result.EffectiveSimTimeNs!.Value, 0, Settings.AppliedRespirationSelection, 0);
+            _beforePacingPaper = null;
+            _pendingPacingPaper = null;
+        }
+        (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.result." + result.Outcome);
+    }
+
+    private void RefreshPacingState(GenericMonitorSkin? skin = null)
+    {
+        skin ??= _monitor.Skin as GenericMonitorSkin;
+        skin?.SetPacingState(_beforePacingPaper is not null && _session.ActivePacing is not null,
+            _applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null,
+            _session.PacingAllowed);
+    }
 
     private void SaveTherapy(MonitorTherapyPreferences preferences)
     {
         preferences.Validate();
+        if (_defibrillator.EnergyJoules != preferences.EnergyJoules)
+        { _defibrillator.SelectEnergy(preferences.EnergyJoules, _safetyClock()); RefreshDefibrillator(); }
         _therapy = preferences;
         if (_therapyPreferences?.Save(preferences) == false && _monitor.Skin is GenericMonitorSkin skin)
         { skin.ShowFeedback("skin.therapySaveFailed"); }
@@ -169,20 +271,24 @@ internal sealed class DesignPreviewWindow : Window
     {
         if (_applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null)
         { return "skin.pacingPending"; }
+        DisarmDefibrillator();
         if (stop)
         {
             if (_beforePacingPaper is null || _session.ActivePacing is null) { return "skin.pacingNotRunning"; }
             long effective = _session.StopPacing();
             _pendingPacingPaper = (_beforePacingPaper, effective);
             _beforePacingPaper = null;
+            RefreshPacingState();
             return "skin.pacingStopScheduled";
         }
+        if (!_session.PacingAllowed) { return "skin.pacingDisabled"; }
         var output = new PacingOutputSettings(preferences.PacingRatePerMinute, preferences.PacingCurrentMilliamps);
         var configuration = ProjectedEcgDemoConfiguration.Default with { Pacing = preferences.PacingType, PacingOutput = output };
         var paper = CapturePaper(configuration);
         long at = _session.SchedulePacing(preferences.PacingType, output);
         _beforePacingPaper ??= _ecg;
         _pendingPacingPaper = (paper, at);
+        RefreshPacingState();
         return "skin.pacingScheduled";
     }
 
@@ -321,6 +427,7 @@ internal sealed class DesignPreviewWindow : Window
     internal void SelectPage(int page)
     {
         if (page is < 0 or > 4) { throw new ArgumentOutOfRangeException(nameof(page)); }
+        if (page != 0) { DisarmDefibrillator(); }
         Page = page;
         _navigation.SelectedIndex = page;
         Localization.Bind(_title, TextBlock.TextProperty, PageKeys[page]);
@@ -436,7 +543,9 @@ internal sealed class DesignPreviewWindow : Window
             int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
             if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
         }
-        var electricalTherapy = Settings.ElectricalConversion.Profile(DesignPreviewSettings.EcgTemplateKey(Settings.EcgSelection));
+        string templateId = DesignPreviewSettings.EcgTemplateKey(Settings.EcgSelection);
+        var electricalTherapy = Settings.ElectricalConversion.Profile(templateId) with
+        { PacingAllowed = Settings.PacingPermissions.Allows(templateId) };
         var manualVitals = Settings.ManualVitals.Read();
         var display = Settings.ReadDisplay();
         int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
@@ -457,7 +566,9 @@ internal sealed class DesignPreviewWindow : Window
     private async Task ApplySettingsCore(bool restart, bool background)
     {
         if (_applying || _closed) { return; }
+        DisarmDefibrillator();
         _applying = true;
+        RefreshPacingState();
         var editor = Settings;
         if (background)
         {
@@ -474,6 +585,8 @@ internal sealed class DesignPreviewWindow : Window
             int paperLayout = Settings.PaperLayout.SelectedIndex;
             bool measurementMillimeters = Settings.MeasurementUnits.SelectedIndex == 1;
             if (paperLayout is < 0 or > 1) { throw new ArgumentException("Preview.InvalidPaperLayout"); }
+            var defibrillator = DefibrillatorConfiguration.Resolve(Settings.Defibrillator.Read(), _monitor.Skin?.DefibrillatorOverride);
+            var sinusTherapy = CaptureSinusTherapy();
             var build = CaptureSourceBuilder();
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             long delayNs = Settings.ReadApplyDelayNs();
@@ -509,6 +622,10 @@ internal sealed class DesignPreviewWindow : Window
             }
             _beforePacingPaper = null;
             _pendingPacingPaper = null;
+            _pendingShockConversion = false;
+            _defibrillator = new(Guid.NewGuid(), defibrillator, _therapy.EnergyJoules);
+            _therapy = _therapy with { EnergyJoules = _defibrillator.EnergyJoules };
+            _sinusTherapy = sinusTherapy;
             _monitor = new(_session, Localization);
             MonitorView = new(_monitor, Localization, CreateSkin());
             BindAlarmAttention();
@@ -525,7 +642,7 @@ internal sealed class DesignPreviewWindow : Window
             if (restart) { Start(); }
             if (_preferences is not null)
             {
-                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters));
+                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters, defibrillator));
                 PreferenceNotice.IsVisible = !saved;
                 Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
                 if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
@@ -533,6 +650,8 @@ internal sealed class DesignPreviewWindow : Window
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
         { SetStatus("validation.baselineRestart"); }
+        catch (ArgumentException exception) when (exception.Message == "Defibrillator.InvalidConfiguration")
+        { SetStatus("defib.invalid"); }
         catch (ArgumentException exception) when (exception.Message == "ElectricalConversion.InvalidDraft")
         { SetStatus("conversion.invalidDrafts"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidApplyDelay")
@@ -599,6 +718,7 @@ internal sealed class DesignPreviewWindow : Window
         finally
         {
             _applying = false;
+            RefreshPacingState();
             editor.Apply.IsEnabled = true;
             editor.Restart.IsEnabled = true;
             editor.ResetAll.IsEnabled = true;
@@ -621,6 +741,7 @@ internal sealed class DesignPreviewWindow : Window
     }
     internal void Pause()
     {
+        DisarmDefibrillator();
         var old = _timer; _timer = null;
         if (old is not null) { old.Stop(); old.Tick -= OnTick; }
         Settings?.Sound.PauseMonitor();
@@ -645,6 +766,11 @@ internal sealed class DesignPreviewWindow : Window
                 Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
                     applied.RespirationSelection, applied.EjectionSelection);
                 _pendingPresentation = null;
+                if (_pendingShockConversion)
+                {
+                    _pendingShockConversion = false;
+                    (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.result.Converted");
+                }
                 SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
                 if (Page == 1) { SelectPage(Page); }
             }
@@ -654,6 +780,7 @@ internal sealed class DesignPreviewWindow : Window
                 _pendingPacingPaper = null;
                 if (Page == 1) { SelectPage(1); }
             }
+            TickDefibrillator();
             _monitor.InvalidateVisual();
             MonitorView.Refresh();
             Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
@@ -665,6 +792,8 @@ internal sealed class DesignPreviewWindow : Window
     }
     private void UpdateState()
     {
+        RefreshPacingState();
+        RefreshDefibrillator();
         _state.Text = Localization.Format("shell.state", Localization.Get(_timer is null ? "shell.paused" : "shell.running"), _session.SimulationTimeNs / 1_000_000_000);
         if (Settings is not null) { Settings.Run.Content = Localization.Get(_timer is null ? "settings.resume" : "settings.pause"); }
     }

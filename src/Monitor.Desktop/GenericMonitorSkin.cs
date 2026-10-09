@@ -7,6 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
@@ -16,7 +17,12 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
     private readonly Func<MonitorTherapyPreferences, bool, string>? _pacing;
-    internal NumericUpDown Energy { get; } = Number(150, 1, 1000, 10);
+    private (bool Running, bool Pending, bool Allowed)? _shownPacing;
+    private bool _pacingFeedback;
+    internal TextBlock PacingStatus { get; } = new() { Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
+    internal DefibrillatorControls Defibrillator { get; }
+    internal ComboBox Energy => Defibrillator.Energy;
+    public DefibrillatorConfiguration? DefibrillatorOverride => null;
     internal NumericUpDown Rate { get; } = Number(70, 30, 180, 5);
     internal NumericUpDown Current { get; } = Number(0, 0, 200, 5);
     internal ComboBox PacingType { get; } = new() { MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -38,14 +44,15 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     };
 
     internal GenericMonitorSkin(DesktopLocalization localization, MonitorTherapyPreferences? preferences = null,
-        Action<MonitorTherapyPreferences>? save = null, Func<MonitorTherapyPreferences, bool, string>? pacing = null)
+        Action<MonitorTherapyPreferences>? save = null, Func<MonitorTherapyPreferences, bool, string>? pacing = null,
+        DefibrillatorConfiguration? defibrillator = null, Action<DefibrillatorCommand>? defibrillatorCommand = null, Action<int>? energyChanged = null)
     {
         _localization = localization;
         _save = save;
         _pacing = pacing;
         preferences ??= MonitorTherapyPreferences.Default;
         preferences.Validate();
-        Energy.Value = preferences.EnergyJoules;
+        Defibrillator = new(localization, defibrillator ?? DefibrillatorConfiguration.Default, preferences.EnergyJoules, defibrillatorCommand, ShowFeedback);
         Rate.Value = preferences.PacingRatePerMinute;
         Current.Value = preferences.PacingCurrentMilliamps;
         _localization.SetChoices(PacingType, Enum.GetValues<PacingIllustration>().Select(mode =>
@@ -53,10 +60,33 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         PacingType.SelectedIndex = (int)preferences.PacingType;
         _localization.Bind(ApplyPacing, ContentControl.ContentProperty, "skin.pacingApply");
         _localization.Bind(StopPacing, ContentControl.ContentProperty, "skin.pacingStop");
-        foreach (var field in new[] { Energy, Rate, Current }) { field.ValueChanged += (_, _) => SaveDraft(); }
+        foreach (var field in new[] { Rate, Current }) { field.ValueChanged += (_, _) => SaveDraft(); }
+        Energy.SelectionChanged += (_, _) =>
+        {
+            if (Energy.SelectedItem is int joules) { energyChanged?.Invoke(joules); }
+            SaveDraft();
+        };
         PacingType.SelectionChanged += (_, _) => SaveDraft();
         ApplyPacing.Click += (_, _) => RunPacing(false);
         StopPacing.Click += (_, _) => RunPacing(true);
+        SetPacingState(false, false, false);
+    }
+
+    internal void SetPacingState(bool running, bool pending, bool allowed)
+    {
+        if (_shownPacing == (running, pending, allowed)) { return; }
+        _shownPacing = (running, pending, allowed);
+        ApplyPacing.IsEnabled = _pacing is not null && !pending && allowed;
+        StopPacing.IsEnabled = _pacing is not null && running && !pending;
+        _localization.Bind(PacingStatus, TextBlock.TextProperty,
+            pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState");
+        _localization.Bind(PacingStatus, ToolTip.TipProperty, text => allowed ? "" : text.GetString("skin.pacingDisabled"));
+        _localization.Bind(ApplyPacing, ContentControl.ContentProperty, running ? "skin.pacingApply" : "skin.pacingStart");
+        if (_pacingFeedback)
+        {
+            Feedback.IsVisible = false;
+            _pacingFeedback = false;
+        }
     }
 
     private static NumericUpDown Number(decimal value, decimal minimum, decimal maximum, decimal increment) => new()
@@ -74,7 +104,7 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     {
         int Integer(NumericUpDown field) => field.Value is { } value && value == decimal.Truncate(value)
             ? checked((int)value) : throw new ArgumentException("TherapyPreferences.InvalidConfiguration");
-        var settings = new MonitorTherapyPreferences(Integer(Energy), Integer(Rate), Integer(Current), (PacingIllustration)PacingType.SelectedIndex);
+        var settings = new MonitorTherapyPreferences((int)(Energy.SelectedItem ?? throw new ArgumentException("TherapyPreferences.InvalidConfiguration")), Integer(Rate), Integer(Current), (PacingIllustration)PacingType.SelectedIndex);
         settings.Validate();
         return settings;
     }
@@ -87,13 +117,18 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
 
     private void RunPacing(bool stop)
     {
-        try { ShowFeedback(_pacing?.Invoke(stop ? MonitorTherapyPreferences.Default : Read(), stop) ?? "skin.pacingUnavailable"); }
+        try
+        {
+            ShowFeedback(_pacing?.Invoke(stop ? MonitorTherapyPreferences.Default : Read(), stop) ?? "skin.pacingUnavailable");
+            _pacingFeedback = true;
+        }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or OverflowException)
         { ShowFeedback(error is InvalidOperationException ? "skin.pacingPending" : "skin.therapyInvalid"); }
     }
 
     internal void ShowFeedback(string key)
     {
+        _pacingFeedback = false;
         Feedback.IsVisible = true;
         _localization.Bind(Feedback, TextBlock.TextProperty, key);
     }
@@ -136,10 +171,9 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         monitor.Children.Add(content.Nibp);
         var therapy = new StackPanel { Spacing = 8 };
         therapy.Children.Add(Caption("skin.therapyControls"));
-        therapy.Children.Add(Panel("skin.defibrillator", [Field("skin.energy", Energy)],
-            ["skin.aed", "skin.charge", "skin.shock", "skin.disarm", "skin.sync"]));
+        therapy.Children.Add(Panel("skin.defibrillator", [Defibrillator], []));
         therapy.Children.Add(Panel("skin.pacer", [Field("skin.pacingType", PacingType), Field("skin.pacingRate", Rate),
-            Field("skin.pacingCurrent", Current), ApplyPacing, StopPacing], []));
+            Field("skin.pacingCurrent", Current), PacingStatus, ApplyPacing, StopPacing], []));
         var scroll = new ScrollViewer { Content = therapy, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var therapyArea = new Grid { RowDefinitions = new("*,Auto") };
         therapyArea.Children.Add(scroll);

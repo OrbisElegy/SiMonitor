@@ -1479,17 +1479,21 @@ public sealed class LocalMonitorPreviewSession
     public const long PresentationLatencyNs = 2_200_000_000;
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
+    public IReadOnlyList<DefibrillationEcgArtifact> ShockArtifacts { get; }
+    public PhysiologyIllustrationConfiguration Configuration { get; }
     public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
     public ManualVitalSigns ManualVitals { get; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
+    public long PresentationFrontierNs(int channel);
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; }
     public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; }
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; }
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; }
+    public IReadOnlyList<DetectedEcgBeat> SynchronizationBeats { get; private set; }
     public IReadOnlyList<WaveformEnvelope> Blocks { get; }
     public MonitorDisplayConfiguration Display { get; private set; }
     public MonitorSweepRanges Ranges { get; private set; }
@@ -1501,13 +1505,16 @@ public sealed class LocalMonitorPreviewSession
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
     public PacingIllustration? ActivePacing { get; }
+    public bool PacingAllowed { get; }
     public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output);
     public long StopPacing();
     public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
-    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition);
+    public LocalMonitorPreviewSession PrepareSinusAfterShock(EcgElectricalTherapyProfile profile);
+    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition, int ecgRecoveryMilliseconds = 1000);
     public void UpdateDisplay(MonitorDisplayConfiguration display);
     public void Advance(long deltaNs);
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
+    public IEnumerable<(long TimeNs, double Value)> PresentedSamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
 }
 ```
 
@@ -1716,6 +1723,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
     public long RowCycle(int slot);
     public MonitorAmplitudeRange PreviousRange(int slot);
     public void Advance(long frontierNs, Func<int, long, long, IEnumerable<double>> samples);
+    public void Advance(Func<int, long> channelFrontierNs, Func<int, long, long, IEnumerable<double>> samples);
 }
 ```
 
@@ -1727,6 +1735,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Respiration, int Ejection, string Seed, IReadOnlyDictionary<string, decimal?> Numbers, IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; }
+    public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; }
     public decimal ApplyDelaySeconds { get; init; }
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate();
@@ -2157,6 +2166,7 @@ public enum ElectricalConversionOutcome
 }
 public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicThresholdJoules, int BiphasicThresholdJoules)
 {
+    public int PostShockPauseMilliseconds { get; init; }
     public const int MaximumEnergyJoules = 1000;
     public static ElectricalConversionSettings Default { get; }
     public void Validate();
@@ -2164,6 +2174,7 @@ public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicTh
 public sealed record EcgElectricalTherapyDescriptor(string TemplateId, ElectricalShockRequirement Requirement);
 public sealed record EcgElectricalTherapyProfile(string TemplateId, ElectricalConversionSettings Settings)
 {
+    public bool PacingAllowed { get; init; }
     public void Validate();
 }
 public sealed record DeliveredElectricalShock(ulong DeliverySequence, long DeliveredAtSimTimeNs, DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules);
@@ -2188,5 +2199,62 @@ public sealed record MonitorTherapyPreferences(int EnergyJoules, int PacingRateP
 {
     public static MonitorTherapyPreferences Default { get; }
     public void Validate();
+}
+```
+
+## Therapy/EcgPacingPermissions.cs
+
+源码：[EcgPacingPermissions.cs](../../../src/Monitor.Application/Therapy/EcgPacingPermissions.cs) · 命名空间：`Monitor.Application.Therapy`
+
+```csharp
+public static class EcgPacingPermissions
+{
+    public static IReadOnlyList<string> TemplateIds { get; }
+    public static IReadOnlyDictionary<string, bool> Snapshot(IReadOnlyDictionary<string, bool> permissions);
+}
+```
+
+`LocalMonitorPreviewSession.PacingAllowed` 来自当前生效模板的 `EcgElectricalTherapyProfile`，
+缺少 profile／许可或模板未登记时为 false。`SchedulePacing` 在状态发布前拒绝，抛出
+`InvalidOperationException("Pacing.TemplateDisabled")`；已有起搏的 `StopPacing` 不检查启动许可。
+待生效源的许可在源切换边界一起发布。此许可只控制监护起搏命令，不阻止直接播放起搏教学模板。
+
+## Therapy/DefibrillatorConfiguration.cs
+
+源码：[DefibrillatorConfiguration.cs](../../../src/Monitor.Application/Therapy/DefibrillatorConfiguration.cs) · 命名空间：`Monitor.Application.Therapy`
+
+```csharp
+public sealed record DefibrillatorConfiguration(IReadOnlyList<int> EnergyStepsJoules,
+    DefibrillationWaveformKind Waveform, int ChargeDurationMilliseconds, int AutoDisarmSeconds)
+{
+    public int EcgRecoveryMilliseconds { get; init; }
+    public static DefibrillatorConfiguration Default { get; }
+    public DefibrillatorConfiguration Snapshot();
+    public int NearestEnergy(int energyJoules);
+    public static DefibrillatorConfiguration Resolve(DefibrillatorConfiguration editable, DefibrillatorConfiguration? deviceOverride);
+}
+```
+
+## Therapy/ManualDefibrillator.cs
+
+源码：[ManualDefibrillator.cs](../../../src/Monitor.Application/Therapy/ManualDefibrillator.cs) · 命名空间：`Monitor.Application.Therapy`
+
+```csharp
+public sealed class ManualDefibrillator
+{
+    public const long HoldDurationNs = 500_000_000;
+    public const long SyncTimeoutNs = 10_000_000_000;
+    public DefibrillatorConfiguration Configuration { get; }
+    public TherapyState State { get; }
+    public int EnergyJoules { get; private set; }
+    public int ChargeProgressPermille { get; private set; }
+    public ManualDefibrillator(Guid instanceId, DefibrillatorConfiguration configuration, int energyJoules);
+    public void SelectEnergy(int energyJoules, long safetyTimeNs);
+    public void SetSynchronized(bool enabled, long safetyTimeNs);
+    public bool BeginCharge(long safetyTimeNs);
+    public bool PressShock(Guid interactionId, long safetyTimeNs);
+    public void ReleaseShock(long safetyTimeNs);
+    public void Disarm(long safetyTimeNs);
+    public DeliveredElectricalShock? Tick(long safetyTimeNs, long simulationTimeNs, IEnumerable<long> qrsPeakTimesNs);
 }
 ```

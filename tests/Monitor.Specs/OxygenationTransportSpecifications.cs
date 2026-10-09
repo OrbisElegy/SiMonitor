@@ -214,13 +214,18 @@ internal static class OxygenationTransportSpecifications
         var baseline = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true, 98000);
         for (int step = 0; step < 43; step++) { preview.Advance(50_000_000); baseline.Advance(50_000_000); }
         long before = preview.SimulationTimeNs;
+        ulong revision = preview.DataRevision;
+        var presented = Enumerable.Range(0, 7).Select(channel => preview.PresentedSamples(channel, 0, before).ToArray()).ToArray();
         Reject(() => preview.Advance(50_000_000));
-        Check.That(preview.SimulationTimeNs == before && preview.Blocks.Count == 0 && preview.DataRevision == 0,
+        Check.That(preview.SimulationTimeNs == before && preview.Blocks.Count == 0 && preview.DataRevision == revision &&
+            Enumerable.Range(0, 7).All(channel => preview.PresentedSamples(channel, 0, before + 50_000_000).SequenceEqual(presented[channel])),
             "missing old oxygen sample rejects the acquisition chunk before its source cursor commits");
         probe.AvailableThroughNs = long.MaxValue;
         preview.Advance(50_000_000);
         baseline.Advance(50_000_000);
-        Check.That(preview.Measurements == baseline.Measurements && preview.Blocks.Count == baseline.Blocks.Count && preview.DataRevision == baseline.DataRevision,
+        Check.That(preview.Measurements == baseline.Measurements && preview.Blocks.Count == baseline.Blocks.Count && preview.DataRevision == baseline.DataRevision &&
+            Enumerable.Range(0, 7).All(channel => preview.PresentedSamples(channel, 0, preview.SimulationTimeNs)
+                .SequenceEqual(baseline.PresentedSamples(channel, 0, baseline.SimulationTimeNs))),
             "restoring source history lets the identical acquisition chunk retry");
     }
 

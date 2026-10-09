@@ -16,6 +16,8 @@ internal static class MonitorDisplaySpecifications
         new(nameof(DenseContoursPreserveKnotsAndMonotonicity), DenseContoursPreserveKnotsAndMonotonicity),
         new(nameof(DenseContourPrefixesRemainLocal), DenseContourPrefixesRemainLocal),
         new(nameof(IndependentSpeedsRetainPreviousScaleUntilOverwritten), IndependentSpeedsRetainPreviousScaleUntilOverwritten),
+        new(nameof(IndependentChannelFrontiersKeepSweepHistoryAndRejectRegression), IndependentChannelFrontiersKeepSweepHistoryAndRejectRegression),
+        new(nameof(LiveChannelsShareCardiacSourceTime), LiveChannelsShareCardiacSourceTime),
     ];
     private static void SkinsOwnFixedValidatedSlotsAndClampBothEdges()
     {
@@ -76,10 +78,17 @@ internal static class MonitorDisplaySpecifications
         long before = session.FrontierNs;
         session.Advance(16_000_000);
         Check.That(session.FrontierNs - before == 16_000_000, "display progresses between 200ms block arrivals");
-        while (session.SimulationTimeNs < 32_000_000_000) { session.Advance(50_000_000); }
+        while (session.SimulationTimeNs < 48_000_000_000) { session.Advance(50_000_000); }
         Check.That(session.Blocks.Count <= LocalMonitorPreviewSession.RetainedBlockCount &&
             session.FrontierNs == session.SimulationTimeNs - LocalMonitorPreviewSession.PresentationLatencyNs,
             "bounded retained history and exact acquisition/presentation lag");
+        for (int channel = 0; channel < 7; channel++)
+        {
+            var samples = session.PresentedSamples(channel, 0, session.SimulationTimeNs).ToArray();
+            Check.That(samples.Length <= LocalMonitorPreviewSession.RetainedBlockCount * (channel == 0 ? 50 : 25) &&
+                samples[0].TimeNs >= session.SimulationTimeNs - LocalMonitorPreviewSession.RetainedBlockCount * 200_000_000L &&
+                session.PresentationFrontierNs(channel) == session.SimulationTimeNs, "all live histories are bounded independently of the delayed packet queue");
+        }
         long time = session.SimulationTimeNs;
         Reject(() => session.Advance(0));
         Check.That(session.SimulationTimeNs == time, "invalid advancement does not mutate clocks");
@@ -150,5 +159,54 @@ internal static class MonitorDisplaySpecifications
         bool rejected = false;
         try { action(); } catch (ArgumentException) { rejected = true; }
         Check.That(rejected, "invalid display input rejected");
+    }
+
+    private static void IndependentChannelFrontiersKeepSweepHistoryAndRejectRegression()
+    {
+        var plan = MonitorDisplayConfiguration.Default();
+        var ranges = new MonitorSweepRanges(plan);
+        long duration = plan.Slots[0].DurationNs;
+        ranges.Advance(channel => channel == 0 ? duration : duration - 2_200_000_000,
+            (channel, from, to) =>
+            {
+                Check.That(channel == 0 && from == 0 && to == duration, "only the completed live ECG sweep changes range");
+                return [-200, 1000];
+            });
+        Check.That(ranges.RowCycle(0) == 1 && ranges.RowCycle(1) == 0 && ranges.ShowPrevious(0) &&
+            ranges.PreviousRange(0) == plan.Slots[0].Range, "ECG wraps without losing previous-sweep history or advancing other rows");
+        Reject(() => ranges.Advance(channel => channel == 0 ? duration - 1 : duration, (_, _, _) => [0]));
+        Check.That(ranges.RowCycle(1) == 0 && ranges.Cycle == 1, "one regressing channel cannot partly publish other row cycles");
+        ranges.Advance(channel => channel == 0 ? duration + 2_200_000_000 : duration, (_, _, _) => [0]);
+        Check.That(ranges.RowCycle(0) == 1 && ranges.RowCycle(1) == 1, "delayed rows later wrap on their own frontier");
+    }
+
+    private static void LiveChannelsShareCardiacSourceTime()
+    {
+        foreach (var configuration in new[] { PhysiologyIllustrationConfiguration.Default,
+            PhysiologyIllustrationConfiguration.PrematureVentricular, PhysiologyIllustrationConfiguration.Fibrillation() })
+        {
+            var session = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows));
+            session.DiscardStartup();
+            while (session.SimulationTimeNs < 10_050_000_000) { session.Advance(50_000_000); }
+            long frontier = session.SimulationTimeNs;
+            var live = Enumerable.Range(0, 7).Select(channel => session.PresentedSamples(channel, frontier - 3_000_000_000, frontier).ToArray()).ToArray();
+            for (int channel = 0; channel < 7; channel++)
+            {
+                var plane = session.Blocks[^1].Planes.Single(candidate => candidate.ChannelId == PhysiologyIllustrationSource.ChannelId(channel));
+                long samplePeriodNs = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                Check.That(session.PresentationFrontierNs(channel) == frontier && frontier - live[channel][^1].TimeNs <= samplePeriodNs,
+                    "ECG, PLETH and all pressure channels reach the same current time at their own native sample rate");
+            }
+            Check.That(Enumerable.Range(0, 7).All(row => session.Ranges.RowCycle(row) == 1),
+                "equal sweep speeds wrap together, including immediately after the shared boundary");
+            while (session.SimulationTimeNs < frontier + 2_500_000_000) { session.Advance(50_000_000); }
+            for (int channel = 0; channel < 7; channel++)
+            {
+                Check.That(live[channel].SequenceEqual(session.Samples(channel, frontier - 3_000_000_000, frontier)),
+                    "live irregular beats and their mechanical/pulse responses preserve exact acquired timestamps, amplitudes and pressure units");
+                Check.That(live[channel].SequenceEqual(session.PresentedSamples(channel, frontier - 3_000_000_000, frontier)),
+                    "arriving packets cannot shift or repaint any already displayed channel");
+            }
+        }
     }
 }

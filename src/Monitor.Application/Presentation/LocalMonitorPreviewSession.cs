@@ -10,7 +10,8 @@ using Monitor.Simulation.Therapy;
 namespace Monitor.Application.Presentation;
 
 // Local preview runtime, not a replacement for the product authority gateway.
-// Uses the same bounded pacing and 2.2s presentation buffer as the physiology demo.
+// Live traces share committed source time. The original delayed acquisition path
+// remains available separately for measurements and recorded waveform packets.
 public sealed class LocalMonitorPreviewSession
 {
     public const long PresentationLatencyNs = 2_200_000_000;
@@ -21,15 +22,26 @@ public sealed class LocalMonitorPreviewSession
     private RealtimeOxygenationConfiguration? _realtimeConfiguration;
     private PhysiologyIllustrationConfiguration? _beforePacing;
     public PacingIllustration? ActivePacing => _beforePacing is null ? null : _configuration.Pacing;
+    public bool PacingAllowed => ElectricalTherapy is { PacingAllowed: true } profile &&
+        EcgPacingPermissions.TemplateIds.Contains(profile.TemplateId, StringComparer.Ordinal);
     private LocalMonitorPreviewSession? _pendingSource;
+    private (LocalMonitorPreviewSession Definition, long EffectiveNs)? _postShockSinus;
+    private readonly List<DefibrillationEcgArtifact> _shockArtifacts = [];
+    public IReadOnlyList<DefibrillationEcgArtifact> ShockArtifacts => _shockArtifacts.AsReadOnly();
     private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
     private readonly List<(long ToExclusiveSourceTimeNs, PhysiologyIllustrationConfiguration Configuration)> _previousPacingSources = [];
     private ulong _lastElectricalDeliverySequence;
+    public PhysiologyIllustrationConfiguration Configuration => _configuration;
     public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
     private WaveformEnvelope[] _blocks = [];
+    private readonly Dictionary<Guid, List<(long TimeNs, double Value, uint QualityFlags)>> _immediateSamples;
+    private readonly Dictionary<Guid, WaveformBlockPlaneConfiguration> _planeConfigurations;
     private readonly LiveWaveformMeasurements? _measurements;
+    private readonly EcgHeartRateMeasurement? _synchronizationEcg;
+    private ulong _synchronizationSequence;
+    public IReadOnlyList<DetectedEcgBeat> SynchronizationBeats { get; private set; } = [];
     private PulseOximeterIllustrationSource? _opticalSource;
     private RealtimeOxygenationSource? _realtimeOxygenation;
     private PhysiologyWaveformGroup? _pendingVentilationSource;
@@ -44,6 +56,11 @@ public sealed class LocalMonitorPreviewSession
     public ManualVitalSigns ManualVitals { get; private set; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
+    public long PresentationFrontierNs(int channel)
+    {
+        _ = PhysiologyIllustrationSource.ChannelId(channel);
+        return SimulationTimeNs;
+    }
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
     public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; } = [];
@@ -68,6 +85,8 @@ public sealed class LocalMonitorPreviewSession
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
+        _planeConfigurations = _source.CaptureState().Assembler.Planes.ToDictionary(plane => plane.Configuration.ChannelId, plane => plane.Configuration);
+        _immediateSamples = _planeConfigurations.Keys.ToDictionary(id => id, _ => new List<(long TimeNs, double Value, uint QualityFlags)>());
         _opticalModulationPermille = opticalModulationPermille;
         if (realtimeOxygenation is not null)
         {
@@ -85,7 +104,11 @@ public sealed class LocalMonitorPreviewSession
         if (oxygenation is not null && (!enableMeasurements || opticalSaturationMilliPercent is not null || opticalVariation is not null))
         { throw new ArgumentException("Preview.OxygenationRequiresExclusiveMeasuredOptics", nameof(oxygenation)); }
         _usesOxygenation = oxygenation is not null;
-        if (enableMeasurements) { _measurements = LiveWaveformMeasurements.CreateIllustration(); }
+        if (enableMeasurements)
+        {
+            _measurements = LiveWaveformMeasurements.CreateIllustration();
+            _synchronizationEcg = new(PhysiologyIllustrationSource.ChannelId(0));
+        }
         if (opticalSaturationMilliPercent is { } target)
         {
             _opticalSource = new(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
@@ -139,22 +162,28 @@ public sealed class LocalMonitorPreviewSession
         _sourceTimeOffsetNs = StartupDiscardNs;
     }
 
-    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs)
+    private void ValidateSourceDefinition(LocalMonitorPreviewSession definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (ReferenceEquals(definition, this) || definition.SimulationTimeNs != 0 || definition._sourceTimeOffsetNs != 0 ||
             definition._pendingSource is not null || definition._pendingVentilationSource is not null ||
             (definition._measurements is null) != (_measurements is null))
         { throw new ArgumentException("Preview.SourceMustBeFresh", nameof(definition)); }
-        if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
         if (_realtimeOxygenation is not null && definition._realtimeOxygenation is not null &&
             OxygenationParameters != definition.OxygenationParameters)
         { throw new ArgumentException("Preview.OxygenationBaselineRequiresRestart"); }
-        long effective = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
-        // Validate against the current source without generating future samples.
         var trial = _source.Fork();
         trial.ContinueWith(definition._source);
+    }
+
+    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs)
+    {
+        ValidateSourceDefinition(definition);
+        if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
+        long effective = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
+        // Explicit source changes replace the entire pending post-shock sequence.
         _beforePacing = null;
+        _postShockSinus = null;
         _pendingSource = definition;
         PendingSourceTimeNs = effective;
         return effective;
@@ -162,6 +191,7 @@ public sealed class LocalMonitorPreviewSession
 
     public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output)
     {
+        if (!PacingAllowed) { throw new InvalidOperationException("Pacing.TemplateDisabled"); }
         if (_pendingSource is not null || _pendingVentilationSource is not null)
         { throw new InvalidOperationException("Pacing.SourceChangePending"); }
         var configuration = PacingIllustrationConfiguration.Apply(_configuration, mode, output);
@@ -182,22 +212,36 @@ public sealed class LocalMonitorPreviewSession
 
     private long ScheduleCardiacConfiguration(PhysiologyIllustrationConfiguration configuration)
     {
+        var definition = CreateCardiacDefinition(configuration, ElectricalTherapy);
+        var previous = _beforePacing;
+        long effective = ScheduleSource(definition, 0);
+        _beforePacing = previous;
+        return effective;
+    }
+
+    public LocalMonitorPreviewSession PrepareSinusAfterShock(EcgElectricalTherapyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (profile.TemplateId != EcgElectricalTherapy.SinusTemplateId)
+        { throw new ArgumentException("ElectricalConversion.SinusTargetRequired", nameof(profile)); }
+        return CreateCardiacDefinition(SinusIllustrationConfiguration.Apply(_configuration), profile);
+    }
+
+    private LocalMonitorPreviewSession CreateCardiacDefinition(PhysiologyIllustrationConfiguration configuration,
+        EcgElectricalTherapyProfile? profile)
+    {
         var realtime = _realtimeConfiguration is null ? null : _realtimeConfiguration with
         {
             Ventilation = _realtimeOxygenation!.Ventilation,
             OxygenDemandMultiplier = _realtimeOxygenation.Snapshot.OxygenDemandMultiplier
         };
-        var definition = new LocalMonitorPreviewSession(configuration, Display, _measurements is not null,
-            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: ElectricalTherapy)
+        return new LocalMonitorPreviewSession(configuration, Display, _measurements is not null,
+            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: profile)
         {
             _opticalSource = _opticalSource,
             _opticalModulationPermille = _opticalModulationPermille,
             _usesOxygenation = _usesOxygenation
         };
-        var previous = _beforePacing;
-        long effective = ScheduleSource(definition, 0);
-        _beforePacing = previous;
-        return effective;
     }
 
     public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules)
@@ -206,19 +250,24 @@ public sealed class LocalMonitorPreviewSession
         return _pendingSource is not null ? new(ElectricalConversionOutcome.SourceChangePending) : result;
     }
 
-    // Future skins supply a prepared sinus source after confirmed delivery. No
+    // Skins supply a prepared sinus source after confirmed delivery. No
     // charging/lease/QRS synchronization is performed by this response adapter.
     // Accepted transitions use the existing atomic 200 ms acquisition boundary.
-    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition)
+    public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition,
+        int ecgRecoveryMilliseconds = 1000)
     {
         ArgumentNullException.ThrowIfNull(delivery);
         if (delivery.DeliverySequence == 0 || delivery.DeliveredAtSimTimeNs != SimulationTimeNs)
         { throw new ArgumentException("ElectricalConversion.InvalidDelivery", nameof(delivery)); }
         var result = EvaluateElectricalShock(delivery.Waveform, delivery.Mode, delivery.EnergyJoules);
         if (delivery.DeliverySequence <= _lastElectricalDeliverySequence) { return new(ElectricalConversionOutcome.DuplicateDelivery); }
+        var artifact = new DefibrillationEcgArtifact(delivery.Waveform, delivery.DeliveredAtSimTimeNs, ecgRecoveryMilliseconds);
+        if (_shockArtifacts.Count >= 128) { throw new InvalidOperationException("Defibrillation.TooManyRetainedShocks"); }
         if (result.Outcome != ElectricalConversionOutcome.Eligible)
         {
+            _shockArtifacts.Add(artifact);
             _lastElectricalDeliverySequence = delivery.DeliverySequence;
+            DataRevision++;
             return result;
         }
         ArgumentNullException.ThrowIfNull(sinusDefinition);
@@ -229,8 +278,21 @@ public sealed class LocalMonitorPreviewSession
             sinusDefinition._configuration.Svt || sinusDefinition._configuration.Vt || sinusDefinition._configuration.Aivr ||
             sinusDefinition._configuration.Aar || sinusDefinition._configuration.Ajr || sinusDefinition._configuration.AtrialEscape)
         { throw new ArgumentException("ElectricalConversion.SinusTargetRequired", nameof(sinusDefinition)); }
-        long effective = ScheduleSource(sinusDefinition, 0);
+        ValidateSourceDefinition(sinusDefinition);
+        long delayNs = artifact.Discharge.EndSimTimeNs - SimulationTimeNs;
+        int pauseMilliseconds = ElectricalTherapy!.Settings.PostShockPauseMilliseconds;
+        long quietAt = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
+        long effective = checked((quietAt + pauseMilliseconds * 1_000_000L + 199_999_999) / 200_000_000 * 200_000_000);
+        if (pauseMilliseconds == 0) { ScheduleSource(sinusDefinition, delayNs); }
+        else
+        {
+            var quiet = CreateCardiacDefinition(sinusDefinition._configuration with { CardiacActivity = CardiacActivity.Absent }, ElectricalTherapy);
+            ScheduleSource(quiet, delayNs);
+            _postShockSinus = (sinusDefinition, effective);
+        }
+        _shockArtifacts.Add(artifact);
         _lastElectricalDeliverySequence = delivery.DeliverySequence;
+        DataRevision++;
         return new(ElectricalConversionOutcome.ConversionScheduled, EcgElectricalTherapy.SinusTemplateId, effective);
     }
 
@@ -240,7 +302,7 @@ public sealed class LocalMonitorPreviewSession
         if (Display.Slots.SequenceEqual(display.Slots)) { return; }
         Display = display;
         Ranges = new(display);
-        Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
+        Ranges.Advance(PresentationFrontierNs, (channel, from, to) => ReadPresentedSamples(channel, from, to, usableOnly: true).Select(s => s.Value));
     }
 
     private void ActivatePendingSource()
@@ -272,6 +334,26 @@ public sealed class LocalMonitorPreviewSession
         OxygenationParameters = definition.OxygenationParameters;
         _pendingSource = null;
         PendingSourceTimeNs = null;
+        if (_postShockSinus is { } sinus)
+        {
+            _pendingSource = sinus.Definition;
+            PendingSourceTimeNs = sinus.EffectiveNs;
+            _postShockSinus = null;
+        }
+    }
+
+    private byte[] ApplyShockArtifacts(byte[] wire)
+    {
+        if (_shockArtifacts.Count == 0) { return wire; }
+        var block = WaveformEnvelopeCodec.Decode(wire);
+        Guid ecgId = PhysiologyIllustrationSource.ChannelId(0);
+        var planes = block.Planes.ToArray();
+        int index = Array.FindIndex(planes, plane => plane.ChannelId == ecgId);
+        if (index < 0) { return wire; }
+        var original = planes[index];
+        foreach (var artifact in _shockArtifacts)
+        { planes[index] = artifact.Apply(planes[index], block.StartSimTimeNs - _sourceTimeOffsetNs); }
+        return ReferenceEquals(original, planes[index]) ? wire : WaveformEnvelopeCodec.EncodeRaw(block with { Planes = planes });
     }
 
     private WaveformEnvelope Rebase(WaveformEnvelope block) => block with
@@ -289,6 +371,8 @@ public sealed class LocalMonitorPreviewSession
     {
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
         List<DetectedEcgBeat> beats = [];
+        List<DetectedEcgBeat> synchronizationBeats = [];
+        SynchronizationBeats = [];
         List<DetectedEcgMonitoringEvent> monitoringEvents = [];
         DetectedMonitoringEvents = [];
         List<DetectedEcgRhythmEvent> rhythmEvents = [];
@@ -314,8 +398,8 @@ public sealed class LocalMonitorPreviewSession
             // Resolve all optical source-time reads before publishing the chunk.
             // Missing history/range errors leave acquisition and clocks retryable.
             PhysiologyWaveformGroup source = _usesOxygenation ? _source.Fork() : _source;
-            byte[][] wires = source.AdvanceTo(sourceNext, 50, 1, 100)
-                .Where(w => WaveformEnvelopeCodec.Decode(w).StartSimTimeNs >= _sourceTimeOffsetNs).ToArray();
+            byte[][] wires = source.AdvanceTo(sourceNext, 50, 1, 100, out var immediateSamples)
+                .Where(w => WaveformEnvelopeCodec.Decode(w).StartSimTimeNs >= _sourceTimeOffsetNs).Select(ApplyShockArtifacts).ToArray();
             byte[]?[] opticalWires = wires.Select(wire =>
             {
                 long start = WaveformEnvelopeCodec.Decode(wire).StartSimTimeNs;
@@ -325,9 +409,25 @@ public sealed class LocalMonitorPreviewSession
                 }
                 return optics?.ConvertAcquiredPulse(wire);
             }).ToArray();
+            synchronizationBeats.AddRange(DetectSynchronizationBeats(immediateSamples));
             _source = source;
             _realtimeOxygenation = oxygenation;
             _opticalSource = optics;
+            foreach (var sample in immediateSamples)
+            {
+                var plane = _planeConfigurations[sample.ChannelId];
+                double value = (double)sample.NormalizedValue * plane.ScaleNumerator / plane.ScaleDenominator +
+                    (double)plane.OffsetNumerator / plane.OffsetDenominator;
+                _immediateSamples[sample.ChannelId].Add((sample.SourceSimTimeNs - _sourceTimeOffsetNs, value, sample.QualityFlags));
+            }
+            long oldestTimeNs = next - RetainedBlockCount * 200_000_000L;
+            foreach (var samples in _immediateSamples.Values)
+            {
+                int expired = samples.FindIndex(sample => sample.TimeNs >= oldestTimeNs);
+                if (expired < 0) { samples.Clear(); }
+                else if (expired > 0) { samples.RemoveRange(0, expired); }
+            }
+            if (immediateSamples.Count > 0) { DataRevision++; }
             if (wires.Length > 0)
             {
                 for (int index = 0; index < wires.Length; index++)
@@ -360,18 +460,43 @@ public sealed class LocalMonitorPreviewSession
                 long acquiredEnd = WaveformEnvelopeCodec.Decode(wires[^1]).StartSimTimeNs + 200_000_000;
                 _previousOpticalSources.RemoveAll(p => p.ToExclusiveSourceTimeNs <= acquiredEnd);
                 _previousPacingSources.RemoveAll(p => p.ToExclusiveSourceTimeNs <= acquiredEnd);
+                if (_blocks.Length > 0) { _shockArtifacts.RemoveAll(artifact => artifact.RecoveryEndSimTimeNs <= _blocks[0].StartSimTimeNs); }
                 DataRevision++;
             }
             SimulationTimeNs = next;
             FrontierNs = _blocks.Length == 0 ? 0 : Math.Max(FrontierNs,
                 Math.Min(_blocks[^1].StartSimTimeNs + 200_000_000, Math.Max(0, next - PresentationLatencyNs)));
-            Ranges.Advance(FrontierNs, (channel, from, to) => Samples(channel, from, to).Select(s => s.Value));
+            Ranges.Advance(PresentationFrontierNs, (channel, from, to) => ReadPresentedSamples(channel, from, to, usableOnly: true).Select(s => s.Value));
             deltaNs -= chunk;
         }
         DetectedRhythmEvents = rhythmEvents.AsReadOnly();
         DetectedMonitoringEvents = monitoringEvents.AsReadOnly();
         DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
+        SynchronizationBeats = synchronizationBeats.AsReadOnly();
+    }
+
+    private IReadOnlyList<DetectedEcgBeat> DetectSynchronizationBeats(IReadOnlyList<PhysiologyWaveformSample> samples)
+    {
+        if (_synchronizationEcg is null) { return []; }
+        Guid id = PhysiologyIllustrationSource.ChannelId(0);
+        var ecg = samples.Where(sample => sample.ChannelId == id).ToArray();
+        if (ecg.Length == 0) { return []; }
+        const long stepNs = 4_000_000;
+        long start = ecg[0].SourceSimTimeNs;
+        var flags = ecg.Select((sample, index) => new WaveformQualityRange((uint)index, 1, sample.QualityFlags))
+            .Where(range => range.QualityFlags != 0).ToArray();
+        var plane = new WaveformPlane(id, 250, 1, (ulong)(start / stepNs), 1, 1, 0, 1,
+            flags.Length == 0 ? WaveformQualityEncoding.None : WaveformQualityEncoding.Ranges,
+            ecg.Select(sample => sample.NormalizedValue).ToArray(), flags);
+        foreach (var artifact in _shockArtifacts) { plane = artifact.Apply(plane, start - _sourceTimeOffsetNs); }
+        var block = new WaveformEnvelope(id, _opticalInstanceId, 1, 1, _synchronizationSequence, 1,
+            start, (uint)(ecg.Length * stepNs), [plane]);
+        var rebased = Rebase(block);
+        var detected = _synchronizationEcg.Consume(WaveformEnvelopeCodec.EncodeRaw(rebased), out _, out _, PacingEvidence(block));
+        _synchronizationSequence++;
+        return _synchronizationEcg.Read(rebased.StartSimTimeNs + rebased.DurationNs - 1).Status is
+            WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp ? detected : [];
     }
     private EcgPacingEvidence? PacingEvidence(WaveformEnvelope block)
     {
@@ -403,7 +528,25 @@ public sealed class LocalMonitorPreviewSession
         };
     }
 
-    public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs)
+    public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs) =>
+        ReadSamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
+
+    public IEnumerable<(long TimeNs, double Value)> PresentedSamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs) =>
+        ReadPresentedSamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
+
+    private IEnumerable<(long TimeNs, double Value)> ReadPresentedSamples(int channel, long fromSimTimeNs,
+        long toExclusiveSimTimeNs, bool usableOnly)
+    {
+        foreach (var sample in _immediateSamples[PhysiologyIllustrationSource.ChannelId(channel)])
+        {
+            if (sample.TimeNs < fromSimTimeNs || sample.TimeNs >= toExclusiveSimTimeNs || usableOnly && sample.QualityFlags != 0) { continue; }
+            var artifact = channel == 0 ? _shockArtifacts.LastOrDefault(candidate => candidate.Contains(sample.TimeNs)) : null;
+            if (artifact is null) { yield return (sample.TimeNs, sample.Value); }
+            else if (!usableOnly) { yield return (sample.TimeNs, artifact.EvaluateMicrovolts(sample.TimeNs)); }
+        }
+    }
+
+    private IEnumerable<(long TimeNs, double Value)> ReadSamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs, bool usableOnly)
     {
         Guid id = PhysiologyIllustrationSource.ChannelId(channel);
         foreach (var block in _blocks)
@@ -414,6 +557,7 @@ public sealed class LocalMonitorPreviewSession
             for (int i = 0; i < plane.Samples.Count; i++)
             {
                 long time = block.StartSimTimeNs + i * step;
+                if (usableOnly && plane.QualityRanges.Any(range => i >= range.FirstSampleOffset && i < range.FirstSampleOffset + range.Count && range.QualityFlags != 0)) { continue; }
                 if (time >= fromSimTimeNs && time < toExclusiveSimTimeNs)
                 {
                     yield return (time, (double)plane.Samples[i] * plane.ScaleNumerator / plane.ScaleDenominator +

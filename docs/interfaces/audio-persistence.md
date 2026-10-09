@@ -290,7 +290,7 @@ SIM_AUDIO_TEST 的非 Windows 构建以 1 ms 轮询原子标志实现，不代�
 ## 皮肤治疗参数草稿
 
 [MonitorTherapyPreferenceStore](../../src/Monitor.Infrastructure/Preferences/MonitorTherapyPreferenceStore.cs)
-使用显示偏好同目录的 `*.therapy.json`，独立 Version=1，不改变 Version=14 显示文件。
+使用显示偏好同目录的 `*.therapy.json`，独立 Version=1，与显示文件的版本分开。
 保存 `EnergyJoules`、`PacingRatePerMinute`、`PacingCurrentMilliamps` 和 `PacingType`，
 默认 150 J、70 ppm、0 mA、VVI；不保存运行、充电或武装状态。重启只恢复输入，不自动启动起搏。
 加载最多 1024 bytes，拒绝未知字段、缺失必需字段、版本及范围错误，回退默认并显示提示。
@@ -331,9 +331,15 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 2 | Alarms 必须非空 |
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
-| 5–14 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 5–15 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
+| 16–17 | 延续 5–15 的规则，并要求非空 Defibrillator |
 
-Save 总是写 Version=14；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=17；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Defibrillator 保存 EnergyStepsJoules、Waveform、ChargeDurationMilliseconds、AutoDisarmSeconds
+和 EcgRecoveryMilliseconds（后者缺省为 1000 ms），
+Load／Save 验证并复制档位；版本 1–15 缺少此项时采用 Generic 默认值。
+版本 17 的逐模板 ElectricalConversions 增加 PostShockPauseMilliseconds；缺省或旧文件为 0，
+不额外模拟真实停顿。运行时伪迹、储能与待恢复序列均不持久化。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。
 Alarms.PlaybackMode 默认 Continuous（0），Notifications（1）表示默认短警报；它只作用于跟随默认的条件。
 Alarms.Notifications 按已注册条件 ID 保存 AlarmNotificationSettings 覆盖项，缺省为空。
@@ -353,6 +359,10 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
 
 版本 14 增加 Generator.ElectricalConversions，按稳定 ECG 模板标识保存允许转复与独立的单／双相能量阈值。旧文件缺省为空映射；切换到窦律不删除原模板配置。见[电击转复接口](electrical-conversion.md)。
+版本 15 增加 `Generator.PacingPermissions`：使用稳定的 `ecgTemplate.t000`–`t179` 标识保存
+各模板的布尔起搏许可。缺省／旧版本为空映射，未设置即拒绝；未知模板标识或 null 映射拒绝加载。
+切换模板保留整张映射，恢复默认清空；运行态和待执行起搏请求不写入该文件。
+
 
 Sound 保存 Volume/HeartbeatVolume（0–100）、HeartbeatEnabled、BeatSource（0–2）、PitchSource（0–1）、
 PauseSeconds（1–3600）、Timing；Timing 周期单位 ms，Info 5000–120000、Notice 1500–60000、

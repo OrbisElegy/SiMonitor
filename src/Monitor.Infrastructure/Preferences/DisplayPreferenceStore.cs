@@ -2,10 +2,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 
 namespace Monitor.Infrastructure.Preferences;
 
-public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false);
+public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null);
 
 // Local preferences and generator inputs; no runtime waveform or playback state.
 public sealed class DisplayPreferenceStore(string path)
@@ -24,6 +25,7 @@ public sealed class DisplayPreferenceStore(string path)
         public bool MeasurementMillimeters { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
         public MonitorSoundPreferences? Sound { get; init; }
+        public DefibrillatorConfiguration? Defibrillator { get; init; }
         private MonitorGeneratorPreferences? _generator;
         public MonitorGeneratorPreferences? Generator
         {
@@ -44,7 +46,7 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             data.Alarms?.Validate();
@@ -53,8 +55,10 @@ public sealed class DisplayPreferenceStore(string path)
             if (data.Version >= 5 && !data.HasGenerator) { throw new ArgumentException("Preferences.MissingGenerator"); }
             if (data.Version == 4 && data.Generator is null) { throw new ArgumentException("Preferences.MissingGenerator"); }
             data.Generator?.Validate();
+            if (data.Version >= 16 && data.Defibrillator is null) { throw new ArgumentException("Preferences.MissingDefibrillator"); }
+            var defibrillator = data.Defibrillator?.Snapshot() ?? DefibrillatorConfiguration.Default;
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator, data.MeasurementMillimeters);
+                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator, data.MeasurementMillimeters, defibrillator);
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
@@ -70,7 +74,8 @@ public sealed class DisplayPreferenceStore(string path)
         preferences.Generator?.Validate();
         var data = new Document
         {
-            Version = 14,
+            Version = 17,
+            Defibrillator = (preferences.Defibrillator ?? DefibrillatorConfiguration.Default).Snapshot(),
             Generator = preferences.Generator,
             Sound = sound,
             Alarms = alarms,

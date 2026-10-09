@@ -23,11 +23,12 @@ public enum ElectricalConversionOutcome
 // Authored deterministic teaching response, not a clinical energy recommendation.
 public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicThresholdJoules, int BiphasicThresholdJoules)
 {
+    public int PostShockPauseMilliseconds { get; init; }
     public const int MaximumEnergyJoules = 1000;
     public static ElectricalConversionSettings Default { get; } = new(false, 200, 150);
     public void Validate()
     {
-        if (MonophasicThresholdJoules is < 0 or > MaximumEnergyJoules || BiphasicThresholdJoules is < 0 or > MaximumEnergyJoules)
+        if (MonophasicThresholdJoules is < 0 or > MaximumEnergyJoules || BiphasicThresholdJoules is < 0 or > MaximumEnergyJoules || PostShockPauseMilliseconds is < 0 or > 10000)
         { throw new ArgumentException("ElectricalConversion.InvalidThreshold"); }
     }
 }
@@ -35,6 +36,7 @@ public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicTh
 public sealed record EcgElectricalTherapyDescriptor(string TemplateId, ElectricalShockRequirement Requirement);
 public sealed record EcgElectricalTherapyProfile(string TemplateId, ElectricalConversionSettings Settings)
 {
+    public bool PacingAllowed { get; init; }
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(TemplateId) || TemplateId.Length > 128 || Settings is null)

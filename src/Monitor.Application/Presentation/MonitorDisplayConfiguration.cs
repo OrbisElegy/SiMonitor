@@ -62,17 +62,22 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
     private MonitorAmplitudeRange[] _ranges = configuration.Slots.Select(s => s.Range).ToArray();
     private MonitorAmplitudeRange[] _previous = configuration.Slots.Select(s => s.Range).ToArray();
     private long[] _cycles = new long[configuration.Slots.Count];
-    private long _frontier;
+    private long[] _frontiers = new long[configuration.Slots.Count];
     public long Cycle { get; private set; }
     public MonitorAmplitudeRange Range(int slot) => _ranges[slot];
     public bool ShowPrevious(int slot) => _cycles[slot] > 0;
     public long RowCycle(int slot) => _cycles[slot];
     public MonitorAmplitudeRange PreviousRange(int slot) => _previous[slot];
-    public void Advance(long frontierNs, Func<int, long, long, IEnumerable<double>> samples)
+    public void Advance(long frontierNs, Func<int, long, long, IEnumerable<double>> samples) => Advance(_ => frontierNs, samples);
+
+    public void Advance(Func<int, long> channelFrontierNs, Func<int, long, long, IEnumerable<double>> samples)
     {
+        ArgumentNullException.ThrowIfNull(channelFrontierNs);
         ArgumentNullException.ThrowIfNull(samples);
-        if (frontierNs < _frontier) { throw new ArgumentException("MonitorDisplay.TimeRegression"); }
-        long[] nextCycles = configuration.Slots.Select(s => frontierNs / s.DurationNs).ToArray();
+        long[] frontiers = configuration.Slots.Select(s => channelFrontierNs(s.Channel)).ToArray();
+        if (frontiers.Where((frontier, index) => frontier < _frontiers[index]).Any())
+        { throw new ArgumentException("MonitorDisplay.TimeRegression"); }
+        long[] nextCycles = configuration.Slots.Select((s, index) => frontiers[index] / s.DurationNs).ToArray();
         var next = _ranges.ToArray(); var previous = _previous.ToArray();
         for (int slot = 0; slot < next.Length; slot++)
         {
@@ -97,6 +102,6 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
             next[slot].Validate();
         }
         if (!nextCycles.SequenceEqual(_cycles)) { Cycle++; }
-        _ranges = next; _previous = previous; _cycles = nextCycles; _frontier = frontierNs;
+        _ranges = next; _previous = previous; _cycles = nextCycles; _frontiers = frontiers;
     }
 }

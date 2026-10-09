@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
@@ -54,7 +55,8 @@ internal static class PacingWaveformSpecifications
     {
         var manual = new ManualVitalSigns(temperatureDeciCelsius: 371);
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
-            MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), true, realtimeOxygenation: RealtimeOxygenationConfiguration.ReferenceAdult, manualVitals: manual);
+            MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), true, realtimeOxygenation: RealtimeOxygenationConfiguration.ReferenceAdult, manualVitals: manual,
+            electricalTherapy: new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default) { PacingAllowed = true });
         for (int i = 0; i < 80; i++) { session.Advance(200_000_000); }
         long now = session.SimulationTimeNs;
         long frontier = session.FrontierNs;

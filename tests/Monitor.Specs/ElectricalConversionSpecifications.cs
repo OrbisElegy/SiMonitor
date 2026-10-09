@@ -74,17 +74,22 @@ internal static class ElectricalConversionSpecifications
         Reject(() => session.ApplyElectricalShock(delivery with { DeliverySequence = 3, EnergyJoules = 151 }, wrong));
         Check.That(session.PendingSourceTimeNs is null, "invalid target rejects without publishing transition or consuming delivery");
         var result = session.ApplyElectricalShock(delivery with { DeliverySequence = 3, EnergyJoules = 151 }, sinus);
-        Check.That(result.Outcome == ElectricalConversionOutcome.ConversionScheduled && result.EffectiveSimTimeNs == session.SimulationTimeNs && session.Blocks.SequenceEqual(history), "conversion uses live continuation without clearing history");
+        Check.That(result.Outcome == ElectricalConversionOutcome.ConversionScheduled && result.EffectiveSimTimeNs == session.SimulationTimeNs + 200_000_000 && session.Blocks.SequenceEqual(history), "conversion uses live continuation without clearing history");
         Check.That(session.ApplyElectricalShock(delivery with { DeliverySequence = 4, EnergyJoules = 151 }, sinus).Outcome == ElectricalConversionOutcome.SourceChangePending, "pending conversion blocks another transition");
         for (int i = 0; i < 50; i++) { session.Advance(200_000_000); }
-        Check.That(session.SimulationTimeNs == 14_000_000_000 && session.ElectricalTherapy?.TemplateId == EcgElectricalTherapy.SinusTemplateId && session.Measurements!.HeartRate.MilliBeatsPerMinute == 75000,
+        Check.That(session.SimulationTimeNs == 14_000_000_000 && session.ElectricalTherapy?.TemplateId == EcgElectricalTherapy.SinusTemplateId,
             "automatic continuation acquires sinus at the existing clock");
+        // Artifact quality interrupts the detector. Allow a complete fresh rate
+        // window plus acquisition latency rather than assume instantaneous HR.
+        for (int i = 0; i < 20; i++) { session.Advance(200_000_000); }
+        Check.That(session.Measurements!.HeartRate.MilliBeatsPerMinute == 75000,
+            "a complete post-recovery measurement window reacquires the sinus rate");
         Check.That(session.ApplyElectricalShock(delivery with { DeliverySequence = 5, DeliveredAtSimTimeNs = session.SimulationTimeNs, EnergyJoules = 1000 }, sinus).Outcome == ElectricalConversionOutcome.NotShockable, "sinus cannot repeatedly convert");
     }
 
     private static void ElectricalConversionPreferencesSurviveTemplateChanges()
     {
-        var entries = EcgElectricalTherapy.Descriptors.Select((d, i) => (d.TemplateId, Value: new ElectricalConversionSettings(i % 2 == 0, 200 + i, 100 + i))).ToDictionary(p => p.TemplateId, p => p.Value);
+        var entries = EcgElectricalTherapy.Descriptors.Select((d, i) => (d.TemplateId, Value: new ElectricalConversionSettings(i % 2 == 0, 200 + i, 100 + i) { PostShockPauseMilliseconds = i * 100 })).ToDictionary(p => p.TemplateId, p => p.Value);
         var generator = new MonitorGeneratorPreferences(21, "室颤（粗波）", 0, 0, "", new Dictionary<string, decimal?>(), new Dictionary<string, bool>(), new Dictionary<string, int>())
         { ElectricalConversions = EcgElectricalTherapy.Snapshot(entries) };
         entries.Clear();

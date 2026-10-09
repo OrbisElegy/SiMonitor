@@ -18,7 +18,9 @@ public sealed class LocalMonitorPreviewSession
     public const long StartupDiscardNs = 12_000_000_000;
     private long _sourceTimeOffsetNs;
     private PhysiologyIllustrationConfiguration _configuration;
-    private readonly RealtimeOxygenationConfiguration? _realtimeConfiguration;
+    private RealtimeOxygenationConfiguration? _realtimeConfiguration;
+    private PhysiologyIllustrationConfiguration? _beforePacing;
+    public PacingIllustration? ActivePacing => _beforePacing is null ? null : _configuration.Pacing;
     private LocalMonitorPreviewSession? _pendingSource;
     private readonly List<(long ToExclusiveSourceTimeNs, PulseOximeterIllustrationSource? Source)> _previousOpticalSources = [];
     private readonly List<(long ToExclusiveSourceTimeNs, PhysiologyIllustrationConfiguration Configuration)> _previousPacingSources = [];
@@ -152,8 +154,49 @@ public sealed class LocalMonitorPreviewSession
         // Validate against the current source without generating future samples.
         var trial = _source.Fork();
         trial.ContinueWith(definition._source);
+        _beforePacing = null;
         _pendingSource = definition;
         PendingSourceTimeNs = effective;
+        return effective;
+    }
+
+    public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output)
+    {
+        if (_pendingSource is not null || _pendingVentilationSource is not null)
+        { throw new InvalidOperationException("Pacing.SourceChangePending"); }
+        var configuration = PacingIllustrationConfiguration.Apply(_configuration, mode, output);
+        long effective = ScheduleCardiacConfiguration(configuration);
+        _beforePacing ??= _configuration;
+        return effective;
+    }
+
+    public long StopPacing()
+    {
+        if (_pendingSource is not null || _pendingVentilationSource is not null)
+        { throw new InvalidOperationException("Pacing.SourceChangePending"); }
+        var previous = _beforePacing ?? throw new InvalidOperationException("Pacing.NotRunning");
+        long effective = ScheduleCardiacConfiguration(previous);
+        _beforePacing = null;
+        return effective;
+    }
+
+    private long ScheduleCardiacConfiguration(PhysiologyIllustrationConfiguration configuration)
+    {
+        var realtime = _realtimeConfiguration is null ? null : _realtimeConfiguration with
+        {
+            Ventilation = _realtimeOxygenation!.Ventilation,
+            OxygenDemandMultiplier = _realtimeOxygenation.Snapshot.OxygenDemandMultiplier
+        };
+        var definition = new LocalMonitorPreviewSession(configuration, Display, _measurements is not null,
+            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: ElectricalTherapy)
+        {
+            _opticalSource = _opticalSource,
+            _opticalModulationPermille = _opticalModulationPermille,
+            _usesOxygenation = _usesOxygenation
+        };
+        var previous = _beforePacing;
+        long effective = ScheduleSource(definition, 0);
+        _beforePacing = previous;
         return effective;
     }
 
@@ -219,6 +262,7 @@ public sealed class LocalMonitorPreviewSession
         _source = source;
         _realtimeOxygenation = oxygenation;
         _configuration = definition._configuration;
+        _realtimeConfiguration = definition._realtimeConfiguration;
         ElectricalTherapy = definition.ElectricalTherapy;
         ManualVitals = definition.ManualVitals;
         _pendingVentilationSource = null;
@@ -339,17 +383,23 @@ public sealed class LocalMonitorPreviewSession
             break;
         }
         if (configuration.Pacing is not { } mode) { return null; }
-        var timeline = RegularPhysiologyTimeline.Restore(new(configuration.ResolvePlan(), block.StartSimTimeNs));
+        const long sampleStepNs = 4_000_000;
+        var timeline = RegularPhysiologyTimeline.Restore(new(configuration.ResolvePlan(), Math.Max(0, block.StartSimTimeNs - sampleStepNs)));
         var events = timeline.AdvanceBefore(checked(block.StartSimTimeNs + block.DurationNs), 100);
+        // Report stimuli at the first acquired sample at/after onset. Arbitrary
+        // output rates need not divide the acquisition grid; include the previous
+        // grid interval so a pulse just before a packet edge is not lost.
         long[] Times(PhysiologyCycleEventKind kind) => events.Where(e => e.Kind == kind)
-            .Select(e => e.SimTimeNs - _sourceTimeOffsetNs).ToArray();
+            .Select(e => checked((e.SimTimeNs + sampleStepNs - 1) / sampleStepNs * sampleStepNs))
+            .Where(t => t >= block.StartSimTimeNs && t < block.StartSimTimeNs + block.DurationNs)
+            .Select(t => t - _sourceTimeOffsetNs).Distinct().ToArray();
         bool ventricular = mode != PacingIllustration.AtrialAai;
         return new(Times(PhysiologyCycleEventKind.VentricularPacingPulse))
         {
             AtrialPulseTimesNs = Times(PhysiologyCycleEventKind.AtrialPacingPulse),
             Origin = EcgPacingEvidenceOrigin.Simulation,
             VentricularPacingExpected = ventricular,
-            ExpectedVentricularIntervalNs = ventricular ? PacingReference.Timing(mode).RrIntervalNs : null
+            ExpectedVentricularIntervalNs = ventricular ? PacingReference.Timing(mode, configuration.PacingOutput).RrIntervalNs : null
         };
     }
 

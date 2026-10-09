@@ -27,6 +27,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
     private decimal _oxygenDemandMultiplier;
     private OxygenReservoirState _reservoirs;
     private List<ArterialOxygenationSample> _history;
+    public VentilationTransportPlan Ventilation => _transport.CaptureState().Ventilation;
     public long SourceSimTimeNs => _history[^1].SourceSimTimeNs;
     public RealtimeOxygenationSnapshot Snapshot => new(SourceSimTimeNs, _history[^1].SaturationMilliPercent,
         _reservoirs, _reservoirs.ConservedOxygenMl - _initialOxygenMl, _history.Count, _oxygenDemandMultiplier);

@@ -570,6 +570,7 @@ public static class IllustrationVentricularTiming
 public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMilliseconds, int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null, int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125, int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0, int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
     public PacingIllustration? Pacing { get; init; }
+    public PacingOutputSettings? PacingOutput { get; init; }
     public EcgChestInfarctionPlan? Infarction { get; init; }
     public EcgInfarctionZones? Zones { get; init; }
     public EcgTContourPlan? TContour { get; init; }
@@ -2146,6 +2147,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
     public const int HistoryCapacity = 1024;
     public long SourceSimTimeNs { get; }
     public RealtimeOxygenationSnapshot Snapshot { get; }
+    public VentilationTransportPlan Ventilation { get; }
     public RealtimeOxygenationSource(PhysiologyTransportSource transport, OxygenReservoirParameters parameters, decimal oxygenDemandMultiplier = 1, long? initialSimTimeNs = null);
     public RealtimeOxygenationSource Fork();
     public void AdvanceTo(long toSimTimeNs);
@@ -2235,6 +2237,7 @@ public enum AvConductionPattern
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs, long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs, long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs, long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
     public PacingIllustration? Pacing { get; init; }
+    public PacingOutputSettings? PacingOutput { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }
@@ -2615,10 +2618,10 @@ public static class PacingReference
 {
     public const string EvidenceId = "PacingIllustration@1";
     public const long DisplayPulseDurationNs = 8_000_000;
-    public static EcgCycleTiming Timing(PacingIllustration mode);
-    public static RegularPhysiologyPlan CreatePlan(PacingIllustration mode);
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(PacingIllustration mode);
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(PacingIllustration mode);
+    public static EcgCycleTiming Timing(PacingIllustration mode, PacingOutputSettings? output = null);
+    public static RegularPhysiologyPlan CreatePlan(PacingIllustration mode, PacingOutputSettings? output = null);
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(PacingIllustration mode, PacingOutputSettings? output = null);
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(PacingIllustration mode, PacingOutputSettings? output = null);
 }
 ```
 
@@ -2648,5 +2651,31 @@ public sealed class DefibrillationWaveform
     public int EvaluateCurrentMilliamps(long simTimeNs);
     public IReadOnlyList<DefibrillationCurrentSample> Sample(long fromSimTimeNs, long toExclusiveSimTimeNs,
         long samplePeriodNs, int maximumSamples, CancellationToken cancellationToken = default);
+}
+```
+
+## Physiology/PacingOutputSettings.cs
+
+源码：[PacingOutputSettings.cs](../../../src/Monitor.Simulation/Physiology/PacingOutputSettings.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record PacingOutputSettings
+{
+    public int RatePerMinute { get; }
+    public int CurrentMilliamps { get; }
+    public long PeriodNs { get; }
+    public PacingOutputSettings(int ratePerMinute, int currentMilliamps);
+}
+```
+
+## Authoring/PacingIllustrationConfiguration.cs
+
+源码：[PacingIllustrationConfiguration.cs](../../../src/Monitor.Simulation/Authoring/PacingIllustrationConfiguration.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public static class PacingIllustrationConfiguration
+{
+    public static PhysiologyIllustrationConfiguration Apply(PhysiologyIllustrationConfiguration current,
+        PacingIllustration mode, PacingOutputSettings output);
 }
 ```

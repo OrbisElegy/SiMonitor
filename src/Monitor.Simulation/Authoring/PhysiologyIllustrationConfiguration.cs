@@ -58,6 +58,7 @@ public sealed record PhysiologyIllustrationConfiguration(
     bool AtrialEscape = false)
 {
     public PacingIllustration? Pacing { get; init; }
+    public PacingOutputSettings? PacingOutput { get; init; }
     public EcgChestInfarctionPlan? Infarction { get; init; }
     public EcgInfarctionZones? Zones { get; init; }
     public EcgTContourPlan? TContour { get; init; }
@@ -172,11 +173,12 @@ public sealed record PhysiologyIllustrationConfiguration(
                 ProlongedPrDelta || Svt || SvtRbbb || SvtLbbb || Vt || VtFusion || VtCapture || VtBidirectional || VtTwisting ||
                 Aivr || AivrFusion || AivrCapture || Ajr || Aar || AtrialEscape)
             { throw new ArgumentException("Pacing.ConflictingModes"); }
-            var respiration = (this with { Pacing = null }).ResolvePlan();
-            var paced = PacingReference.CreatePlan(pacing);
+            var respiration = (this with { Pacing = null, PacingOutput = null }).ResolvePlan();
+            var paced = PacingReference.CreatePlan(pacing, PacingOutput);
             return respiration with
             {
                 Pacing = pacing,
+                PacingOutput = PacingOutput,
                 HeartPeriodNs = paced.HeartPeriodNs,
                 IndependentVentricularPeriodNs = paced.IndependentVentricularPeriodNs,
                 VentricularElectricalOffsetNs = paced.VentricularElectricalOffsetNs,
@@ -184,6 +186,7 @@ public sealed record PhysiologyIllustrationConfiguration(
                 VentricularMechanicalOffsetNs = paced.VentricularMechanicalOffsetNs
             };
         }
+        if (PacingOutput is not null) { throw new ArgumentException("Pacing.OutputRequiresMode"); }
         if (RhythmSchedule is { } rhythm)
         {
             var plan = (this with { RhythmSchedule = null }).ResolvePlan() with { RhythmSchedule = rhythm };

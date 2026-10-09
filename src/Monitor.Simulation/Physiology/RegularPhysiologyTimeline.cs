@@ -88,6 +88,7 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
     public PacingIllustration? Pacing { get; init; }
+    public PacingOutputSettings? PacingOutput { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }
@@ -200,7 +201,7 @@ public sealed class RegularPhysiologyTimeline
                 plan.MechanicalEveryCycles != 1 || plan.MechanicalAfterCycles is not null || plan.MechanicalDurationCycles is not null)) ||
             plan.VentricularConductionRatio < 1 || plan.VentricularPeriodNs > long.MaxValue ||
             (plan.IndependentVentricularPeriodNs is { } independent &&
-                ((independent < plan.HeartPeriodNs && plan.ConductionPattern is not (AvConductionPattern.MonomorphicVtIllustration or AvConductionPattern.VtCaptureIllustration or AvConductionPattern.AcceleratedVentricularIllustration or AvConductionPattern.AcceleratedJunctionalIllustration)) || plan.VentricularConductionRatio != 1)) ||
+                ((independent < plan.HeartPeriodNs && plan.Pacing is null && plan.ConductionPattern is not (AvConductionPattern.MonomorphicVtIllustration or AvConductionPattern.VtCaptureIllustration or AvConductionPattern.AcceleratedVentricularIllustration or AvConductionPattern.AcceleratedJunctionalIllustration)) || plan.VentricularConductionRatio != 1)) ||
             plan.VentricularElectricalOffsetNs < (plan.IndependentVentricularPeriodNs is null && plan.ConductionPattern != AvConductionPattern.NarrowComplexSvtIllustration ? 1 : 0) ||
             plan.VentricularElectricalOffsetNs >= (plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs) ||
             plan.AtrialMechanicalOffsetNs < 0 || plan.AtrialMechanicalOffsetNs >= plan.HeartPeriodNs ||

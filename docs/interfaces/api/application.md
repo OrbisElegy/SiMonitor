@@ -1500,6 +1500,9 @@ public sealed class LocalMonitorPreviewSession
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
+    public PacingIllustration? ActivePacing { get; }
+    public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output);
+    public long StopPacing();
     public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
     public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition);
     public void UpdateDisplay(MonitorDisplayConfiguration display);

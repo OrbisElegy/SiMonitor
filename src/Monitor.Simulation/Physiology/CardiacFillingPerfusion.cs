@@ -147,7 +147,7 @@ public static class CardiacFillingPerfusion
         {
             Int128 cycle = pacing is PacingIllustration.VentricularOversensing or PacingIllustration.IntermittentVentricularNoncapture
                 ? (Int128)(index / 2) * 4 + index % 2 : index;
-            return cycle * 1_000_000_000 + plan.VentricularMechanicalOffsetNs;
+            return cycle * (plan.PacingOutput?.PeriodNs ?? 1_000_000_000) + plan.VentricularMechanicalOffsetNs;
         }
         if (plan.RateAdjustment is { } adjustment)
         {

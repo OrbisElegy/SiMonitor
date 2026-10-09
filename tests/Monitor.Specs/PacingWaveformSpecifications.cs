@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Physiology;
@@ -10,12 +11,68 @@ internal static class PacingWaveformSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(AdjustablePacingPreservesTimingAndStopsOutputAtZero), AdjustablePacingPreservesTimingAndStopsOutputAtZero),
+        new(nameof(PacingPlaybackPreservesTheLiveSession), PacingPlaybackPreservesTheLiveSession),
         new(nameof(PacingSeparatesOutputCaptureAndMechanics), PacingSeparatesOutputCaptureAndMechanics),
         new(nameof(PacingProjectionAndRecoveryAreDeterministic), PacingProjectionAndRecoveryAreDeterministic),
         new(nameof(PacingFailureDoesNotInventPerfusion), PacingFailureDoesNotInventPerfusion),
         new(nameof(PacingRejectsConflictsAndPreservesCursor), PacingRejectsConflictsAndPreservesCursor),
         new(nameof(DefibrillationHasFiniteSignedPhases), DefibrillationHasFiniteSignedPhases),
     ];
+
+    private static void AdjustablePacingPreservesTimingAndStopsOutputAtZero()
+    {
+        foreach (var mode in Enum.GetValues<PacingIllustration>())
+            foreach (int rate in new[] { 30, 90, 180 })
+            {
+                var output = new PacingOutputSettings(rate, 60);
+                var plan = PacingReference.CreatePlan(mode, output);
+                var events = RegularPhysiologyTimeline.Start(plan).AdvanceBefore(4_000_000_000, 200);
+                _ = PacingReference.CreateElectrodes(mode, output);
+                var configuration = PacingIllustrationConfiguration.Apply(PhysiologyIllustrationConfiguration.Default, mode, output);
+                var source = PhysiologyIllustrationSource.Create(configuration);
+                for (int step = 1; step <= 20; step++) { _ = source.AdvanceTo(step * 200_000_000L, 50, 1, 100); }
+                if (mode == PacingIllustration.DualChamberDdd)
+                {
+                    var pulses = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularPacingPulse).ToArray();
+                    Check.That(pulses.Zip(pulses.Skip(1)).All(p => p.Second.SimTimeNs - p.First.SimTimeNs == output.PeriodNs),
+                        "pacing rate changes actual stimulus spacing");
+                }
+            }
+        var silent = PacingReference.CreatePlan(PacingIllustration.DualChamberDdd, new(90, 0));
+        Check.That(RegularPhysiologyTimeline.Start(silent).AdvanceBefore(4_000_000_000, 100)
+            .All(e => e.Kind is not (PhysiologyCycleEventKind.AtrialPacingPulse or PhysiologyCycleEventKind.VentricularPacingPulse or
+                PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.VentricularMechanical)),
+            "zero output creates neither stimulus nor evoked capture");
+        var low = PacingReference.CreateLeadIIBands(PacingIllustration.DualChamberDdd, new(70, 30));
+        var high = PacingReference.CreateLeadIIBands(PacingIllustration.DualChamberDdd, new(70, 60));
+        Check.That(high.Single(b => b.Trigger == PhysiologyCycleEventKind.VentricularPacingPulse).TableQ32.Max() ==
+            2 * low.Single(b => b.Trigger == PhysiologyCycleEventKind.VentricularPacingPulse).TableQ32.Max(), "current controls displayed stimulus amplitude");
+    }
+
+    private static void PacingPlaybackPreservesTheLiveSession()
+    {
+        var manual = new ManualVitalSigns(temperatureDeciCelsius: 371);
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
+            MonitorDisplayConfiguration.Default(), true, realtimeOxygenation: RealtimeOxygenationConfiguration.ReferenceAdult, manualVitals: manual);
+        for (int i = 0; i < 80; i++) { session.Advance(200_000_000); }
+        long now = session.SimulationTimeNs;
+        long frontier = session.FrontierNs;
+        var samples = session.Samples(0, frontier - 1_000_000_000, frontier).ToArray();
+        long at = session.SchedulePacing(PacingIllustration.DualChamberDdd, new(90, 60));
+        Check.That(at == now && session.SimulationTimeNs == now && session.ManualVitals == manual && session.Oxygenation is not null,
+            "starting pacing schedules a boundary without resetting clocks, optics or manual values");
+        for (int i = 0; i < 60; i++) { session.Advance(200_000_000); }
+        Check.That(session.ActivePacing == PacingIllustration.DualChamberDdd &&
+            session.Samples(0, frontier - 1_000_000_000, frontier).SequenceEqual(samples), "paced playback retains old visible history");
+        session.SchedulePacing(PacingIllustration.RightVentricularVvi, new(80, 60));
+        for (int i = 0; i < 20; i++) { session.Advance(200_000_000); }
+        Check.That(session.ActivePacing == PacingIllustration.RightVentricularVvi, "type and rate can be reapplied while running");
+        session.StopPacing();
+        for (int i = 0; i < 100; i++) { session.Advance(200_000_000); }
+        Check.That(session.ActivePacing is null && session.Measurements!.HeartRate.MilliBeatsPerMinute is > 74000 and < 76000,
+            "stop restores the original cardiac example after changing pacing type");
+    }
 
     private static void PacingSeparatesOutputCaptureAndMechanics()
     {

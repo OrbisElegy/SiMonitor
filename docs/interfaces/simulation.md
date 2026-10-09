@@ -504,6 +504,16 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 冲突的心律、形态、心率调整与机械周期门控会拒绝；呼吸、血压参数和整体关闭机械射血仍可独立配置。
 已有状态缺省为 `Pacing = null`；新增枚举值追加，不改旧值。
 
+上述工厂可选传入同一 `PacingOutputSettings`，同时写入配置／计划的 `PacingOutput`。
+省略时保留原模板时序；指定时支持 30–180 ppm 和 0–200 mA。频率改变实际刺激间隔，
+高频时缩短形态支撑；电流线性缩放教学尖峰，零电流停止刺激及诱发事件。
+非零电流的夺获／失败仍由示例决定，不提供患者特定夺获阈值。
+`PacingIllustrationConfiguration.Apply` 替换心脏示例并保留呼吸、压力输入。
+`LocalMonitorPreviewSession.SchedulePacing` / `StopPacing` 返回下一采集边界时间，保留会话、
+历史波形和实时氧合状态；停止恢复首次启动前配置，普通源切换取消起搏覆盖。
+仿真刺激旁路时间映射到刺激开始后首个 4 ms 采集点，跨包边界不遗漏，仍标记为 Simulation。
+
+
 `DefibrillationWaveform.Create(DefibrillationWaveformPlan, deliveredAtSimTimeNs)` 验证后构造不可变单次源。
 `EvaluateCurrentMilliamps(simTimeNs)` 及 `Sample(fromSimTimeNs, toExclusiveSimTimeNs, samplePeriodNs, maximumSamples, cancellationToken)`
 输出放电电流。相区间左闭右开，间隔和支持区间外为零，第二相为负。

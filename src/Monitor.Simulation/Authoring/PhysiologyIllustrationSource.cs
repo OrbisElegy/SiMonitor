@@ -65,12 +65,12 @@ public static class PhysiologyIllustrationSource
         bool variablePerfusion = beatPerfusion || fibrillation;
         bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
-        long PulseDuration(long normal) => plan.RateAdjustment is not null ? Math.Min(normal, (long)plan.VentricularPeriodNs - 80_000_000) : configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        long PulseDuration(long normal) => plan.RateAdjustment is not null || plan.PacingOutput is not null ? Math.Min(normal, (long)plan.VentricularPeriodNs - 80_000_000) : configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         PhysiologyWaveformChannelPlan[] channels =
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
-                configuration.Pacing is { } pacing ? PacingReference.CreateLeadIIBands(pacing) :
+                configuration.Pacing is { } pacing ? PacingReference.CreateLeadIIBands(pacing, configuration.PacingOutput) :
                 sinusArrest ? SinusArrestReference.CreateLeadIIBands() :
                 sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :
                 configuration.Zones is { } zones ? zones.CreateLeadIIBands() :

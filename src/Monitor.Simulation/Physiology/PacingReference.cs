@@ -4,7 +4,7 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Fixed teaching examples, not a programmable implant/device model.
+// Teaching patterns with optional output settings, not a programmable implant/device model.
 public enum PacingIllustration
 {
     AtrialAai,
@@ -35,7 +35,7 @@ public static class PacingReference
         PacingIllustration.RightVentricularVvi or PacingIllustration.LeadlessRightVentricular or
         PacingIllustration.TemporaryTransvenous;
 
-    public static EcgCycleTiming Timing(PacingIllustration mode)
+    public static EcgCycleTiming Timing(PacingIllustration mode, PacingOutputSettings? output = null)
     {
         ValidateMode(mode);
         long qrs = mode switch
@@ -45,22 +45,30 @@ public static class PacingReference
             PacingIllustration.BiventricularCrt => 140_000_000,
             _ => 160_000_000,
         };
-        return new(PeriodNs, 100_000_000, 200_000_000, qrs, 420_000_000, 180_000_000);
+        long period = output?.PeriodNs ?? PeriodNs;
+        long Scale(long durationNs) => durationNs * Math.Min(period, PeriodNs) / PeriodNs;
+        return new(period, Scale(100_000_000), Scale(200_000_000), Scale(qrs), Scale(420_000_000), Scale(180_000_000));
     }
 
-    public static RegularPhysiologyPlan CreatePlan(PacingIllustration mode)
+    public static RegularPhysiologyPlan CreatePlan(PacingIllustration mode, PacingOutputSettings? output = null)
     {
         ValidateMode(mode);
-        return new(0, IndependentAtrium(mode) ? 800_000_000 : PeriodNs,
-            208_000_000, 88_000_000, 288_000_000, 3_750_000_000, 1_875_000_000,
-            IndependentVentricularPeriodNs: IndependentAtrium(mode) ? PeriodNs : null)
-        { Pacing = mode };
+        long period = output?.PeriodNs ?? PeriodNs;
+        long Scale(long durationNs) => durationNs * Math.Min(period, PeriodNs) / PeriodNs;
+        return new(0, IndependentAtrium(mode) ? 800_000_000 : period,
+            Scale(208_000_000), Scale(88_000_000), Scale(288_000_000), 3_750_000_000, 1_875_000_000,
+            IndependentVentricularPeriodNs: IndependentAtrium(mode) ? period : null)
+        { Pacing = mode, PacingOutput = output };
     }
 
     internal static void Validate(RegularPhysiologyPlan plan)
     {
-        if (plan.Pacing is not { } mode) { return; }
-        var expected = CreatePlan(mode);
+        if (plan.Pacing is not { } mode)
+        {
+            if (plan.PacingOutput is not null) { throw new PhysiologyTimelineException("Pacing.OutputRequiresMode", nameof(plan)); }
+            return;
+        }
+        var expected = CreatePlan(mode, plan.PacingOutput);
         if (plan.HeartPeriodNs != expected.HeartPeriodNs || plan.VentricularElectricalOffsetNs != expected.VentricularElectricalOffsetNs ||
             plan.AtrialMechanicalOffsetNs != expected.AtrialMechanicalOffsetNs || plan.VentricularMechanicalOffsetNs != expected.VentricularMechanicalOffsetNs ||
             plan.IndependentVentricularPeriodNs != expected.IndependentVentricularPeriodNs || plan.ConductionPattern != AvConductionPattern.FixedPr ||
@@ -84,12 +92,15 @@ public static class PacingReference
         bool atrialPulse = kind == PhysiologyCycleEventKind.AtrialPacingPulse;
         bool ventricularPulse = kind == PhysiologyCycleEventKind.VentricularPacingPulse;
         bool intrinsic = mode == PacingIllustration.VentricularUndersensing;
+        if (plan.PacingOutput?.CurrentMilliamps == 0 && !((atrial && IndependentAtrium(mode)) || intrinsic && !atrialPulse && !ventricularPulse))
+        { return; }
         if (atrialPulse && (IndependentAtrium(mode) || intrinsic) ||
             ventricularPulse && mode is PacingIllustration.AtrialAai or PacingIllustration.VentricularOutputFailure ||
             atrial && mode == PacingIllustration.AtrialNoncapture ||
             !atrial && !atrialPulse && !ventricularPulse && mode is PacingIllustration.VentricularNoncapture or PacingIllustration.VentricularOutputFailure)
         { return; }
-        long period = atrial && IndependentAtrium(mode) ? 800_000_000 : PeriodNs;
+        long outputPeriod = plan.PacingOutput?.PeriodNs ?? PeriodNs;
+        long period = atrial && IndependentAtrium(mode) ? 800_000_000 : outputPeriod;
         long offset = kind switch
         {
             PhysiologyCycleEventKind.AtrialPacingPulse => 0,
@@ -99,18 +110,19 @@ public static class PacingReference
             PhysiologyCycleEventKind.VentricularElectrical => 208_000_000,
             _ => 288_000_000,
         };
+        if (!(atrial && IndependentAtrium(mode))) { offset = offset * Math.Min(outputPeriod, PeriodNs) / PeriodNs; }
         // Four-beat repeating pauses: oversensing inhibits output; noncapture
         // preserves pulses. Both remove ventricular electrical/mechanical events.
         bool pause = !atrial && !atrialPulse && (mode == PacingIllustration.VentricularOversensing ||
             mode == PacingIllustration.IntermittentVentricularNoncapture && !ventricularPulse);
         IndexedCardiacSchedule.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs,
-            maximumEvents, visitor, pause ? 4 * PeriodNs : period,
-            pause ? [0, PeriodNs] : [0], cancellationToken);
+            maximumEvents, visitor, pause ? 4 * outputPeriod : period,
+            pause ? [0, outputPeriod] : [0], cancellationToken);
     }
 
-    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(PacingIllustration mode)
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes(PacingIllustration mode, PacingOutputSettings? output = null)
     {
-        var timing = Timing(mode);
+        var timing = Timing(mode, output);
         // Existing authored component contours are reused as illustrative
         // activation patterns, not evidence of a particular lead position.
         var source = mode switch
@@ -124,6 +136,7 @@ public static class PacingReference
             PacingIllustration.LeftBundleBranchArea or PacingIllustration.LeftVentricularEpicardial))
         { source = WithApicalAxis(source); }
         int amplitude = mode == PacingIllustration.LeadlessRightVentricular ? 200 : 1200;
+        amplitude = amplitude * (output?.CurrentMilliamps ?? 60) / 60;
         int[] vector = [0, 1, 0, 1, -1, -1, 0, 1, 1, 1];
         var electrodes = source.Select(e => e with
         {
@@ -136,9 +149,9 @@ public static class PacingReference
         return ElectrodeWaveformComposition.Restore(new(electrodes, [])).CaptureState().Electrodes;
     }
 
-    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(PacingIllustration mode)
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands(PacingIllustration mode, PacingOutputSettings? output = null)
     {
-        var electrodes = CreateElectrodes(mode);
+        var electrodes = CreateElectrodes(mode, output);
         var ra = electrodes.Single(e => e.Electrode == EcgElectrode.RA);
         var ll = electrodes.Single(e => e.Electrode == EcgElectrode.LL);
         return Array.AsReadOnly(ll.Bands.Zip(ra.Bands).Select(pair => pair.First with

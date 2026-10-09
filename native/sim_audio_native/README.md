@@ -40,7 +40,7 @@ the corresponding layout under `artifacts/native-audio-test/`. The actual
 binary paths, hashes, host architecture and build commands are recorded in
 `artifacts/native-audio/build-evidence.json`.
 
-The test build also includes a deterministic retirement regression. Run it with:
+The test build also includes deterministic retirement and callback-dispatch regressions. Run them with:
 
 ```sh
 ctest --test-dir artifacts/native-audio-test --build-config Release --output-on-failure
@@ -52,19 +52,30 @@ retain reason 2; an ordinary underrun still produces reason 1. The test uses an
 isolated PCM ring and no device worker or hardware. Its scheduling hook is compiled
 only into the regression executable, never either shared library.
 
+The callback regression drives miniaudio's actual dispatcher with several
+back-to-back requests, including an exact full-ring drain. Dispatch must consume
+only the requested frames: fixed-size dispatch would prefetch another period,
+potentially retiring the ring during a WASAPI startup burst before the producer
+can refill it. An actual request beyond the available PCM must still retire it.
+
 Use `python3 tools/build.py` for dependency preparation, the production native
 library and a managed Release build. This combined command does not build the
 null-backend test library. When building Desktop on Windows, the project copies
 the available production DLL and its license into the build or publish output.
 Build the native library before building Desktop. No native binaries are
 tracked in Git, and test libraries must not replace production libraries.
+On Windows, `dotnet run` checks that the DLL is beside the application and reports
+the build command if it is missing. After rebuilding the native library, omit
+`--no-build` so the managed build copies the updated DLL into its output directory.
 
 ## Backend and lifecycle
 
 Production enables ONLY WASAPI on Windows, shared mode, 48 kHz mono float PCM
 at the ABI, low-latency performance preference and noAutoConvertSRC=true.
-miniaudio handles native sample-rate/channel conversion internally. A fixed
-UTF-8 WASAPI endpoint ID or null/system default can be supplied. Device
+miniaudio handles native sample-rate/channel conversion internally. Fixed-size
+callbacks are disabled to avoid eager intermediary-buffer prefetch; the consumer
+handles arbitrary frame counts. A fixed UTF-8 WASAPI endpoint ID or null/system
+default can be supplied. Device
 listing is not yet exposed. Other operating systems fail explicitly.
 No ASIO SDK is included. Test builds enable only miniaudio's null device.
 

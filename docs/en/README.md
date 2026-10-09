@@ -57,6 +57,8 @@ This prepares dependencies, builds the production native audio library, and buil
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 ```
 
+After cleaning on Windows, rerun the build script to restore the native audio DLL. For the default Debug configuration used by `dotnet run --project src/Monitor.Desktop/Monitor.Desktop.csproj`, first run `py -3 tools/build.py --configuration Debug`. After rebuilding only the native library, run `dotnet run` without `--no-build` to copy the new DLL into the matching application output directory. The run check reports the recovery command when the DLL is missing.
+
 You can also prepare dependencies first and then build from the local cache:
 
 ```sh

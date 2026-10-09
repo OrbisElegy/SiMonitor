@@ -195,6 +195,10 @@ int32_t sa_open(const char* device_id_utf8, uint32_t capacity_ms, sa_output** ou
     config.sampleRate = 48000;
     config.performanceProfile = ma_performance_profile_low_latency;
     config.wasapi.noAutoConvertSRC = MA_TRUE;
+    /* consume() accepts arbitrary frame counts. Fixed-size dispatch eagerly
+       reads one extra period into miniaudio's intermediary buffer, which can
+       retire our ring during a WASAPI startup burst before the producer wakes. */
+    config.noFixedSizedCallback = MA_TRUE;
     config.dataCallback = data_callback;
     config.notificationCallback = notification_callback;
     config.pUserData = output;

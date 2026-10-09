@@ -258,6 +258,7 @@ sa_submit frames 是 float 元素数；所有值有限且在 [-1,1]，先完整�
 若写入过程中被退役，结果仍可为 -4；不要重播给旧 handle 或假定队列仍能恢复。
 
 callback 先清零，再读有效 PCM；首次不足保存 missing frames，退役 reason 由 0 原子改为 1。
+原生配置关闭 miniaudio 的固定大小 callback 包装，按实际请求的 frame 数消费，避免额外预读一个 period 导致启动时提前欠载；consumer 支持任意请求长度。
 stop/reroute/interruption 通知将 reason 设为 2，underrun 不得把 2 覆盖为 1。
 之后 callback 保持静音。sa_close 先退役为 2，再 stop/uninit/join、释放 clock/ring/context/handle；
 停止失败保留 handle，必须重试 close。成功 close 后不得再访问句柄或相关缓冲。

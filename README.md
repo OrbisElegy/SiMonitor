@@ -54,6 +54,8 @@ python3 tools/build.py --jobs 32
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 ```
 
+Windows 清理后，应先重新运行构建脚本以恢复原生音频 DLL。若使用默认 Debug 配置的 `dotnet run --project src/Monitor.Desktop/Monitor.Desktop.csproj`，先执行 `py -3 tools/build.py --configuration Debug`。仅重编译原生库后，再运行不带 `--no-build` 的 `dotnet run`，才会将新 DLL 复制到对应的应用输出目录；缺失 DLL 时启动检查会提示上述恢复命令。
+
 也可以先准备依赖，再使用本地缓存构建：
 
 ```sh

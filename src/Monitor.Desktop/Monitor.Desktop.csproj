@@ -30,6 +30,11 @@
     <None Include="$(NativeAudioBinary)" Link="sim_audio_native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../native/sim_audio_native/vendor/LICENSE.miniaudio" Link="LICENSE.miniaudio" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="RequireNativeAudioForRun" BeforeTargets="ComputeRunArguments"
+          Condition="$([MSBuild]::IsOSPlatform('Windows')) And '$(SIMONITOR_AUDIO_OUTPUT)' != 'wasapi' And '$(SIMONITOR_AUDIO_OUTPUT)' != 'alsa'">
+    <Error Condition="!Exists('$(TargetDir)sim_audio_native.dll')"
+           Text="Windows audio requires sim_audio_native.dll beside the application. From the repository root, run: py -3 tools/build.py --configuration $(Configuration). Then retry dotnet run." />
+  </Target>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />

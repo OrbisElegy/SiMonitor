@@ -156,8 +156,11 @@ internal sealed class EcgRhythmAnalysis(int endDelayMilliseconds = 5000)
     {
         if (heartRateStatus != WaveformMeasurementStatus.Valid)
         { return new(heartRateStatus, null, null, null); }
+        // A mixed atrial window can be undecided while a confirmed episode is
+        // still active. Publish that episode until Beat confirms recovery or
+        // interrupts it after sustained evidence loss; reads never end it early.
         return new(_ready ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.WarmingUp,
-            _ready ? _irregular.Active : null, _ready && _atrialReady ? _af.Active : null, _evidence);
+            _ready ? _irregular.Active : null, _ready && (_atrialReady || _af.Active) ? _af.Active : null, _evidence);
     }
 
     private int[]? AtrialWindow(long peakTimeNs)

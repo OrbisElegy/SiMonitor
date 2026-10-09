@@ -12,6 +12,8 @@ internal static class EcgRhythmSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(0);
     public static Specification[] All =>
     [
+        new(nameof(AfRecoveryKeepsOneAlarmEpisode), AfRecoveryKeepsOneAlarmEpisode),
+        new(nameof(AmbiguousAtrialEvidenceEventuallyInterruptsAf), AmbiguousAtrialEvidenceEventuallyInterruptsAf),
         new(nameof(AfEpisodesStartAndEndFromAcquiredEvidence), AfEpisodesStartAndEndFromAcquiredEvidence),
         new(nameof(RhythmEvidenceSurvivesPacketBoundariesAndRestore), RhythmEvidenceSurvivesPacketBoundariesAndRestore),
         new(nameof(SignalLossInterruptsRatherThanEndsAf), SignalLossInterruptsRatherThanEndsAf),
@@ -20,6 +22,67 @@ internal static class EcgRhythmSpecifications
         new(nameof(PreviewExposesRhythmEventsOnce), PreviewExposesRhythmEventsOnce),
         new(nameof(SlowRhythmInvalidatesPreviouslyReadyEvidence), SlowRhythmInvalidatesPreviouslyReadyEvidence),
     ];
+
+    private static void AfRecoveryKeepsOneAlarmEpisode()
+    {
+        foreach (bool fine in new[] { false, true })
+            foreach (bool discardStartup in new[] { false, true })
+            {
+                var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true);
+                if (discardStartup) { session.DiscardStartup(); }
+                var alarms = new EcgAlarmNotices();
+                List<DetectedEcgRhythmEvent> events = [];
+                List<string> indications = [];
+                bool started = false;
+                for (int step = 0; step < 1050; step++)
+                {
+                    if (step is 300 or 750)
+                    {
+                        var configuration = step == 300 ? PhysiologyIllustrationConfiguration.Fibrillation(fine) : PhysiologyIllustrationConfiguration.Default;
+                        session.ScheduleSource(new(configuration, MonitorDisplayConfiguration.Default(), true), 0);
+                    }
+                    session.Advance(200_000_000);
+                    events.AddRange(session.DetectedRhythmEvents.Where(e => e.Kind == EcgRhythmEventKind.SuspectedAtrialFibrillation));
+                    var snapshot = session.Measurements!;
+                    var notices = alarms.Evaluate(true, snapshot, session.DetectedMonitoringEvents, session.DetectedRhythmEvents);
+                    string indication = string.Join(",", notices.Where(n => n.Id is "ecg-af" or "ecg-af-end" or "ecg-irregular" or "ecg-irregular-end").Select(n => n.Id));
+                    started |= indication == "ecg-af";
+                    if (started && indications.LastOrDefault() != indication) { indications.Add(indication); }
+                }
+                Check.That(indications is ["ecg-af", "ecg-af-end", ""],
+                    "live sinus/AF/sinus must not downgrade or reannounce AF during recovery: " + string.Join(" -> ", indications));
+                Check.That(events.Count == 2 && events[0].Transition == EcgRhythmTransition.Started && events[1].Transition == EcgRhythmTransition.Ended,
+                    "live conversion produces exactly one confirmed AF episode and one recovery");
+                Check.That(alarms.Lifecycle.NotificationRecords.Count(r => r.Decision.Episode.ConditionId == "ecg-af") == 1,
+                    "mixed recovery windows never create another AF sound notification");
+            }
+    }
+
+    private static void AmbiguousAtrialEvidenceEventuallyInterruptsAf()
+    {
+        short[] af = Acquire(PhysiologyIllustrationConfiguration.Fibrillation(true), 60);
+        short[] noisy = af.Select((v, i) => checked((short)(v + (i % 2 == 0 ? 60 : -60)))).ToArray();
+        short[] samples = af.Concat(noisy).ToArray();
+        var detector = new EcgHeartRateMeasurement(Channel);
+        List<DetectedEcgRhythmEvent> events = [];
+        bool active = false;
+        for (int start = 0; start < samples.Length; start += 50)
+        {
+            detector.Consume(Wire(samples.Skip(start).Take(50).ToArray(), start, (ulong)(start / 50)), out var transitions);
+            foreach (var transition in transitions.Where(e => e.Kind == EcgRhythmEventKind.SuspectedAtrialFibrillation))
+            {
+                events.Add(transition);
+                active = transition.Transition == EcgRhythmTransition.Started;
+            }
+            var reading = detector.ReadRhythm((start + 49) * StepNs);
+            if (active) { Check.That(reading.SuspectedAtrialFibrillation == true, "a confirmed episode stays published until its explicit end or interruption"); }
+            if (start % 850 == 0) { detector = EcgHeartRateMeasurement.Restore(detector.Capture()); }
+        }
+        Check.That(events.Count == 2 && events[1].Transition == EcgRhythmTransition.Interrupted &&
+            events[1].Interruption == EcgRhythmInterruption.InsufficientAtrialEvidence &&
+            detector.ReadRhythm((samples.Length - 1) * StepNs).SuspectedAtrialFibrillation is null,
+            "persistent ambiguous atrial evidence interrupts AF without claiming recovery or retaining it indefinitely");
+    }
 
     private static void AfEpisodesStartAndEndFromAcquiredEvidence()
     {

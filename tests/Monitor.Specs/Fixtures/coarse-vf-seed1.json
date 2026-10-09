@@ -1,0 +1,314 @@
+{
+  "Version": 14,
+  "Skin": 1,
+  "Slots": [
+    {
+      "Channel": 0,
+      "Automatic": true,
+      "Minimum": -1200,
+      "Maximum": 1500,
+      "Speed": 250
+    },
+    {
+      "Channel": 2,
+      "Automatic": true,
+      "Minimum": 0,
+      "Maximum": 1600,
+      "Speed": 250
+    },
+    {
+      "Channel": 3,
+      "Automatic": true,
+      "Minimum": 0,
+      "Maximum": 160,
+      "Speed": 250
+    },
+    {
+      "Channel": 4,
+      "Automatic": true,
+      "Minimum": 0,
+      "Maximum": 80,
+      "Speed": 250
+    },
+    {
+      "Channel": 1,
+      "Automatic": true,
+      "Minimum": -1200,
+      "Maximum": 1200,
+      "Speed": 250
+    }
+  ],
+  "PaperLayout": 0,
+  "MeasurementMillimeters": false,
+  "Alarms": {
+    "HeartRate": {
+      "Enabled": true,
+      "CriticalLow": 40000,
+      "WarningLow": 50000,
+      "WarningHigh": 120000,
+      "CriticalHigh": 180000
+    },
+    "SpO2Enabled": true,
+    "SpO2Warning": 92000,
+    "SpO2Critical": 85000,
+    "NoExpirationEnabled": false,
+    "NoExpirationSeconds": 20,
+    "Additional": {
+      "RespirationRate": {
+        "Enabled": true,
+        "CriticalLow": 4000,
+        "WarningLow": 8000,
+        "WarningHigh": 30000,
+        "CriticalHigh": 40000
+      },
+      "PulseRate": {
+        "Enabled": true,
+        "CriticalLow": 40000,
+        "WarningLow": 50000,
+        "WarningHigh": 120000,
+        "CriticalHigh": 180000
+      },
+      "EtCo2": {
+        "Enabled": true,
+        "CriticalLow": 1500,
+        "WarningLow": 2500,
+        "WarningHigh": 5000,
+        "CriticalHigh": 6000
+      },
+      "Co2RespirationRate": {
+        "Enabled": true,
+        "CriticalLow": 4000,
+        "WarningLow": 8000,
+        "WarningHigh": 30000,
+        "CriticalHigh": 40000
+      },
+      "AbpMean": {
+        "Enabled": true,
+        "CriticalLow": 4000,
+        "WarningLow": 6000,
+        "WarningHigh": 11000,
+        "CriticalHigh": 14000
+      },
+      "PaMean": {
+        "Enabled": true,
+        "CriticalLow": 0,
+        "WarningLow": 500,
+        "WarningHigh": 3000,
+        "CriticalHigh": 4500
+      },
+      "CvpMean": {
+        "Enabled": true,
+        "CriticalLow": -500,
+        "WarningLow": 0,
+        "WarningHigh": 1500,
+        "CriticalHigh": 2500
+      }
+    },
+    "NoticeColorEnabled": true,
+    "EcgMonitoringEnabled": true,
+    "ConfirmationTimings": {},
+    "NoExpirationConfirmation": {
+      "TriggerMilliseconds": 0,
+      "RecoveryMilliseconds": 0
+    },
+    "PlaybackMode": 0,
+    "Notifications": {
+      "ecg-asystole": {
+        "RepeatSuppressionMilliseconds": 0,
+        "ReminderEnabled": false,
+        "ReminderMilliseconds": 30000,
+        "SoundMode": 0,
+        "LatchingMode": 0
+      }
+    }
+  },
+  "Sound": {
+    "Volume": 70,
+    "HeartbeatVolume": 100,
+    "HeartbeatEnabled": true,
+    "BeatSource": 0,
+    "PitchSource": 1,
+    "PauseSeconds": 120,
+    "Timing": {
+      "InfoTone": false,
+      "InfoMilliseconds": 30000,
+      "NoticeMilliseconds": 10000,
+      "WarningMilliseconds": 5000,
+      "CriticalMilliseconds": 1500
+    },
+    "OutputDeviceId": null,
+    "Muted": false
+  },
+  "Generator": {
+    "Ecg": 21,
+    "EcgName": "\u5BA4\u98A4\uFF08\u7C97\u6CE2\uFF09",
+    "Respiration": 0,
+    "Ejection": 0,
+    "Seed": "0000000000000000000000000000000000000000000000000000000000000001",
+    "Numbers": {
+      "HeartRate": 30,
+      "AtrialRate": 60,
+      "PauseDuration": 10000,
+      "ConductionPercent": 33,
+      "RateVariation": 1,
+      "RespiratoryRate": 16,
+      "InspirationPercent": 50,
+      "EtCo2Target": 40,
+      "EtCo2Variation": 0,
+      "AbpPulseGain": 1,
+      "PaPulseGain": 1,
+      "CvpBaseline": 6,
+      "AbpSystolic": 80,
+      "AbpDiastolic": 60,
+      "PaSystolic": 25,
+      "PaDiastolic": 10,
+      "AbpVariation": 0,
+      "PaVariation": 0,
+      "OpticalTarget": 98,
+      "OpticalVariation": 0,
+      "OpticalModulation": 1,
+      "RespSignalAmplitude": 1000,
+      "RespCardiacArtifact": 0,
+      "Co2TransportDelay": 0,
+      "Co2DispersionStep": 0,
+      "Co2DeadSpace": 125,
+      "Co2Rise": 250,
+      "Co2Fall": 200,
+      "Co2Baseline": 0,
+      "Co2PlateauStart": 35,
+      "TContourParameters.Peak": 300,
+      "TContourParameters.SecondPeak": 200,
+      "TContourParameters.Crossing": 35,
+      "InfarctionParameters.Delay": 0,
+      "InfarctionParameters.QrsWeight": 100,
+      "InfarctionParameters.TPeak": 300,
+      "InfarctionParameters.JPoint": 0,
+      "InfarctionParameters.StEnd": 0,
+      "InfarctionParameters.StArch": 0
+    },
+    "Flags": {
+      "OpticalEnabled": true,
+      "CardiacRateEnabled": false,
+      "AbpTargetEnabled": false,
+      "PaTargetEnabled": false,
+      "Co2CustomPlateau": false,
+      "InfarctionParameters.ComponentsEnabled": false,
+      "InfarctionParameters.ReferenceT": true,
+      "InfarctionParameters.SeparateRegions": false,
+      "TChest0": true,
+      "InfarctionChest0": false,
+      "TChest1": false,
+      "InfarctionChest1": false,
+      "TChest2": false,
+      "InfarctionChest2": false,
+      "TChest3": false,
+      "InfarctionChest3": false,
+      "TChest4": false,
+      "InfarctionChest4": false,
+      "TChest5": false,
+      "InfarctionChest5": false
+    },
+    "Choices": {
+      "TContourParameters.Target": 2,
+      "InfarctionParameters.Necrosis": 0,
+      "InfarctionParameters.IschemiaRegion": 0,
+      "InfarctionParameters.InjuryRegion": 0,
+      "InfarctionParameters.NecrosisRegion": 0
+    },
+    "ElectricalConversions": {
+      "ecgTemplate.t006": {
+        "Enabled": true,
+        "MonophasicThresholdJoules": 200,
+        "BiphasicThresholdJoules": 150
+      },
+      "ecgTemplate.t038": {
+        "Enabled": false,
+        "MonophasicThresholdJoules": 200,
+        "BiphasicThresholdJoules": 150
+      },
+      "ecgTemplate.t039": {
+        "Enabled": false,
+        "MonophasicThresholdJoules": 200,
+        "BiphasicThresholdJoules": 150
+      },
+      "ecgTemplate.t067": {
+        "Enabled": false,
+        "MonophasicThresholdJoules": 200,
+        "BiphasicThresholdJoules": 150
+      },
+      "ecgTemplate.t021": {
+        "Enabled": false,
+        "MonophasicThresholdJoules": 200,
+        "BiphasicThresholdJoules": 150
+      }
+    },
+    "ApplyDelaySeconds": 3,
+    "Oxygenation": {
+      "Realtime": true,
+      "TidalVolumeMicrolitersBtps": 450000,
+      "DeadSpaceMicrolitersBtps": 150000,
+      "InspiredOxygenMillionths": 210000,
+      "AirwayOpen": true,
+      "Patient": {
+        "Profile": {
+          "AgeYears": 35,
+          "Sex": 0,
+          "HeightCm": 175,
+          "WeightKg": 70,
+          "BodyMassIndex": 22.857142857142857142857142857
+        },
+        "Overrides": {
+          "BloodVolumeMl": null,
+          "FrcMlBtps": null,
+          "HemoglobinGramsPerDl": null,
+          "BasalOxygenDemandMlStpdPerMinute": null
+        },
+        "Resolved": {
+          "ReferenceSetId": "AdultOxygenationDefaults@1",
+          "Parameters": {
+            "FrcMlBtps": 3157.1970247699297498955431892,
+            "BloodVolumeMl": 4823.7546875000,
+            "ArterialVolumeFraction": 0.2,
+            "HemoglobinGramsPerDl": 15.29,
+            "ShuntFraction": 0.02,
+            "OxygenDemandMlStpdPerMinute": 241.20065297175828072259751981,
+            "RespiratoryQuotient": 0.8,
+            "ConsumptionFloorMlPerDl": 2,
+            "VolumeRecoverySeconds": 2,
+            "ArterialVolumeMl": 964.75093750000,
+            "VenousVolumeMl": 3859.00375000000
+          },
+          "BloodVolume": {
+            "Value": 4823.7546875000,
+            "Unit": "mL",
+            "Origin": 1,
+            "ReferenceId": "Nadler1962-Adult@1",
+            "CenterSelection": "regression prediction"
+          },
+          "Frc": {
+            "Value": 3157.1970247699297498955431892,
+            "Unit": "mL(BTPS)",
+            "Origin": 0,
+            "ReferenceId": "GLI2021-FRC-M@1",
+            "CenterSelection": "LMS z=0 median"
+          },
+          "Hemoglobin": {
+            "Value": 15.29,
+            "Unit": "g/dL",
+            "Origin": 0,
+            "ReferenceId": "Beutler2006-NHANESIII-White-Hb-Mean@1",
+            "CenterSelection": "age-group mean, 0 SD"
+          },
+          "BasalOxygenDemand": {
+            "Value": 241.20065297175828072259751981,
+            "Unit": "mL(STPD)/min",
+            "Origin": 1,
+            "ReferenceId": "Schofield1985-FAO2004-Weir@1",
+            "CenterSelection": "basal prediction, zero residual"
+          }
+        }
+      },
+      "OxygenDemandMultiplier": 1
+    }
+  }
+}

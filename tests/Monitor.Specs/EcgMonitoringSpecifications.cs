@@ -24,6 +24,7 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgQtCorrectionAndStPolarityUseMeasuredUnits), EcgQtCorrectionAndStPolarityUseMeasuredUnits),
         new(nameof(EcgMonitoringEventsCommitWithAllChannels), EcgMonitoringEventsCommitWithAllChannels),
         new(nameof(EcgFibrillationRequiresFrequencyAndPersistence), EcgFibrillationRequiresFrequencyAndPersistence),
+        new(nameof(EcgFibrillationRecoversWithoutLatchingAcrossEvidenceLoss), EcgFibrillationRecoversWithoutLatchingAcrossEvidenceLoss),
         new(nameof(EcgMonitoringFlowsThroughLivePreview), EcgMonitoringFlowsThroughLivePreview),
         new(nameof(EcgAcquiredPresetsProduceVentricularEvidence), EcgAcquiredPresetsProduceVentricularEvidence),
         new(nameof(EcgPacingRequiresAcquiredPulseEvidence), EcgPacingRequiresAcquiredPulseEvidence),
@@ -261,6 +262,27 @@ internal static class EcgMonitoringSpecifications
         Check.That(result.Events.Any(e => e.Condition == EcgMonitoringConditions.SuspectedVentricularFibrillation && e.ConfirmedAtNs >= 4_000_000_000), "smooth uncountable 5 Hz activity requires four seconds");
         var noise = Run(Enumerable.Range(0, 2500).Select(i => (short)(i % 2 == 0 ? 350 : -350)).ToArray());
         Check.That(noise.Events.All(e => e.Condition != EcgMonitoringConditions.SuspectedVentricularFibrillation), "high-frequency noise is not VF evidence");
+    }
+
+    private static void EcgFibrillationRecoversWithoutLatchingAcrossEvidenceLoss()
+    {
+        short[] vf = Enumerable.Range(0, 2500).Select(i => (short)(350 * Math.Sin(i * 2 * Math.PI * 5 / 250))).ToArray();
+        foreach (short[] tail in new[] { Normal(10), new short[2500], Enumerable.Range(0, 2500).Select(i => (short)(i % 2 == 0 ? 350 : -350)).ToArray() })
+        {
+            short[] samples = vf.Concat(tail).ToArray();
+            var result = Run(samples);
+            var recovered = result.Events.Where(e => e.Condition == EcgMonitoringConditions.SuspectedVentricularFibrillation).ToArray();
+            Check.That(recovered.Length == 2 && recovered[0].Transition == EcgMonitoringTransition.Started &&
+                recovered[1].Transition == EcgMonitoringTransition.Ended && recovered[1].ConfirmedAtNs <= 14_000_000_000,
+                "organized rhythm, flatline and nonfibrillatory noise end VF within a bounded interval");
+            var restored = Run(samples, size: 37, restore: true);
+            Check.That(result.Reading == restored.Reading && result.Events.SequenceEqual(restored.Events),
+                "VF recovery survives packet partitioning and checkpoints");
+        }
+        var active = Run(vf);
+        active.Detector.Consume(Wire(new short[50], vf.Length, active.Sequence, poor: true), out _, out var interrupted);
+        Check.That(interrupted.Any(e => e.Condition == EcgMonitoringConditions.SuspectedVentricularFibrillation &&
+            e.Transition == EcgMonitoringTransition.Interrupted), "signal loss interrupts VF immediately");
     }
 
     private static void EcgMonitoringFlowsThroughLivePreview()

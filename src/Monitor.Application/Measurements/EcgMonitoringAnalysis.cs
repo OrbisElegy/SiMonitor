@@ -12,7 +12,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     private int[] _samples = new int[500];
     private int _cursor, _count, _learningBeats;
     private long _timeNs;
-    private long? _validFromNs, _lastPeakNs, _vfFromNs;
+    private long? _validFromNs, _lastPeakNs, _vfFromNs, _vfNegativeFromNs;
     private Observation[] _beats = [];
     private Shape[] _learning = [];
     private Shape? _template;
@@ -66,6 +66,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         _validFromNs = _validFromNs,
         _lastPeakNs = _lastPeakNs,
         _vfFromNs = _vfFromNs,
+        _vfNegativeFromNs = _vfNegativeFromNs,
         _beats = _beats,
         _learning = _learning,
         _template = _template,
@@ -104,7 +105,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             { events.Add(new(condition, EcgMonitoringTransition.Interrupted, _episodeStarts[Index(condition)], timeNs, reason)); }
         }
         _active = EcgMonitoringConditions.None;
-        _validFromNs = _lastPeakNs = _vfFromNs = _lastPulseNs = _unconfirmedPulseNs = _pulseEvidenceFromNs = _averageRrNs = null;
+        _validFromNs = _lastPeakNs = _vfFromNs = _vfNegativeFromNs = _lastPulseNs = _unconfirmedPulseNs = _pulseEvidenceFromNs = _averageRrNs = null;
         _beats = [];
         _learning = [];
         _recovery = [];
@@ -166,14 +167,29 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         { InvalidateRepolarization(timeNs, events, EcgRhythmInterruption.InsufficientRrEvidence); }
 
         long silenceNs = timeNs - (_lastPeakNs ?? _validFromNs.Value);
-        // Frequency evidence is evaluated on complete one-second acquired windows.
+        // An isolated detector candidate inside continuous fibrillatory activity
+        // is not evidence of recovery. Enter conservatively; leave on sustained
+        // negative waveform evidence or a sequence of organized complexes.
+        bool vfActive = (_active & EcgMonitoringConditions.SuspectedVentricularFibrillation) != 0;
         if ((timeNs - _validFromNs.Value) % 1_000_000_000 == 996_000_000 && _count >= 250)
         {
-            bool fibrillatory = silenceNs >= 996_000_000 && FibrillatoryWindow();
-            if (fibrillatory) { _vfFromNs ??= timeNs - 996_000_000; }
-            else { _vfFromNs = null; }
+            bool fibrillatory = FibrillatoryWindow();
+            if (vfActive)
+            {
+                if (fibrillatory) { _vfNegativeFromNs = null; }
+                else { _vfNegativeFromNs ??= timeNs - 996_000_000; }
+            }
+            else
+            {
+                if (silenceNs >= 996_000_000 && fibrillatory) { _vfFromNs ??= timeNs - 996_000_000; }
+                else { _vfFromNs = null; }
+                _vfNegativeFromNs = null;
+            }
         }
-        bool vf = _vfFromNs is { } vfFrom && timeNs - vfFrom >= 4_000_000_000 && silenceNs >= 4_000_000_000;
+        bool vf = vfActive
+            ? _vfFromNs is not null && (_vfNegativeFromNs is null || timeNs - _vfNegativeFromNs < 2_000_000_000)
+            : _vfFromNs is { } vfFrom && timeNs - vfFrom >= 4_000_000_000 && silenceNs >= 4_000_000_000;
+        if (vfActive && !vf) { _vfFromNs = _vfNegativeFromNs = null; }
         Set(EcgMonitoringConditions.SuspectedVentricularFibrillation, vf, _vfFromNs ?? timeNs, timeNs, events);
         // Wait for an in-flight QRS confirmation, but at most the detector's
         // bounded candidate duration. Flatline still alarms at the threshold.
@@ -265,7 +281,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         var morphology = new EcgBeatMorphology(label, width, difference);
         _lastMorphology = morphology;
         _lastPeakNs = beat.PeakTimeNs;
-        _vfFromNs = null;
+        if ((_active & EcgMonitoringConditions.SuspectedVentricularFibrillation) == 0) { _vfFromNs = null; }
         if (_ronTCandidateNs is { } candidate && intervalNs > _ronTAverageNs * 5 / 4)
         { Occur(EcgMonitoringConditions.RonTPvc, candidate, beat.ConfirmedAtNs, events); }
         _ronTCandidateNs = null;
@@ -305,6 +321,8 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         }
         else { _svtRun = 0; }
         _beats = _beats.Append(new(beat.PeakTimeNs, label, shape)).TakeLast(300).ToArray();
+        if ((_active & EcgMonitoringConditions.SuspectedVentricularFibrillation) != 0 && OrganizedVfRecovery())
+        { _vfFromNs = _vfNegativeFromNs = null; }
         _averageRrNs = AverageRrNs() ?? _averageRrNs;
         bool fastV = _ventricularRun >= 2 && 60_000_000_000L * (_ventricularRun - 1) >
             (beat.PeakTimeNs - _runStartNs) * settings.VtachHeartRate;
@@ -460,6 +478,17 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
     {
         int age = (int)((_timeNs - timeNs) / StepNs);
         return _samples[(_cursor - 1 - age + _samples.Length * 2) % _samples.Length];
+    }
+
+    private bool OrganizedVfRecovery()
+    {
+        var recent = _beats.TakeLast(3).ToArray();
+        if (recent.Length != 3 || recent.Any(b => b.Shape is null || b.Shape.Width > 200)) { return false; }
+        long first = recent[1].PeakNs - recent[0].PeakNs;
+        long second = recent[2].PeakNs - recent[1].PeakNs;
+        return first is >= 250_000_000 and <= 2_500_000_000 && second is >= 250_000_000 and <= 2_500_000_000 &&
+            Math.Abs(first - second) <= Math.Max(first, second) / 5 &&
+            Difference(recent[0].Shape!, recent[1].Shape!) < 250 && Difference(recent[1].Shape!, recent[2].Shape!) < 250;
     }
 
     private bool QuietWindow()

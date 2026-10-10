@@ -88,7 +88,9 @@ Generic 右侧提供可配置的除颤能量阶梯（档位边界 1–1000 J）�
 电流缩放教学刺激幅度，0 mA 无刺激与诱发夺获；非零电流的夺获／失败由所选示例决定，
 尚无患者特定的夺获阈值模型。底部工具栏仍为占位按钮。
 
-除颤区的 AED 模式占完整一行，指示灯熄灭表示自动分析尚未接入。手动充电键内部按进度从左向右填充，
+除颤区的 AED 模式占完整一行，可切换半自动分析／充电／按住确认电击流程。状态灯在分析、
+充电、等待确认、CPR 和取消阶段更新，文字提示包含 CPR 倒计时。AED 内锁定能量、同步
+及起搏，取消后需重新分析；文字、状态灯及 E1/F1 语音随阶段更新。手动充电键内部按进度从左向右填充，
 充满后持续亮起，放电键闪烁；同步键有独立指示灯。放电要求持续按住鼠标主键或空格／Enter
 至少 0.5 秒；同步时继续按住等待新检测的 QRS。松手、失焦、离开监护页、暂停、
 应用设置、起搏命令、改变档位或同步模式均取消待放电状态，充满后还有自动取消计时。
@@ -217,6 +219,7 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 | [generate_therapy_auditions_r2.py](../../tools/generate_therapy_auditions_r2.py) | `--output PATH`、`--tts-models PATH` | 默认输出 `artifacts/therapy-auditions-r2/`；按反馈新增机械开启式起搏候选、独立 CPR 音色及速度、平叙双语语音；[参数与调研来源](../../eng/audio/therapy-audition-r2.json)记录对首轮的修订。依赖离线模型、首轮导出及 numpy/scipy/pyworld；不改变运行时起搏映射 |
 | [generate_therapy_auditions_r3.py](../../tools/generate_therapy_auditions_r3.py) | `--output PATH`、`--tts-models PATH` | 默认输出 `artifacts/therapy-auditions-r3/`；[选音与参数](../../eng/audio/therapy-audition-r3.json)记录 P7 起搏、C2 CPR 和英文平叙 A，生成英文气流瞬态处理及 Kokoro 中文新声线候选；依赖第二轮导出和隔离缓存中的模型 |
 | [generate_therapy_auditions_r4.py](../../tools/generate_therapy_auditions_r4.py) | `--output PATH`、`--tts-models PATH` | 默认输出 `artifacts/therapy-auditions-r4/`；[选音状态](../../eng/audio/therapy-audition-r4.json)记录第三轮反馈，生成英文原生 VITS/Matcha 对照、中文 R2 A 历史对照和已选 FastSpeech2-A / AISHELL-3 SSB0534；中文从项目 WAV 原样复制；依赖第二、三轮导出与隔离模型缓存 |
+| [generate_therapy_runtime_tones.py](../../tools/generate_therapy_runtime_tones.py) | 无 | 使用 TTS 隔离环境运行；从已选参数生成运行时就绪双声与 C2 点击及校验清单 |
 | [generate_therapy_selected_flow.py](../../tools/generate_therapy_selected_flow.py) | 无 | 从第四轮英文原文件及项目已选中文 WAV 生成 E1/F1 成人 AED 单次电击与完整 120 秒 CPR 流程、中英文连播及逐句试听；输出 `artifacts/therapy-selected-flow/`，仅离线编排 |
 | [generate_therapy_pad_placement.py](../../tools/generate_therapy_pad_placement.py) | 无 | 按 [位置错误提示扩展](../../eng/audio/therapy-pad-placement.json)读取已确认 E1/F1 语音并生成贴片位置互换纠正分支，输出 `artifacts/therapy-pad-placement/`；模拟器位置判定专用，未接入运行时 |
 | [generate_critical_a2.py](../../tools/generate_critical_a2.py)、[a3](../../tools/generate_critical_a3.py)、[a4](../../tools/generate_critical_a4.py) | 各自 `--output PATH` | 默认输出 `artifacts/alarm-auditions/` |

@@ -56,6 +56,8 @@ internal sealed class DesignPreviewWindow : Window
     private readonly MonitorTherapyPreferenceStore? _therapyPreferences;
     private readonly Func<long> _safetyClock;
     private ManualDefibrillator _defibrillator = null!;
+    private AutomatedExternalDefibrillator _aed = null!;
+    internal AutomatedExternalDefibrillator Aed => _aed;
     private ulong _shockSequence;
     private bool _pendingShockConversion;
     private EcgElectricalTherapyProfile _sinusTherapy = new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default);
@@ -116,6 +118,7 @@ internal sealed class DesignPreviewWindow : Window
         }
         Settings.Defibrillator.Restore(preferences.Defibrillator ?? DefibrillatorConfiguration.Default);
         _defibrillator = new(Guid.NewGuid(), Settings.Defibrillator.Read(), _therapy.EnergyJoules);
+        _aed = new(_defibrillator);
         _sinusTherapy = CaptureSinusTherapy();
         _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin());
         if (therapyRejected) { ((GenericMonitorSkin)_monitor.Skin!).ShowFeedback("skin.therapyRejected"); }
@@ -182,7 +185,10 @@ internal sealed class DesignPreviewWindow : Window
 
     private EcgElectricalTherapyProfile CaptureSinusTherapy() =>
         Settings.ElectricalConversion.Profile(EcgElectricalTherapy.SinusTemplateId) with
-        { PacingAllowed = Settings.PacingPermissions.Allows(EcgElectricalTherapy.SinusTemplateId) };
+        {
+            PacingAllowed = Settings.PacingPermissions.Allows(EcgElectricalTherapy.SinusTemplateId),
+            AedSettings = Settings.AedConversion.Profile(EcgElectricalTherapy.SinusTemplateId).Settings
+        };
 
     private bool DefibrillatorAvailable => !_closed && !_applying && _timer is not null && Page == 0 &&
         _session.PendingSourceTimeNs is null && _pendingPresentation is null && _pendingPacingPaper is null;
@@ -190,22 +196,29 @@ internal sealed class DesignPreviewWindow : Window
     private void RefreshDefibrillator(GenericMonitorSkin? skin = null)
     {
         skin ??= _monitor?.Skin as GenericMonitorSkin;
-        skin?.Defibrillator.Refresh(_defibrillator, _safetyClock(), DefibrillatorAvailable);
+        skin?.Defibrillator.Refresh(_defibrillator, _safetyClock(), DefibrillatorAvailable, _aed,
+            _session.ActivePacing is null && _monitor?.MonitoredChannels.HasFlag(MonitorChannels.Ecg) == true);
         _monitor?.RefreshSynchronization(_defibrillator.State.Mode == DefibrillationMode.ManualSynchronized);
+        Settings.Sound.UpdateTherapy(_defibrillator, _aed, !_closed && !_applying && _timer is not null && Page == 0);
     }
 
     private void DisarmDefibrillator()
     {
         if (_defibrillator is null) { return; }
-        _defibrillator.Disarm(_safetyClock());
+        _aed.Suspend(_safetyClock());
         RefreshDefibrillator();
     }
 
     internal void RunDefibrillatorCommand(DefibrillatorCommand command)
     {
         long now = _safetyClock();
-        if (command == DefibrillatorCommand.ReleaseShock) { _defibrillator.ReleaseShock(now); }
-        else if (command == DefibrillatorCommand.Disarm) { _defibrillator.Disarm(now); }
+        if (command == DefibrillatorCommand.ReleaseShock)
+        {
+            if (_aed.Enabled) { _aed.ReleaseShock(now); }
+            else { _defibrillator.ReleaseShock(now); }
+        }
+        else if (command == DefibrillatorCommand.Disarm) { _aed.Suspend(now); }
+        else if (command == DefibrillatorCommand.ToggleAed && _aed.Enabled) { _aed.Disable(now); }
         else if (!DefibrillatorAvailable)
         { (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.unavailable"); }
         else
@@ -214,29 +227,49 @@ internal sealed class DesignPreviewWindow : Window
             switch (command)
             {
                 case DefibrillatorCommand.Charge:
-                    _defibrillator.BeginCharge(now);
+                    if (_aed.Enabled)
+                    {
+                        if (_aed.Phase == AedPhase.Suspended) { _aed.Enable(now, _session.SimulationTimeNs); }
+                    }
+                    else { _defibrillator.BeginCharge(now); }
                     break;
                 case DefibrillatorCommand.PressShock:
-                    _defibrillator.PressShock(Guid.NewGuid(), now);
+                    if (_aed.Enabled) { _aed.PressShock(Guid.NewGuid(), now, _session.SimulationTimeNs, AedEvidence); }
+                    else { _defibrillator.PressShock(Guid.NewGuid(), now); }
                     break;
                 case DefibrillatorCommand.ToggleSync:
-                    _defibrillator.SetSynchronized(_defibrillator.State.Mode != DefibrillationMode.ManualSynchronized, now);
+                    if (!_aed.Enabled) { _defibrillator.SetSynchronized(_defibrillator.State.Mode != DefibrillationMode.ManualSynchronized, now); }
+                    break;
+                case DefibrillatorCommand.ToggleAed:
+                    if (_session.ActivePacing is null && _monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg))
+                    { _aed.Enable(now, _session.SimulationTimeNs); }
                     break;
             }
         }
         RefreshDefibrillator();
+        RefreshPacingState();
     }
+
+    private AedEcgEvidence? AedEvidence => _monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) &&
+        _session.ActivePacing is null ? _session.LiveEcgEvidence : null;
 
     private void TickDefibrillator()
     {
-        if (!DefibrillatorAvailable) { DisarmDefibrillator(); return; }
-        var delivery = _defibrillator.Tick(_safetyClock(), _session.SimulationTimeNs,
+        // A delivered shock can schedule its own quiet interval/sinus transition.
+        // That transition must not cancel the newly started CPR cycle.
+        bool recovering = _aed.Phase == AedPhase.Cpr && _pendingShockConversion &&
+            !_closed && !_applying && _timer is not null && Page == 0;
+        if (!DefibrillatorAvailable && !recovering) { DisarmDefibrillator(); return; }
+        var delivery = _aed.Enabled ? _aed.Tick(_safetyClock(), _session.SimulationTimeNs, AedEvidence) :
+            _defibrillator.Tick(_safetyClock(), _session.SimulationTimeNs,
             (_monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) ? _session.SynchronizationBeats : []).Select(beat => beat.PeakTimeNs));
         if (delivery is null) { return; }
         // A host-wide token survives device configuration changes on the same session.
         delivery = delivery with { DeliverySequence = ++_shockSequence };
         var sinus = _session.PrepareSinusAfterShock(_sinusTherapy);
         var result = _session.ApplyElectricalShock(delivery, sinus, _defibrillator.Configuration.EcgRecoveryMilliseconds);
+        Settings.Sound.WithdrawHeartbeat();
+        Settings.Sound.PlayTherapyRelay();
         if (result.Outcome == ElectricalConversionOutcome.ConversionScheduled)
         {
             _pendingShockConversion = true;
@@ -254,12 +287,13 @@ internal sealed class DesignPreviewWindow : Window
         skin ??= _monitor.Skin as GenericMonitorSkin;
         skin?.SetPacingState(_beforePacingPaper is not null && _session.ActivePacing is not null,
             _applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null,
-            _session.PacingAllowed);
+            _session.PacingAllowed, _aed.Enabled);
     }
 
     private void SaveTherapy(MonitorTherapyPreferences preferences)
     {
         preferences.Validate();
+        if (_aed.Enabled) { preferences = preferences with { EnergyJoules = _defibrillator.EnergyJoules }; }
         if (_defibrillator.EnergyJoules != preferences.EnergyJoules)
         { _defibrillator.SelectEnergy(preferences.EnergyJoules, _safetyClock()); RefreshDefibrillator(); }
         _therapy = preferences;
@@ -269,6 +303,7 @@ internal sealed class DesignPreviewWindow : Window
 
     private string SetPacing(MonitorTherapyPreferences preferences, bool stop)
     {
+        if (_aed.Enabled && !stop) { return "aed.pacingUnavailable"; }
         if (_applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null)
         { return "skin.pacingPending"; }
         DisarmDefibrillator();
@@ -545,7 +580,7 @@ internal sealed class DesignPreviewWindow : Window
         }
         string templateId = DesignPreviewSettings.EcgTemplateKey(Settings.EcgSelection);
         var electricalTherapy = Settings.ElectricalConversion.Profile(templateId) with
-        { PacingAllowed = Settings.PacingPermissions.Allows(templateId) };
+        { PacingAllowed = Settings.PacingPermissions.Allows(templateId), AedSettings = Settings.AedConversion.Profile(templateId).Settings };
         var manualVitals = Settings.ManualVitals.Read();
         var display = Settings.ReadDisplay();
         int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
@@ -624,6 +659,7 @@ internal sealed class DesignPreviewWindow : Window
             _pendingPacingPaper = null;
             _pendingShockConversion = false;
             _defibrillator = new(Guid.NewGuid(), defibrillator, _therapy.EnergyJoules);
+            _aed = new(_defibrillator);
             _therapy = _therapy with { EnergyJoules = _defibrillator.EnergyJoules };
             _sinusTherapy = sinusTherapy;
             _monitor = new(_session, Localization);
@@ -760,6 +796,10 @@ internal sealed class DesignPreviewWindow : Window
         try
         {
             _session.Advance(deltaNs);
+            // Consume only this advance's actual stimuli, independently of QRS
+            // capture. Late UI bursts are coalesced, never replayed as a backlog.
+            if (_session.EmittedPacingPulseTimesNs.Any(time => _session.SimulationTimeNs - time <= 250_000_000))
+            { Settings.Sound.PlayTherapyRelay(); }
             if (_pendingPresentation is { } applied && _session.PendingSourceTimeNs is null)
             {
                 _ecg = applied.Paper;
@@ -784,7 +824,7 @@ internal sealed class DesignPreviewWindow : Window
             _monitor.InvalidateVisual();
             MonitorView.Refresh();
             Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
-                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices);
+                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices, _session.LiveBeatEvidence);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)

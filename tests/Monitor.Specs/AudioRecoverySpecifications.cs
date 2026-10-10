@@ -11,6 +11,7 @@ internal static class AudioRecoverySpecifications
         new(nameof(PlaybackRecoversAndKeepsDeviceSelection), PlaybackRecoversAndKeepsDeviceSelection),
         new(nameof(MasterGainControlsBufferedPcmWithoutLosingVolume), MasterGainControlsBufferedPcmWithoutLosingVolume),
         new(nameof(ReconnectionDoesNotReplayRetiredNotifications), ReconnectionDoesNotReplayRetiredNotifications),
+        new(nameof(HeartbeatCancellationSurvivesImmediateReenable), HeartbeatCancellationSurvivesImmediateReenable),
     ];
 
     private static void PlaybackRecoversAndKeepsDeviceSelection()
@@ -83,6 +84,36 @@ internal static class AudioRecoverySpecifications
         Check.That(sequencer.Dispatches.Single().Stage == AlarmSoundDispatchStage.Selected, "current newer group is eligible after reconnection");
     }
 
+    private static void HeartbeatCancellationSurvivesImmediateReenable()
+    {
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        var output = new RecoveryOutput();
+        var player = new MonitorAlarmPlayback(() => output);
+        player.SetHeartbeatEnabled(true);
+        output.OnPump = () =>
+        {
+            if (output.Pumps == 1) { player.SubmitHeartbeat(100); }
+            if (output.Pumps == 3)
+            {
+                Check.That(output.LastPeak > 0, "the old QRS tone is active before discharge");
+                player.CancelHeartbeat();
+                player.SetHeartbeatEnabled(false);
+                player.SetHeartbeatEnabled(true); // Same UI frame; worker never observes false.
+            }
+            if (output.Pumps == 5)
+            { Check.That(output.TailPeak == 0, "cancellation fences active cues after queued PCM and a short fade drain"); }
+            if (output.Pumps == 7) { player.SubmitHeartbeat(100); }
+            if (output.Pumps == 9)
+            {
+                Check.That(output.LastPeak > 0, "a newly confirmed QRS may sound after cancellation");
+                cancellation.Cancel();
+            }
+            return true;
+        };
+        Check.That(player.RunAsync(cancellation.Token).GetAwaiter().GetResult() == SoundPreviewResult.Stopped && output.Pumps == 9,
+            "the worker completes the deterministic cancel/re-enable interleaving");
+    }
+
     private sealed class RecoveryOutput : IPumpedAudioOutput, IAudioOutputDevice
     {
         private AudioRenderSession? _session;
@@ -92,6 +123,8 @@ internal static class AudioRecoverySpecifications
         public int Pumps { get; private set; }
         public float Gain => _session!.Gain;
         public float Peak { get; private set; }
+        public float LastPeak { get; private set; }
+        public float TailPeak { get; private set; }
         public IAudioOutputDevice Open(string? deviceId, AudioRenderSession session, long generation)
         { DeviceId = deviceId; _session = session; return this; }
         public bool Start() => true;
@@ -102,6 +135,8 @@ internal static class AudioRecoverySpecifications
             float[] pcm = new float[1920];
             _session!.Read(pcm);
             _session.TryProduce(1920);
+            LastPeak = pcm.Max(Math.Abs);
+            TailPeak = pcm.Skip(240).Max(Math.Abs);
             Peak = Math.Max(Peak, pcm.Max(Math.Abs));
             return OnPump();
         }

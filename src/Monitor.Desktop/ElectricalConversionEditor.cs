@@ -14,6 +14,7 @@ internal sealed class ElectricalConversionEditor : UserControl
     private readonly DesktopLocalization _localization;
     private string? _templateId;
     private bool _syncing;
+    private readonly bool _automated;
     internal CheckBox Enabled { get; } = new();
     internal NumericUpDown Monophasic { get; } = Energy();
     internal NumericUpDown Biphasic { get; } = Energy();
@@ -22,13 +23,14 @@ internal sealed class ElectricalConversionEditor : UserControl
     private readonly TextBlock _templateName = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private readonly TextBlock _mode = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
 
-    internal ElectricalConversionEditor(DesktopLocalization localization)
+    internal ElectricalConversionEditor(DesktopLocalization localization, bool automated = false)
     {
         _localization = localization;
+        _automated = automated;
         var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(DesktopInformationPages.Help("electrical-conversion"));
         var heading = new TextBlock { FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold };
-        localization.Bind(heading, TextBlock.TextProperty, "conversion.title");
+        localization.Bind(heading, TextBlock.TextProperty, automated ? "conversion.aedTitle" : "conversion.title");
         panel.Children.Add(heading);
         panel.Children.Add(_templateName);
         panel.Children.Add(_mode);
@@ -79,6 +81,7 @@ internal sealed class ElectricalConversionEditor : UserControl
     internal void Select(string templateId)
     {
         var descriptor = EcgElectricalTherapy.Find(templateId);
+        if (_automated && descriptor?.Requirement == ElectricalShockRequirement.Synchronized) { descriptor = null; }
         _templateId = descriptor?.TemplateId;
         IsVisible = descriptor is not null;
         if (descriptor is null) { return; }

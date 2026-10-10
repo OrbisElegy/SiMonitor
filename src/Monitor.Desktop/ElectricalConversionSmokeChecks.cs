@@ -39,6 +39,16 @@ internal static class ElectricalConversionSmokeChecks
             }
             Require(settings.ElectricalConversion.Capture().Count == 24, "all template values retained independently");
             settings.EcgSelection = 21;
+            Require(settings.AedConversion.IsVisible && settings.AedConversion.Enabled.IsChecked != true,
+                "VF exposes a separate disabled AED response by default");
+            settings.AedConversion.Enabled.IsChecked = true;
+            settings.AedConversion.Biphasic.Value = 180;
+            settings.AedConversion.PostShockPause.Value = 1.5m;
+            settings.EcgSelection = 22;
+            Require(settings.AedConversion.Enabled.IsChecked != true, "another VF template does not inherit AED permission");
+            settings.EcgSelection = 21;
+            Require(settings.AedConversion.Biphasic.Value == 180 && settings.AedConversion.PostShockPause.Value == 1.5m,
+                "switching templates retains the AED draft independently of manual settings");
             settings.OpenAdvanced(0);
             window.SelectPage(2);
             DesktopViewportSmokeChecks.Layout(window);
@@ -59,6 +69,8 @@ internal static class ElectricalConversionSmokeChecks
             window.RestartSettings();
             window.Pause();
             Require(!window.PreferenceNotice.IsVisible && window.Session.ElectricalTherapy?.Settings.BiphasicThresholdJoules == 121, "apply publishes response with the source and saves full bank");
+            Require(window.Session.ElectricalTherapy?.AedSettings is { Enabled: true, BiphasicThresholdJoules: 180, PostShockPauseMilliseconds: 1500 },
+                "apply publishes the independent AED response atomically with the source");
             settings.ElectricalConversion.Biphasic.Value = 5;
             Require(window.Session.ElectricalTherapy?.Settings.BiphasicThresholdJoules == 121, "unapplied editor cannot change live therapy response");
             settings.ElectricalConversion.Biphasic.Value = 121;
@@ -82,7 +94,10 @@ internal static class ElectricalConversionSmokeChecks
                 reloaded.Settings.EcgSelection = 21;
                 Require(reloaded.Settings.ElectricalConversion.Biphasic.Value == 121 && reloaded.Settings.ElectricalConversion.Monophasic.Value == 271 &&
                     reloaded.Settings.ElectricalConversion.Enabled.IsChecked == true, "original VF response survives sinus switch and restart");
+                Require(reloaded.Settings.AedConversion.Enabled.IsChecked == true && reloaded.Settings.AedConversion.Biphasic.Value == 180 &&
+                    reloaded.Settings.AedConversion.PostShockPause.Value == 1.5m, "AED bank survives sinus switch and restart independently");
                 reloaded.Settings.EcgSelection = 6;
+                Require(!reloaded.Settings.AedConversion.IsVisible, "a synchronized-only template hides AED conversion");
                 Require(reloaded.Settings.ElectricalConversion.Biphasic.Value == 106, "other template response remains distinct");
                 foreach (int index in new[] { 0, 1, 2, 31, 33, 72, 73, 74, 165, 175 })
                 {

@@ -7,6 +7,7 @@ namespace Monitor.Infrastructure.Audio;
 public sealed class AudioRenderSession
 {
     private readonly SampleToneRenderer _renderer;
+    private readonly TherapySoundRenderer _therapy = new();
     private readonly AudioPcmBuffer _buffer;
     private readonly float[] _scratch;
     private int _retired;
@@ -46,6 +47,9 @@ public sealed class AudioRenderSession
     public ToneScheduleResult? Schedule(long key, TonePreset preset, long targetFrame, long expiryFrame) =>
         RequiresReplacement ? null : _renderer.Schedule(key, preset, targetFrame, expiryFrame);
 
+    public void UpdateTherapy(TherapySoundRequest? request, bool announce = true) => _therapy.Update(request, announce);
+    public void UpdateTherapyRelay(bool enabled, bool triggered = false) => _therapy.UpdateRelay(enabled, triggered);
+
     public void Cancel(long key) => _renderer.Cancel(key);
 
     // Full buffer leaves renderer and cue phase untouched; no pending PCM copy
@@ -56,6 +60,7 @@ public sealed class AudioRenderSession
         ArgumentOutOfRangeException.ThrowIfGreaterThan(frames, _scratch.Length);
         if (RequiresReplacement || _buffer.WritableFrames < frames) { return false; }
         _renderer.Render(_scratch.AsSpan(0, frames));
+        _therapy.Mix(_scratch.AsSpan(0, frames));
         if (RequiresReplacement) { return false; }
         bool written = _buffer.TryWrite(_scratch.AsSpan(0, frames));
         if (!written) { Retire(); }

@@ -1,0 +1,28 @@
+{
+  "sample_rate_hz": 48000,
+  "format": "PCM16 mono",
+  "generator": "tools/generate_therapy_runtime_tones.py",
+  "selections": "eng/audio/therapy-audition-r4.json",
+  "files": [
+    {
+      "file": "Ready.wav",
+      "frames": 35520,
+      "sha256": "f939d91d5209790a36c6362fbfa3284d7024c12e212180fc3d9ef3d85abe1426"
+    },
+    {
+      "file": "ReadyHold.wav",
+      "frames": 28800,
+      "sha256": "a08508025b1824234dab3b33c4d141ca244cca62df33c13a11e387e74d6585a1"
+    },
+    {
+      "file": "Cpr.wav",
+      "frames": 960,
+      "sha256": "6db837ebbfdab2a9641c3a3307b4120225d8929f23424956599c0b2b9c9ce15f"
+    },
+    {
+      "file": "Relay.wav",
+      "frames": 1632,
+      "sha256": "d8c92c3dc02d13a432983ad1ac960c386e719e84163da1d4913b3bae29f2dc26"
+    }
+  ]
+}

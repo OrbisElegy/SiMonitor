@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Monitor.Application.Therapy;
 using Monitor.Domain.Therapy;
+using Monitor.Infrastructure.Audio;
 using Monitor.Simulation.Therapy;
 
 namespace Monitor.Desktop;
@@ -47,8 +48,9 @@ internal static class DefibrillatorSmokeChecks
                 "nonlinear energy selection reaches the command owner even with an invalid pacing draft");
             skin.Rate.Value = 70;
             Click(controls.Aed);
-            Require(skin.Feedback.Text == window.Localization.Get("defib.aedUnavailable") && window.Defibrillator.State.Energy == EnergyState.Idle,
-                "AED status is explicit and cannot trigger a manual shock");
+            Require(window.Aed.Phase == AedPhase.Analyzing && window.Defibrillator.State.Energy == EnergyState.Idle,
+                "AED starts analysis without authorizing a shock");
+            Click(controls.Aed);
             Click(controls.Charge);
             Tick(500_000_000);
             Require(controls.ChargeProgressPermille == 500 && controls.ChargeLit && !controls.Shock.IsEnabled &&
@@ -131,12 +133,23 @@ internal static class DefibrillatorSmokeChecks
             window.RestartSettings();
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
             skin.Energy.SelectedItem = 200;
+            window.Settings.Sound.HeartbeatEnabled.IsChecked = true;
+            window.Settings.Sound.BeatSource.SelectedIndex = 0;
+            int liveHeartbeatCues = 0;
             void Advance(int frames)
             {
                 for (int i = 0; i < frames; i++)
                 {
                     safetyNs += 50_000_000;
+                    long? previousCue = window.Settings.Sound.LastHeartbeatConfirmedAtNs;
                     window.Pulse(window.ActiveTimer, 50_000_000);
+                    if (window.Settings.Sound.LastHeartbeatConfirmedAtNs is { } cue && cue != previousCue)
+                    {
+                        liveHeartbeatCues++;
+                        Require(window.Session.SimulationTimeNs - cue <= 50_000_000 &&
+                            window.Session.LiveBeatEvidence!.EcgBeats.Any(beat => beat.ConfirmedAtNs == cue),
+                            "audible QRS follows this frame's visible ECG, never a delayed measurement packet");
+                    }
                 }
             }
             Advance(200);
@@ -164,6 +177,7 @@ internal static class DefibrillatorSmokeChecks
                 window.Session.PendingSourceTimeNs is not null, "the configured cardiac pause precedes sinus recovery");
             Capture(window, "generic-post-shock-recovery.png");
             Advance(150);
+            Require(liveHeartbeatCues >= 4, "post-shock sinus resumes real-time QRS cues");
             window.Pause();
             Require(window.Session.ElectricalTherapy!.TemplateId == "ecgTemplate.t000" &&
                 window.Session.Samples(0, artifact.DeliveredAtSimTimeNs, artifact.RecoveryEndSimTimeNs).Any(sample => Math.Abs(sample.Value) > 3000),
@@ -179,6 +193,102 @@ internal static class DefibrillatorSmokeChecks
     }
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    internal static void VerifyAed()
+    {
+        long safetyNs = 0;
+        var window = new DesignPreviewWindow(safetyClock: () => safetyNs);
+        window.Show();
+        try
+        {
+            window.Settings.EcgSelection = 21;
+            window.Settings.AedConversion.Enabled.IsChecked = true;
+            window.Settings.AedConversion.Biphasic.Value = 150;
+            window.Settings.AedConversion.PostShockPause.Value = 2;
+            window.Settings.Defibrillator.ChargeSeconds.Value = .1m;
+            window.RestartSettings();
+            void Advance(int frames)
+            {
+                for (int frame = 0; frame < frames; frame++)
+                {
+                    safetyNs += 50_000_000;
+                    window.Pulse(window.ActiveTimer, 50_000_000);
+                }
+            }
+            Advance(200);
+            var controls = ((GenericMonitorSkin)window.MonitorTrace.Skin!).Defibrillator;
+            controls.Energy.SelectedItem = 200;
+            Click(controls.Sync);
+            Click(controls.Aed);
+            Require(window.Aed.Phase == AedPhase.Analyzing && !controls.SyncLit && !controls.Sync.IsEnabled &&
+                !controls.Energy.IsEnabled && !controls.Shock.IsEnabled, "AED clears sync and locks manual therapy controls");
+            Require(controls.Status.Text == window.Localization.Format("aed.phase.Analyzing", 8), "analysis prompt includes its countdown");
+            Require(window.Settings.Sound.PublishedTherapy is { Phase: TherapySoundPhase.Analyzing, EnteringAed: true },
+                "AED entry publishes adult and analysis speech once");
+            Advance(162);
+            Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
+                "live VF automatically charges AED");
+            Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "shock advice text remains visible without countdown arguments");
+            window.Localization.Select("en");
+            Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "active AED prompt follows language changes");
+            Require(window.Settings.Sound.PublishedTherapy is { Phase: TherapySoundPhase.Ready, Locale: "en", Announce: false },
+                "language change withdraws the old voice without replaying ready history");
+            window.Localization.Select("zh-CN");
+            Capture(window, "generic-aed-shock-advised.png");
+            Click(controls.Shock);
+            Require(window.Session.ShockArtifacts.Count == 0, "an ordinary click cannot discharge AED");
+            Require(window.Settings.Sound.TherapyRelayCount == 0, "ready and button clicks do not emit a discharge relay");
+            KeyEvent(controls.Shock, true);
+            Advance(4);
+            KeyEvent(controls.Shock, false);
+            Require(window.Aed.Phase == AedPhase.Suspended && window.Defibrillator.State.Energy == EnergyState.Idle &&
+                controls.Charge.IsEnabled, "a short hold disarms and offers reanalysis");
+            Click(controls.Charge);
+            Advance(162);
+            KeyEvent(controls.Shock, true);
+            Advance(10);
+            KeyEvent(controls.Shock, false);
+            Require(window.Aed.Phase == AedPhase.Cpr && window.Session.ShockArtifacts.Count == 1 &&
+                !controls.Shock.IsEnabled && window.Session.PendingSourceTimeNs is not null,
+                "held AED shock uses the common artifact and conversion path exactly once");
+            Require(window.Settings.Sound.TherapyRelayCount == 1, "only actual AED delivery emits the discharge relay");
+            Require(window.Settings.Sound.PublishedTherapy is { Phase: TherapySoundPhase.CprShock, Announce: true } &&
+                !window.Settings.ElectricalConversion.Enabled.IsChecked.GetValueOrDefault(),
+                "AED delivery publishes its CPR sequence and converts with manual conversion disabled");
+            Advance(50);
+            Require(window.Aed.Phase == AedPhase.Cpr && window.Session.ElectricalTherapy!.TemplateId == "ecgTemplate.t000",
+                "post-shock quiet interval and sinus transition preserve the CPR cycle");
+            Capture(window, "generic-aed-cpr.png");
+            Advance(2350);
+            Require(window.Aed.Phase == AedPhase.Analyzing, "120 seconds of CPR starts another analysis");
+            Advance(180);
+            Require(window.Aed.Phase == AedPhase.Cpr && window.Aed.Advice == AedAdvice.NoShock &&
+                window.Defibrillator.State.DeliveredCount == 1, "converted sinus gets no-shock advice without a second discharge: " +
+                window.Aed.Phase + "/" + window.Aed.Advice + " " + window.Session.LiveEcgEvidence);
+            window.Pause();
+            Require(window.Aed.Phase == AedPhase.Suspended && !controls.Charge.IsEnabled, "pause suspends the complete AED workflow");
+            Require(window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Silent, "pause removes all therapy sound intent");
+            window.Start();
+            Click(controls.Charge);
+            Require(window.Aed.Phase == AedPhase.Analyzing, "resume requires explicit reanalysis");
+            window.SelectPage(2);
+            Require(window.Aed.Phase == AedPhase.Suspended, "leaving the monitor invalidates AED analysis");
+            window.Settings.EcgSelection = 72;
+            window.RestartSettings();
+            window.SelectPage(0);
+            Require(!window.Aed.Enabled && window.Defibrillator.State.Energy == EnergyState.Idle,
+                "template/configuration replacement resets the AED owner");
+            controls = ((GenericMonitorSkin)window.MonitorTrace.Skin!).Defibrillator;
+            Click(controls.Aed);
+            Advance(280);
+            Require(window.Aed.Phase == AedPhase.Cpr && window.Aed.Advice == AedAdvice.NoShock && !controls.Shock.IsEnabled,
+                "asystole gives no-shock advice");
+            Click(controls.Aed);
+            Require(!window.Aed.Enabled && controls.Energy.IsEnabled && controls.Sync.IsEnabled,
+                "leaving AED restores manual controls without retaining charge");
+        }
+        finally { window.Close(); }
+    }
 
     internal static void VerifySynchronizationMarkers()
     {

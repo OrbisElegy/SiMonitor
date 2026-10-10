@@ -5,7 +5,7 @@
   "speed": 1.0,
   "project_inclusion_authorized": true,
   "listening_approval_pending": false,
-  "runtime_enabled": false,
+  "runtime_enabled": true,
   "source": "https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/tts3",
   "upstream_dataset": "https://www.openslr.org/93/",
   "license_status": "PaddleSpeech code and AISHELL-3 dataset: Apache-2.0; weight archives have no separate license text; generated audio not relicensed under project code license; weight/output release scope remains to be confirmed",
@@ -345,5 +345,19 @@
   "vocoder": "PaddleSpeech Parallel WaveGAN AISHELL-3 ONNX 1.1.0",
   "speaker": "SSB0534",
   "speaker_id": 57,
-  "audition_variant": "FastSpeech2-A"
+  "audition_variant": "FastSpeech2-A",
+  "runtime_prompt_ids": [
+    "AED_MODE_ADULT",
+    "AED_ANALYZING",
+    "AED_SHOCKABLE",
+    "AED_READY",
+    "AED_SHOCK_RECORDED",
+    "AED_AUTO_DISARM",
+    "AED_RHYTHM_CHANGED_ANALYZING",
+    "AED_AUTO_DISARM_ANALYZING",
+    "AED_NSA_CPR",
+    "AED_CPR_START",
+    "AED_CPR_BREATHS",
+    "AED_CPR_STOP"
+  ]
 }

@@ -200,6 +200,12 @@ Reconnecting 表示正在等待恢复，OutputActive 仅在成功 Pump 后为真
 SetVolume 设置 0–100 主音量与静音；AudioRenderSession.Gain（0–1）在 PCM 离开托管缓冲时缩放，
 同时影响已渲染的报警、心搏和试听，硬件队列中的少量 PCM 仍按原音量播放。桌面请求使用满幅报警与相对心搏音量，避免重复缩放。
 SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
+桌面心搏事件来自 `LocalMonitorPreviewSession.LiveBeatEvidence`：ECG 复用实时同步 QRS 检出，
+PLETH 从同一实时采样路径独立检出；来源状态、事件新鲜度和可见波形统一使用当前仿真时间。
+延迟采集包继续供数值测量和记录使用，不再作为实时心搏音的触发来源。音高仍使用既有 SpO₂ 测量。
+实际放电立即撤回当前帧 ECG 事件并调用 `CancelHeartbeat()`，清空待播事件；取消代次使播放线程
+即使未观察到短暂的禁用状态，也会撤回旧心搏排程。已提交原生设备的短队列不能追溯收回。
+恢复后仅新检出的 QRS／PLETH 事件可发声，放电伪迹不作为 QRS，来源切换仍遵循去重和稳定时间。
 两个入口的专用 owner 线程以 Highest 优先级运行，每次 Pump 后调用 `WaitForQueueSpace(10)` 等待下一次 consumer
 运行，而不是固定 sleep；请求和心搏 cue 最迟在下一次唤醒时进入排程。
 OutputActive 只表示曾成功 pumping 且 worker 尚活动，不保证物理出声或已达到延迟目标。
@@ -332,9 +338,9 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
 | 5–15 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
-| 16–17 | 延续 5–15 的规则，并要求非空 Defibrillator |
+| 16–18 | 延续 5–15 的规则，并要求非空 Defibrillator |
 
-Save 总是写 Version=17；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=18；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 Defibrillator 保存 EnergyStepsJoules、Waveform、ChargeDurationMilliseconds、AutoDisarmSeconds
 和 EcgRecoveryMilliseconds（后者缺省为 1000 ms），
 Load／Save 验证并复制档位；版本 1–15 缺少此项时采用 Generic 默认值。
@@ -379,3 +385,62 @@ IO/UnauthorizedAccessException 返回 false；非法参数、路径规范化或�
 因此调用方应区分用户输入无效、加载被拒绝、保存失败和文件缺失；成功 Save 只说明文件发布成功。
 
 版本 10 的通知项还保存 LatchingMode（NonLatching=0、UntilAcknowledged=1）；旧文件缺省为非保持。仅控制恢复后的视觉提示，不恢复确认状态或声音请求。用户确认、确认后提醒和软件退役水位见[确认与保持接口](alarms/alarm-attention.md)。
+
+## 治疗声音
+
+`TherapySoundDirector` 将手动充电／就绪及半自动 AED 阶段映射为 `TherapySoundRequest`。
+每次阶段或语言变化产生递增 Revision；当前进度和 CPR 已用时间是同一 revision 的新快照。
+`MonitorAlarmPlayback.SetTherapy` 使用最新值邮箱，与报警共用输出设备和 `AudioRenderSession`。
+设备重连保留已消费 revision，当前充电底音与 CPR 相位可恢复，状态进入语音及就绪双声不补播。
+切换语言撤回旧语音，不复述历史阶段；下次阶段提示使用新语言。没有贴片／移动模型时，
+等待信号只显示文字，不虚构“检测到移动”或“接触不良”的语音诊断。
+
+`TherapySoundRenderer` 在生产线程混入 48 kHz 单声道 PCM，资产在音频输出启动前预载，
+Update 准备只读片段，Mix 不做文件读取、分配或锁操作。语音将监护底音降至约 -18 dB、
+充电底音降至约 -12 dB，波形叠加后限幅；主音量与静音作用于全部声音，报警音暂停只作用于报警。
+当前原生队列中的 PCM 不能收回，下一未渲染帧起撤回旧提示，保留最多 5 ms 消除跳变尾部。
+
+CPR 播放位置仅在新 revision／新输出会话进入时用已用时间定位一次，此后按实际生成的
+48 kHz PCM 帧连续推进。同一 revision 的界面进度快照不得重新定位录音或节拍：界面计时、
+仿真推进和音频队列并不同步，反复定位即使没有 underrun 也会重复／跳过采样，产生拉长或断续感。
+仿真阶段切换、暂停和撤回仍立即终止旧提示；120 秒已用时间到期也禁止继续播放。
+设备重连按当前 CPR 进度恢复节拍位置，不补播进入语音。
+
+| 阶段 | 声音 |
+|---|---|
+| AED 进入／分析 | 成人模式、正在分析；信号学习期间不反复排队 |
+| 充电 | 当前进度驱动 390–760 Hz 连续音，12 ms 频率平滑；AED 另播建议电击／正在充电 |
+| 就绪 | AED 先播离开患者／确认电击；随后一次 870 Hz 双声，之后循环 740／1040 Hz 双音保持提示；手动省略语音。放电、disarm、暂停或退出停止保持音 |
+| 已交付电击／不建议电击 | 对应语音及开始按压提示，绝不以充电状态代替实际交付 |
+| 实际放电／起搏脉冲 | P7 微型继电器音；只有实际放电及输出脉冲触发，disarm 不冒充放电 |
+| CPR | 110/min 的 C2 点击，30 次后留 5 秒通气窗并提示两次人工呼吸；120 秒包含进入语音 |
+| 再分析 | 先结束节拍，再播停止 CPR／正在分析；主动取消后恢复分析使用解除充电提示 |
+| 取消／暂停／退出 | 撤回旧语音及底音；运行页解除储能可播未执行电击／已解除充电，暂停或离页保持静音 |
+
+节拍仅为教学提示，不生成按压波形。模式、节拍和语音状态不持久化。
+就绪保持音每个音阶 300 ms、RMS -34 dBFS；二、三次谐波相对基频幅度为 0.18／0.12，
+采用 3 ms 起音、8 ms 收音的平滑包络，使音色明亮并避免切换跳变；这是 Generic 的音效参数。
+整个 Ready 阶段（含语音、“滴滴”、间隔与保持音）将监护报警和心搏音按配置音量再压低 24 dB，
+20 ms 平滑进入；放电、disarm 或退出 Ready 后在 100 ms 内恢复。语音压低与储能压低取较低增益，
+不叠乘；不改报警状态、播放进度或用户音量。重连后仍优先提示储能，总静音继续作用于全部声音。
+重连或切换语言后可以继续保持音，但不重播就绪语音或“滴滴”。放电继电器由实际交付回执触发，
+起搏继电器由 `LocalMonitorPreviewSession.EmittedPacingPulseTimesNs` 触发：仅报告本次 Advance
+中活动起搏器在 ECG 采样网格上发出的房／室脉冲，去重并按会话时间排序，不依赖 QRS 检出或夺获。
+零电流、停止起搏或未输出的脉冲不会虚构声音，未夺获但仍输出的脉冲继续有声。
+室性输出失败模板若仍有房性输出，仅房性脉冲发声。
+继电器与心搏音开关独立，共用总音量与静音。播放请求使用最新值邮箱，250 ms 之外的旧事件丢弃，
+延迟堆积的脉冲合并而不补播；暂停清空待播，输出故障清空旧事件，重连不自动触发继电器。
+中文采用原样 F1 录音；英文 E1 为经用户授权重新生成并接入的固定录音，试听审核标记仍为待复核。
+资产 SHA-256、文字与来源分别保存在 `eng/audio/voices/{locale}/{voice}/manifest.json`。
+声源声明和许可证随构建／发布产物复制到 `therapy-licenses/`，不把生成语音重新许可为项目代码。
+就绪音、保持音、C2 点击与 P7 继电器通过 `tools/generate_therapy_runtime_tones.py` 生成，其中 C2/P7 复用原试听生成器，校验和在
+`src/Monitor.Infrastructure/Audio/SelectedTherapySounds/manifest.json`。充电底音按原选音参数随实际进度合成。
+
+可用规格程序的 `--therapy-audio-fixture OUTPUT_DIRECTORY` 直接从运行时混音器生成中英文
+完整流程 WAV。模拟界面快照抖动及短暂停顿，包含分析、充电、就绪保持音、实际交付继电器及语音、完整 120 秒 CPR 与再分析，末尾另附 6 秒 90 PPM 起搏继电器试听；这是离线
+PCM 核验／试听，不证明声卡或扬声器的物理输出与时延。
+同一命令还生成 `ready-priority.wav`：0–3 秒为最高音量危急报警与心搏，3–9 秒加入储能提示，
+9–13 秒解除储能并恢复背景音，使用运行时共享混音器且不中断报警时间线。
+
+版本 18 增加 `Generator.AedElectricalConversions`，其校验与手动映射一致；读取 1–17 版时
+复制已有 `ElectricalConversions`，迁移后分别保存，不共享可变字典。未设置的新规则默认关闭。

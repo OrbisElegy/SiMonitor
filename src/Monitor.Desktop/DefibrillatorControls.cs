@@ -12,7 +12,7 @@ using Monitor.Domain.Therapy;
 
 namespace Monitor.Desktop;
 
-internal enum DefibrillatorCommand { Charge, PressShock, ReleaseShock, Disarm, ToggleSync }
+internal enum DefibrillatorCommand { Charge, PressShock, ReleaseShock, Disarm, ToggleSync, ToggleAed }
 
 internal sealed class DefibrillatorControls : StackPanel
 {
@@ -20,6 +20,8 @@ internal sealed class DefibrillatorControls : StackPanel
     private readonly Action<DefibrillatorCommand>? _command;
     private string? _shownStatus;
     private bool? _shownSync;
+    private bool? _shownAed;
+    private string? _shownChargeKey;
     private bool _holding;
     private bool _pointerHolding;
     private Key? _heldKey;
@@ -40,6 +42,7 @@ internal sealed class DefibrillatorControls : StackPanel
     internal bool ShockLit { get; private set; }
     internal bool ChargeLit { get; private set; }
     internal bool SyncLit { get; private set; }
+    internal bool AedLit { get; private set; }
 
     internal DefibrillatorControls(DesktopLocalization localization, DefibrillatorConfiguration configuration,
         int selectedEnergyJoules, Action<DefibrillatorCommand>? command, Action<string> feedback)
@@ -60,8 +63,8 @@ internal sealed class DefibrillatorControls : StackPanel
         Energy.SelectionChanged += (_, _) => RefreshEnergyButtons();
         RefreshEnergyButtons();
         Aed.Content = IndicatorCaption(_aedLamp, "skin.aed");
-        localization.Bind(Aed, AutomationProperties.NameProperty, "defib.aedUnavailable");
-        Aed.Click += (_, _) => feedback("defib.aedUnavailable");
+        localization.Bind(Aed, AutomationProperties.NameProperty, "aed.off");
+        Aed.Click += (_, _) => command?.Invoke(DefibrillatorCommand.ToggleAed);
         Children.Add(Aed);
         var energyLabel = new TextBlock { Foreground = Brush.Parse("#BAC5D1"), FontSize = 12 };
         localization.Bind(energyLabel, TextBlock.TextProperty, "skin.energy");
@@ -144,19 +147,22 @@ internal sealed class DefibrillatorControls : StackPanel
         HigherEnergy.IsEnabled = Energy.SelectedIndex >= 0 && Energy.SelectedIndex < Energy.ItemCount - 1;
     }
 
-    internal void Refresh(ManualDefibrillator device, long safetyTimeNs, bool available)
+    internal void Refresh(ManualDefibrillator device, long safetyTimeNs, bool available,
+        AutomatedExternalDefibrillator? aed = null, bool aedAvailable = true)
     {
+        bool automated = aed?.Enabled == true;
         var state = device.State;
         bool ready = state.Energy == EnergyState.Ready;
         bool charging = state.Energy == EnergyState.Charging;
         bool holding = state.Attempt is DefibrillationAttemptState.DischargeRequested or DefibrillationAttemptState.AwaitingSync;
-        Charge.IsEnabled = available;
-        Shock.IsEnabled = available && ready;
-        Disarm.IsEnabled = charging || ready;
-        Sync.IsEnabled = available;
-        Energy.IsEnabled = !holding;
-        LowerEnergy.IsEnabled = !holding && Energy.SelectedIndex > 0;
-        HigherEnergy.IsEnabled = !holding && Energy.SelectedIndex < Energy.ItemCount - 1;
+        Aed.IsEnabled = automated || available && aedAvailable;
+        Charge.IsEnabled = available && (!automated || aed!.Phase == AedPhase.Suspended);
+        Shock.IsEnabled = available && ready && (!automated || aed!.Phase == AedPhase.ShockAdvised);
+        Disarm.IsEnabled = charging || ready || automated && aed!.Phase != AedPhase.Suspended;
+        Sync.IsEnabled = available && !automated;
+        Energy.IsEnabled = !holding && !automated;
+        LowerEnergy.IsEnabled = Energy.IsEnabled && Energy.SelectedIndex > 0;
+        HigherEnergy.IsEnabled = Energy.IsEnabled && Energy.SelectedIndex < Energy.ItemCount - 1;
         ChargeLit = ready || charging && device.ChargeProgressPermille > 0;
         SyncLit = state.Mode == DefibrillationMode.ManualSynchronized;
         ShockLit = ready && safetyTimeNs / 400_000_000 % 2 == 0;
@@ -177,11 +183,30 @@ internal sealed class DefibrillatorControls : StackPanel
         }
         Shock.Background = Brush.Parse(ShockLit ? "#D83B45" : "#562831");
         _syncLamp.Background = Brush.Parse(SyncLit ? "#53F28C" : "#39434B");
-        string key = !available ? "defib.unavailable" : "defib.state." + state.Attempt;
-        if (_shownStatus != key)
+        AedLit = automated && (aed!.Phase is AedPhase.Cpr or AedPhase.Suspended || safetyTimeNs / 400_000_000 % 2 == 0);
+        _aedLamp.Background = Brush.Parse(!AedLit ? "#39434B" : aed!.Phase == AedPhase.ShockAdvised ? "#F25B65" :
+            aed.Phase is AedPhase.WaitingForSignal or AedPhase.Suspended ? "#EDB64D" : "#53F28C");
+        string key = automated ? aed!.Phase == AedPhase.Cpr ? "aed.cpr." + aed.Advice : "aed.phase." + aed.Phase :
+            !available ? "defib.unavailable" : "defib.state." + state.Attempt;
+        int seconds = aed?.RemainingSeconds ?? 0;
+        string statusIdentity = key + ":" + seconds;
+        if (_shownStatus != statusIdentity)
         {
-            _shownStatus = key;
-            _localization.Bind(Status, TextBlock.TextProperty, key);
+            _shownStatus = statusIdentity;
+            _localization.Bind(Status, TextBlock.TextProperty, key,
+                automated && aed!.Phase is AedPhase.Analyzing or AedPhase.Cpr ? [seconds] : []);
+        }
+        if (_shownAed != automated)
+        {
+            _shownAed = automated;
+            _localization.Bind(Aed, AutomationProperties.NameProperty, automated ? "aed.on" : "aed.off");
+        }
+        string chargeKey = automated && aed!.Phase == AedPhase.Suspended ? "aed.analyze" : "skin.charge";
+        if (_shownChargeKey != chargeKey)
+        {
+            _shownChargeKey = chargeKey;
+            _localization.Bind((TextBlock)_chargeFill.Child!, TextBlock.TextProperty, chargeKey);
+            _localization.Bind(Charge, AutomationProperties.NameProperty, chargeKey);
         }
         if (_shownSync != SyncLit)
         {

@@ -147,6 +147,8 @@ public sealed class AudioRenderSession
     public int BufferedFrames { get; }
     public long RenderedThroughFrame { get; }
     public ToneScheduleResult? Schedule(long key, TonePreset preset, long targetFrame, long expiryFrame);
+    public void UpdateTherapy(TherapySoundRequest? request, bool announce = true);
+    public void UpdateTherapyRelay(bool enabled, bool triggered = false);
     public void Cancel(long key);
     public bool TryProduce(int frames);
     public int Read(Span<float> destination);
@@ -200,8 +202,12 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     public void SetVolume(int volumePercent, bool muted);
     public ulong RetiredNotificationSequence { get; }
     public void SetHeartbeatEnabled(bool enabled);
+    public void CancelHeartbeat();
     public void SubmitHeartbeat(int volumePercent, int pitchPercent = 97);
     public void SetRequest(MonitorAlarmSoundRequest? request);
+    public void SetTherapy(TherapySoundRequest? request);
+    public void SetTherapyRelayEnabled(bool enabled);
+    public void SubmitTherapyRelay();
     public Task<SoundPreviewResult> RunAsync(CancellationToken cancellationToken);
 }
 public sealed class MonitorAlarmSequencer(AudioRenderSession session, ulong retiredNotificationSequence = 0)
@@ -803,3 +809,51 @@ public sealed class MonitorTherapyPreferenceStore(string path)
     public bool Save(MonitorTherapyPreferences settings);
 }
 ```
+
+## Audio/TherapySoundDirector.cs
+
+源码：[TherapySoundDirector.cs](../../../src/Monitor.Infrastructure/Audio/TherapySoundDirector.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public enum TherapySoundPhase { Silent, Analyzing, Charging, Ready, CprShock, CprNoShock, Cancelled }
+public sealed record TherapySoundRequest(ulong Revision, TherapySoundPhase Phase, string Locale,
+    bool Automated, int ChargeProgressPermille, int CprElapsedMilliseconds)
+{
+    public bool Announce { get; init; }
+    public bool EnteringAed { get; init; }
+    public bool AfterCpr { get; init; }
+    public bool RhythmChanged { get; init; }
+    public bool Reanalyzing { get; init; }
+    public void Validate();
+}
+public sealed class TherapySoundDirector
+{
+    public TherapySoundRequest Update(ManualDefibrillator device, AutomatedExternalDefibrillator aed, string locale, bool active);
+}
+```
+
+## Audio/TherapySoundRenderer.cs
+
+源码：[TherapySoundRenderer.cs](../../../src/Monitor.Infrastructure/Audio/TherapySoundRenderer.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed class TherapySoundRenderer
+{
+    public void Update(TherapySoundRequest? request, bool announce = true);
+    public void UpdateRelay(bool enabled, bool triggered = false);
+    public void Mix(Span<float> samples);
+}
+```
+
+## Audio/SelectedTherapySounds.cs
+
+源码：[SelectedTherapySounds.cs](../../../src/Monitor.Infrastructure/Audio/SelectedTherapySounds.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public static class SelectedTherapySounds
+{
+    public static int FrameCount(string id, string locale = "en");
+}
+```
+
+治疗声音状态、撤回、重连、CPR 相位及固定录音来源见[音频接口](../audio-persistence.md#治疗声音)。

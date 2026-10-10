@@ -1,0 +1,99 @@
+{
+  "models": {
+    "zh-CN": "FastSpeech2 AISHELL-3 SSB0534 + PWGAN",
+    "en": "VITS LJS E1"
+  },
+  "source_manifest_sha256": "c233e1f1b0050c94b2a5813529592626b9802ec8d59a304a74af99999dcdc932",
+  "human_approved": false,
+  "replaces_approved_assets": false,
+  "files": [
+    {
+      "file": "AED_MODE_ADULT.wav",
+      "prompt_id": "AED_MODE_ADULT",
+      "text": "Adult mode.",
+      "sha256": "9faa50cd9a83b980c2565971b4246e53f51f1d66062c27d8bf7e92a3536fbb0e",
+      "duration_s": 1.0332916666666667
+    },
+    {
+      "file": "AED_ANALYZING.wav",
+      "prompt_id": "AED_ANALYZING",
+      "text": "Analyzing the heart rhythm. Do not touch the patient.",
+      "sha256": "3afb395a72d5e9f19545b1cc3fc3c0dfee2e3e209984fdcc6068d803516fb8d5",
+      "duration_s": 3.5269166666666667
+    },
+    {
+      "file": "AED_SHOCKABLE.wav",
+      "prompt_id": "AED_SHOCKABLE",
+      "text": "Shock advised. Charging.",
+      "sha256": "42a689f6d55621fb4791adf8d447cad16818608566f5ffc64fe307c62eef630f",
+      "duration_s": 1.9827708333333334
+    },
+    {
+      "file": "AED_READY.wav",
+      "prompt_id": "AED_READY",
+      "text": "Stand clear. Press the flashing shock button.",
+      "sha256": "1168a8f743e78edb1ffc38f5e17468e4d6caf7cd39a4c0144e55ecd6065f2514",
+      "duration_s": 3.236666666666667
+    },
+    {
+      "file": "AED_SHOCK_RECORDED.wav",
+      "prompt_id": "AED_SHOCK_RECORDED",
+      "text": "Simulated shock recorded.",
+      "sha256": "94813be0e4f1abc1724dd1626ce8cfca1eeb87913f8cf9abe476194023c2720a",
+      "duration_s": 2.0085416666666664
+    },
+    {
+      "file": "AED_AUTO_DISARM.wav",
+      "prompt_id": "AED_AUTO_DISARM",
+      "text": "Simulated shock not delivered. Charge removed.",
+      "sha256": "b9fefa3e3ab94735625af4e21ef9449f774dedfc38afba6c5bdb3a018b5f7226",
+      "duration_s": 3.26325
+    },
+    {
+      "file": "AED_RHYTHM_CHANGED_ANALYZING.wav",
+      "prompt_id": "AED_RHYTHM_CHANGED_ANALYZING",
+      "text": "Rhythm changed. Simulated shock canceled. Analyzing the heart rhythm. Do not touch the patient.",
+      "sha256": "57ed645d67f7ee9679ef99ccb7340027fd2032050230eb18be664b0277cf18a5",
+      "duration_s": 6.67975
+    },
+    {
+      "file": "AED_AUTO_DISARM_ANALYZING.wav",
+      "prompt_id": "AED_AUTO_DISARM_ANALYZING",
+      "text": "Charge removed. Analyzing the heart rhythm. Do not touch the patient.",
+      "sha256": "f2eab50e35e2645cc432b44062e317095eb61439ab5c5270d0312aff1328f608",
+      "duration_s": 4.813083333333333
+    },
+    {
+      "file": "AED_NSA_CPR.wav",
+      "prompt_id": "AED_NSA_CPR",
+      "text": "No shock advised. Begin CPR.",
+      "sha256": "32ee62cf1fd0078d6e5370949dc91991256d9ced8e0a74b5df605610c5a6e7fb",
+      "duration_s": 2.9231875
+    },
+    {
+      "file": "AED_CPR_START.wav",
+      "prompt_id": "AED_CPR_START",
+      "text": "Begin chest compressions. Follow the beat.",
+      "sha256": "0d565660bbb1c13dab8b6bb82960a3bf485300a3472f6e0ee97e9dc4f4ff8de7",
+      "duration_s": 2.7374375
+    },
+    {
+      "file": "AED_CPR_BREATHS.wav",
+      "prompt_id": "AED_CPR_BREATHS",
+      "text": "Give two breaths.",
+      "sha256": "767b29763f27a5ee14f8e4efb1243892130ce3837dff9177498b86e00f38c994",
+      "duration_s": 1.3235416666666666
+    },
+    {
+      "file": "AED_CPR_STOP.wav",
+      "prompt_id": "AED_CPR_STOP",
+      "text": "Stop CPR. Do not touch the patient.",
+      "sha256": "765546524a9764b08624cb6a078252651cd753873a119ced778fc2260876d410",
+      "duration_s": 3.1553958333333334
+    }
+  ],
+  "runtime_enabled": true,
+  "integration_authorized": true,
+  "listening_review_pending": true,
+  "generator": "tools/generate_selected_therapy_voices.py --language en"
+}

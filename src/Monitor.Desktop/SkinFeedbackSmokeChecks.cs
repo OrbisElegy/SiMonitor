@@ -27,6 +27,7 @@ internal static class SkinFeedbackSmokeChecks
             var session = window.Session;
             skin.ApplyPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(window.Settings.Sound.TherapyRelayCount > 0, "actual pacing stimuli publish relay sounds");
             Require(ReferenceEquals(session, window.Session) && session.ActivePacing == PacingIllustration.DualChamberDdd &&
                 session.Measurements!.HeartRate.MilliBeatsPerMinute is > 89000 and < 91000,
                 $"start applies the selected pacing type and actual rate without restarting: {skin.Feedback.Text}; mode={session.ActivePacing}; HR={session.Measurements!.HeartRate}; time={session.SimulationTimeNs}");
@@ -38,7 +39,9 @@ internal static class SkinFeedbackSmokeChecks
                 session.Measurements!.HeartRate.MilliBeatsPerMinute is > 79000 and < 81000, "reapply changes pacing type and rate");
             skin.Rate.Value = null;
             skin.StopPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            ulong stoppedRelays = window.Settings.Sound.TherapyRelayCount;
             for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+            Require(window.Settings.Sound.TherapyRelayCount == stoppedRelays, "stopped pacing does not publish more relay sounds");
             Require(session.ActivePacing is null && session.Measurements!.HeartRate.MilliBeatsPerMinute is > 74000 and < 76000,
                 "stop remains available with invalid drafts and restores the original rhythm");
             var reopened = new DesignPreviewWindow(path);

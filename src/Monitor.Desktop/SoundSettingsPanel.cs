@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Monitor.Application.Measurements;
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Desktop;
@@ -43,6 +44,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     private bool _monitorRunning;
     private readonly MonitorBeatSource _source = new();
     private LiveMeasurementSnapshot? _sourceMeasurement;
+    private MonitorBeatEvidence? _liveBeatEvidence;
+    internal long? LastHeartbeatConfirmedAtNs { get; private set; }
+    internal void WithdrawHeartbeat() => _alarms.CancelHeartbeat();
     private readonly TextBlock _sourceStatus = Text();
     private readonly TextBlock _sourceHistory = Text();
     internal event Action? BeatSourceChanged;
@@ -54,6 +58,32 @@ internal sealed class SoundSettingsPanel : StackPanel
         MonitorBeatOrigin.Pleth => "PLETH",
         _ => _localization.Get("sound.originWaiting"),
     };
+    private readonly TherapySoundDirector _therapyDirector = new();
+    private ManualDefibrillator? _therapyDevice;
+    private AutomatedExternalDefibrillator? _aed;
+    private bool _therapyActive;
+    internal TherapySoundRequest? PublishedTherapy { get; private set; }
+    internal ulong TherapyRelayCount { get; private set; }
+    internal void PlayTherapyRelay()
+    {
+        if (!_therapyActive || _closed) { return; }
+        TherapyRelayCount++;
+        _alarms.SubmitTherapyRelay();
+    }
+    internal void UpdateTherapy(ManualDefibrillator device, AutomatedExternalDefibrillator aed, bool active)
+    {
+        _therapyDevice = device;
+        _aed = aed;
+        _therapyActive = active;
+        PublishTherapy();
+    }
+    private void PublishTherapy()
+    {
+        _alarms.SetTherapyRelayEnabled(_therapyActive && !_closed);
+        if (_therapyDevice is null || _aed is null) { return; }
+        PublishedTherapy = _therapyDirector.Update(_therapyDevice, _aed, _localization.Locale, _therapyActive && !_closed);
+        _alarms.SetTherapy(PublishedTherapy);
+    }
     private readonly MonitorBeatPitch _pitch = new();
     internal int BeatPitchPercent => PitchSource.SelectedIndex == 1 ? _pitch.SaturationPercent : 97;
     internal MonitorNotice? PitchNotice => HeartbeatEnabled.IsChecked == true && PitchSource.SelectedIndex == 1 && _pitch.Unavailable
@@ -96,6 +126,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         // Text computed outside bindings (source labels, notices) follows the selected language.
         _localization.LocaleChanged += () =>
         {
+            PublishTherapy();
             RefreshSourceText();
             RefreshDevices();
             RefreshMute();
@@ -263,9 +294,17 @@ internal sealed class SoundSettingsPanel : StackPanel
     }
 
     internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null,
-        IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null, IReadOnlyList<MonitorNotice>? notices = null)
+        IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null, IReadOnlyList<MonitorNotice>? notices = null,
+        MonitorBeatEvidence? liveBeatEvidence = null)
     {
         if (measurement is not null) { _sourceMeasurement = measurement; }
+        if (liveBeatEvidence is not null) { _liveBeatEvidence = liveBeatEvidence; }
+        if (_liveBeatEvidence is not null)
+        {
+            // A non-live settings refresh must not fall back to delayed packets.
+            beats = liveBeatEvidence?.EcgBeats;
+            pulses = liveBeatEvidence?.PlethPulses;
+        }
         UpdateBeatSource();
         if (PitchSource.SelectedIndex == 1) { _pitch.Update(measurement?.SpO2, measurement?.SampleTimeNs ?? 0); }
         if (_alarms.OutputActive) { SetOutputNotice(null); }
@@ -280,7 +319,10 @@ internal sealed class SoundSettingsPanel : StackPanel
             _ => null
         };
         if (HeartbeatEnabled.IsChecked == true && confirmed is { } at && _source.Accept(_source.Current, at))
-        { _alarms.SubmitHeartbeat((int)HeartbeatVolume.Value, BeatPitchPercent); }
+        {
+            LastHeartbeatConfirmedAtNs = at;
+            _alarms.SubmitHeartbeat((int)HeartbeatVolume.Value, BeatPitchPercent);
+        }
     }
     internal void RefreshAlarmNotices(IReadOnlyList<MonitorNotice> notices)
     {
@@ -292,8 +334,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         if (BeatSource.SelectedIndex is < 0 or > 2) { return; }
         if (!_source.Update((MonitorBeatMode)BeatSource.SelectedIndex,
-            _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
-            _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData, _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
+            _liveBeatEvidence?.EcgStatus ?? _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
+            _liveBeatEvidence?.PlethStatus ?? _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData,
+            _liveBeatEvidence?.SampleTimeNs ?? _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
         _alarms.SetHeartbeatEnabled(false);
         RefreshSourceText();
         BeatSourceChanged?.Invoke();
@@ -304,11 +347,18 @@ internal sealed class SoundSettingsPanel : StackPanel
         _sourceHistory.Text = string.Join("\n", _source.Changes.Select(c => _localization.Format("sound.historyEntry", c.TimeNs / 1_000_000_000,
             _localization.Get(c.Mode == MonitorBeatMode.Auto ? "sound.modeAuto" : "sound.modeManual"), OriginName(c.From), OriginName(c.To))));
     }
-    internal void ResetBeatSource() { _source.Reset(); _sourceMeasurement = null; UpdateBeatSource(); }
+    internal void ResetBeatSource()
+    {
+        _source.Reset(); _sourceMeasurement = null; _liveBeatEvidence = null; LastHeartbeatConfirmedAtNs = null;
+        _alarms.CancelHeartbeat(); UpdateBeatSource();
+    }
     internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }
     internal void PauseMonitor()
     {
-        _monitorRunning = false; Publish();
+        _monitorRunning = false;
+        _therapyActive = false;
+        PublishTherapy();
+        Publish();
     }
     internal void StartAudioPause(int seconds)
     {
@@ -429,7 +479,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (OutputNotice == notice) { return; }
         OutputNotice = notice; OutputNoticeChanged?.Invoke();
     }
-    internal void Close() { _closed = true; _pauseTimer.Stop(); _outputTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
+    internal void Close() { _closed = true; PublishTherapy(); _pauseTimer.Stop(); _outputTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
     private static Button Button() => new()
     {
         MinHeight = 44,

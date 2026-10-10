@@ -16,6 +16,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <EmbeddedResource Include="Audio/SelectedTones/*.pcm" />
+    <EmbeddedResource Include="Audio/SelectedTherapySounds/*.wav" LogicalName="Monitor.Therapy.%(Filename).wav" />
+    <EmbeddedResource Include="../../eng/audio/voices/zh-CN/F1/*.wav" LogicalName="Monitor.Therapy.zh-CN.%(Filename).wav" />
+    <EmbeddedResource Include="../../eng/audio/voices/en/E1/*.wav" LogicalName="Monitor.Therapy.en.%(Filename).wav" />
+    <None Include="../../eng/audio/voices/en/E1/*.txt;../../eng/audio/voices/en/E1/UPSTREAM-README.md;../../eng/audio/voices/en/E1/manifest.json"
+          Link="therapy-licenses/en/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../eng/audio/voices/zh-CN/F1/*.txt;../../eng/audio/voices/zh-CN/F1/manifest.json"
+          Link="therapy-licenses/zh-CN/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Localization/Resources/*.json" LogicalName="Monitor.Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

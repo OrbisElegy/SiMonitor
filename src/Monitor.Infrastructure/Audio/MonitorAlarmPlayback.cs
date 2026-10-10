@@ -34,6 +34,26 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
     private const int PumpWaitMilliseconds = 10;
     private MonitorAlarmSoundRequest? _request;
+    private TherapySoundRequest? _therapyRequest;
+    private ulong _consumedTherapyRevision;
+    private bool _therapyRelayEnabled;
+    private RelaySubmission? _relay;
+    private sealed record RelaySubmission(long SubmittedAt);
+    public void SetTherapyRelayEnabled(bool enabled)
+    {
+        Volatile.Write(ref _therapyRelayEnabled, enabled);
+        if (!enabled) { Interlocked.Exchange(ref _relay, null); }
+    }
+    public void SubmitTherapyRelay()
+    {
+        if (Volatile.Read(ref _therapyRelayEnabled) && Volatile.Read(ref _busy) != 0)
+        { Interlocked.Exchange(ref _relay, new(Stopwatch.GetTimestamp())); }
+    }
+    public void SetTherapy(TherapySoundRequest? request)
+    {
+        request?.Validate();
+        Volatile.Write(ref _therapyRequest, request);
+    }
     private int _busy;
     private IPumpedAudioOutput? _output;
     private AudioOutputLifecycle? _owner;
@@ -59,11 +79,17 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
         Volatile.Write(ref _gain, muted ? 0 : volumePercent / 100f);
     }
     private BeatSubmission? _beat;
-    private sealed record BeatSubmission(int Volume, int PitchPercent, long SubmittedAt);
+    private long _heartbeatCancellation;
+    private sealed record BeatSubmission(int Volume, int PitchPercent, long SubmittedAt, long Cancellation);
+    public void CancelHeartbeat()
+    {
+        Interlocked.Increment(ref _heartbeatCancellation);
+        Interlocked.Exchange(ref _beat, null);
+    }
     public void SetHeartbeatEnabled(bool enabled)
     {
         Volatile.Write(ref _heartbeatEnabled, enabled);
-        if (!enabled) { Interlocked.Exchange(ref _beat, null); }
+        if (!enabled) { CancelHeartbeat(); }
     }
     // Single-slot mailbox: a delayed worker drops old cues instead of catching up.
     public void SubmitHeartbeat(int volumePercent, int pitchPercent = 97)
@@ -71,7 +97,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
         if (pitchPercent is < 70 or > 97) { throw new ArgumentOutOfRangeException(nameof(pitchPercent)); }
         if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
         if (Volatile.Read(ref _heartbeatEnabled) && Volatile.Read(ref _busy) != 0)
-        { Interlocked.Exchange(ref _beat, new(volumePercent, pitchPercent, Stopwatch.GetTimestamp())); }
+        { Interlocked.Exchange(ref _beat, new(volumePercent, pitchPercent, Stopwatch.GetTimestamp(), Volatile.Read(ref _heartbeatCancellation))); }
     }
     public void SetRequest(MonitorAlarmSoundRequest? request)
     {
@@ -92,6 +118,8 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
         {
             if (!Close()) { return SoundPreviewResult.StopFailed; }
             if (cancellationToken.IsCancellationRequested) { return SoundPreviewResult.Stopped; }
+            // Decode fixed therapy assets before starting the short native queue.
+            _ = SelectedTherapySounds.FrameCount("Ready");
             while (!cancellationToken.IsCancellationRequested)
             {
                 string? deviceId = Volatile.Read(ref _deviceId);
@@ -103,13 +131,27 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                     {
                         var session = _owner.Session!;
                         var sequencer = new MonitorAlarmSequencer(session, RetiredNotificationSequence);
+                        long heartbeatCancellation = Volatile.Read(ref _heartbeatCancellation);
                         while (!cancellationToken.IsCancellationRequested && deviceId == Volatile.Read(ref _deviceId))
                         {
                             session.Gain = Volatile.Read(ref _gain);
+                            var therapy = Volatile.Read(ref _therapyRequest);
+                            session.UpdateTherapy(therapy, therapy is not null && therapy.Revision > _consumedTherapyRevision);
+                            if (therapy is not null) { _consumedTherapyRevision = Math.Max(_consumedTherapyRevision, therapy.Revision); }
+                            var relay = Interlocked.Exchange(ref _relay, null);
+                            session.UpdateTherapyRelay(Volatile.Read(ref _therapyRelayEnabled),
+                                relay is not null && Stopwatch.GetElapsedTime(relay.SubmittedAt).TotalMilliseconds <= 250);
                             sequencer.Update(Volatile.Read(ref _request));
                             Volatile.Write(ref _retiredNotificationSequence, Math.Max(RetiredNotificationSequence, sequencer.RetiredNotificationSequence));
                             var beat = Interlocked.Exchange(ref _beat, null);
-                            int? volume = beat is not null && Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
+                            long cancellation = Volatile.Read(ref _heartbeatCancellation);
+                            if (heartbeatCancellation != cancellation)
+                            {
+                                sequencer.UpdateHeartbeat(false, null);
+                                heartbeatCancellation = cancellation;
+                            }
+                            int? volume = beat is not null && beat.Cancellation == cancellation &&
+                                Stopwatch.GetElapsedTime(beat.SubmittedAt).TotalMilliseconds <= 250 ? beat.Volume : null;
                             sequencer.UpdateHeartbeat(Volatile.Read(ref _heartbeatEnabled), volume, beat?.PitchPercent ?? 97);
                             if (!_output.Pump() || !_owner.CheckHealth()) { break; }
                             Volatile.Write(ref _outputActive, true);
@@ -125,6 +167,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                 Volatile.Write(ref _outputActive, false);
                 if (!Close()) { return SoundPreviewResult.StopFailed; }
                 Interlocked.Exchange(ref _beat, null);
+                Interlocked.Exchange(ref _relay, null);
                 Volatile.Write(ref _reconnecting, 1);
                 // Device selection changes reconnect immediately; outages use bounded backoff.
                 if (deviceId == Volatile.Read(ref _deviceId)) { cancellationToken.WaitHandle.WaitOne(250); }
@@ -137,6 +180,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
             Volatile.Write(ref _outputActive, false);
             if (!Close()) { result = SoundPreviewResult.StopFailed; }
             Interlocked.Exchange(ref _beat, null);
+            Interlocked.Exchange(ref _relay, null);
             Volatile.Write(ref _busy, 0);
         }
         return result;

@@ -25,6 +25,8 @@ internal static class Program
                 { return ManagedAudioCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 if (args[0] == "--audio-tone-fixture")
                 { return AudioFixtureCommand.Execute(args, Console.OpenStandardOutput(), Console.Error, cancellation.Token); }
+                if (args[0] == "--therapy-audio-fixture")
+                { return TherapyAudioFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
                 if (args[0] is "--oxygen-transport-fixture" or "--oxygenation-replay-check" or
                     "--oxygen-deep-transport-fixture" or "--oxygenation-deep-replay-check" or "--oxygenation-realtime-check")
                 { return OxygenationFixtureCommand.Execute(args, Console.Out, Console.Error, cancellation.Token); }
@@ -39,6 +41,7 @@ internal static class Program
             .. TherapySpecifications.All,
             .. ManualDefibrillatorSpecifications.All,
             .. AedSpecifications.All,
+            .. TherapySoundSpecifications.All,
             .. AedConversionSpecifications.All,
             .. PostShockSpecifications.All,
             .. PacingWaveformSpecifications.All,

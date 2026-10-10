@@ -17,7 +17,7 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
     private readonly Func<MonitorTherapyPreferences, bool, string>? _pacing;
-    private (bool Running, bool Pending, bool Allowed)? _shownPacing;
+    private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
     private bool _pacingFeedback;
     internal TextBlock PacingStatus { get; } = new() { Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
     internal DefibrillatorControls Defibrillator { get; }
@@ -72,15 +72,15 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         SetPacingState(false, false, false);
     }
 
-    internal void SetPacingState(bool running, bool pending, bool allowed)
+    internal void SetPacingState(bool running, bool pending, bool allowed, bool aedEnabled = false)
     {
-        if (_shownPacing == (running, pending, allowed)) { return; }
-        _shownPacing = (running, pending, allowed);
-        ApplyPacing.IsEnabled = _pacing is not null && !pending && allowed;
+        if (_shownPacing == (running, pending, allowed, aedEnabled)) { return; }
+        _shownPacing = (running, pending, allowed, aedEnabled);
+        ApplyPacing.IsEnabled = _pacing is not null && !pending && allowed && !aedEnabled;
         StopPacing.IsEnabled = _pacing is not null && running && !pending;
         _localization.Bind(PacingStatus, TextBlock.TextProperty,
-            pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState");
-        _localization.Bind(PacingStatus, ToolTip.TipProperty, text => allowed ? "" : text.GetString("skin.pacingDisabled"));
+            aedEnabled ? "aed.pacingUnavailable" : pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState");
+        _localization.Bind(PacingStatus, ToolTip.TipProperty, text => aedEnabled ? text.GetString("aed.pacingUnavailable") : allowed ? "" : text.GetString("skin.pacingDisabled"));
         _localization.Bind(ApplyPacing, ContentControl.ContentProperty, running ? "skin.pacingApply" : "skin.pacingStart");
         if (_pacingFeedback)
         {

@@ -484,6 +484,14 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         int[] values = Enumerable.Range(0, 61).Select(i => ValueAt(startNs + i * StepNs)).ToArray();
         int[] edges = values.Take(3).Concat(values.TakeLast(3)).Order().ToArray();
         int baseline = (edges[2] + edges[3]) / 2;
+        int tailStart = SlowRepolarizationTailStart(values);
+        if (tailStart >= 0)
+        {
+            // An elevated ST continuation is neither the terminal QRS lobe
+            // nor an isoelectric baseline. Use the quiet pre-QRS segment when
+            // a steep complex settles into a separate, slow terminal contour.
+            baseline = values.Skip(12).Take(6).Sum() / 6;
+        }
         values = values.Select(v => v - baseline).ToArray();
         int magnitude = values.Max(v => Math.Abs(v));
         if (magnitude < 150) { return null; }
@@ -491,7 +499,9 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         // Measure the complex surrounding the detected peak. Separate P/T
         // deflections in the window must not extend QRS across a quiet segment.
         // Bridge crossings shorter than 40 ms so separated QRS lobes remain included.
-        int[] lobes = Enumerable.Range(0, values.Length).Where(i => Math.Abs(values[i]) > threshold).ToArray();
+        int[] lobes = Enumerable.Range(0, tailStart >= 0 ? tailStart + 1 : values.Length)
+            .Where(i => Math.Abs(values[i]) > threshold).ToArray();
+        if (lobes.Length == 0) { return null; }
         int peak = Enumerable.Range(0, lobes.Length).MinBy(i => Math.Abs(lobes[i] - 30));
         int first = peak, last = peak;
         while (first > 0 && lobes[first] - lobes[first - 1] <= 10) { first--; }
@@ -502,6 +512,31 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         // brisk activation to the dominant peak with a prolonged terminal limb.
         bool rapidInitial = (dominant - lobes[first]) * 4 <= 40 && (lobes[last] - dominant) * 4 >= 60;
         return new(width, values.Select(v => v * 1000 / magnitude).ToArray(), rapidInitial);
+    }
+
+    private static int SlowRepolarizationTailStart(int[] values)
+    {
+        // Require a quiet 24 ms pre-QRS segment and an off-baseline tail.
+        // Only trim after the detected peak, where a steep complex settles
+        // for 20 ms and the remaining contour stays slow and monotonic.
+        int[] before = values.Skip(12).Take(6).ToArray();
+        if (before.Max() - before.Min() > 30) { return -1; }
+        int baseline = before.Sum() / before.Length;
+        int magnitude = values.Max(v => Math.Abs(v - baseline));
+        if (Math.Abs(values[^1] - baseline) <= Math.Max(50, magnitude / 5)) { return -1; }
+        int[] slopes = values.Zip(values.Skip(1), (a, b) => b - a).ToArray();
+        int maximumSlope = slopes.Max(Math.Abs);
+        if (maximumSlope < 100) { return -1; }
+        for (int start = 36; start <= values.Length - 9; start++)
+        {
+            int[] tail = slopes.Skip(start).ToArray();
+            int direction = Math.Sign(values[^1] - values[start]);
+            if (tail.Take(5).All(slope => Math.Abs(slope) <= maximumSlope / 20) &&
+                tail.All(slope => Math.Abs(slope) <= maximumSlope / 10 &&
+                    (direction == 0 ? Math.Abs(slope) <= 2 : slope * direction >= -2)))
+            { return start; }
+        }
+        return -1;
     }
 
     // A wide premature complex can be conducted from the atria. Require both

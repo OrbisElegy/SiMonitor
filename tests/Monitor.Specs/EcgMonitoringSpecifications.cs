@@ -15,6 +15,7 @@ internal static class EcgMonitoringSpecifications
     [
         new(nameof(EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence), EcgAberrantAtrialBeatsRequireAtrialAndQrsEvidence),
         new(nameof(EcgHypertrophyDoesNotProduceVentricularRuns), EcgHypertrophyDoesNotProduceVentricularRuns),
+        new(nameof(EcgInfarctionStContinuationDoesNotCreateVentricularRhythm), EcgInfarctionStContinuationDoesNotCreateVentricularRhythm),
         new(nameof(EcgPauseAndAsystoleUseLiveSamples), EcgPauseAndAsystoleUseLiveSamples),
         new(nameof(EcgVentricularPatternsRequireLearnedMorphology), EcgVentricularPatternsRequireLearnedMorphology),
         new(nameof(EcgVentricularRunsRespectRateAndLength), EcgVentricularRunsRespectRateAndLength),
@@ -71,6 +72,44 @@ internal static class EcgMonitoringSpecifications
                     EcgMonitoringConditions.RunPvcs or EcgMonitoringConditions.PvcsPerMinuteHigh)),
                     "hypertrophy contour must not create ventricular runs: " + shape + "/" + transition + ": " + result.Reading);
             }
+        }
+    }
+
+    private static void EcgInfarctionStContinuationDoesNotCreateVentricularRhythm()
+    {
+        const EcgMonitoringConditions ventricular = EcgMonitoringConditions.VentricularRhythm |
+            EcgMonitoringConditions.VentricularTachycardia | EcgMonitoringConditions.RunPvcs |
+            EcgMonitoringConditions.PairPvcs | EcgMonitoringConditions.PvcsPerMinuteHigh;
+        foreach (var stage in new[] { InfarctionIllustrationStage.HyperacuteInjury, InfarctionIllustrationStage.AcuteMonophasic })
+        {
+            var configuration = PhysiologyIllustrationConfiguration.Default with
+            { Infarction = new(0, stage, InfarctionTerritory.Inferior) };
+            foreach (int offsetMilliseconds in new[] { 0, 200, 400, 600 })
+            {
+                var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true);
+                while (session.SimulationTimeNs < 25_000_000_000 + offsetMilliseconds * 1_000_000L) { session.Advance(200_000_000); }
+                session.ScheduleSource(new(configuration, MonitorDisplayConfiguration.Default(), true), 0);
+                while (session.SimulationTimeNs < 50_000_000_000)
+                {
+                    session.Advance(200_000_000);
+                    Check.That(session.DetectedMonitoringEvents.All(e => (e.Condition & ventricular) == 0),
+                        "an ST continuation cannot create ventricular runs after a live template change: " + stage + "/" + offsetMilliseconds);
+                }
+                Check.That(session.Measurements!.HeartRate.MilliBeatsPerMinute == 75000 &&
+                    session.Measurements.EcgMonitoring is { PvcsLastMinute: 0, LastBeat: { Label: EcgBeatLabel.Normal, QrsWidthMilliseconds: < 100 } },
+                    "the stable infarction contour retains its sinus rate and recovers a narrow reference");
+                Check.That(session.Measurements.EcgMonitoring.Repolarization is
+                { StStatus: WaveformMeasurementStatus.Valid, StMicrovolts: > 0 },
+                    "excluding the ST tail from QRS width preserves the measured ST elevation");
+            }
+            short[] samples = Acquire(PhysiologyIllustrationConfiguration.Default, 25).Concat(Acquire(configuration, 30)).ToArray();
+            var result = Run(samples);
+            var restored = Run(samples, 37, restore: true);
+            var inverted = Run(samples.Select(value => checked((short)(600 - value))).ToArray());
+            Check.That(result.Reading == restored.Reading && result.Events.SequenceEqual(restored.Events) &&
+                result.Reading.LastBeat == inverted.Reading.LastBeat &&
+                inverted.Events.All(e => (e.Condition & ventricular) == 0) && inverted.Reading.PvcsLastMinute == 0,
+                "ST boundary handling is independent of packet partition, checkpoint, lead polarity and constant baseline");
         }
     }
 

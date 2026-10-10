@@ -22,7 +22,7 @@ internal static class ProductIdentity
         You should have received a copy of the GNU Affero General Public License
         along with this program. If not, see <https://www.gnu.org/licenses/>.
         """;
-    internal const string Version = "V0.5";
+    internal const string Version = "V0.6.0";
 #if SIMONITOR_RELEASE
     internal static bool DevelopmentFeatures => false;
 #else

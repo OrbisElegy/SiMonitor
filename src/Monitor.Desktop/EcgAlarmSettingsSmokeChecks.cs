@@ -28,6 +28,7 @@ internal static class EcgAlarmSettingsSmokeChecks
                 browser.Rows.Keys.Order(StringComparer.Ordinal).SequenceEqual(EcgAlarmNotices.Descriptors.Select(d => d.Id).Order(StringComparer.Ordinal)) &&
                 !browser.GetVisualDescendants().OfType<ComboBox>().Any(),
                 "all ECG events are directly browsable without a long selector");
+            Require(!browser.Rows.ContainsKey("ecg-svt"), "internal SVT discrimination has no standalone alarm editor");
             Capture("all", 1440, 940);
             Require(!browser.FilterTools.IsOpen && !browser.Search.GetVisualAncestors().Contains(browser) &&
                 browser.Filter.Bounds.Width == 44 && browser.Filter.Bounds.Height == 44 &&
@@ -87,7 +88,7 @@ internal static class EcgAlarmSettingsSmokeChecks
             browser.Search.Text = "no-matching-event";
             Require(browser.VisibleCount == 0 && browser.Clear.IsEnabled, "empty results remain recoverable");
             Click(browser.Clear);
-            Require(browser.VisibleCount == 25 && browser.Category.SelectedIndex == 0 && browser.Search.Text == "" && !browser.HasFilters,
+            Require(browser.VisibleCount == 24 && browser.Category.SelectedIndex == 0 && browser.Search.Text == "" && !browser.HasFilters,
                 "clear restores all groups and search");
             browser.Search.Text = "PVC";
             Require(browser.VisibleCount > 0 && browser.Rows["ecg-pvc-rate"].IsVisible, "English acronym finds ventricular ectopy");

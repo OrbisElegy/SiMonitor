@@ -278,6 +278,18 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             label = EcgBeatLabel.Normal;
             difference = Difference(shape!, _template!);
         }
+        if (SustainedRapidWideSupraventricularStart(new(beat.PeakTimeNs, label, shape)) is { } conductedStart)
+        {
+            // A confirmed conducted run must not keep accruing PVC/R-on-T
+            // evidence against an obsolete narrow/slow reference. Correct only
+            // observations inside this confirmed run, preserving older ectopy.
+            label = EcgBeatLabel.SupraventricularPremature;
+            _beats = _beats.Select(b => b.PeakNs >= conductedStart && b.Label == EcgBeatLabel.Ventricular
+                ? b with { Label = EcgBeatLabel.SupraventricularPremature } : b).ToArray();
+            _ventricularRun = 0;
+            _runHasLeftBoundary = false;
+            _ronTCandidateNs = _previousRonTNs = null;
+        }
         var morphology = new EcgBeatMorphology(label, width, difference);
         _lastMorphology = morphology;
         _lastPeakNs = beat.PeakTimeNs;
@@ -285,7 +297,11 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         if (_ronTCandidateNs is { } candidate && intervalNs > _ronTAverageNs * 5 / 4)
         { Occur(EcgMonitoringConditions.RonTPvc, candidate, beat.ConfirmedAtNs, events); }
         _ronTCandidateNs = null;
-        if (label == EcgBeatLabel.Ventricular && average is { } mean && mean > 600_000_000 &&
+        // Repeated short intervals within a sustained ventricular/wide run are
+        // not separate premature beats coupled to a preceding reference beat.
+        if (label == EcgBeatLabel.Ventricular &&
+            _beats.LastOrDefault()?.Label is EcgBeatLabel.Normal or EcgBeatLabel.Learning or EcgBeatLabel.SupraventricularPremature &&
+            average is { } mean && mean > 600_000_000 &&
             intervalNs > 0 && (intervalNs < 333_000_000 && intervalNs * 3 < mean ||
                 intervalNs * 5 < mean * 4 && width <= 160 && previousRepolarization?.PeakNs == previous &&
                 HasUnfinishedT(previousRepolarization, beat.PeakTimeNs)))
@@ -326,12 +342,16 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         _averageRrNs = AverageRrNs() ?? _averageRrNs;
         bool fastV = _ventricularRun >= 2 && 60_000_000_000L * (_ventricularRun - 1) >
             (beat.PeakTimeNs - _runStartNs) * settings.VtachHeartRate;
-        Set(EcgMonitoringConditions.VentricularTachycardia, fastV && _ventricularRun >= settings.VtachRunBeats, _runStartNs, beat.ConfirmedAtNs, events);
+        long? wideRunStartNs = SustainedWideTachycardiaStart();
+        long? rapidWideStartNs = SustainedRapidWideSupraventricularStart();
+        Set(EcgMonitoringConditions.VentricularTachycardia, rapidWideStartNs is null &&
+            (fastV && _ventricularRun >= settings.VtachRunBeats || wideRunStartNs is not null),
+            wideRunStartNs ?? _runStartNs, beat.ConfirmedAtNs, events);
         Set(EcgMonitoringConditions.VentricularRhythm, !fastV && _ventricularRun > settings.VentricularRhythmRunBeats, _runStartNs, beat.ConfirmedAtNs, events);
         Set(EcgMonitoringConditions.RunPvcs, !fastV && _ventricularRun > 2 && _ventricularRun <= settings.VentricularRhythmRunBeats, _runStartNs, beat.ConfirmedAtNs, events);
         Set(EcgMonitoringConditions.SupraventricularTachycardia, _svtRun >= settings.SvtRunBeats &&
-            60_000_000_000L * (_svtRun - 1) > (beat.PeakTimeNs - _svtStartNs) * settings.SvtHeartRate,
-            _svtStartNs, beat.ConfirmedAtNs, events);
+            60_000_000_000L * (_svtRun - 1) > (beat.PeakTimeNs - _svtStartNs) * settings.SvtHeartRate || rapidWideStartNs is not null,
+            rapidWideStartNs ?? _svtStartNs, beat.ConfirmedAtNs, events);
         bool bigeminy = Pattern([0, 1, 0, 1, 0]) || (_active & EcgMonitoringConditions.VentricularBigeminy) != 0 && Pattern([1, 0, 1, 0, 1]);
         bool trigeminy = Pattern([0, 0, 1, 0, 0, 1, 0, 0]) || (_active & EcgMonitoringConditions.VentricularTrigeminy) != 0 &&
             (Pattern([0, 1, 0, 0, 1, 0, 0, 1]) || Pattern([1, 0, 0, 1, 0, 0, 1, 0]));
@@ -346,6 +366,43 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         if (label == EcgBeatLabel.Normal && width < 120 && intervalNs >= 400_000_000 && intervalNs <= 2_000_000_000)
         { _pending = new(beat.PeakTimeNs, startNs - 20_000_000, endNs - 20_000_000, intervalNs); }
         else { InvalidateRepolarization(beat.ConfirmedAtNs, events, EcgRhythmInterruption.InsufficientRrEvidence); }
+    }
+
+    // A learned dominant contour is not evidence that a rapid wide rhythm is
+    // normal. Screen the acquired run independently of the reference/PVC labels,
+    // including during learning and reacquisition after a shock artifact.
+    // This single-lead teaching screen cannot exclude every aberrantly conducted
+    // supraventricular rhythm; it does not infer pulse or treatment eligibility.
+    private long? SustainedWideTachycardiaStart()
+    {
+        if (_ventricularPacing) { return null; }
+        var recent = RecentFastBeats(settings.VtachRunBeats, settings.VtachHeartRate);
+        if (recent.Length == 0) { return null; }
+        int nonVentricular = recent.Count(b => b.Shape!.Width < 100 || b.Shape.RapidInitialDeflection);
+        // Once confirmed, one isolated narrow/capture complex need not mean the
+        // sustained rhythm ended. Two such complexes withdraw this evidence.
+        bool established = (_active & EcgMonitoringConditions.VentricularTachycardia) != 0;
+        return nonVentricular == 0 || established && nonVentricular == 1 ? recent[0].PeakNs : null;
+    }
+
+    // A repeatedly fast initial deflection followed by a broad terminal limb
+    // supports conducted wide tachycardia (including the RBBB illustration).
+    // Require a consistent run, not a single short rise or a source label.
+    private long? SustainedRapidWideSupraventricularStart(Observation? candidate = null)
+    {
+        if (_ventricularPacing) { return null; }
+        var recent = RecentFastBeats(settings.SvtRunBeats, settings.SvtHeartRate, candidate);
+        return recent.Length > 0 && recent.All(b => b.Shape is { Width: >= 100, RapidInitialDeflection: true } &&
+            Difference(b.Shape, recent[0].Shape!) < 250)
+            ? recent[0].PeakNs : null;
+    }
+
+    private Observation[] RecentFastBeats(int count, int rate, Observation? candidate = null)
+    {
+        var recent = (candidate is null ? _beats : _beats.Append(candidate)).TakeLast(count).ToArray();
+        return recent.Length == count && recent.All(b => b.Shape is not null && b.Label != EcgBeatLabel.Paced) &&
+            recent.Zip(recent.Skip(1), (a, b) => b.PeakNs - a.PeakNs).All(rr => rr > 0 && rr * rate < MinuteNs)
+            ? recent : [];
     }
 
     // An initial dominant abnormal shape or an obsolete normal RR must not
@@ -440,7 +497,11 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         while (first > 0 && lobes[first] - lobes[first - 1] <= 10) { first--; }
         while (last < lobes.Length - 1 && lobes[last + 1] - lobes[last] <= 10) { last++; }
         int width = (lobes[last] - lobes[first] + 1) * 4;
-        return new(width, values.Select(v => v * 1000 / magnitude).ToArray());
+        int dominant = Enumerable.Range(lobes[first], lobes[last] - lobes[first] + 1).MaxBy(i => Math.Abs(values[i]));
+        // A bounded sample-contour proxy, not a clinical RWPT measurement:
+        // brisk activation to the dominant peak with a prolonged terminal limb.
+        bool rapidInitial = (dominant - lobes[first]) * 4 <= 40 && (lobes[last] - dominant) * 4 >= 60;
+        return new(width, values.Select(v => v * 1000 / magnitude).ToArray(), rapidInitial);
     }
 
     // A wide premature complex can be conducted from the atria. Require both
@@ -552,7 +613,7 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
         events.Add(new(condition, EcgMonitoringTransition.Occurred, fromNs, timeNs));
     }
     private static int Index(EcgMonitoringConditions condition) => System.Numerics.BitOperations.TrailingZeroCount((ulong)condition);
-    private sealed record Shape(int Width, int[] Values);
+    private sealed record Shape(int Width, int[] Values, bool RapidInitialDeflection);
     private sealed record RecoveryBeat(Shape Shape, long RrNs);
     private sealed record Observation(long PeakNs, EcgBeatLabel Label, Shape? Shape);
     private sealed record PendingBeat(DetectedEcgBeat Beat, long StartNs, long EndNs, PendingRepolarization? PreviousRepolarization, long? PulseNs);

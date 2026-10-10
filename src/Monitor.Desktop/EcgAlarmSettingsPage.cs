@@ -41,7 +41,7 @@ internal sealed class EcgAlarmSettingsPage : UserControl
         ("alarm.ecgGroupCritical", ["ecg-asystole", "ecg-vf", "ecg-vt"]),
         ("alarm.ecgGroupPauses", ["ecg-pause", "ecg-missed"]),
         ("alarm.ecgGroupVentricular", ["ecg-nsvt", "ecg-ventricular", "ecg-pvc-run", "ecg-pvc-pair", "ecg-bigeminy", "ecg-trigeminy", "ecg-multiform", "ecg-pvc-rate", "ecg-ron-t"]),
-        ("alarm.ecgGroupAtrial", ["ecg-svt", "ecg-af", "ecg-irregular", "ecg-af-end", "ecg-irregular-end"]),
+        ("alarm.ecgGroupAtrial", ["ecg-af", "ecg-irregular", "ecg-af-end", "ecg-irregular-end"]),
         ("alarm.ecgGroupRepolarization", ["ecg-st-high", "ecg-st-low", "ecg-qtc", "ecg-delta-qtc"]),
         ("alarm.ecgGroupPacing", ["ecg-pacer-capture", "ecg-pacer-pacing"])
     ];
@@ -169,7 +169,6 @@ internal sealed class EcgAlarmSettingsPage : UserControl
     {
         "ecg-vt" or "ecg-nsvt" => "室速 VT",
         "ecg-vf" => "室颤 VF",
-        "ecg-svt" => "室上速 SVT",
         "ecg-af" or "ecg-af-end" => "房颤 AF AFib",
         _ => descriptor.Text.Contains("室早", StringComparison.Ordinal) ? "室性早搏 PVC" : ""
     };

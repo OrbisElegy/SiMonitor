@@ -23,9 +23,14 @@ internal static class EcgMonitoringSpecifications
         new(nameof(EcgRepolarizationRequiresSustainedMeasuredEvidence), EcgRepolarizationRequiresSustainedMeasuredEvidence),
         new(nameof(EcgQtCorrectionAndStPolarityUseMeasuredUnits), EcgQtCorrectionAndStPolarityUseMeasuredUnits),
         new(nameof(EcgMonitoringEventsCommitWithAllChannels), EcgMonitoringEventsCommitWithAllChannels),
+        new(nameof(EcgAcquiredFibrillationRemainsSustained), EcgAcquiredFibrillationRemainsSustained),
         new(nameof(EcgFibrillationRequiresFrequencyAndPersistence), EcgFibrillationRequiresFrequencyAndPersistence),
         new(nameof(EcgFibrillationRecoversWithoutLatchingAcrossEvidenceLoss), EcgFibrillationRecoversWithoutLatchingAcrossEvidenceLoss),
         new(nameof(EcgMonitoringFlowsThroughLivePreview), EcgMonitoringFlowsThroughLivePreview),
+        new(nameof(EcgDigitalisToRbbbDoesNotCreatePrematureBeatAlarms), EcgDigitalisToRbbbDoesNotCreatePrematureBeatAlarms),
+        new(nameof(EcgRapidInitialWideRunsSupportSupraventricularEvidence), EcgRapidInitialWideRunsSupportSupraventricularEvidence),
+        new(nameof(EcgVtachSurvivesAbnormalStartupAndReacquisition), EcgVtachSurvivesAbnormalStartupAndReacquisition),
+        new(nameof(EcgVtachStartupRequiresSustainedFastWideEvidence), EcgVtachStartupRequiresSustainedFastWideEvidence),
         new(nameof(EcgAcquiredPresetsProduceVentricularEvidence), EcgAcquiredPresetsProduceVentricularEvidence),
         new(nameof(EcgPacingRequiresAcquiredPulseEvidence), EcgPacingRequiresAcquiredPulseEvidence),
         new(nameof(EcgSimulatedPacingRestoresAndRejectsInvalidEvidence), EcgSimulatedPacingRestoresAndRejectsInvalidEvidence),
@@ -255,6 +260,19 @@ internal static class EcgMonitoringSpecifications
         Check.That(exercised, "transaction test reaches an actual advanced event");
     }
 
+    private static void EcgAcquiredFibrillationRemainsSustained()
+    {
+        foreach (var pattern in new[] { AvConductionPattern.VentricularFibrillationCoarseIllustration,
+            AvConductionPattern.VentricularFibrillationFineIllustration })
+        {
+            var result = Run(Acquire(PhysiologyIllustrationConfiguration.Disorganized(pattern), 300));
+            var events = result.Events.Where(e => e.Condition == EcgMonitoringConditions.SuspectedVentricularFibrillation).ToArray();
+            Check.That(events.Length == 1 && events[0].Transition == EcgMonitoringTransition.Started &&
+                result.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.SuspectedVentricularFibrillation),
+                "QRS prelude segmentation must not split continuous acquired VF into an apparent recovery: " + pattern);
+        }
+    }
+
     private static void EcgFibrillationRequiresFrequencyAndPersistence()
     {
         short[] wave = Enumerable.Range(0, 2500).Select(i => (short)(350 * Math.Sin(i * 2 * Math.PI * 5 / 250))).ToArray();
@@ -304,6 +322,122 @@ internal static class EcgMonitoringSpecifications
             .Concat(Acquire(PhysiologyIllustrationConfiguration.VtPreset, 20)).ToArray());
         Check.That(vt.Events.Any(e => e.Condition == EcgMonitoringConditions.VentricularTachycardia),
             "actual acquired VT after normal learning produces VT: " + vt.Reading);
+    }
+
+    private static void EcgDigitalisToRbbbDoesNotCreatePrematureBeatAlarms()
+    {
+        foreach (var shape in Enum.GetValues<DigitalisTShape>())
+        {
+            foreach (int offsetMilliseconds in new[] { 0, 200, 400, 600 })
+            {
+                var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default with
+                { DigitalisEffect = true, DigitalisShape = shape }, MonitorDisplayConfiguration.Default(), true);
+                while (session.SimulationTimeNs < 30_000_000_000 + offsetMilliseconds * 1_000_000L) { session.Advance(200_000_000); }
+                session.ScheduleSource(new(PhysiologyIllustrationConfiguration.SvtPreset with { SvtRbbb = true },
+                    MonitorDisplayConfiguration.Default(), true), 0);
+                var ecgAlarms = new EcgAlarmNotices();
+                var heartRateAlarm = new ConfirmedLimitNotice(MonitorNumeric.HeartRate);
+                bool highHeartRate = false;
+                while (session.SimulationTimeNs < 45_000_000_000)
+                {
+                    session.Advance(200_000_000);
+                    Check.That(session.DetectedMonitoringEvents.All(e => e.Condition != EcgMonitoringConditions.RonTPvc),
+                        "a sustained RBBB SVT run is not repeated isolated R-on-T evidence: " + shape + "/" + offsetMilliseconds);
+                    var snapshot = session.Measurements!;
+                    var notices = ecgAlarms.Evaluate(true, snapshot, session.DetectedMonitoringEvents, session.DetectedRhythmEvents);
+                    Check.That(notices.All(n => n.Id is not ("ecg-ron-t" or "ecg-svt" or "ecg-vt" or "ecg-pvc-rate")),
+                        "the transition must not publish an ectopy, VT or standalone SVT alarm");
+                    highHeartRate |= heartRateAlarm.Evaluate(new(true, 40000, 50000, 120000, 180000), snapshot)?.Id == "hr-high";
+                }
+                Check.That(highHeartRate && session.Measurements!.EcgMonitoring.PvcsLastMinute == 0 &&
+                    session.Measurements.EcgMonitoring.ActiveConditions.HasFlag(EcgMonitoringConditions.SupraventricularTachycardia),
+                    "retain internal conducted-rhythm evidence, withdraw false PVC counts, and publish the configured HR-high alarm");
+            }
+        }
+    }
+
+    private static void EcgRapidInitialWideRunsSupportSupraventricularEvidence()
+    {
+        short[] rbbb = Acquire(PhysiologyIllustrationConfiguration.SvtPreset with { SvtRbbb = true }, 40);
+        foreach (bool priorSinus in new[] { false, true })
+        {
+            short[] samples = priorSinus ? Acquire(PhysiologyIllustrationConfiguration.Default, 20).Concat(rbbb).ToArray() : rbbb;
+            var result = Run(samples);
+            Check.That(result.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.SupraventricularTachycardia) &&
+                result.Events.All(e => e.Condition is not (EcgMonitoringConditions.VentricularTachycardia or EcgMonitoringConditions.SuspectedVentricularFibrillation)),
+                "consistent fast initial activation with a wide terminal limb supports SVT before or after reference learning: " + priorSinus);
+            var restored = Run(samples, 37, restore: true);
+            var inverted = Run(samples.Select(value => checked((short)(600 - value))).ToArray());
+            Check.That(restored.Reading == result.Reading && restored.Events.SequenceEqual(result.Events) &&
+                inverted.Events.SequenceEqual(result.Events), "wide conducted run evidence survives checkpoints, packet boundaries, polarity and baseline changes");
+        }
+        // A broad initial activation cannot borrow the RBBB-like exception.
+        var lbbb = Run(Acquire(PhysiologyIllustrationConfiguration.SvtPreset with { SvtLbbb = true }, 40));
+        Check.That(!lbbb.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.SupraventricularTachycardia),
+            "the ambiguous LBBB illustration is not identified by hidden template metadata");
+    }
+
+    private static void EcgVtachSurvivesAbnormalStartupAndReacquisition()
+    {
+        foreach (var configuration in new[]
+        {
+            PhysiologyIllustrationConfiguration.VtPreset,
+            PhysiologyIllustrationConfiguration.VtPreset with { VtFusion = true },
+            PhysiologyIllustrationConfiguration.VtPreset with { VtCapture = true },
+            PhysiologyIllustrationConfiguration.VtPreset with { VtBidirectional = true }
+        })
+        {
+            short[] samples = Acquire(configuration, 60);
+            var result = Run(samples);
+            var starts = result.Events.Where(e => e.Condition == EcgMonitoringConditions.VentricularTachycardia).ToArray();
+            Check.That(starts.Length == 1 && starts[0].Transition == EcgMonitoringTransition.Started && starts[0].ConfirmedAtNs < 6_000_000_000 &&
+                result.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia),
+                "startup VT is detected without a preceding sinus reference and stays active: " + configuration + " / " + string.Join(";", starts));
+            var restored = Run(samples, 37, restore: true);
+            Check.That(restored.Reading == result.Reading && restored.Events.SequenceEqual(result.Events),
+                "startup VT evidence survives packet partition and checkpoints");
+            var detector = new EcgHeartRateMeasurement(Channel, new());
+            List<DetectedEcgMonitoringEvent> events = [];
+            for (int start = 0; start < samples.Length; start += 50)
+            {
+                detector.Consume(Wire(samples.Skip(start).Take(50).ToArray(), start, (ulong)(start / 50),
+                    poor: start >= 5000 && start < 5250), out _, out var batch);
+                events.AddRange(batch);
+            }
+            var vt = events.Where(e => e.Condition == EcgMonitoringConditions.VentricularTachycardia).ToArray();
+            Check.That(vt.Length == 3 && vt[0].Transition == EcgMonitoringTransition.Started &&
+                vt[1].Transition == EcgMonitoringTransition.Interrupted && vt[2].Transition == EcgMonitoringTransition.Started &&
+                vt[2].ConfirmedAtNs < 27_000_000_000 && detector.ReadMonitoring((samples.Length - 1) * StepNs).ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia),
+                "signal recovery reacquires sustained VT instead of learning it away: " + string.Join(";", vt));
+        }
+    }
+
+    private static void EcgVtachStartupRequiresSustainedFastWideEvidence()
+    {
+        short[] fast = new short[20 * 250];
+        for (int peak = 125; peak < fast.Length - 20; peak += 100) { Qrs(fast, peak, 20); }
+        var vt = Run(fast);
+        Check.That(vt.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia), "fast wide acquired run alarms without a reference");
+        var limited = Run(fast, settings: new() { VtachHeartRate = 150 });
+        Check.That(!limited.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia), "rate threshold remains strict");
+        var narrow = Run(Acquire(PhysiologyIllustrationConfiguration.SvtPreset, 30));
+        var slow = Run(Acquire(PhysiologyIllustrationConfiguration.AivrPreset, 30));
+        Check.That(new[] { narrow, slow }.All(r => r.Events.All(e => e.Condition != EcgMonitoringConditions.VentricularTachycardia)),
+            "narrow SVT and slow wide ventricular rhythm do not satisfy startup VT");
+        var paced = Run(fast, settings: new() { PacedMode = true });
+        Check.That(paced.Events.All(e => e.Condition != EcgMonitoringConditions.VentricularTachycardia),
+            "paced mode without usable pulse evidence cannot become startup VT");
+        short[] alternating = new short[20 * 250];
+        for (int i = 0, peak = 125; peak < alternating.Length - 20; i++, peak += 100)
+        { Qrs(alternating, peak, i % 2 == 0 ? 20 : 8); }
+        Check.That(Run(alternating).Events.All(e => e.Condition != EcgMonitoringConditions.VentricularTachycardia),
+            "fast alternating wide and narrow beats are not a sustained wide run");
+        var inverted = Run(fast.Select(value => checked((short)(600 - value))).ToArray(), 37, restore: true);
+        Check.That(inverted.Events.SequenceEqual(vt.Events), "startup VT is invariant to lead polarity and baseline offset");
+        var recovery = Run(fast.Concat(Normal(20)).ToArray());
+        Check.That(!recovery.Reading.ActiveConditions.HasFlag(EcgMonitoringConditions.VentricularTachycardia) &&
+            recovery.Events.Any(e => e.Condition == EcgMonitoringConditions.VentricularTachycardia && e.Transition == EcgMonitoringTransition.Ended),
+            "returning sinus rhythm clears VT without waiting for reference learning");
     }
 
     private static short[] Acquire(PhysiologyIllustrationConfiguration configuration, int seconds)

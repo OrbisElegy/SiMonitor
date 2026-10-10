@@ -872,7 +872,6 @@
   "alarm.ecg.multiform": "ECG · 多形室早",
   "alarm.ecg.pvc-rate": "ECG · 室早频发",
   "alarm.ecg.ron-t": "ECG · R-on-T 室早",
-  "alarm.ecg.svt": "ECG · 室上性心动过速",
   "alarm.ecg.st-high": "ECG · ST 段抬高",
   "alarm.ecg.st-low": "ECG · ST 段压低",
   "alarm.ecg.qtc": "ECG · QTc 延长",

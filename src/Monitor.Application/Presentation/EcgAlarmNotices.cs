@@ -37,7 +37,6 @@ public sealed class EcgAlarmNotices
         D("multiform", "ECG · 多形室早", EcgMonitoringConditions.MultiformPvcs),
         D("pvc-rate", "ECG · 室早频发", EcgMonitoringConditions.PvcsPerMinuteHigh),
         D("ron-t", "ECG · R-on-T 室早", EcgMonitoringConditions.RonTPvc),
-        D("svt", "ECG · 室上性心动过速", EcgMonitoringConditions.SupraventricularTachycardia),
         D("st-high", "ECG · ST 段抬高", EcgMonitoringConditions.StHigh),
         D("st-low", "ECG · ST 段压低", EcgMonitoringConditions.StLow),
         D("qtc", "ECG · QTc 延长", EcgMonitoringConditions.QtcHigh),
@@ -194,7 +193,6 @@ public sealed class EcgAlarmNotices
         "ecg-missed" or "ecg-pacer-capture" or "ecg-pacer-pacing" => (2, 1),
         "ecg-af" or "ecg-af-end" => (3, 0),
         "ecg-irregular" or "ecg-irregular-end" => (3, 1),
-        "ecg-svt" => (4, 0),
         _ => (-1, 0)
     };
 

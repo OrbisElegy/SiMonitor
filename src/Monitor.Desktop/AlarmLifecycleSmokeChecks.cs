@@ -48,7 +48,7 @@ internal static class AlarmLifecycleSmokeChecks
             AlarmConditionSnapshot State(string id) => alerts.AlarmLifecycles.SelectMany(j => j.Conditions).Single(s => s.ConditionId == id);
             AlarmLifecycleTransition[] Events() => alerts.AlarmLifecycles.SelectMany(j => j.Transitions).ToArray();
             Read();
-            Require(alerts.AlarmLifecycles.Count == 11 && alerts.AlarmLifecycles.Sum(j => j.Conditions.Count) == 43 &&
+            Require(alerts.AlarmLifecycles.Count == 11 && alerts.AlarmLifecycles.Sum(j => j.Conditions.Count) == 42 &&
                 alerts.AlarmLifecycles.SelectMany(j => j.Conditions).Count(s => s.State == AlarmConditionState.Active) == 10,
                 "all existing numeric and absence conditions have independent runtime lifecycle owners");
             foreach (var notice in window.MonitorView.ActiveNotices.Where(n => n.Level == MonitorNoticeLevel.Critical))

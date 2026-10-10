@@ -872,7 +872,6 @@
   "alarm.ecg.multiform": "ECG · Multiform PVCs",
   "alarm.ecg.pvc-rate": "ECG · Frequent PVCs",
   "alarm.ecg.ron-t": "ECG · R-on-T PVC",
-  "alarm.ecg.svt": "ECG · Supraventricular tachycardia",
   "alarm.ecg.st-high": "ECG · ST high",
   "alarm.ecg.st-low": "ECG · ST low",
   "alarm.ecg.qtc": "ECG · QTc prolonged",

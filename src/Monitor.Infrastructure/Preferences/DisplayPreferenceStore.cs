@@ -49,7 +49,17 @@ public sealed class DisplayPreferenceStore(string path)
             if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
-            data.Alarms?.Validate();
+            var alarms = data.Alarms;
+            // Retired presentation-only SVT policy may be present in saved
+            // configurations. Keep all remaining preferences and reject other
+            // unknown/malformed entries as before.
+            if (alarms?.Notifications is { } notifications && notifications.TryGetValue("ecg-svt", out var retiredSvt))
+            {
+                if (retiredSvt is null) { throw new ArgumentException("AlarmNotification.InvalidCondition"); }
+                retiredSvt.Validate();
+                alarms = alarms with { Notifications = notifications.Where(p => p.Key != "ecg-svt").ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal) };
+            }
+            alarms?.Validate();
             if (data.Version >= 3 && data.Sound is null) { throw new ArgumentException("Preferences.MissingSound"); }
             data.Sound?.Validate();
             if (data.Version >= 5 && !data.HasGenerator) { throw new ArgumentException("Preferences.MissingGenerator"); }
@@ -58,7 +68,7 @@ public sealed class DisplayPreferenceStore(string path)
             if (data.Version >= 16 && data.Defibrillator is null) { throw new ArgumentException("Preferences.MissingDefibrillator"); }
             var defibrillator = data.Defibrillator?.Snapshot() ?? DefibrillatorConfiguration.Default;
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, data.Alarms, data.Sound, data.Generator, data.MeasurementMillimeters, defibrillator);
+                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, alarms, data.Sound, data.Generator, data.MeasurementMillimeters, defibrillator);
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)

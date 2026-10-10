@@ -71,6 +71,15 @@ internal static class NotificationSettingsSpecifications
                 settings.All(e => loaded.Alarms.NotificationFor(e.Key) == e.Value) &&
                 !valid.Contains("Occurrence", StringComparison.Ordinal) && !valid.Contains("NotificationSequence", StringComparison.Ordinal),
                 "all notification settings round trip without episodes, cursors or requests");
+            var retired = JsonNode.Parse(valid)!.AsObject();
+            retired["Alarms"]!["Notifications"]!["ecg-svt"] = System.Text.Json.JsonSerializer.SerializeToNode(AlarmNotificationSettings.Default);
+            File.WriteAllText(path, retired.ToJsonString());
+            var migratedSvt = store.Load(out rejected);
+            Check.That(!rejected && !migratedSvt.Alarms!.Notifications.ContainsKey("ecg-svt") && migratedSvt.Sound == sound &&
+                settings.All(e => migratedSvt.Alarms.NotificationFor(e.Key) == e.Value),
+                "retiring the standalone SVT alarm preserves existing profiles and all other notification settings");
+            Check.That(store.Save(migratedSvt) && !File.ReadAllText(path).Contains("ecg-svt", StringComparison.Ordinal),
+                "the retired SVT policy is not written back");
             var oldSound = JsonNode.Parse(valid)!.AsObject();
             oldSound["Version"] = 12;
             oldSound["Sound"]!.AsObject().Remove("Muted");

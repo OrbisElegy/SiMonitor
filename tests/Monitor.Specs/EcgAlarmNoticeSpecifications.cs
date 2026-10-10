@@ -11,6 +11,7 @@ internal static class EcgAlarmNoticeSpecifications
     public static Specification[] All =>
     [
         new(nameof(EcgAlarmMappingsAndEvidenceGates), EcgAlarmMappingsAndEvidenceGates),
+        new(nameof(EcgSvtEvidenceHasNoSeparateNoticeOrSound), EcgSvtEvidenceHasNoSeparateNoticeOrSound),
         new(nameof(EcgAlarmOccurrenceIsVisibleAndConsumedOnce), EcgAlarmOccurrenceIsVisibleAndConsumedOnce),
         new(nameof(EcgAlarmAttentionAndSoundFollowConfirmedEvidence), EcgAlarmAttentionAndSoundFollowConfirmedEvidence),
         new(nameof(EcgAlarmRecoveryAndInterruptionsAreDistinct), EcgAlarmRecoveryAndInterruptionsAreDistinct),
@@ -43,7 +44,7 @@ internal static class EcgAlarmNoticeSpecifications
             var isolated = new EcgAlarmNotices().Evaluate(true, Snapshot(0, descriptor.Condition));
             Check.That(isolated.Single().Id == descriptor.Id, "each supported condition remains available without a superseding alarm");
         }
-        Check.That(EcgAlarmNotices.Descriptors.Count == 25 && !notices.Any(n => n.Id.EndsWith("-end", StringComparison.Ordinal)), "rhythm ending notices require explicit detector recovery");
+        Check.That(EcgAlarmNotices.Descriptors.Count == 24 && !notices.Any(n => n.Id.EndsWith("-end", StringComparison.Ordinal)), "rhythm ending notices require explicit detector recovery");
         snapshot = snapshot with
         {
             SampleTimeNs = 100_000_000,
@@ -57,6 +58,17 @@ internal static class EcgAlarmNoticeSpecifications
         Check.That(!notices.Any(n => n.Id is "ecg-st-high" or "ecg-st-low" or "ecg-qtc" or "ecg-delta-qtc" or "ecg-pacer-capture" or "ecg-pacer-pacing"), "missing evidence hides even a stale flagged value");
         notices = alarms.Evaluate(true, snapshot with { SampleTimeNs = 200_000_000, EcgMonitoring = snapshot.EcgMonitoring with { Learning = true }, EcgRhythm = Empty.EcgRhythm });
         Check.That(notices.Count == 1 && notices.Single().Id == "ecg-asystole", "learning preserves only supported urgent evidence");
+    }
+
+    private static void EcgSvtEvidenceHasNoSeparateNoticeOrSound()
+    {
+        var alarms = new EcgAlarmNotices();
+        var snapshot = Snapshot(200, EcgMonitoringConditions.SupraventricularTachycardia);
+        var notices = alarms.Evaluate(true, snapshot,
+            [new(EcgMonitoringConditions.SupraventricularTachycardia, EcgMonitoringTransition.Started, 0, 200_000_000)]);
+        Check.That(notices.Count == 0 && alarms.Lifecycle.NotificationRecords.Count == 0 &&
+            !MonitorAlarmPreferences.NotificationConditionIds.Contains("ecg-svt"),
+            "SVT remains detector evidence without a separate notice, sound policy or settings entry");
     }
 
     private static void EcgAlarmOccurrenceIsVisibleAndConsumedOnce()

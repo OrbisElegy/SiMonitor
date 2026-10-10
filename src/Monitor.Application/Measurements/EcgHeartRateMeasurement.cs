@@ -199,7 +199,9 @@ public sealed class EcgHeartRateMeasurement
         // A markedly steeper new deflection can follow a broad atrial prelude
         // before the quiet confirmation gap has elapsed. Restart at that edge
         // instead of rejecting the merged P/QRS envelope as an overlong complex.
-        if (s.Active && time - s.Start >= 100_000_000 && (long)slope > (long)s.MaxSlope * 3)
+        // Freeze the prelude's maximum after 100 ms: comparing against a maximum
+        // updated on each new QRS sample can chase its rising edge indefinitely.
+        if (s.Active && time - s.Start >= 100_000_000 && (long)slope > (long)s.InitialMaxSlope * 2)
         { s.Active = false; }
         if (!s.Active)
         {
@@ -207,8 +209,10 @@ public sealed class EcgHeartRateMeasurement
             s.Active = true; s.Start = s.LastActive = time; s.PeakTime = time;
             s.Baseline = delayed; s.Min = Math.Min(value, delayed); s.Max = Math.Max(value, delayed);
             s.PeakDistance = Math.Abs(value - delayed); s.MaxSlope = slope;
+            s.InitialMaxSlope = slope;
         }
         s.Min = Math.Min(s.Min, value); s.Max = Math.Max(s.Max, value); s.MaxSlope = Math.Max(s.MaxSlope, slope);
+        if (time - s.Start < 100_000_000) { s.InitialMaxSlope = s.MaxSlope; }
         int distance = Math.Abs(value - s.Baseline);
         if (distance > s.PeakDistance) { s.PeakDistance = distance; s.PeakTime = time; }
         // After recent fast, discrete beats, follow the steeper QRS contour so
@@ -275,7 +279,7 @@ public sealed class EcgHeartRateMeasurement
         internal long[] Peaks = [];
         internal int[] History = new int[250];
         internal int Cursor, Count, FilterCount, Previous1, Previous2, GoodCount;
-        internal int Baseline, Min, Max, MaxSlope, LastSlope, PeakDistance, LastQrsAmplitude;
+        internal int Baseline, Min, Max, MaxSlope, InitialMaxSlope, LastSlope, PeakDistance, LastQrsAmplitude;
         internal bool Poor, Uncountable, Active;
     }
 }

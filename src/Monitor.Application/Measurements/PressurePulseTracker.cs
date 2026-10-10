@@ -4,7 +4,10 @@ using Monitor.Simulation.Determinism;
 namespace Monitor.Application.Measurements;
 
 public sealed record PulsePressureReading(WaveformMeasurementStatus Status, int? SystolicCentiMmHg,
-    int? DiastolicCentiMmHg, long? LastPeakTimeNs);
+    int? DiastolicCentiMmHg, long? LastPeakTimeNs)
+{
+    public int? LatestAmplitudeCentiMmHg { get; init; }
+}
 
 // Bounded teaching detector for pulsatile125Hz pressure, independent of ECG.
 // Hysteresis rejects small notch rebounds; median-of-three rejects one-sample
@@ -67,6 +70,7 @@ internal sealed class PressurePulseTracker
             pulses.Length == 0 ? WaveformMeasurementStatus.WarmingUp : WaveformMeasurementStatus.Valid;
         int? Mean(Func<Pulse, int> selector) => status == WaveformMeasurementStatus.Valid
             ? (int)FixedPointMath.RoundDivideTiesToEven(pulses.Sum(p => (long)selector(p)), pulses.Length) : null;
-        return new(status, Mean(p => p.Peak), Mean(p => p.Trough), _lastPeak);
+        return new(status, Mean(p => p.Peak), Mean(p => p.Trough), _lastPeak)
+        { LatestAmplitudeCentiMmHg = status == WaveformMeasurementStatus.Valid ? _amplitude : null };
     }
 }

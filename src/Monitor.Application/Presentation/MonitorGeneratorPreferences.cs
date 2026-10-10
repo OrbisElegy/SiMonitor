@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Measurements;
 using Monitor.Application.Therapy;
 
 namespace Monitor.Application.Presentation;
@@ -8,6 +9,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     string Seed, IReadOnlyDictionary<string, decimal?> Numbers,
     IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public PressureTransducerLimits PressureTransducers { get; init; } = new();
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; } =
         EcgElectricalTherapy.Snapshot(new Dictionary<string, ElectricalConversionSettings>());
     public IReadOnlyDictionary<string, ElectricalConversionSettings> AedElectricalConversions { get; init; } =
@@ -24,6 +26,8 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }
         Oxygenation?.Validate();
+        ArgumentNullException.ThrowIfNull(PressureTransducers);
+        PressureTransducers.Validate();
         _ = EcgElectricalTherapy.Snapshot(ElectricalConversions);
         _ = EcgElectricalTherapy.Snapshot(AedElectricalConversions);
         _ = EcgPacingPermissions.Snapshot(PacingPermissions);

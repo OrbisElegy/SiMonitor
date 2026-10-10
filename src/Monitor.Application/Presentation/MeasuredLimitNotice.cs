@@ -62,6 +62,8 @@ public static class MeasuredLimitNotice
             { Message = new("alarm.limitSettingsInvalid", descriptor.LabelMessage) };
         }
         var (status, value) = Read(numeric, snapshot);
+        if (PressureLowBound(numeric, snapshot) is { } bound)
+        { return bound <= wl ? CreateNotice(descriptor, low: true, critical: bound <= cl) : null; }
         if (status != WaveformMeasurementStatus.Valid || value is not { } measured || measured < descriptor.Minimum || measured > descriptor.Maximum)
         { return null; }
         bool low = measured < wl, high = measured > wh;
@@ -74,6 +76,22 @@ public static class MeasuredLimitNotice
         new(descriptor.Id + (low ? "-low" : "-high"), critical ? MonitorNoticeLevel.Critical : MonitorNoticeLevel.Warning,
             descriptor.Label + (critical ? low ? " 极低" : " 极高" : low ? " 低" : " 高"))
         { Numeric = descriptor.Numeric, Message = LimitMessage(descriptor.LabelMessage, low, critical) };
+
+    internal static int? PressureLowBound(MonitorNumeric numeric, LiveMeasurementSnapshot snapshot)
+    {
+        var pressure = numeric switch
+        {
+            MonitorNumeric.AbpMean => snapshot.AbpMean,
+            MonitorNumeric.PaMean => snapshot.PaMean,
+            MonitorNumeric.CvpMean => snapshot.CvpMean,
+            _ => null
+        };
+        return pressure is
+        {
+            Status: WaveformMeasurementStatus.OutOfRange, MeanCentiMmHg: null,
+            BelowRangeUpperBoundCentiMmHg: >= -10000 and <= 40000
+        } ? pressure.BelowRangeUpperBoundCentiMmHg : null;
+    }
 
     internal static TextMessage LimitMessage(TextMessage label, bool low, bool critical) =>
         new(critical ? low ? "alarm.limitCriticalLow" : "alarm.limitCriticalHigh" : low ? "alarm.limitLow" : "alarm.limitHigh", label);

@@ -35,10 +35,12 @@ public sealed class ConfirmedLimitNotice
         var instantaneous = MeasuredLimitNotice.Evaluate(_descriptor.Numeric, limits, snapshot);
         ArgumentOutOfRangeException.ThrowIfNegative(snapshot.SampleTimeNs);
         var (status, value) = MeasuredLimitNotice.Read(_descriptor.Numeric, snapshot);
+        int? lowBound = MeasuredLimitNotice.PressureLowBound(_descriptor.Numeric, snapshot);
+        int measured = value.GetValueOrDefault();
         long now = snapshot.SampleTimeNs;
         if (!limits.Enabled || instantaneous?.Level == MonitorNoticeLevel.Info ||
-            status != WaveformMeasurementStatus.Valid || value is not { } measured ||
-            measured < _descriptor.Minimum || measured > _descriptor.Maximum)
+            lowBound is null && (status != WaveformMeasurementStatus.Valid || value is null ||
+            measured < _descriptor.Minimum || measured > _descriptor.Maximum))
         {
             var reason = !limits.Enabled ? AlarmTransitionReason.Disabled
                 : instantaneous?.Id == _descriptor.Id + "-settings" ? AlarmTransitionReason.InvalidConfiguration
@@ -57,10 +59,15 @@ public sealed class ConfirmedLimitNotice
 
         // Each threshold has its own evidence. Alternating Warning/Critical
         // must not restart the timer for an uninterrupted Warning violation.
-        _warningLow.Update(measured < limits.WarningLow!.Value, now, timing.WarningLow);
-        _criticalLow.Update(measured < limits.CriticalLow!.Value, now, timing.CriticalLow);
-        _warningHigh.Update(limits.WarningHigh is { } warningHigh && measured > warningHigh, now, timing.WarningHigh);
-        _criticalHigh.Update(limits.CriticalHigh is { } criticalHigh && measured > criticalHigh, now, timing.CriticalHigh);
+        // A censored value proves only pressure < bound. It must not invent a
+        // precise reading, escalate below an unproven threshold, or recover an
+        // already active alarm without evidence of crossing its boundary.
+        _warningLow.Update(lowBound is { } wl ? wl <= limits.WarningLow!.Value || _warningLow.Active : measured < limits.WarningLow!.Value, now, timing.WarningLow);
+        _criticalLow.Update(lowBound is { } cl ? cl <= limits.CriticalLow!.Value || _criticalLow.Active : measured < limits.CriticalLow!.Value, now, timing.CriticalLow);
+        _warningHigh.Update(limits.WarningHigh is { } warningHigh &&
+            (lowBound is { } wh ? wh > warningHigh && _warningHigh.Active : measured > warningHigh), now, timing.WarningHigh);
+        _criticalHigh.Update(limits.CriticalHigh is { } criticalHigh &&
+            (lowBound is { } ch ? ch > criticalHigh && _criticalHigh.Active : measured > criticalHigh), now, timing.CriticalHigh);
 
         ObserveDirection(low: true, now);
         if (_descriptor.Numeric != MonitorNumeric.SpO2) { ObserveDirection(low: false, now); }

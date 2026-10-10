@@ -1044,5 +1044,12 @@
   "defib.ecgRecovering": "Post-shock recovery",
   "defib.shockMarker": "SHOCK",
   "conversion.postShockPause": "Cardiac pause before sinus recovery (seconds, 0 = off)",
-  "defib.result.Converted": "Shock delivered; conversion complete"
+  "defib.result.Converted": "Shock delivered; conversion complete",
+  "pressureRange.title": "Pressure transducers",
+  "pressureRange.abp": "ABP minimum measurable pressure (mmHg)",
+  "pressureRange.pa": "PA minimum measurable pressure (mmHg)",
+  "pressureRange.cvp": "CVP minimum measurable pressure (mmHg)",
+  "pressureRange.abpPulse": "ABP minimum pulse amplitude (mmHg)",
+  "pressureRange.paPulse": "PA minimum pulse amplitude (mmHg)",
+  "pressureRange.invalid": "Range limits must be −100 to 400 mmHg; minimum pulse amplitudes must be 2 to 100 mmHg, with up to two decimal places."
 }

@@ -582,6 +582,7 @@ internal sealed class DesignPreviewWindow : Window
         var electricalTherapy = Settings.ElectricalConversion.Profile(templateId) with
         { PacingAllowed = Settings.PacingPermissions.Allows(templateId), AedSettings = Settings.AedConversion.Profile(templateId).Settings };
         var manualVitals = Settings.ManualVitals.Read();
+        var pressureTransducers = Settings.PressureTransducers.Read();
         var display = Settings.ReadDisplay();
         int modulation = Settings.OpticalEnabled.IsChecked != true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.OpticalModulation, 1000, "vitals.opticalModulationField");
         var oxygenation = Settings.OpticalEnabled.IsChecked == true && Settings.Oxygenation.Realtime.IsChecked == true
@@ -590,7 +591,8 @@ internal sealed class DesignPreviewWindow : Window
         {
             var next = new LocalMonitorPreviewSession(config, display, enableMeasurements: true,
                 opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: modulation,
-                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals, electricalTherapy: electricalTherapy);
+                opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals, electricalTherapy: electricalTherapy,
+                pressureTransducers: pressureTransducers);
             return (next, ecgConfig, CapturePaper(ecgConfig), config);
         };
     }
@@ -688,6 +690,8 @@ internal sealed class DesignPreviewWindow : Window
         { SetStatus("validation.baselineRestart"); }
         catch (ArgumentException exception) when (exception.Message == "Defibrillator.InvalidConfiguration")
         { SetStatus("defib.invalid"); }
+        catch (ArgumentException exception) when (exception.Message == "PressureTransducer.InvalidLimits")
+        { SetStatus("pressureRange.invalid"); }
         catch (ArgumentException exception) when (exception.Message == "ElectricalConversion.InvalidDraft")
         { SetStatus("conversion.invalidDrafts"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidApplyDelay")

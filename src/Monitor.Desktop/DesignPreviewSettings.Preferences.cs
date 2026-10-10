@@ -99,7 +99,7 @@ internal sealed partial class DesignPreviewSettings
                 p => p.Value.Value is { } v && v >= p.Value.Minimum && v <= p.Value.Maximum ? (decimal?)v : null),
             GeneratorFlags().ToDictionary(p => p.Key, p => p.Value.IsChecked == true),
             GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex))
-        { ElectricalConversions = ElectricalConversion.Capture(), AedElectricalConversions = AedConversion.Capture(), PacingPermissions = PacingPermissions.Capture(), ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true) };
+        { ElectricalConversions = ElectricalConversion.Capture(), AedElectricalConversions = AedConversion.Capture(), PacingPermissions = PacingPermissions.Capture(), ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true), PressureTransducers = PressureTransducers.Read() };
         result.Validate();
         return result;
     }
@@ -127,6 +127,7 @@ internal sealed partial class DesignPreviewSettings
         ElectricalConversion.Restore(saved.ElectricalConversions);
         AedConversion.Restore(saved.AedElectricalConversions);
         PacingPermissions.Restore(saved.PacingPermissions);
+        PressureTransducers.Restore(saved.PressureTransducers);
         ApplyDelaySeconds.Value = saved.ApplyDelaySeconds;
         EcgSelection = saved.Ecg;
         RespirationSelection = saved.Respiration;

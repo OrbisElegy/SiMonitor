@@ -1044,5 +1044,12 @@
   "defib.ecgRecovering": "电击后恢复中",
   "defib.shockMarker": "电击",
   "conversion.postShockPause": "转复前心脏停顿（秒，0 为关闭）",
-  "defib.result.Converted": "已放电，转复完成"
+  "defib.result.Converted": "已放电，转复完成",
+  "pressureRange.title": "压力换能器",
+  "pressureRange.abp": "ABP 最低可测压力（mmHg）",
+  "pressureRange.pa": "PA 最低可测压力（mmHg）",
+  "pressureRange.cvp": "CVP 最低可测压力（mmHg）",
+  "pressureRange.abpPulse": "ABP 最小搏动幅度（mmHg）",
+  "pressureRange.paPulse": "PA 最小搏动幅度（mmHg）",
+  "pressureRange.invalid": "量程下限须为 −100 至 400 mmHg，最小搏动幅度须为 2 至 100 mmHg，最多两位小数。"
 }

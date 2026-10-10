@@ -24,6 +24,43 @@
 [本地预览](../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.cs)、
 [扫线显示组合](../../src/Monitor.Application/Presentation/SweepDisplayComposition.cs)。
 
+## 有创压力数值量程下限
+
+`PressureTransducerLimits` 在有效的采样测量快照上应用 ABP／PA／CVP 各自的数值下限，
+单位为 0.01 mmHg。默认均为 −5000（−50 mmHg），允许 −10000 至 40000；这是模拟器
+可配置的数值报告范围，不修改源压力、教学波形或 NIBP。默认依据见
+[压力换能器调研](../research/physiology/vascular-pressure-runoff-research.md#换能器量程与低压判失效)。
+
+严格低于下限的平均压返回 `OutOfRange`、空 `MeanCentiMmHg` 及
+`BelowRangeUpperBoundCentiMmHg`，只表示压力小于该上界。相等仍可测。
+SYS/DIA 任一低于下限时，该组不可报告，两个值均为空；量程内的平均压可继续报告。
+通用测量显示将这些值呈现为 `---`。等待、过期、无数据、信号无效不会转成低压证据。
+
+数值报警只消费公开的上界，不访问隐藏的源压力。上界不高于低报警阈值时可确认该级
+低报警，沿用独立的确认延时；不能据此升级到低于上界的更严重阈值。
+已确认的报警在边界未知时保持，直到可测证据支持恢复，或关闭／信号中断等使证据失效。
+普通 `OutOfRange` 若没有有效上界，不产生低压报警。数值与报警开关仍按皮肤监测能力生效。
+
+桌面入口为“高级参数 → 压力换能器”。配置保存在 `MonitorGeneratorPreferences.PressureTransducers`，
+旧配置省略字段时采用默认值；显式空值或超范围值被拒绝。应用时与源设置同一边界生效，
+起搏及电击后恢复沿用当前配置，恢复全部默认值清除此覆盖。
+
+### 有创压力弱搏动
+
+同一配置的 `AbpMinimumPulseCentiMmHg`、`PaMinimumPulseCentiMmHg` 默认 300（3 mmHg），
+允许 200 至 10000；下界与当前检测器的 2 mmHg 底限一致，上界为模拟器配置范围。
+`PulsePressureReading.LatestAmplitudeCentiMmHg` 来自最近完整有效搏动的峰谷差，
+不从源模板或八搏平均 SYS/DIA 差推断。幅度严格低于阈值时，只将该通道的脉动读数
+投影为 `PoorSignal`，清除 SYS/DIA 并显示 `---/---`；相等仍报告。
+范围越界状态优先于弱搏动状态。无有效幅度证据不制造弱搏动结论。
+
+低于检测底限或不再搏动时，沿用最后检出搏动后 5 秒过期；恢复可检出的足够强搏动后
+自动报告。失去采集／质量不良／断流仍沿用原状态及重新积累规则。最新幅度参与检查点恢复。
+弱搏动不更改原始压力波形、4 秒采样平均压或均压报警，不推断换能器脱开。
+CVP 无 SYS/DIA，故不设置搏动门限；NIBP 不受影响。保存、旧配置回退、配置激活、
+治疗后的配置保留与量程下限一致。默认值依据见
+[弱搏动调研](../research/physiology/vascular-pressure-runoff-research.md#弱搏动与平均压)。
+
 ## 时间、单位与质量
 
 `Ns` 均为纳秒，但时钟含义不能互换：采集测量用样本仿真时间，扫线用呈现时间和显式

@@ -265,6 +265,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
     private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     internal DefibrillatorSettingsEditor Defibrillator { get; }
+    internal PressureTransducerEditor PressureTransducers { get; }
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
     internal ComboBox MeasurementUnits { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
     internal ComboBox PaperLayout { get; } = new() { SelectedIndex = 0, MinWidth = 220 };
@@ -282,6 +283,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         AedConversion = new ElectricalConversionEditor(Localization, automated: true);
         PacingPermissions = new PacingPermissionEditor(Localization);
         Defibrillator = new DefibrillatorSettingsEditor(Localization);
+        PressureTransducers = new PressureTransducerEditor(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
@@ -369,6 +371,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         appliedParameters.Children.Add(AppliedEjectionParameters);
         advancedGroups.Add(("advanced.sectionApplied", appliedParameters));
         advancedGroups.Add(("skin.defibrillator", Defibrillator));
+        advancedGroups.Add(("pressureRange.title", PressureTransducers));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("advanced.sectionTools", _advancedTools)); }
         var advancedHeaders = new Dictionary<int, string> { [0] = "advanced.headerWaveform", [3] = ProductIdentity.DevelopmentFeatures ? "advanced.headerOverviewTools" : "advanced.headerOverview" };
         SectionPages[6] = new SettingsSections(Localization, "settings.advanced", advancedHeaders, advancedGroups.ToArray());

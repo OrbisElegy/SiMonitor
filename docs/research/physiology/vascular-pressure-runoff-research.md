@@ -287,3 +287,34 @@ CVP 的平均压力不能套用动脉下降：可在后续加入动静脉容积�
 原形态已通过显式经验层保留；瓣膜／反射动力学、独立右心／静脉储库、测量算法
 和运行中重定向仍属于后续工作；
 不能据 RC 机制规格通过而宣称整个压力场景已完成资格验证。
+
+## 换能器量程与低压判失效
+
+[Edwards TruWave 使用说明 §18](https://eifu.edwards.com/eifu/5970f1b346e0fb00015e5f4d/DOC-0102465B.pdf)
+给出 −50 至 +300 mmHg 的工作压力范围；
+[TE MEAS 1620 规格](https://www.te.com/en/product-20005913-08.html)也列出同一区间。
+因此有创压力的零压、负压和普通低血压不等同于换能器不可测，不能直接采用一个正的
+低血压阈值充当硬件下限。本项目以 −50 mmHg 作为可配置数值报告下限的 Generic 默认值，
+而非声称所有设备均采用这一范围；本轮只建模下限，未增加上限饱和行为。
+
+量程与搏动检出是不同问题。[Philips HeartStart MRx 培训资料，Invasive Pressures Monitoring](https://www.documents.philips.com/doclib/enc/fetch/577817/577891/HeartStart_MRx.pdf)
+区分平均压与非搏动压力：波形非搏动时仍可保留平均压，并有均压低于 10 mmHg 且无搏动的
+脱开报警规则。该 10 mmHg 条件不是换能器测压下限，本项目不将其移植为下限默认值。
+
+对于人为设置的下限 L，本项目仅输出压力 < L 的范围证据，不将底层教学源的精确数值
+泄漏给报警器。这足以在 L ≤ 报警阈值时确认低压；不足以证明更低阈值的越界，亦不能
+自行证明原有低报警已恢复。具体显示、确认与保存契约见
+[测量呈现接口](../../interfaces/measurements-presentation.md#有创压力数值量程下限)。
+
+
+## 弱搏动与平均压
+
+[Philips HeartStart MRx 使用说明，Invasive Pressures 与 Troubleshooting（印刷页 119、321）](https://www.documents.philips.com/assets/Instruction%20for%20Use/20220223/0dfdf14dc52a4669932eae45013618cc.pdf?feed=ifu_docs_feed)
+规定非搏动压力仅显示均压；在从压力波测脉率时，低于 25 bpm 或压力波幅低于 3 mmHg
+可产生 Non-pulsatile INOP。这是特定设备的规则，不能视为所有换能器的物理检测极限。
+
+Generic 将 3 mmHg 用作 ABP／PA 可配置最小搏动幅度的初值，按采样的完整峰谷差比较。
+本项目没有从有创压力派生 PR，故不照搬该 PR INOP，也不加入 25 bpm 的脉率规则。
+弱搏动仅使 SYS/DIA 无效，保留均压和均压报警；无完整搏动时沿用检测器的 5 秒过期。
+2–100 mmHg 的可编辑范围及 5 秒过期是本项目选择，并非上述手册的通用设备要求。
+低搏动可能来自患者或测量系统，单凭低搏动不应自动断言导管脱开。

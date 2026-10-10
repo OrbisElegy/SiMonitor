@@ -55,8 +55,9 @@ public sealed class LocalMonitorPreviewSession
     private bool _usesOxygenation;
     private long _measurementFrontier;
     private static readonly long AcquisitionLatencyNs = FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs;
-    public LiveMeasurementSnapshot? Measurements => _measurements?.Read(Math.Max(_measurementFrontier,
-        Math.Max(0, SimulationTimeNs - AcquisitionLatencyNs)));
+    public LiveMeasurementSnapshot? Measurements => _measurements is null ? null : PressureTransducers.Apply(
+        _measurements.Read(Math.Max(_measurementFrontier, Math.Max(0, SimulationTimeNs - AcquisitionLatencyNs))));
+    public PressureTransducerLimits PressureTransducers { get; private set; }
     public ManualVitalSigns ManualVitals { get; private set; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
@@ -81,11 +82,13 @@ public sealed class LocalMonitorPreviewSession
         bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
         SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
         RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null,
-        EcgElectricalTherapyProfile? electricalTherapy = null)
+        EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         electricalTherapy?.Validate();
         ElectricalTherapy = electricalTherapy;
+        PressureTransducers = pressureTransducers ?? new();
+        PressureTransducers.Validate();
         ManualVitals = manualVitals ?? ManualVitalSigns.Empty;
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
@@ -242,7 +245,7 @@ public sealed class LocalMonitorPreviewSession
             OxygenDemandMultiplier = _realtimeOxygenation.Snapshot.OxygenDemandMultiplier
         };
         return new LocalMonitorPreviewSession(configuration, Display, _measurements is not null,
-            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: profile)
+            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: profile, pressureTransducers: PressureTransducers)
         {
             _opticalSource = _opticalSource,
             _opticalModulationPermille = _opticalModulationPermille,
@@ -334,6 +337,7 @@ public sealed class LocalMonitorPreviewSession
         _configuration = definition._configuration;
         _realtimeConfiguration = definition._realtimeConfiguration;
         ElectricalTherapy = definition.ElectricalTherapy;
+        PressureTransducers = definition.PressureTransducers;
         ManualVitals = definition.ManualVitals;
         _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;

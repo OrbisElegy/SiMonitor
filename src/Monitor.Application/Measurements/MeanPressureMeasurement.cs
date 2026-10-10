@@ -8,6 +8,7 @@ public sealed record MeanPressureReading(WaveformMeasurementStatus Status, int? 
     long? WindowStartTimeNs, long? MeasuredAtNs)
 {
     public PulsePressureReading? Pulse { get; init; }
+    public int? BelowRangeUpperBoundCentiMmHg { get; init; }
 }
 
 // Mean of the latest four seconds of uniform125Hz pressure samples in mmHg.

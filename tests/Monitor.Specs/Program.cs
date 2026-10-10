@@ -91,6 +91,7 @@ internal static class Program
             .. SeededCo2Specifications.All,
             .. MeasuredLimitSpecifications.All,
             .. PressureLimitSpecifications.All,
+            .. PressureTransducerSpecifications.All,
             .. AlarmConfirmationSpecifications.All,
             .. NoExpirationConfirmationSpecifications.All,
             .. AlarmLifecycleSpecifications.All,

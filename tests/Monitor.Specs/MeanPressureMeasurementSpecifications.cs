@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Monitor.Application.Measurements;
+using Monitor.Application.Presentation;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Authoring;
 
@@ -10,6 +11,7 @@ internal static class MeanPressureMeasurementSpecifications
     private static readonly Guid Channel = PhysiologyIllustrationSource.ChannelId(3);
     public static Specification[] All =>
     [
+        new(nameof(WeakPressurePulseKeepsMeanAndLowAlarms), WeakPressurePulseKeepsMeanAndLowAlarms),
         new(nameof(PressurePulseRecoversAfterAmplitudeDrop), PressurePulseRecoversAfterAmplitudeDrop),
         new(nameof(PulsePressureMeasuresCyclesAndExpires), PulsePressureMeasuresCyclesAndExpires),
         new(nameof(PressurePulseControlsPreserveRunoffAndOtherChannels), PressurePulseControlsPreserveRunoffAndOtherChannels),
@@ -18,6 +20,56 @@ internal static class MeanPressureMeasurementSpecifications
         new(nameof(PressureMeanRejectsBadInputAndRestores), PressureMeanRejectsBadInputAndRestores),
         new(nameof(RealPressureChannelsJoinAtomicLiveReadings), RealPressureChannelsJoinAtomicLiveReadings),
     ];
+    private static void WeakPressurePulseKeepsMeanAndLowAlarms()
+    {
+        var empty = LiveWaveformMeasurements.CreateIllustration().Read(0);
+        foreach (int amplitude in new[] { 0, 100, 250, 299, 300, 400 })
+            foreach (bool startStrong in new[] { false, true })
+            {
+                var measurement = new MeanPressureMeasurement(Channel, detectPulse: true);
+                MeanPressureMeasurement? restored = null;
+                var alarm = new ConfirmedLimitNotice(MonitorNumeric.AbpMean);
+                var alarmLimits = MeasuredLimitNotice.Describe(MonitorNumeric.AbpMean).TeachingDefaults with { Enabled = true };
+                bool sawWeakBeforeAverageFell = false;
+                for (int block = 0; block < 160; block++)
+                {
+                    int currentAmplitude = (startStrong && block < 40) || block >= 120 ? 4000 : amplitude;
+                    var packet = WaveformEnvelopeCodec.Decode(Wire(block));
+                    short[] values = Enumerable.Range(block * 25, 25).Select(i =>
+                    {
+                        int phase = i % 125;
+                        int fraction = phase < 20 ? phase * 5 : phase < 25 ? 100 : phase < 65 ? 100 - (phase - 25) * 5 / 2 : 0;
+                        return (short)(1000 + currentAmplitude * fraction / 100);
+                    }).ToArray();
+                    byte[] wire = WaveformEnvelopeCodec.EncodeRaw(packet with { Planes = [packet.Planes[0] with { Samples = values }] });
+                    var raw = measurement.Consume(wire);
+                    if (restored is not null) { Check.That(raw == restored.Consume(wire), "latest amplitude survives checkpoint during weak pulse transition"); }
+                    if (block == 44) { restored = MeanPressureMeasurement.Restore(measurement.Capture()); }
+                    var snapshot = new PressureTransducerLimits().Apply(empty with { SampleTimeNs = block * 200_000_000L, AbpMean = raw, PaMean = raw });
+                    var notice = alarm.Evaluate(alarmLimits, snapshot);
+                    if (block >= 70 && block < 120)
+                    {
+                        Check.That(snapshot.AbpMean.Status == WaveformMeasurementStatus.Valid && snapshot.AbpMean.MeanCentiMmHg == raw.MeanCentiMmHg,
+                            "weak pulses never censor a measurable mean");
+                        Check.That(notice?.Level == MonitorNoticeLevel.Critical, "weak low pressure retains confirmed mean alarm");
+                        Check.That((snapshot.AbpMean.Pulse!.Status == WaveformMeasurementStatus.Valid) == (amplitude >= 300), "strict weak threshold and equality");
+                        if (amplitude < 300) { Check.That(snapshot.AbpMean.Pulse.SystolicCentiMmHg is null && snapshot.AbpMean.Pulse.DiastolicCentiMmHg is null, "weak or absent pulse clears both extrema"); }
+                    }
+                    if (amplitude is >= 200 and < 300 && raw.Pulse is { Status: WaveformMeasurementStatus.Valid } pulse &&
+                        pulse.SystolicCentiMmHg - pulse.DiastolicCentiMmHg > 300 && snapshot.AbpMean.Pulse!.Status == WaveformMeasurementStatus.PoorSignal)
+                    { sawWeakBeforeAverageFell = true; }
+                    if (block == 119 && amplitude == 400)
+                    {
+                        var independent = new PressureTransducerLimits(AbpMinimumPulseCentiMmHg: 500).Apply(empty with { AbpMean = raw, PaMean = raw });
+                        Check.That(independent.AbpMean.Pulse!.Status == WaveformMeasurementStatus.PoorSignal && independent.PaMean.Pulse!.Status == WaveformMeasurementStatus.Valid,
+                            "independent configurable pulse thresholds");
+                    }
+                    if (block == 159) { Check.That(snapshot.AbpMean.Pulse!.Status == WaveformMeasurementStatus.Valid, "restored strong pulsation recovers without restart"); }
+                }
+                if (startStrong && amplitude is >= 200 and < 300) { Check.That(sawWeakBeforeAverageFell, "historical strong pulses cannot hide new weak pulses"); }
+            }
+    }
+
     private static void PressurePulseRecoversAfterAmplitudeDrop()
     {
         foreach (int weakAmplitude in new[] { 400, 100, 0 })

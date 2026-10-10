@@ -624,6 +624,7 @@ public sealed class LiveWaveformMeasurements
 public sealed record MeanPressureReading(WaveformMeasurementStatus Status, int? MeanCentiMmHg, long? WindowStartTimeNs, long? MeasuredAtNs)
 {
     public PulsePressureReading? Pulse { get; init; }
+    public int? BelowRangeUpperBoundCentiMmHg { get; init; }
 }
 public sealed class MeanPressureMeasurement
 {
@@ -747,6 +748,7 @@ public sealed class PlethPulseRateMeasurement
 ```csharp
 public sealed record PulsePressureReading(WaveformMeasurementStatus Status, int? SystolicCentiMmHg, int? DiastolicCentiMmHg, long? LastPeakTimeNs)
 {
+    public int? LatestAmplitudeCentiMmHg { get; init; }
 }
 ```
 
@@ -1485,6 +1487,7 @@ public sealed class LocalMonitorPreviewSession
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
     public ManualVitalSigns ManualVitals { get; }
+    public PressureTransducerLimits PressureTransducers { get; private set; }
     public long SimulationTimeNs { get; private set; }
     public long FrontierNs { get; private set; }
     public long PresentationFrontierNs(int channel);
@@ -1503,7 +1506,7 @@ public sealed class LocalMonitorPreviewSession
     public RealtimeOxygenationSnapshot? Oxygenation { get; }
     public OxygenReservoirParameters? OxygenationParameters { get; private set; }
 
-    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null);
+    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
@@ -1739,6 +1742,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 ```csharp
 public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Respiration, int Ejection, string Seed, IReadOnlyDictionary<string, decimal?> Numbers, IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public PressureTransducerLimits PressureTransducers { get; init; }
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; }
     public IReadOnlyDictionary<string, ElectricalConversionSettings> AedElectricalConversions { get; init; }
     public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; }
@@ -2298,3 +2302,15 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
 
 与手动模式共享单一储能所有者，调用方必须按当前模式路由命令；不得旁路 AED 检查直接
 触发手动放电。证据来自实际样本时间，状态与计时契约见[电复律接口](../electrical-conversion.md#半自动-aed)。
+
+## Measurements/PressureTransducerLimits.cs
+
+源码：[PressureTransducerLimits.cs](../../../src/Monitor.Application/Measurements/PressureTransducerLimits.cs) · 命名空间：`Monitor.Application.Measurements`
+
+```csharp
+public sealed record PressureTransducerLimits(int AbpMinimumCentiMmHg = -5000, int PaMinimumCentiMmHg = -5000, int CvpMinimumCentiMmHg = -5000, int AbpMinimumPulseCentiMmHg = 300, int PaMinimumPulseCentiMmHg = 300)
+{
+    public void Validate();
+    public LiveMeasurementSnapshot Apply(LiveMeasurementSnapshot snapshot);
+}
+```

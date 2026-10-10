@@ -40,8 +40,12 @@ public sealed class LocalMonitorPreviewSession
     private readonly Dictionary<Guid, WaveformBlockPlaneConfiguration> _planeConfigurations;
     private readonly LiveWaveformMeasurements? _measurements;
     private readonly EcgHeartRateMeasurement? _synchronizationEcg;
+    private readonly PlethPulseRateMeasurement? _livePleth;
+    private ulong _livePlethSequence;
+    public MonitorBeatEvidence? LiveBeatEvidence { get; private set; }
     private ulong _synchronizationSequence;
     public IReadOnlyList<DetectedEcgBeat> SynchronizationBeats { get; private set; } = [];
+    public AedEcgEvidence? LiveEcgEvidence { get; private set; }
     private PulseOximeterIllustrationSource? _opticalSource;
     private RealtimeOxygenationSource? _realtimeOxygenation;
     private PhysiologyWaveformGroup? _pendingVentilationSource;
@@ -66,6 +70,7 @@ public sealed class LocalMonitorPreviewSession
     public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; } = [];
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; } = [];
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; } = [];
+    public IReadOnlyList<long> EmittedPacingPulseTimesNs { get; private set; } = [];
     public IReadOnlyList<WaveformEnvelope> Blocks => Array.AsReadOnly(_blocks);
     public MonitorDisplayConfiguration Display { get; private set; }
     public MonitorSweepRanges Ranges { get; private set; }
@@ -108,6 +113,7 @@ public sealed class LocalMonitorPreviewSession
         {
             _measurements = LiveWaveformMeasurements.CreateIllustration();
             _synchronizationEcg = new(PhysiologyIllustrationSource.ChannelId(0));
+            _livePleth = new(PhysiologyIllustrationSource.ChannelId(2));
         }
         if (opticalSaturationMilliPercent is { } target)
         {
@@ -244,9 +250,9 @@ public sealed class LocalMonitorPreviewSession
         };
     }
 
-    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules)
+    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules, bool automated = false)
     {
-        var result = EcgElectricalTherapy.Evaluate(ElectricalTherapy, _configuration, waveform, mode, deliveredEnergyJoules);
+        var result = EcgElectricalTherapy.Evaluate(ElectricalTherapy, _configuration, waveform, mode, deliveredEnergyJoules, automated);
         return _pendingSource is not null ? new(ElectricalConversionOutcome.SourceChangePending) : result;
     }
 
@@ -259,13 +265,14 @@ public sealed class LocalMonitorPreviewSession
         ArgumentNullException.ThrowIfNull(delivery);
         if (delivery.DeliverySequence == 0 || delivery.DeliveredAtSimTimeNs != SimulationTimeNs)
         { throw new ArgumentException("ElectricalConversion.InvalidDelivery", nameof(delivery)); }
-        var result = EvaluateElectricalShock(delivery.Waveform, delivery.Mode, delivery.EnergyJoules);
+        var result = EvaluateElectricalShock(delivery.Waveform, delivery.Mode, delivery.EnergyJoules, delivery.Automated);
         if (delivery.DeliverySequence <= _lastElectricalDeliverySequence) { return new(ElectricalConversionOutcome.DuplicateDelivery); }
         var artifact = new DefibrillationEcgArtifact(delivery.Waveform, delivery.DeliveredAtSimTimeNs, ecgRecoveryMilliseconds);
         if (_shockArtifacts.Count >= 128) { throw new InvalidOperationException("Defibrillation.TooManyRetainedShocks"); }
         if (result.Outcome != ElectricalConversionOutcome.Eligible)
         {
             _shockArtifacts.Add(artifact);
+            WithdrawShockBeatCues();
             _lastElectricalDeliverySequence = delivery.DeliverySequence;
             DataRevision++;
             return result;
@@ -280,7 +287,7 @@ public sealed class LocalMonitorPreviewSession
         { throw new ArgumentException("ElectricalConversion.SinusTargetRequired", nameof(sinusDefinition)); }
         ValidateSourceDefinition(sinusDefinition);
         long delayNs = artifact.Discharge.EndSimTimeNs - SimulationTimeNs;
-        int pauseMilliseconds = ElectricalTherapy!.Settings.PostShockPauseMilliseconds;
+        int pauseMilliseconds = (delivery.Automated ? ElectricalTherapy!.AedSettings : ElectricalTherapy!.Settings).PostShockPauseMilliseconds;
         long quietAt = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
         long effective = checked((quietAt + pauseMilliseconds * 1_000_000L + 199_999_999) / 200_000_000 * 200_000_000);
         if (pauseMilliseconds == 0) { ScheduleSource(sinusDefinition, delayNs); }
@@ -291,6 +298,7 @@ public sealed class LocalMonitorPreviewSession
             _postShockSinus = (sinusDefinition, effective);
         }
         _shockArtifacts.Add(artifact);
+        WithdrawShockBeatCues();
         _lastElectricalDeliverySequence = delivery.DeliverySequence;
         DataRevision++;
         return new(ElectricalConversionOutcome.ConversionScheduled, EcgElectricalTherapy.SinusTemplateId, effective);
@@ -372,6 +380,9 @@ public sealed class LocalMonitorPreviewSession
         if (deltaNs is <= 0 or > 250_000_000) { throw new ArgumentOutOfRangeException(nameof(deltaNs)); }
         List<DetectedEcgBeat> beats = [];
         List<DetectedEcgBeat> synchronizationBeats = [];
+        List<DetectedPlethPulse> livePulses = [];
+        List<long> pacingPulseTimesNs = [];
+        EmittedPacingPulseTimesNs = [];
         SynchronizationBeats = [];
         List<DetectedEcgMonitoringEvent> monitoringEvents = [];
         DetectedMonitoringEvents = [];
@@ -409,7 +420,8 @@ public sealed class LocalMonitorPreviewSession
                 }
                 return optics?.ConvertAcquiredPulse(wire);
             }).ToArray();
-            synchronizationBeats.AddRange(DetectSynchronizationBeats(immediateSamples));
+            synchronizationBeats.AddRange(DetectSynchronizationBeats(immediateSamples, pacingPulseTimesNs));
+            livePulses.AddRange(DetectLivePulses(immediateSamples));
             _source = source;
             _realtimeOxygenation = oxygenation;
             _opticalSource = optics;
@@ -474,11 +486,44 @@ public sealed class LocalMonitorPreviewSession
         DetectedPulses = Array.AsReadOnly(pulses.Where(p => _measurementFrontier - p.ConfirmedAtNs <= 250_000_000).ToArray());
         DetectedBeats = Array.AsReadOnly(beats.Where(b => _measurementFrontier - b.ConfirmedAtNs <= 250_000_000).ToArray());
         SynchronizationBeats = synchronizationBeats.AsReadOnly();
+        EmittedPacingPulseTimesNs = Array.AsReadOnly(pacingPulseTimesNs.Distinct().Order().ToArray());
+        if (_synchronizationEcg is not null && _livePleth is not null)
+        {
+            LiveBeatEvidence = new(SimulationTimeNs, _synchronizationEcg.Read(SimulationTimeNs).Status,
+                _livePleth.Read(SimulationTimeNs).Status, SynchronizationBeats, livePulses.AsReadOnly());
+        }
     }
 
-    private IReadOnlyList<DetectedEcgBeat> DetectSynchronizationBeats(IReadOnlyList<PhysiologyWaveformSample> samples)
+    private void WithdrawShockBeatCues()
     {
-        if (_synchronizationEcg is null) { return []; }
+        SynchronizationBeats = [];
+        if (LiveBeatEvidence is { } evidence)
+        { LiveBeatEvidence = evidence with { EcgStatus = WaveformMeasurementStatus.PoorSignal, EcgBeats = [] }; }
+    }
+
+    private IReadOnlyList<DetectedPlethPulse> DetectLivePulses(IReadOnlyList<PhysiologyWaveformSample> samples)
+    {
+        if (_livePleth is null) { return []; }
+        Guid id = PhysiologyIllustrationSource.ChannelId(2);
+        var pleth = samples.Where(sample => sample.ChannelId == id).ToArray();
+        if (pleth.Length == 0) { return []; }
+        const long stepNs = 8_000_000;
+        long start = pleth[0].SourceSimTimeNs;
+        var configuration = _planeConfigurations[id];
+        var flags = pleth.Select((sample, index) => new WaveformQualityRange((uint)index, 1, sample.QualityFlags))
+            .Where(range => range.QualityFlags != 0).ToArray();
+        var plane = new WaveformPlane(id, 125, 1, (ulong)(start / stepNs),
+            configuration.ScaleNumerator, configuration.ScaleDenominator, configuration.OffsetNumerator, configuration.OffsetDenominator,
+            flags.Length == 0 ? WaveformQualityEncoding.None : WaveformQualityEncoding.Ranges,
+            pleth.Select(sample => sample.NormalizedValue).ToArray(), flags);
+        var block = new WaveformEnvelope(id, _opticalInstanceId, 1, 1, _livePlethSequence++, 1,
+            start, (uint)(pleth.Length * stepNs), [plane]);
+        return _livePleth.Consume(WaveformEnvelopeCodec.EncodeRaw(Rebase(block)));
+    }
+
+    private IReadOnlyList<DetectedEcgBeat> DetectSynchronizationBeats(IReadOnlyList<PhysiologyWaveformSample> samples, List<long> pacingPulseTimesNs)
+    {
+        if (_synchronizationEcg is null && ActivePacing is null) { return []; }
         Guid id = PhysiologyIllustrationSource.ChannelId(0);
         var ecg = samples.Where(sample => sample.ChannelId == id).ToArray();
         if (ecg.Length == 0) { return []; }
@@ -493,9 +538,19 @@ public sealed class LocalMonitorPreviewSession
         var block = new WaveformEnvelope(id, _opticalInstanceId, 1, 1, _synchronizationSequence, 1,
             start, (uint)(ecg.Length * stepNs), [plane]);
         var rebased = Rebase(block);
-        var detected = _synchronizationEcg.Consume(WaveformEnvelopeCodec.EncodeRaw(rebased), out _, out _, PacingEvidence(block));
+        var evidence = PacingEvidence(block);
+        if (ActivePacing is not null && evidence is not null)
+        {
+            pacingPulseTimesNs.AddRange(evidence.PulseTimesNs);
+            pacingPulseTimesNs.AddRange(evidence.AtrialPulseTimesNs);
+        }
+        if (_synchronizationEcg is null) { return []; }
+        var detected = _synchronizationEcg.Consume(WaveformEnvelopeCodec.EncodeRaw(rebased), out _, out _, evidence);
         _synchronizationSequence++;
-        return _synchronizationEcg.Read(rebased.StartSimTimeNs + rebased.DurationNs - 1).Status is
+        long at = rebased.StartSimTimeNs + rebased.DurationNs - stepNs;
+        var reading = _synchronizationEcg.Read(at);
+        LiveEcgEvidence = new(at, reading, _synchronizationEcg.ReadMonitoring(at));
+        return reading.Status is
             WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.WarmingUp ? detected : [];
     }
     private EcgPacingEvidence? PacingEvidence(WaveformEnvelope block)

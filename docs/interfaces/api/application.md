@@ -1493,7 +1493,10 @@ public sealed class LocalMonitorPreviewSession
     public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; }
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; }
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; }
+    public IReadOnlyList<long> EmittedPacingPulseTimesNs { get; private set; }
     public IReadOnlyList<DetectedEcgBeat> SynchronizationBeats { get; private set; }
+    public AedEcgEvidence? LiveEcgEvidence { get; private set; }
+    public MonitorBeatEvidence? LiveBeatEvidence { get; private set; }
     public IReadOnlyList<WaveformEnvelope> Blocks { get; }
     public MonitorDisplayConfiguration Display { get; private set; }
     public MonitorSweepRanges Ranges { get; private set; }
@@ -1508,7 +1511,7 @@ public sealed class LocalMonitorPreviewSession
     public bool PacingAllowed { get; }
     public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output);
     public long StopPacing();
-    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
+    public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules, bool automated = false);
     public LocalMonitorPreviewSession PrepareSinusAfterShock(EcgElectricalTherapyProfile profile);
     public ElectricalConversionResult ApplyElectricalShock(DeliveredElectricalShock delivery, LocalMonitorPreviewSession sinusDefinition, int ecgRecoveryMilliseconds = 1000);
     public void UpdateDisplay(MonitorDisplayConfiguration display);
@@ -1643,6 +1646,8 @@ public enum MonitorBeatOrigin
 public sealed record MonitorBeatSourceChange(long TimeNs, MonitorBeatMode Mode, MonitorBeatOrigin From, MonitorBeatOrigin To)
 {
 }
+public sealed record MonitorBeatEvidence(long SampleTimeNs, WaveformMeasurementStatus EcgStatus,
+    WaveformMeasurementStatus PlethStatus, IReadOnlyList<DetectedEcgBeat> EcgBeats, IReadOnlyList<DetectedPlethPulse> PlethPulses);
 public sealed class MonitorBeatSource
 {
     public MonitorBeatOrigin Current { get; private set; }
@@ -1735,6 +1740,7 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Respiration, int Ejection, string Seed, IReadOnlyDictionary<string, decimal?> Numbers, IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; }
+    public IReadOnlyDictionary<string, ElectricalConversionSettings> AedElectricalConversions { get; init; }
     public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; }
     public decimal ApplyDelaySeconds { get; init; }
     public OxygenationEditorPreferences? Oxygenation { get; init; }
@@ -2175,9 +2181,13 @@ public sealed record EcgElectricalTherapyDescriptor(string TemplateId, Electrica
 public sealed record EcgElectricalTherapyProfile(string TemplateId, ElectricalConversionSettings Settings)
 {
     public bool PacingAllowed { get; init; }
+    public ElectricalConversionSettings AedSettings { get; init; }
     public void Validate();
 }
-public sealed record DeliveredElectricalShock(ulong DeliverySequence, long DeliveredAtSimTimeNs, DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules);
+public sealed record DeliveredElectricalShock(ulong DeliverySequence, long DeliveredAtSimTimeNs, DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules)
+{
+    public bool Automated { get; init; }
+}
 public sealed record ElectricalConversionResult(ElectricalConversionOutcome Outcome, string? TargetTemplateId = null, long? EffectiveSimTimeNs = null);
 public static class EcgElectricalTherapy
 {
@@ -2185,7 +2195,7 @@ public static class EcgElectricalTherapy
     public static IReadOnlyList<EcgElectricalTherapyDescriptor> Descriptors { get; }
     public static EcgElectricalTherapyDescriptor? Find(string templateId);
     public static IReadOnlyDictionary<string, ElectricalConversionSettings> Snapshot(IReadOnlyDictionary<string, ElectricalConversionSettings> settings);
-    public static ElectricalConversionResult Evaluate(EcgElectricalTherapyProfile? profile, PhysiologyIllustrationConfiguration configuration, DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules);
+    public static ElectricalConversionResult Evaluate(EcgElectricalTherapyProfile? profile, PhysiologyIllustrationConfiguration configuration, DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules, bool automated = false);
 }
 ```
 
@@ -2258,3 +2268,33 @@ public sealed class ManualDefibrillator
     public DeliveredElectricalShock? Tick(long safetyTimeNs, long simulationTimeNs, IEnumerable<long> qrsPeakTimesNs);
 }
 ```
+
+## Therapy/AutomatedExternalDefibrillator.cs
+
+源码：[AutomatedExternalDefibrillator.cs](../../../src/Monitor.Application/Therapy/AutomatedExternalDefibrillator.cs) · 命名空间：`Monitor.Application.Therapy`
+
+```csharp
+public enum AedPhase { Off, Analyzing, WaitingForSignal, Charging, ShockAdvised, Cpr, Suspended }
+public enum AedAdvice { Undetermined, Shock, NoShock }
+public sealed record AedEcgEvidence(long SampleTimeNs, EcgHeartRateReading HeartRate, EcgMonitoringReading Monitoring);
+public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
+{
+    public const long AnalysisDurationNs = 8_000_000_000;
+    public const long CprDurationNs = 120_000_000_000;
+    public AedPhase Phase { get; private set; }
+    public AedAdvice Advice { get; private set; }
+    public bool Enabled { get; }
+    public int RemainingSeconds { get; private set; }
+    public long CprElapsedNs { get; }
+    public void Enable(long safetyTimeNs, long simulationTimeNs);
+    public void Disable(long safetyTimeNs);
+    public void Suspend(long safetyTimeNs);
+    public void ReleaseShock(long safetyTimeNs);
+    public bool PressShock(Guid interactionId, long safetyTimeNs, long simulationTimeNs, AedEcgEvidence? evidence);
+    public DeliveredElectricalShock? Tick(long safetyTimeNs, long simulationTimeNs, AedEcgEvidence? evidence);
+    public static AedAdvice Classify(AedEcgEvidence? evidence, long simulationTimeNs);
+}
+```
+
+与手动模式共享单一储能所有者，调用方必须按当前模式路由命令；不得旁路 AED 检查直接
+触发手动放电。证据来自实际样本时间，状态与计时契约见[电复律接口](../electrical-conversion.md#半自动-aed)。

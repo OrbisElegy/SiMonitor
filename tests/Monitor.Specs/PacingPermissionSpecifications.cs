@@ -72,7 +72,7 @@ internal static class PacingPermissionSpecifications
             Check.That(!rejected && loaded.PacingPermissions.OrderBy(p => p.Key).SequenceEqual(generator.PacingPermissions.OrderBy(p => p.Key)),
                 "all per-template flags survive reloading independently");
             var document = JsonNode.Parse(File.ReadAllText(path))!;
-            Check.That(document["Version"]!.GetValue<int>() == 17, "device configuration schema uses version 17");
+            Check.That(document["Version"]!.GetValue<int>() == 18, "device configuration schema uses version 18");
             document["Version"] = 14;
             document["Generator"]!.AsObject().Remove("PacingPermissions");
             File.WriteAllText(path, document.ToJsonString());

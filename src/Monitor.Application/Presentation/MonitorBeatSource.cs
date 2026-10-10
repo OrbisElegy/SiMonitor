@@ -6,6 +6,8 @@ namespace Monitor.Application.Presentation;
 public enum MonitorBeatMode { Ecg, Pleth, Auto }
 public enum MonitorBeatOrigin { None, Ecg, Pleth }
 public sealed record MonitorBeatSourceChange(long TimeNs, MonitorBeatMode Mode, MonitorBeatOrigin From, MonitorBeatOrigin To);
+public sealed record MonitorBeatEvidence(long SampleTimeNs, WaveformMeasurementStatus EcgStatus,
+    WaveformMeasurementStatus PlethStatus, IReadOnlyList<DetectedEcgBeat> EcgBeats, IReadOnlyList<DetectedPlethPulse> PlethPulses);
 
 // Local source policy. A reliable status never creates a beat event.
 public sealed class MonitorBeatSource

@@ -37,15 +37,21 @@ public sealed record EcgElectricalTherapyDescriptor(string TemplateId, Electrica
 public sealed record EcgElectricalTherapyProfile(string TemplateId, ElectricalConversionSettings Settings)
 {
     public bool PacingAllowed { get; init; }
+    public ElectricalConversionSettings AedSettings { get; init; } = ElectricalConversionSettings.Default;
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(TemplateId) || TemplateId.Length > 128 || Settings is null)
         { throw new ArgumentException("ElectricalConversion.InvalidProfile"); }
         Settings.Validate();
+        ArgumentNullException.ThrowIfNull(AedSettings);
+        AedSettings.Validate();
     }
 }
 public sealed record DeliveredElectricalShock(ulong DeliverySequence, long DeliveredAtSimTimeNs,
-    DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules);
+    DefibrillationWaveformKind Waveform, DefibrillationMode Mode, int EnergyJoules)
+{
+    public bool Automated { get; init; }
+}
 public sealed record ElectricalConversionResult(ElectricalConversionOutcome Outcome, string? TargetTemplateId = null, long? EffectiveSimTimeNs = null);
 
 public static class EcgElectricalTherapy
@@ -80,7 +86,7 @@ public static class EcgElectricalTherapy
     // A selected/charged energy or an unfulfilled synchronization request is not delivery.
     public static ElectricalConversionResult Evaluate(EcgElectricalTherapyProfile? profile,
         PhysiologyIllustrationConfiguration configuration, DefibrillationWaveformKind waveform,
-        DefibrillationMode mode, int deliveredEnergyJoules)
+        DefibrillationMode mode, int deliveredEnergyJoules, bool automated = false)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         if (!Enum.IsDefined(waveform) || !Enum.IsDefined(mode) || deliveredEnergyJoules is <= 0 or > ElectricalConversionSettings.MaximumEnergyJoules)
@@ -92,13 +98,22 @@ public static class EcgElectricalTherapy
         bool ventricular = descriptor.Requirement is ElectricalShockRequirement.VentricularTachycardia or ElectricalShockRequirement.Unsynchronized;
         // A non-ventricular organized ECG with no ejection is a PEA illustration.
         if (!ventricular && !configuration.VentricularMechanicalEnabled) { return new(ElectricalConversionOutcome.NotShockable); }
-        if (!profile.Settings.Enabled) { return new(ElectricalConversionOutcome.Disabled); }
-        bool asynchronous = descriptor.Requirement == ElectricalShockRequirement.Unsynchronized ||
-            descriptor.Requirement == ElectricalShockRequirement.VentricularTachycardia && !configuration.VentricularMechanicalEnabled;
-        if (mode != (asynchronous ? DefibrillationMode.ManualAsynchronous : DefibrillationMode.ManualSynchronized))
+        var settings = automated ? profile.AedSettings : profile.Settings;
+        if (!settings.Enabled) { return new(ElectricalConversionOutcome.Disabled); }
+        // Ejection does not imply hemodynamic stability. An authored VT response
+        // may convert after an actual asynchronous delivery even with ejection.
+        // This response rule does not choose the clinically recommended mode.
+        bool modeAllowed = descriptor.Requirement switch
+        {
+            ElectricalShockRequirement.Unsynchronized => mode == DefibrillationMode.ManualAsynchronous,
+            ElectricalShockRequirement.VentricularTachycardia => mode == DefibrillationMode.ManualAsynchronous ||
+                configuration.VentricularMechanicalEnabled && mode == DefibrillationMode.ManualSynchronized,
+            _ => mode == DefibrillationMode.ManualSynchronized
+        };
+        if (automated && mode != DefibrillationMode.ManualAsynchronous || !modeAllowed)
         { return new(ElectricalConversionOutcome.WrongMode); }
         bool monophasic = waveform is DefibrillationWaveformKind.MonophasicDampedSine or DefibrillationWaveformKind.MonophasicTruncatedExponential;
-        int threshold = monophasic ? profile.Settings.MonophasicThresholdJoules : profile.Settings.BiphasicThresholdJoules;
+        int threshold = monophasic ? settings.MonophasicThresholdJoules : settings.BiphasicThresholdJoules;
         return deliveredEnergyJoules > threshold ? new(ElectricalConversionOutcome.Eligible, SinusTemplateId)
             : new(ElectricalConversionOutcome.EnergyTooLow);
     }

@@ -15,6 +15,7 @@ internal static class ElectricalConversionSpecifications
     public static Specification[] All =>
     [
         new(nameof(ElectricalConversionUsesStrictIndependentThresholds), ElectricalConversionUsesStrictIndependentThresholds),
+        new(nameof(VtachAsynchronousResponseRetainsTemplateAndEnergyGuards), VtachAsynchronousResponseRetainsTemplateAndEnergyGuards),
         new(nameof(ElectricalConversionPreservesClockAndRejectsReplay), ElectricalConversionPreservesClockAndRejectsReplay),
         new(nameof(ElectricalConversionPreferencesSurviveTemplateChanges), ElectricalConversionPreferencesSurviveTemplateChanges),
     ];
@@ -41,9 +42,10 @@ internal static class ElectricalConversionSpecifications
         foreach (bool pulse in new[] { true, false })
         {
             var vt = PhysiologyIllustrationConfiguration.VtPreset with { VentricularMechanicalEnabled = pulse };
-            var correct = pulse ? DefibrillationMode.ManualSynchronized : DefibrillationMode.ManualAsynchronous;
-            Check.That(EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t026"), vt, wave, correct, 200).Outcome == ElectricalConversionOutcome.Eligible, "VT uses explicit ejection context");
-            Check.That(EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t026"), vt, wave, pulse ? DefibrillationMode.ManualAsynchronous : DefibrillationMode.ManualSynchronized, 200).Outcome == ElectricalConversionOutcome.WrongMode, "wrong mode cannot convert VT");
+            Check.That(EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t026"), vt, wave, DefibrillationMode.ManualAsynchronous, 200).Outcome == ElectricalConversionOutcome.Eligible,
+                "ejection does not prohibit an authored asynchronous VT response");
+            Check.That(EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t026"), vt, wave, DefibrillationMode.ManualSynchronized, 200).Outcome ==
+                (pulse ? ElectricalConversionOutcome.Eligible : ElectricalConversionOutcome.WrongMode), "synchronized VT response retains its ejection context");
         }
         var af = PhysiologyIllustrationConfiguration.Fibrillation();
         Check.That(EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t006"), af, wave, DefibrillationMode.ManualAsynchronous, 1000).Outcome == ElectricalConversionOutcome.WrongMode, "high energy cannot bypass synchronization");
@@ -55,6 +57,34 @@ internal static class ElectricalConversionSpecifications
         Reject(() => EcgElectricalTherapy.Evaluate(Profile("ecgTemplate.t021"), Vf, wave, DefibrillationMode.ManualAsynchronous, 0));
         Reject(() => new ElectricalConversionSettings(true, -1, 10).Validate());
         Reject(() => new ElectricalConversionSettings(false, 10, 1001).Validate());
+    }
+
+    private static void VtachAsynchronousResponseRetainsTemplateAndEnergyGuards()
+    {
+        foreach (int index in new[] { 26, 27, 28, 29 })
+        {
+            var configuration = PhysiologyIllustrationConfiguration.VtPreset with
+            { VtFusion = index == 27, VtCapture = index == 28, VtBidirectional = index == 29 };
+            var profile = Profile($"ecgTemplate.t{index:D3}");
+            foreach (var waveform in Enum.GetValues<DefibrillationWaveformKind>())
+            {
+                int threshold = waveform is DefibrillationWaveformKind.MonophasicDampedSine or DefibrillationWaveformKind.MonophasicTruncatedExponential ? 300 : 150;
+                foreach (int energy in new[] { threshold, threshold + 1 })
+                {
+                    Check.That(EcgElectricalTherapy.Evaluate(profile, configuration, waveform, DefibrillationMode.ManualAsynchronous, energy).Outcome ==
+                        (energy > threshold ? ElectricalConversionOutcome.Eligible : ElectricalConversionOutcome.EnergyTooLow),
+                        "every organized VT variant retains strict waveform-specific thresholds for asynchronous delivery");
+                }
+                Check.That(EcgElectricalTherapy.Evaluate(profile with { Settings = Enabled with { Enabled = false } }, configuration,
+                    waveform, DefibrillationMode.ManualAsynchronous, 1000).Outcome == ElectricalConversionOutcome.Disabled,
+                    "allowing asynchronous VT does not override the authored permission");
+                Check.That(EcgElectricalTherapy.Evaluate(profile, configuration, waveform, DefibrillationMode.ManualAsynchronous, 1000, automated: true).Outcome == ElectricalConversionOutcome.Disabled,
+                    "manual VT permission cannot enable an AED response");
+                Check.That(EcgElectricalTherapy.Evaluate(profile with { AedSettings = Enabled }, configuration,
+                    waveform, DefibrillationMode.ManualAsynchronous, 1000, automated: true).Outcome == ElectricalConversionOutcome.Eligible,
+                    "an independently enabled AED VT response uses the same actual asynchronous mode");
+            }
+        }
     }
 
     private static void ElectricalConversionPreservesClockAndRejectsReplay()

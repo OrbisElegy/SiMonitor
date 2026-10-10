@@ -19,7 +19,43 @@ internal static class PacingWaveformSpecifications
         new(nameof(PacingFailureDoesNotInventPerfusion), PacingFailureDoesNotInventPerfusion),
         new(nameof(PacingRejectsConflictsAndPreservesCursor), PacingRejectsConflictsAndPreservesCursor),
         new(nameof(DefibrillationHasFiniteSignedPhases), DefibrillationHasFiniteSignedPhases),
+        new(nameof(LivePacingStimuliAreIndependentOfCapture), LivePacingStimuliAreIndependentOfCapture),
     ];
+
+    private static void LivePacingStimuliAreIndependentOfCapture()
+    {
+        foreach (var mode in new[] { PacingIllustration.DualChamberDdd, PacingIllustration.AtrialAai,
+            PacingIllustration.VentricularNoncapture, PacingIllustration.VentricularOutputFailure })
+            foreach (int current in new[] { 0, 60 })
+            {
+                var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
+                    MonitorDisplayConfiguration.Default(), enableMeasurements: true,
+                    electricalTherapy: new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default) { PacingAllowed = true });
+                session.SchedulePacing(mode, new(60, current));
+                List<long> emitted = [];
+                for (int i = 0; i < 80; i++)
+                {
+                    long before = session.SimulationTimeNs;
+                    session.Advance(50_000_000);
+                    Check.That(session.EmittedPacingPulseTimesNs.All(time => time >= before && time < session.SimulationTimeNs),
+                        "stimulus sideband belongs to the current acquisition interval");
+                    emitted.AddRange(session.EmittedPacingPulseTimesNs);
+                }
+                bool output = current > 0;
+                Check.That((emitted.Count > 0) == output && emitted.Distinct().Count() == emitted.Count,
+                    "actual pulses are unique, include noncapture, and exclude zero current");
+                if (output)
+                {
+                    int expected = mode is PacingIllustration.DualChamberDdd or PacingIllustration.VentricularNoncapture ? 8 : 4;
+                    Check.That(emitted.Count == expected, $"{mode}: both atrial and ventricular stimuli follow the selected rate");
+                    if (mode == PacingIllustration.VentricularOutputFailure)
+                    { Check.That(emitted.All(time => time % 1_000_000_000 == 0), "ventricular output failure retains only the template's actual atrial stimuli"); }
+                }
+                session.StopPacing();
+                session.Advance(200_000_000);
+                Check.That(session.EmittedPacingPulseTimesNs.Count == 0, "stopping pacing clears pulse events");
+            }
+    }
 
     private static void AdjustablePacingPreservesTimingAndStopsOutputAtZero()
     {

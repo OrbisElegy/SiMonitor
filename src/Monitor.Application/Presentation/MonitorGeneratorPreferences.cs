@@ -10,6 +10,8 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
 {
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; } =
         EcgElectricalTherapy.Snapshot(new Dictionary<string, ElectricalConversionSettings>());
+    public IReadOnlyDictionary<string, ElectricalConversionSettings> AedElectricalConversions { get; init; } =
+        EcgElectricalTherapy.Snapshot(new Dictionary<string, ElectricalConversionSettings>());
     public decimal ApplyDelaySeconds { get; init; } = 3;
     public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; } =
         EcgPacingPermissions.Snapshot(new Dictionary<string, bool>());
@@ -23,6 +25,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }
         Oxygenation?.Validate();
         _ = EcgElectricalTherapy.Snapshot(ElectricalConversions);
+        _ = EcgElectricalTherapy.Snapshot(AedElectricalConversions);
         _ = EcgPacingPermissions.Snapshot(PacingPermissions);
     }
 }

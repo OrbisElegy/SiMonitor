@@ -38,6 +38,8 @@ internal static class Program
             .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. ManualDefibrillatorSpecifications.All,
+            .. AedSpecifications.All,
+            .. AedConversionSpecifications.All,
             .. PostShockSpecifications.All,
             .. PacingWaveformSpecifications.All,
             .. PacingPermissionSpecifications.All,

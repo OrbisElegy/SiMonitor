@@ -8,7 +8,7 @@ public static class SelectedTherapySounds
 {
     private static readonly string[] Prompts = ["AED_MODE_ADULT", "AED_ANALYZING", "AED_SHOCKABLE", "AED_READY",
         "AED_SHOCK_RECORDED", "AED_RHYTHM_CHANGED_ANALYZING", "AED_AUTO_DISARM", "AED_AUTO_DISARM_ANALYZING",
-        "AED_NSA_CPR", "AED_CPR_START", "AED_CPR_BREATHS", "AED_CPR_STOP"];
+        "AED_NSA_CPR", "AED_CPR_START", "AED_CPR_BREATHS", "AED_CPR_STOP", "AED_CPR_HANDS", "AED_CPR_DEPTH"];
     private static readonly Dictionary<string, short[]> Clips = LoadAll();
 
     internal static ReadOnlyMemory<short> Get(string id, string locale = "en") => Clips[

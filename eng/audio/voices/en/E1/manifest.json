@@ -17,30 +17,34 @@
     {
       "file": "AED_ANALYZING.wav",
       "prompt_id": "AED_ANALYZING",
-      "text": "Analyzing the heart rhythm. Do not touch the patient.",
-      "sha256": "3afb395a72d5e9f19545b1cc3fc3c0dfee2e3e209984fdcc6068d803516fb8d5",
-      "duration_s": 3.5269166666666667
+      "text": "Pause chest compressions. Do not touch the patient. Analyzing heart rhythm.",
+      "sha256": "5e430e5e23fdbd737a199ce1d90e557c33e996db874bb0eccd2906d3cb7d166b",
+      "duration_s": 5.4168125,
+      "human_approved": false
     },
     {
       "file": "AED_SHOCKABLE.wav",
       "prompt_id": "AED_SHOCKABLE",
-      "text": "Shock advised. Charging.",
-      "sha256": "42a689f6d55621fb4791adf8d447cad16818608566f5ffc64fe307c62eef630f",
-      "duration_s": 1.9827708333333334
+      "text": "Shock advised. Charging. Do not touch the patient.",
+      "sha256": "3bd9538a6a5ed42e28b583525836658137da3437b26d802d2845be418eeea010",
+      "duration_s": 3.8146458333333335,
+      "human_approved": false
     },
     {
       "file": "AED_READY.wav",
       "prompt_id": "AED_READY",
-      "text": "Stand clear. Press the flashing shock button.",
-      "sha256": "1168a8f743e78edb1ffc38f5e17468e4d6caf7cd39a4c0144e55ecd6065f2514",
-      "duration_s": 3.236666666666667
+      "text": "Make sure everyone is clear. Hold the shock button until the shock is delivered.",
+      "sha256": "23e90f4227c3edebdac520cfbed0fa0ebb1533aa096e44c1e23abdb16e86b121",
+      "duration_s": 5.133166666666667,
+      "human_approved": false
     },
     {
       "file": "AED_SHOCK_RECORDED.wav",
       "prompt_id": "AED_SHOCK_RECORDED",
-      "text": "Simulated shock recorded.",
-      "sha256": "94813be0e4f1abc1724dd1626ce8cfca1eeb87913f8cf9abe476194023c2720a",
-      "duration_s": 2.0085416666666664
+      "text": "Simulated shock delivered. Immediately begin chest compressions.",
+      "sha256": "62143db0a2c23750bf73dcf8dbce356866e71b77ff456f48d3458160e444b392",
+      "duration_s": 4.2058333333333335,
+      "human_approved": false
     },
     {
       "file": "AED_AUTO_DISARM.wav",
@@ -66,34 +70,55 @@
     {
       "file": "AED_NSA_CPR.wav",
       "prompt_id": "AED_NSA_CPR",
-      "text": "No shock advised. Begin CPR.",
-      "sha256": "32ee62cf1fd0078d6e5370949dc91991256d9ced8e0a74b5df605610c5a6e7fb",
-      "duration_s": 2.9231875
+      "text": "No shock advised. Immediately continue CPR.",
+      "sha256": "902b67cc8dcdb51f800dba5e97bc2dd0d274f5386f4a0f2c5b29b64b55efa8ae",
+      "duration_s": 3.6314166666666665,
+      "human_approved": false
     },
     {
       "file": "AED_CPR_START.wav",
       "prompt_id": "AED_CPR_START",
-      "text": "Begin chest compressions. Follow the beat.",
-      "sha256": "0d565660bbb1c13dab8b6bb82960a3bf485300a3472f6e0ee97e9dc4f4ff8de7",
-      "duration_s": 2.7374375
+      "text": "Immediately begin chest compressions. Follow the beat.",
+      "sha256": "a4a15fc56a46613909cec6ead637db9715fcd4da5ceb4bb53217b8edf6651bd3",
+      "duration_s": 3.3876041666666667,
+      "human_approved": false
     },
     {
       "file": "AED_CPR_BREATHS.wav",
       "prompt_id": "AED_CPR_BREATHS",
-      "text": "Give two breaths.",
-      "sha256": "767b29763f27a5ee14f8e4efb1243892130ce3837dff9177498b86e00f38c994",
-      "duration_s": 1.3235416666666666
+      "text": "Give two breaths. Make the chest rise with each breath.",
+      "sha256": "5937106292c3049720fe62480843fdd1c615b82816daf7e6df7cf6da46eb7d6d",
+      "duration_s": 3.6898541666666667,
+      "human_approved": false
     },
     {
       "file": "AED_CPR_STOP.wav",
       "prompt_id": "AED_CPR_STOP",
-      "text": "Stop CPR. Do not touch the patient.",
-      "sha256": "765546524a9764b08624cb6a078252651cd753873a119ced778fc2260876d410",
-      "duration_s": 3.1553958333333334
+      "text": "Pause chest compressions. Do not touch the patient.",
+      "sha256": "aa37b923891548d88220333acb67ed8634395fb9121877356ca5453da1816570",
+      "duration_s": 3.4804791666666666,
+      "human_approved": false
+    },
+    {
+      "file": "AED_CPR_HANDS.wav",
+      "prompt_id": "AED_CPR_HANDS",
+      "text": "Place one hand on the lower half of the breastbone, with the other hand on top. Keep your arms straight and press down.",
+      "sha256": "60414ad9d294e23971322cb8790458adcf1378b10d772c10fe3ede80bfdc67c8",
+      "duration_s": 7.398479166666666,
+      "human_approved": false
+    },
+    {
+      "file": "AED_CPR_DEPTH.wav",
+      "prompt_id": "AED_CPR_DEPTH",
+      "text": "Compress five to six centimeters deep, one hundred to one hundred twenty times per minute. Let the chest fully recoil.",
+      "sha256": "4db20463490760b643a89c9438b46644d9e257b12904cc90591c82c2e9eddd1b",
+      "duration_s": 7.028083333333333,
+      "human_approved": false
     }
   ],
   "runtime_enabled": true,
   "integration_authorized": true,
   "listening_review_pending": true,
-  "generator": "tools/generate_selected_therapy_voices.py --language en"
+  "generator": "tools/generate_selected_therapy_voices.py --language en",
+  "guidance_generator": "tools/generate_selected_therapy_voices.py --offline"
 }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Audio;
 
 namespace Monitor.Specs;
@@ -15,7 +16,9 @@ internal static class TherapySoundSpecifications
         new(nameof(TherapyCprSnapshotsDoNotSeekPlayingPcm), TherapyCprSnapshotsDoNotSeekPlayingPcm),
         new(nameof(TherapyCprReconnectAnchorsOnceAndStillStops), TherapyCprReconnectAnchorsOnceAndStillStops),
         new(nameof(TherapyRelayRequiresActualEventsAndSharesMute), TherapyRelayRequiresActualEventsAndSharesMute),
-        new(nameof(StoredEnergyWarningDucksAndRestoresMonitor), StoredEnergyWarningDucksAndRestoresMonitor)
+        new(nameof(StoredEnergyWarningDucksAndRestoresMonitor), StoredEnergyWarningDucksAndRestoresMonitor),
+        new(nameof(CprSuppressesHeartbeatWithoutSuppressingAlarmsOrReplayingBeats), CprSuppressesHeartbeatWithoutSuppressingAlarmsOrReplayingBeats),
+        new(nameof(CprInstructionPrecedesClicksAndCoachingAvoidsBreaths), CprInstructionPrecedesClicksAndCoachingAvoidsBreaths)
     ];
 
     private static TherapySoundRequest Request(TherapySoundPhase phase, string locale = "zh-CN", ulong revision = 1) =>
@@ -117,27 +120,41 @@ internal static class TherapySoundSpecifications
 
     private static void TherapyCprUsesThirtyCompressionsAndTwoBreaths()
     {
-        const string locale = "en";
-        var renderer = new TherapySoundRenderer();
-        renderer.Update(Request(TherapySoundPhase.CprNoShock, locale));
-        int intro = SelectedTherapySounds.FrameCount("AED_NSA_CPR", locale) + SelectedTherapySounds.FrameCount("AED_CPR_START", locale) + 2 * 7680;
-        int compressions = 30 * 48000 * 60 / 110;
-        int cycle = compressions + 5 * 48000;
-        float[] samples = Render(renderer, intro + cycle + 960);
-        float[] click = SelectedTherapySounds.Get("Cpr").ToArray().Select(s => s / 32768f).ToArray();
-        for (int beat = 0; beat < 30; beat++)
-        {
-            // Integer frame rounding follows the renderer's 110/min clock.
-            int at = intro + (int)Math.Ceiling(beat * 48000d * 60 / 110);
-            int offset = at - intro - beat * 48000 * 60 / 110;
-            Check.That(samples.Skip(at).Take(click.Length - offset).SequenceEqual(click.Skip(offset)), "CPR click follows the current compression slot");
-        }
-        var breath = SelectedTherapySounds.Get("AED_CPR_BREATHS", locale).ToArray().Select(s => s / 32768f);
-        Check.That(samples.Skip(intro + compressions).Take(breath.Count()).SequenceEqual(breath), "two-breath prompt occupies the ventilation window without clicks");
-        Check.That(samples.Skip(intro + cycle).Take(click.Length).SequenceEqual(click), "compression cycle resumes after a five-second ventilation window");
-        renderer.Update(Request(TherapySoundPhase.CprNoShock, locale) with { CprElapsedMilliseconds = 120000 });
-        Check.That(Render(renderer, 48000).All(s => s == 0), "no metronome or queued breaths outlive 120 seconds");
+        foreach (string locale in new[] { "en", "zh-CN" })
+            foreach (var phase in new[] { TherapySoundPhase.CprShock, TherapySoundPhase.CprNoShock })
+            {
+                var renderer = new TherapySoundRenderer();
+                renderer.Update(Request(phase, locale), announce: false);
+                int intro = CprInstructionFrames(phase, locale);
+                int compressions = 30 * 48000 * 60 / 110;
+                int cycle = compressions + 5 * 48000;
+                float[] samples = Render(renderer, intro + 2 * cycle);
+                float[] expected = new float[samples.Length];
+                float[] click = SelectedTherapySounds.Get("Cpr").ToArray().Select(s => s / 32768f).ToArray();
+                float[] breath = SelectedTherapySounds.Get("AED_CPR_BREATHS", locale).ToArray().Select(s => s / 32768f).ToArray();
+                for (int round = 0; round < 2; round++)
+                {
+                    for (int beat = 0; beat < 30; beat++)
+                    {
+                        // Integer frame rounding follows the renderer's 110/min clock.
+                        int slot = (int)Math.Ceiling(beat * 48000d * 60 / 110);
+                        int offset = slot - beat * 48000 * 60 / 110;
+                        click.AsSpan(offset).CopyTo(expected.AsSpan(intro + round * cycle + slot));
+                    }
+                    breath.CopyTo(expected, intro + round * cycle + compressions);
+                }
+                Check.That(samples.SequenceEqual(expected),
+                    "after the entry instruction, each cycle has exactly 30 clicks followed by two breaths in a five-second window");
+                renderer.Update(Request(phase, locale) with { CprElapsedMilliseconds = 120000 });
+                Check.That(Render(renderer, 48000).All(s => s == 0), "no metronome or queued breaths outlive 120 seconds");
+            }
     }
+
+    private static int CprInstructionFrames(TherapySoundPhase phase, string locale) =>
+        phase == TherapySoundPhase.CprShock
+            ? SelectedTherapySounds.FrameCount("AED_SHOCK_RECORDED", locale) + 7680
+            : SelectedTherapySounds.FrameCount("AED_NSA_CPR", locale) + 7680 +
+                SelectedTherapySounds.FrameCount("AED_CPR_START", locale) + 7680;
 
     private static void TherapyMixIsPartitionIndependentAndAllocationFree()
     {
@@ -204,15 +221,15 @@ internal static class TherapySoundSpecifications
 
     private static void TherapyCprReconnectAnchorsOnceAndStillStops()
     {
-        var request = Request(TherapySoundPhase.CprShock, "en") with { CprElapsedMilliseconds = 30000 };
+        var request = Request(TherapySoundPhase.CprShock, "en") with { CprElapsedMilliseconds = 60000 };
         var reference = new TherapySoundRenderer();
         reference.Update(request with { CprElapsedMilliseconds = 0 });
-        Render(reference, 30000 * 48);
+        Render(reference, 60000 * 48);
         var reconnected = new TherapySoundRenderer();
         reconnected.Update(request, announce: false);
         Check.That(Render(reconnected, 4800).SequenceEqual(Render(reference, 4800)),
             "a fresh stream anchors to the current CPR cycle without replaying its introduction");
-        reconnected.Update(request with { CprElapsedMilliseconds = 30050 }, announce: false);
+        reconnected.Update(request with { CprElapsedMilliseconds = 60050 }, announce: false);
         Check.That(Render(reconnected, 4800).SequenceEqual(Render(reference, 4800)),
             "later snapshots cannot rewind the reconnected stream");
         reconnected.Update(request with { CprElapsedMilliseconds = 120000 }, announce: false);
@@ -245,5 +262,113 @@ internal static class TherapySoundSpecifications
         float[] buffer = new float[480];
         Check.That(session.TryProduce(480) && session.Read(buffer) == 480 && buffer.All(s => s == 0),
             "master mute also silences actual relay events in the shared stream");
+    }
+
+    private static void CprInstructionPrecedesClicksAndCoachingAvoidsBreaths()
+    {
+        foreach (string locale in new[] { "en", "zh-CN" })
+            foreach (var phase in new[] { TherapySoundPhase.CprShock, TherapySoundPhase.CprNoShock })
+            {
+                var guided = new TherapySoundRenderer();
+                var rhythm = new TherapySoundRenderer();
+                guided.Update(Request(phase, locale));
+                rhythm.Update(Request(phase, locale), announce: false);
+                const int compressions = 30 * 48000 * 60 / 110;
+                const int cycle = compressions + 5 * 48000;
+                int start = CprInstructionFrames(phase, locale);
+                float[] actual = Render(guided, start + 2 * cycle);
+                float[] clicks = Render(rhythm, actual.Length);
+                string introId = phase == TherapySoundPhase.CprShock ? "AED_SHOCK_RECORDED" : "AED_NSA_CPR";
+                var intro = SelectedTherapySounds.Get(introId, locale).Span;
+                for (int i = 0; i < intro.Length; i++)
+                {
+                    Check.That(actual[i] == intro[i] / 32768f,
+                        "the initial action instruction plays without compression clicks");
+                }
+                if (phase == TherapySoundPhase.CprNoShock)
+                {
+                    var instruction = SelectedTherapySounds.Get("AED_CPR_START", locale).Span;
+                    int at = intro.Length + 7680;
+                    for (int i = 0; i < instruction.Length; i++)
+                    {
+                        Check.That(actual[at + i] == instruction[i] / 32768f,
+                            "no-shock advice is followed by an explicit instruction to begin chest compressions");
+                    }
+                }
+                Check.That(clicks.Take(start).All(s => s == 0),
+                    "neither compression clicks nor ventilation cues precede the completed instruction");
+                Check.That(actual.AsSpan(start - 7680, 7680).ToArray().All(s => s == 0),
+                    "a short gap separates the action instruction from the first compression");
+                var hands = SelectedTherapySounds.Get("AED_CPR_HANDS", locale).Span;
+                for (int i = 0; i < hands.Length; i++)
+                {
+                    Check.That(actual[start + i] == hands[i] / 32768f + clicks[start + i],
+                        "coaching starts with the first compression and preserves the click volume");
+                }
+                foreach (string id in new[] { "AED_CPR_HANDS", "AED_CPR_DEPTH" })
+                {
+                    Check.That(SelectedTherapySounds.FrameCount(id, locale) < compressions,
+                        "each coaching instruction fits inside a compression window");
+                }
+                int introFrames = intro.Length;
+                Check.That(actual.Skip(introFrames).Where((s, i) => Math.Abs(s - clicks[i + introFrames]) > .001).Any(),
+                    "detailed coaching plays after the immediate action instruction");
+                for (int at = start + compressions; at < actual.Length; at += cycle)
+                {
+                    Check.That(actual.AsSpan(at, 5 * 48000).SequenceEqual(clicks.AsSpan(at, 5 * 48000)),
+                        "coaching never overlaps the two-breath prompt or inserts extra ventilation delays");
+                }
+                var reconnected = new TherapySoundRenderer();
+                reconnected.Update(Request(phase, locale) with { CprElapsedMilliseconds = 1000 }, announce: false);
+                Check.That(Render(reconnected, actual.Length - 48000).AsSpan().SequenceEqual(clicks.AsSpan(48000)),
+                    "reconnecting during the instruction preserves the first full 30:2 cycle without replaying speech");
+                guided.Update(Request(phase, locale, 2) with { CprElapsedMilliseconds = 119990 }, announce: false);
+                Check.That(Render(guided, 960).Skip(480).All(s => s == 0), "audio stops at 120 seconds even without another UI snapshot");
+            }
+    }
+
+    private static void CprSuppressesHeartbeatWithoutSuppressingAlarmsOrReplayingBeats()
+    {
+        foreach (var phase in new[] { TherapySoundPhase.CprShock, TherapySoundPhase.CprNoShock })
+        {
+            var mixed = new AudioRenderSession();
+            var reference = new AudioRenderSession();
+            var mixedOwner = new MonitorAlarmSequencer(mixed);
+            var referenceOwner = new MonitorAlarmSequencer(reference);
+            float[] actual = new float[480];
+            float[] expected = new float[480];
+            mixedOwner.UpdateHeartbeat(true, 100);
+            for (int i = 0; i < 2; i++) { mixed.TryProduce(480); mixed.Read(actual); }
+            Check.That(actual.Any(s => s != 0), "a heartbeat is already sounding before CPR starts");
+            for (int i = 0; i < 2; i++) { reference.TryProduce(480); reference.Read(expected); }
+            var request = Request(phase) with { Announce = false };
+            mixed.UpdateTherapy(request);
+            reference.UpdateTherapy(request);
+            for (int block = 0; block < 3000; block++)
+            {
+                var alarm = new MonitorAlarmSoundRequest(MonitorNoticeLevel.Critical, 100, new());
+                mixedOwner.Update(alarm);
+                referenceOwner.Update(alarm);
+                mixedOwner.UpdateHeartbeat(true, block % 40 == 0 ? 100 : null);
+                mixed.TryProduce(480); mixed.Read(actual);
+                reference.TryProduce(480); reference.Read(expected);
+                if (block > 0)
+                { Check.That(actual.SequenceEqual(expected), "CPR cancels existing beats and drops new ones, retaining alarms through compression and ventilation"); }
+            }
+            mixed.UpdateTherapy(null);
+            reference.UpdateTherapy(null);
+            mixedOwner.Update(null);
+            referenceOwner.Update(null);
+            for (int block = 0; block < 50; block++)
+            {
+                mixedOwner.UpdateHeartbeat(true, null);
+                mixed.TryProduce(480); mixed.Read(actual);
+                reference.TryProduce(480); reference.Read(expected);
+                Check.That(actual.SequenceEqual(expected), "CPR exit does not replay any suppressed beats");
+            }
+            mixedOwner.UpdateHeartbeat(true, 100);
+            for (int i = 0; i < 2; i++) { mixed.TryProduce(480); mixed.Read(actual); reference.TryProduce(480); reference.Read(expected); }
+            Check.That(!actual.SequenceEqual(expected), "only a new heartbeat restores the normal monitor rhythm");
+        }
     }
 }

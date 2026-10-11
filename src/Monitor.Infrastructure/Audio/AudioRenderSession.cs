@@ -43,6 +43,7 @@ public sealed class AudioRenderSession
     }
     // Producer-only position; never report this as a physical device cursor.
     public long RenderedThroughFrame => _renderer.Position;
+    internal bool SuppressesHeartbeat => _therapy.SuppressesHeartbeat;
 
     public ToneScheduleResult? Schedule(long key, TonePreset preset, long targetFrame, long expiryFrame) =>
         RequiresReplacement ? null : _renderer.Schedule(key, preset, targetFrame, expiryFrame);

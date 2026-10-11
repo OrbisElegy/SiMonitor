@@ -11,7 +11,7 @@ public sealed class TherapySoundRenderer
     private Clip[] _clips = [];
     private long _frame;
     private long _cprFrame;
-    private long _cprIntroFrames;
+    private long _cprStartFrame;
     private ReadOnlyMemory<short> _click;
     private ReadOnlyMemory<short> _breath;
     private readonly ReadOnlyMemory<short> _readyHold = SelectedTherapySounds.Get("ReadyHold");
@@ -29,6 +29,10 @@ public sealed class TherapySoundRenderer
     private const long CompressionsFrames = 30L * Rate * 60 / 110;
     private const long CycleFrames = CompressionsFrames + 5 * Rate;
     private static readonly double ChargeSmoothing = 1 - Math.Exp(-1d / (Rate * .012));
+
+    internal bool SuppressesHeartbeat => _request is
+    { Phase: TherapySoundPhase.CprShock or TherapySoundPhase.CprNoShock, CprElapsedMilliseconds: < 120000 } &&
+        _cprFrame < 120L * Rate;
 
     // Actual delivery/stimulus events only; never infer a relay from a phase change.
     public void UpdateRelay(bool enabled, bool triggered = false)
@@ -60,7 +64,6 @@ public sealed class TherapySoundRenderer
                 {
                     case TherapySoundPhase.Analyzing:
                         if (request.EnteringAed) { ids.Add("AED_MODE_ADULT"); }
-                        if (request.AfterCpr) { ids.Add("AED_CPR_STOP"); }
                         ids.Add(request.RhythmChanged ? "AED_RHYTHM_CHANGED_ANALYZING" :
                             request.Reanalyzing ? "AED_AUTO_DISARM_ANALYZING" : "AED_ANALYZING");
                         break;
@@ -72,10 +75,11 @@ public sealed class TherapySoundRenderer
                         ids.Add("Ready");
                         break;
                     case TherapySoundPhase.CprShock:
-                        ids.Add("AED_SHOCK_RECORDED"); ids.Add("AED_CPR_START");
+                        ids.Add("AED_SHOCK_RECORDED");
                         break;
                     case TherapySoundPhase.CprNoShock:
-                        ids.Add("AED_NSA_CPR"); ids.Add("AED_CPR_START");
+                        ids.Add("AED_NSA_CPR");
+                        ids.Add("AED_CPR_START");
                         break;
                     case TherapySoundPhase.Cancelled:
                         ids.Add("AED_AUTO_DISARM");
@@ -89,7 +93,23 @@ public sealed class TherapySoundRenderer
                     clips.Add(new(samples, at, id != "Ready"));
                     at += samples.Length + 7680;
                 }
-                _cprIntroFrames = at;
+                if (request.Phase is TherapySoundPhase.CprShock or TherapySoundPhase.CprNoShock)
+                {
+                    // Start the whole 30:2 cycle after the action instruction,
+                    // including on reconnects that omit the entry announcement.
+                    _cprStartFrame = at;
+                    foreach (string id in new[] { "AED_CPR_HANDS", "AED_CPR_DEPTH" })
+                    {
+                        var samples = SelectedTherapySounds.Get(id, request.Locale);
+                        if (samples.Length > CompressionsFrames) { throw new InvalidOperationException("TherapySound.GuidanceTooLong"); }
+                        // Fit each instruction wholly within compressions so it
+                        // cannot overlap the recurring two-breath instruction.
+                        long local = (at - _cprStartFrame) % CycleFrames;
+                        if (local + samples.Length > CompressionsFrames) { at += CycleFrames - local; }
+                        clips.Add(new(samples, at, true));
+                        at += samples.Length + Rate;
+                    }
+                }
                 _readyHoldStartFrame = announce && request.Announce ? at : 0;
                 if (announce && request.Announce) { _clips = clips.ToArray(); }
                 // Force both continuous assets into memory outside Mix.
@@ -104,10 +124,11 @@ public sealed class TherapySoundRenderer
     {
         var request = _request;
         bool cpr = request?.Phase is TherapySoundPhase.CprShock or TherapySoundPhase.CprNoShock;
-        bool cprExpired = cpr && request!.CprElapsedMilliseconds >= 120000;
         foreach (ref float sample in samples)
         {
+            bool cprExpired = cpr && (request!.CprElapsedMilliseconds >= 120000 || _cprFrame >= 120L * Rate);
             float speech = 0, effect = 0;
+            float compression = 0;
             bool speaking = false;
             long cursor = cpr ? _cprFrame : _frame;
             if (request is not null && !cprExpired)
@@ -132,15 +153,15 @@ public sealed class TherapySoundRenderer
                     var hold = _readyHold.Span;
                     effect += hold[(int)((_frame - _readyHoldStartFrame) % hold.Length)] / 32768f;
                 }
-                if (cpr && _cprFrame >= _cprIntroFrames && _cprFrame < 120L * Rate)
+                if (cpr && _cprFrame >= _cprStartFrame)
                 {
-                    long local = (_cprFrame - _cprIntroFrames) % CycleFrames;
+                    long local = (_cprFrame - _cprStartFrame) % CycleFrames;
                     if (local < CompressionsFrames)
                     {
                         long beat = local * 110 / (Rate * 60);
                         long index = local - beat * Rate * 60 / 110;
                         var click = _click.Span;
-                        if (index < click.Length) { effect += click[(int)index] / 32768f; }
+                        if (index < click.Length) { compression = click[(int)index] / 32768f; }
                     }
                     else
                     {
@@ -152,7 +173,8 @@ public sealed class TherapySoundRenderer
             }
             float tail = _cancelFrames > 0 ? _cancelSample * --_cancelFrames / 240f : 0;
             if (_relayFrame < _relay.Length) { effect += _relay.Span[_relayFrame++] / 32768f; }
-            _lastTherapySample = speech + effect * (speaking ? .2512f : 1);
+            // Keep the compression rhythm audible during coaching.
+            _lastTherapySample = speech + compression + effect * (speaking ? .2512f : 1);
             // Stored-energy warnings retain priority throughout Ready, including
             // gaps and reconnects. Smooth attack/release avoids gain discontinuities.
             _readyBackgroundGain = request?.Phase == TherapySoundPhase.Ready

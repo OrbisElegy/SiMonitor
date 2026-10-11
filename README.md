@@ -114,7 +114,7 @@ python3 tools/generate_selected_therapy_voices.py --offline
 
 `--tts-cache-dir PATH` 可指定恢复位置；生成工具也需传入相同参数。`--check` 只校验，`--offline` 在资源缺失时报告错误。普通构建无需 TTS 模型；需要同时准备构建依赖和 TTS 时使用 `--tts`。默认不恢复 Qwen、Kokoro、CosyVoice 等历史候选，也不恢复旧 R1–R4 试听流程所依赖的全部缓存和中间产物。
 
-重新合成覆盖中英文各 23 条固定提示，输出到 `artifacts/therapy-selected-resynthesis/`，可用 `--language zh-CN` 只生成中文。推理存在随机性，输出需重新听审，不保证与已确认 WAV 字节一致。生成工具不会覆盖仓库中已确认的语音；这些位于 `eng/audio/voices/` 的受版本控制资源也不会被上述清理命令删除。
+重新合成覆盖中英文固定提示及按压指导，输出到 `artifacts/therapy-selected-resynthesis/`，可用 `--language zh-CN` 只生成中文。推理存在随机性，输出需重新听审，不保证与已确认 WAV 字节一致。生成工具不会覆盖仓库中已确认的语音；这些位于 `eng/audio/voices/` 的受版本控制资源也不会被上述清理命令删除。
 脚本只处理仓库内生成内容，不卸载系统工具链，也不清理供其他项目共用的全局 NuGet 缓存。
 
 ## 许可证与归属

@@ -117,7 +117,7 @@ python3 tools/generate_selected_therapy_voices.py --offline
 
 Use `--tts-cache-dir PATH` on both commands to select another cache. `--check` only verifies; `--offline` fails when resources are missing. Normal builds do not require TTS models. Use `--tts` to prepare both build and TTS dependencies. Historical candidates such as Qwen, Kokoro, and CosyVoice, and all caches/intermediate outputs needed by the old R1–R4 audition workflows, are outside this restore operation.
 
-The generator writes 23 prompts per language to `artifacts/therapy-selected-resynthesis/`; `--language zh-CN` selects only Chinese. Inference is stochastic, so new audio requires listening review and may differ from approved WAVs. The generator preserves approved repository audio, and the cleaning commands preserve version-controlled resources under `eng/audio/voices/`.
+The generator writes fixed prompts and compression coaching in both languages to `artifacts/therapy-selected-resynthesis/`; `--language zh-CN` selects only Chinese. Inference is stochastic, so new audio requires listening review and may differ from approved WAVs. The generator preserves approved repository audio, and the cleaning commands preserve version-controlled resources under `eng/audio/voices/`.
 The script handles only generated files inside this repository. It does not uninstall system toolchains or clear the global NuGet cache shared with other projects.
 
 ## License and attribution

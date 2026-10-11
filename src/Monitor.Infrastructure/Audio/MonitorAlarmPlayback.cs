@@ -299,7 +299,7 @@ public sealed class MonitorAlarmSequencer(AudioRenderSession session, ulong reti
     {
         if (pitchPercent is < 70 or > 97) { throw new ArgumentOutOfRangeException(nameof(pitchPercent)); }
         if (volumePercent is < 0 or > 100) { throw new ArgumentOutOfRangeException(nameof(volumePercent)); }
-        if (!enabled)
+        if (!enabled || session.SuppressesHeartbeat)
         {
             foreach (long key in _beatKeys) { session.Cancel(key); }
             _beatKeys.Clear(); return;

@@ -173,8 +173,8 @@
     },
     {
       "prompt_id": "AED_ANALYZING",
-      "zh_CN": "正在分析心律，请勿接触患者",
-      "en": "Analyzing the heart rhythm. Do not touch the patient.",
+      "zh_CN": "暂停胸外按压，请勿接触患者，正在分析心律",
+      "en": "Pause chest compressions. Do not touch the patient. Analyzing heart rhythm.",
       "trigger": "进入分析时一次；若本次转换已有 `*_ANALYZING` 合并提示则抑制",
       "priority": "VS0"
     },
@@ -194,22 +194,22 @@
     },
     {
       "prompt_id": "AED_SHOCKABLE",
-      "zh_CN": "建议电击，正在充电",
-      "en": "Shock advised. Charging.",
+      "zh_CN": "建议电击，正在充电，请勿接触患者",
+      "en": "Shock advised. Charging. Do not touch the patient.",
       "trigger": "进入 Charging 时一次",
       "priority": "VS1"
     },
     {
       "prompt_id": "AED_READY",
-      "zh_CN": "所有人离开患者，按下闪烁的电击按钮",
-      "en": "Stand clear. Press the flashing shock button.",
+      "zh_CN": "确认所有人已离开患者，按住电击按钮直至电击完成",
+      "en": "Make sure everyone is clear. Hold the shock button until the shock is delivered.",
       "trigger": "进入 Ready 时立即",
       "priority": "VS0"
     },
     {
       "prompt_id": "AED_SHOCK_RECORDED",
-      "zh_CN": "模拟电击已记录",
-      "en": "Simulated shock recorded.",
+      "zh_CN": "模拟电击已完成，立即开始胸外按压",
+      "en": "Simulated shock delivered. Immediately begin chest compressions.",
       "trigger": "系列最后一次 `ShockDelivered` 后一次",
       "priority": "VS1"
     },
@@ -257,8 +257,8 @@
     },
     {
       "prompt_id": "AED_NSA_CPR",
-      "zh_CN": "不建议电击，开始心肺复苏",
-      "en": "No shock advised. Begin CPR.",
+      "zh_CN": "不建议电击，立即继续心肺复苏",
+      "en": "No shock advised. Immediately continue CPR.",
       "trigger": "NSA 转入 CPR 时一次",
       "priority": "VS1"
     },
@@ -271,15 +271,15 @@
     },
     {
       "prompt_id": "AED_CPR_START",
-      "zh_CN": "开始胸外按压，跟随节拍",
-      "en": "Begin chest compressions. Follow the beat.",
+      "zh_CN": "立即开始胸外按压，跟随节拍",
+      "en": "Immediately begin chest compressions. Follow the beat.",
       "trigger": "CPR 开始时一次",
       "priority": "VS1"
     },
     {
       "prompt_id": "AED_CPR_BREATHS",
-      "zh_CN": "进行两次人工呼吸",
-      "en": "Give two breaths.",
+      "zh_CN": "进行两次人工呼吸，每次使胸部抬起",
+      "en": "Give two breaths. Make the chest rise with each breath.",
       "trigger": "30:2 或 15:2 的通气阶段",
       "priority": "VS1"
     },
@@ -292,15 +292,30 @@
     },
     {
       "prompt_id": "AED_CPR_STOP",
-      "zh_CN": "停止心肺复苏，请勿接触患者",
-      "en": "Stop CPR. Do not touch the patient.",
+      "zh_CN": "暂停胸外按压，请勿接触患者",
+      "en": "Pause chest compressions. Do not touch the patient.",
       "trigger": "返回分析前立即",
       "priority": "VS0"
+    },
+    {
+      "prompt_id": "AED_CPR_HANDS",
+      "zh_CN": "双手重叠，掌根放在胸部中央的胸骨下半部，双臂伸直，垂直按压",
+      "en": "Place one hand on the lower half of the breastbone, with the other hand on top. Keep your arms straight and press down.",
+      "trigger": "CPR 按压阶段分段指导；不延迟节拍、不占通气窗",
+      "priority": "VS1"
+    },
+    {
+      "prompt_id": "AED_CPR_DEPTH",
+      "zh_CN": "保持每分钟一百到一百二十次，深度五到六厘米，每次按压后让胸部充分回弹",
+      "en": "Compress five to six centimeters deep, one hundred to one hundred twenty times per minute. Let the chest fully recoil.",
+      "trigger": "CPR 按压阶段分段指导；不延迟节拍、不占通气窗",
+      "priority": "VS1"
     }
   ],
   "english_pronunciation_candidates": {
     "compressions": "k ə m p ɹ ˈ ɛ ʃ ə n z",
     "cpr": "s ˈ i ː p ˈ i ː ˈ ɑ ː ɹ",
-    "defibrillation": "d i ː f ˌ ɪ b ɹ ɪ l ˈ e ɪ ʃ ə n"
+    "defibrillation": "d i ː f ˌ ɪ b ɹ ɪ l ˈ e ɪ ʃ ə n",
+    "breastbone": "b ɹ ˈ ɛ s t b ˌ o ʊ n"
   }
 }

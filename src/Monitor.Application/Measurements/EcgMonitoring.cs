@@ -73,6 +73,9 @@ public sealed record EcgMonitoringReading(WaveformMeasurementStatus Status, bool
     EcgMonitoringConditions ActiveConditions, int? PvcsLastMinute, EcgBeatMorphology? LastBeat,
     EcgRepolarizationReading Repolarization)
 {
+    // Peak of the completed morphology; the heart-rate detector may already
+    // have reported the next beat while its morphology is still pending.
+    public long? LastBeatPeakTimeNs { get; init; }
     public bool PacingEvidenceAvailable { get; init; }
     public EcgPacingEvidenceOrigin? PacingEvidenceOrigin { get; init; }
     public static EcgMonitoringReading NoData { get; } = new(WaveformMeasurementStatus.NoData, true,

@@ -498,6 +498,7 @@ public sealed record DetectedEcgMonitoringEvent(EcgMonitoringConditions Conditio
 public sealed record EcgRepolarizationReading(WaveformMeasurementStatus StStatus, int? StMicrovolts, WaveformMeasurementStatus QtStatus, int? QtMilliseconds, int? QtcMilliseconds, int? DeltaQtcMilliseconds);
 public sealed record EcgMonitoringReading(WaveformMeasurementStatus Status, bool Learning, EcgMonitoringConditions ActiveConditions, int? PvcsLastMinute, EcgBeatMorphology? LastBeat, EcgRepolarizationReading Repolarization)
 {
+    public long? LastBeatPeakTimeNs { get; init; }
     public bool PacingEvidenceAvailable { get; init; }
     public EcgPacingEvidenceOrigin? PacingEvidenceOrigin { get; init; }
     public static EcgMonitoringReading NoData { get; }

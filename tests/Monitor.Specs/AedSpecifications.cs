@@ -16,7 +16,10 @@ internal static class AedSpecifications
         new(nameof(AedInvalidatesAdviceBeforeDelivery), AedInvalidatesAdviceBeforeDelivery),
         new(nameof(AedNoShockAndCprCyclesReanalyze), AedNoShockAndCprCyclesReanalyze),
         new(nameof(AedClassifiesEcgEvidenceConservatively), AedClassifiesEcgEvidenceConservatively),
-        new(nameof(AedUsesLiveWaveformsWithoutConversionMetadata), AedUsesLiveWaveformsWithoutConversionMetadata)
+        new(nameof(AedUsesLiveWaveformsWithoutConversionMetadata), AedUsesLiveWaveformsWithoutConversionMetadata),
+        new(nameof(AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm), AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm),
+        new(nameof(AedCaptureHistoryCannotSurviveInvalidEvidence), AedCaptureHistoryCannotSurviveInvalidEvidence),
+        new(nameof(AedCompletesLiveVtCaptureWorkflow), AedCompletesLiveVtCaptureWorkflow)
     ];
 
     private static readonly Guid Interaction = Guid.Parse("1424f029-6cd5-4ce8-b563-565020ba2001");
@@ -172,6 +175,129 @@ internal static class AedSpecifications
             Check.That(aed.Phase == expected && session.ElectricalTherapy is null,
                 "live samples classify VF/asystole/sinus/VT without template conversion metadata: " + session.LiveEcgEvidence);
             Check.That(session.LiveEcgEvidence!.SampleTimeNs > session.FrontierNs, "AED evidence follows immediate ECG, not delayed acquisition");
+        }
+    }
+
+    private static AedEcgEvidence WideRhythmEvidence(long at, bool narrow = false)
+    {
+        long peak = at / 350_000_000 * 350_000_000;
+        var evidence = Evidence(at, EcgMonitoringConditions.None);
+        return evidence with
+        {
+            HeartRate = evidence.HeartRate with { LastBeatTimeNs = peak },
+            Monitoring = evidence.Monitoring with
+            {
+                LastBeatPeakTimeNs = peak,
+                LastBeat = new(EcgBeatLabel.Normal, narrow ? 80 : 120, 0)
+            }
+        };
+    }
+
+    private static long ChargeWideRhythm(AutomatedExternalDefibrillator aed)
+    {
+        aed.Enable(0, 0);
+        long now = 0;
+        while (now < 8_400_000_000 - StepNs)
+        {
+            now += StepNs;
+            aed.Tick(now, now, WideRhythmEvidence(now));
+        }
+        Check.That(aed.Phase == AedPhase.ShockAdvised, "six-beat wide history supports the normal analysis and charge");
+        return now;
+    }
+
+    private static void AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm()
+    {
+        var device = Device();
+        var aed = new AutomatedExternalDefibrillator(device);
+        long now = ChargeWideRhythm(aed) + StepNs;
+        var capture = WideRhythmEvidence(now, narrow: true);
+        Check.That(AutomatedExternalDefibrillator.Classify(capture, now) == AedAdvice.NoShock,
+            "a narrow snapshot alone never authorizes shock");
+        Check.That(aed.PressShock(Interaction, now, now, capture),
+            "an isolated capture retains established wide-rhythm advice without a VT alarm label");
+        for (; now < 8_750_000_000; now += StepNs)
+        {
+            Check.That(aed.Tick(now, now, WideRhythmEvidence(now, narrow: true)) is null && aed.Phase == AedPhase.ShockAdvised,
+                "repeated packets of one capture do not become multiple narrow beats or deliver early");
+        }
+        Check.That(aed.Tick(now, now, WideRhythmEvidence(now, narrow: true)) is null &&
+            aed.Phase == AedPhase.Analyzing && device.State.Energy == EnergyState.Idle,
+            "a second distinct narrow beat cancels the held shock before delivery");
+        Check.That(!aed.PressShock(Interaction, now, now, WideRhythmEvidence(now, narrow: true)),
+            "old wide history cannot authorize a new press after recovery");
+    }
+
+    private static void AedCaptureHistoryCannotSurviveInvalidEvidence()
+    {
+        foreach (int interruption in Enumerable.Range(0, 12))
+        {
+            var device = Device();
+            var aed = new AutomatedExternalDefibrillator(device);
+            long now = ChargeWideRhythm(aed) + StepNs;
+            if (interruption is 9 or 10) { now += 250_000_000; }
+            var capture = WideRhythmEvidence(now, narrow: true);
+            AedEcgEvidence? invalid = interruption switch
+            {
+                0 => null,
+                1 => capture with { SampleTimeNs = now - 250_000_000 },
+                2 => capture with { HeartRate = capture.HeartRate with { Status = WaveformMeasurementStatus.PoorSignal } },
+                3 => capture with { HeartRate = capture.HeartRate with { MilliBeatsPerMinute = 150_000 } },
+                4 => capture with { Monitoring = capture.Monitoring with { ActiveConditions = EcgMonitoringConditions.Asystole } },
+                5 => capture with { Monitoring = capture.Monitoring with { ActiveConditions = EcgMonitoringConditions.SupraventricularTachycardia } },
+                6 => capture with { Monitoring = capture.Monitoring with { LastBeat = new(EcgBeatLabel.Paced, 80, 0) } },
+                7 => capture with { Monitoring = capture.Monitoring with { LastBeatPeakTimeNs = now + StepNs } },
+                8 => capture with { Monitoring = capture.Monitoring with { LastBeatPeakTimeNs = null } },
+                11 => capture with { Monitoring = capture.Monitoring with { LastBeatPeakTimeNs = now - 800_000_000 } },
+                _ => capture
+            };
+            if (interruption == 10)
+            { Check.That(!aed.PressShock(Interaction, now, now, invalid), "a press following a stream gap cannot reuse capture history"); }
+            else { aed.Tick(now, now, invalid); }
+            Check.That(device.State.Energy == EnergyState.Idle && aed.Phase != AedPhase.ShockAdvised,
+                "capture tolerance never overrides invalid, slow, paced or explicitly nonshockable evidence");
+            now += StepNs;
+            aed.Tick(now, now, WideRhythmEvidence(now, narrow: true));
+            Check.That(aed.Advice == AedAdvice.Undetermined && device.State.Energy == EnergyState.Idle,
+                "resumed narrow evidence cannot recover discarded authorization");
+        }
+    }
+
+    private static void AedCompletesLiveVtCaptureWorkflow()
+    {
+        foreach (long startNs in new long[] { 0, 8_000_000_000, 14_000_000_000 })
+        {
+            var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.VtPreset with { VtCapture = true },
+                MonitorDisplayConfiguration.Default(), true);
+            while (session.SimulationTimeNs < startNs) { session.Advance(StepNs); }
+            var device = new ManualDefibrillator(Interaction, DefibrillatorConfiguration.Default, 200);
+            var aed = new AutomatedExternalDefibrillator(device);
+            aed.Enable(startNs, startNs);
+            bool ready = false;
+            long? pressedAtNs = null;
+            DeliveredElectricalShock? delivered = null;
+            while (session.SimulationTimeNs < startNs + 40_000_000_000 && delivered is null)
+            {
+                session.Advance(StepNs);
+                long now = session.SimulationTimeNs;
+                var evidence = session.LiveEcgEvidence!;
+                delivered = aed.Tick(now, now, evidence);
+                if (aed.Phase == AedPhase.ShockAdvised) { ready = true; }
+                if (now >= startNs + 12_000_000_000)
+                { Check.That(ready, "capture during analysis or default charging must not restart the workflow"); }
+                if (ready && delivered is null)
+                { Check.That(aed.Phase == AedPhase.ShockAdvised, "later isolated captures retain the charged advice"); }
+                if (pressedAtNs is null && now >= startNs + 25_000_000_000 &&
+                    evidence.Monitoring.LastBeat is { QrsWidthMilliseconds: < 100 })
+                {
+                    Check.That(aed.PressShock(Interaction, now, now, evidence), "live capture accepts explicit confirmation of sustained VT advice");
+                    pressedAtNs = now;
+                }
+                if (pressedAtNs is null || now - pressedAtNs < 500_000_000)
+                { Check.That(delivered is null, "capture handling never bypasses the full explicit hold"); }
+            }
+            Check.That(delivered is { Automated: true, DeliverySequence: 1 } && aed.Phase == AedPhase.Cpr &&
+                session.ElectricalTherapy is null, "live VT capture completes one confirmed discharge without template metadata");
         }
     }
 }

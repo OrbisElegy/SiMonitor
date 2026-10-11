@@ -63,6 +63,8 @@ var reading = detector.ReadMonitoring(asOfSampleTimeNs);
 最近心搏形态、ST/QT 读数和 `PacingEvidenceAvailable`。没有数据或质量不可用时不暴露活动条件，
 不以零替代未知数值。顶层 Valid 表示采样可分析；具体 ST/QT 是否可测以其独立状态为准，
 不能由顶层 Valid 推断所有项目都正常。心率的 Valid/Stale/Uncountable 仍读原有 `HeartRate`。
+`LastBeatPeakTimeNs` 对应最近已完成形态的心搏峰值；形态确认晚于峰值 160 ms，不能用
+心率检测器可能已经更新到下一搏的 `LastBeatTimeNs` 替代。尚无形态或信号不可用时为 null。
 
 `DetectedEcgMonitoringEvent` 的 `Condition` 始终只有一位；`EvidenceFromNs` 是本实现使用的
 证据开始时间，`ConfirmedAtNs` 是已采集样本上的因果确认时间，不是回填的真实发病时间。

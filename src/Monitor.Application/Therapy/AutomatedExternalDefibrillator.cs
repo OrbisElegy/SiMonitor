@@ -32,6 +32,8 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
     private long _lastSafetyTimeNs;
     private long? _lastEvidenceNs;
     private AedAdvice _candidate;
+    private readonly Queue<(long PeakTimeNs, bool Wide)> _recentBeats = new();
+    private bool _wideRunEstablished;
     public AedPhase Phase { get; private set; }
     public AedAdvice Advice { get; private set; }
     public bool Enabled => Phase != AedPhase.Off;
@@ -60,6 +62,7 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         Advice = AedAdvice.Undetermined;
         RemainingSeconds = 0;
         _lastEvidenceNs = null;
+        ClearBeatHistory();
     }
 
     public void ReleaseShock(long safetyTimeNs)
@@ -73,7 +76,7 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
     {
         ValidateTime(safetyTimeNs, simulationTimeNs);
         if (Phase != AedPhase.ShockAdvised) { return false; }
-        if (Classify(evidence, simulationTimeNs) != AedAdvice.Shock)
+        if (HasEvidenceGap(evidence) || ClassifyCurrentRhythm(evidence, simulationTimeNs) != AedAdvice.Shock)
         { device.Disarm(safetyTimeNs); StartAnalysis(simulationTimeNs); return false; }
         return device.PressShock(interactionId, safetyTimeNs);
     }
@@ -88,9 +91,9 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
             if (RemainingSeconds == 0) { StartAnalysis(simulationTimeNs); }
             return null;
         }
-        var advice = Classify(evidence, simulationTimeNs);
+        var advice = ClassifyCurrentRhythm(evidence, simulationTimeNs);
         // A stream gap invalidates even apparently fresh advice from its next packet.
-        bool gap = _lastEvidenceNs is { } last && evidence is { } next && next.SampleTimeNs - last > 200_000_000;
+        bool gap = HasEvidenceGap(evidence);
         _lastEvidenceNs = evidence?.SampleTimeNs;
         if (advice == AedAdvice.Undetermined || gap)
         {
@@ -98,6 +101,7 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
             Phase = AedPhase.WaitingForSignal;
             Advice = AedAdvice.Undetermined;
             RemainingSeconds = 0;
+            ClearBeatHistory();
             return null;
         }
         if (Phase == AedPhase.WaitingForSignal) { StartAnalysis(simulationTimeNs); }
@@ -122,6 +126,9 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
     }
 
     public static AedAdvice Classify(AedEcgEvidence? evidence, long simulationTimeNs)
+        => Classify(evidence, simulationTimeNs, false);
+
+    private static AedAdvice Classify(AedEcgEvidence? evidence, long simulationTimeNs, bool sustainedWideRun)
     {
         if (evidence is null || evidence.SampleTimeNs < 0 || evidence.SampleTimeNs > simulationTimeNs ||
             simulationTimeNs - evidence.SampleTimeNs > 200_000_000 ||
@@ -139,11 +146,56 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         // 100 ms is this detector's sampled-complex proxy, not clinical QRS duration.
         if (evidence.HeartRate is { Status: WaveformMeasurementStatus.Valid, MilliBeatsPerMinute: > 150_000 } &&
             evidence.HeartRate.LastBeatTimeNs is { } peak && peak <= simulationTimeNs && simulationTimeNs - peak <= 600_000_000 &&
-            monitoring.LastBeat is { QrsWidthMilliseconds: >= 100, Label: not EcgBeatLabel.Paced })
+            monitoring.LastBeat is { Label: not EcgBeatLabel.Paced } beat &&
+            (beat.QrsWidthMilliseconds >= 100 || sustainedWideRun))
         { return AedAdvice.Shock; }
         if (monitoring.Learning || evidence.HeartRate.Status != WaveformMeasurementStatus.Valid)
         { return AedAdvice.Undetermined; }
         return AedAdvice.NoShock;
+    }
+
+    private AedAdvice ClassifyCurrentRhythm(AedEcgEvidence? evidence, long simulationTimeNs)
+    {
+        // Count completed morphologies once, not repeated UI ticks or the newer
+        // heart-rate peak. Establish six wide beats before tolerating one narrow
+        // capture in that window; a second narrow beat ends the exception.
+        // Morphology completes 160 ms after its peak; retain that delay in
+        // addition to the separate 600 ms heart-rate freshness requirement.
+        if (evidence is
+            {
+                Monitoring:
+                {
+                    Status: WaveformMeasurementStatus.Valid,
+                    LastBeatPeakTimeNs: { } peak, LastBeat: { } beat
+                }
+            } &&
+            peak >= 0 && peak <= evidence.SampleTimeNs && peak <= simulationTimeNs &&
+            simulationTimeNs - peak <= 760_000_000 && beat.Label != EcgBeatLabel.Paced)
+        {
+            if (_recentBeats.Count > 0 && (peak < _recentBeats.Last().PeakTimeNs ||
+                peak - _recentBeats.Last().PeakTimeNs > 600_000_000)) { ClearBeatHistory(); }
+            if (_recentBeats.Count == 0 || peak != _recentBeats.Last().PeakTimeNs)
+            {
+                _recentBeats.Enqueue((peak, beat.QrsWidthMilliseconds >= 100));
+                if (_recentBeats.Count > 6) { _recentBeats.Dequeue(); }
+                int narrowBeats = _recentBeats.Count(item => !item.Wide);
+                _wideRunEstablished = _recentBeats.Count == 6 &&
+                    (narrowBeats == 0 || _wideRunEstablished && narrowBeats == 1);
+            }
+        }
+        else { ClearBeatHistory(); }
+        var advice = Classify(evidence, simulationTimeNs, _wideRunEstablished);
+        if (advice != AedAdvice.Shock) { ClearBeatHistory(); }
+        return advice;
+    }
+
+    private bool HasEvidenceGap(AedEcgEvidence? evidence) =>
+        _lastEvidenceNs is { } last && evidence is { } next && next.SampleTimeNs - last > 200_000_000;
+
+    private void ClearBeatHistory()
+    {
+        _recentBeats.Clear();
+        _wideRunEstablished = false;
     }
 
     private void StartAnalysis(long simulationTimeNs)
@@ -154,6 +206,7 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         _phaseStartedNs = simulationTimeNs;
         _stableSinceNs = simulationTimeNs;
         _lastEvidenceNs = null;
+        ClearBeatHistory();
         RemainingSeconds = (int)(AnalysisDurationNs / 1_000_000_000);
     }
 

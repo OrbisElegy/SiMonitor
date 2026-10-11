@@ -455,7 +455,11 @@ internal sealed class EcgMonitoringAnalysis(EcgMonitoringSettings settings)
             new(stValid ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.Uncountable, stValid ? _st : null,
                 qtValid ? WaveformMeasurementStatus.Valid : WaveformMeasurementStatus.Uncountable,
                 qtValid ? _qt : null, qtValid ? _qtc : null, qtValid ? _qtc - _baseline : null))
-        { PacingEvidenceAvailable = _pulseEvidenceFromNs is not null, PacingEvidenceOrigin = _pulseEvidenceFromNs is null ? null : _pacingOrigin };
+        {
+            LastBeatPeakTimeNs = _beats.LastOrDefault()?.PeakNs,
+            PacingEvidenceAvailable = _pulseEvidenceFromNs is not null,
+            PacingEvidenceOrigin = _pulseEvidenceFromNs is null ? null : _pacingOrigin
+        };
     }
 
     private bool Pattern(int[] pattern)

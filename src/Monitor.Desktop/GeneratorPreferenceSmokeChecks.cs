@@ -13,7 +13,7 @@ internal static class GeneratorPreferenceSmokeChecks
         string path = Path.Combine(directory, "settings.json");
         try
         {
-            foreach (int selection in new[] { 0, 1, 19, 107, 137, 2 })
+            foreach (int selection in new[] { 0, 1, 19, 107, 137, 180, 2 })
             {
                 var window = new DesignPreviewWindow();
                 MonitorGeneratorPreferences expected;

@@ -8,7 +8,7 @@ namespace Monitor.Application.Therapy;
 public static class EcgPacingPermissions
 {
     public static IReadOnlyList<string> TemplateIds { get; } = Array.AsReadOnly(
-        Enumerable.Range(0, 180).Select(index => string.Create(CultureInfo.InvariantCulture, $"ecgTemplate.t{index:D3}")).ToArray());
+        Enumerable.Range(0, 181).Select(index => string.Create(CultureInfo.InvariantCulture, $"ecgTemplate.t{index:D3}")).ToArray());
 
     public static IReadOnlyDictionary<string, bool> Snapshot(IReadOnlyDictionary<string, bool> permissions)
     {

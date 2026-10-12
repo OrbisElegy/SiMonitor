@@ -1051,5 +1051,7 @@
   "pressureRange.cvp": "CVP minimum measurable pressure (mmHg)",
   "pressureRange.abpPulse": "ABP minimum pulse amplitude (mmHg)",
   "pressureRange.paPulse": "PA minimum pulse amplitude (mmHg)",
-  "pressureRange.invalid": "Range limits must be −100 to 400 mmHg; minimum pulse amplitudes must be 2 to 100 mmHg, with up to two decimal places."
+  "pressureRange.invalid": "Range limits must be −100 to 400 mmHg; minimum pulse amplitudes must be 2 to 100 mmHg, with up to two decimal places.",
+  "ecgTemplate.t180": "Mirror-image dextrocardia (standard leads)",
+  "summary.dextrocardia": "Standard limb and left chest positions; inverted lead I and decreasing precordial R waves."
 }

@@ -569,6 +569,7 @@ public static class IllustrationVentricularTiming
 ```csharp
 public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMilliseconds, int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null, int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125, int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0, int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
+    public bool Dextrocardia { get; init; }
     public PacingIllustration? Pacing { get; init; }
     public PacingOutputSettings? PacingOutput { get; init; }
     public EcgChestInfarctionPlan? Infarction { get; init; }
@@ -2717,3 +2718,20 @@ public sealed class DefibrillationEcgArtifact
 
 `Apply` 接收已验证的微伏 ECG 平面，保留区间外样本及既有质量标记；区间内覆盖为前端示意输出
 并标记不可判读。`EvaluateMicrovolts` 区间外返回 0，调用方用 `Contains` 区分非作用区间。
+
+## Physiology/DextrocardiaReference.cs
+
+源码：[DextrocardiaReference.cs](../../../src/Monitor.Simulation/Physiology/DextrocardiaReference.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+常规电极位置下的镜像右位心教学示意。肢体投影与左右上肢反接具有相同变换关系，
+但左胸 R 波递减；不改变心动与机械事件时序。来源与自定参数见
+[形态依据](../../../eng/physiology/mirror-image-dextrocardia.json)。不提供右胸导联或儿科定量标定。
+
+```csharp
+public static class DextrocardiaReference
+{
+    public const string EvidenceId = "MirrorImageDextrocardiaIllustration@1";
+    public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes();
+    public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands();
+}
+```

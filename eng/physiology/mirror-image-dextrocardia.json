@@ -1,0 +1,159 @@
+{
+  "id": "MirrorImageDextrocardiaIllustration@1",
+  "source": {
+    "title": "诸福棠实用儿科学（第9版）",
+    "page": 1677,
+    "figure": "27-45",
+    "section": "右位心",
+    "evidence": "User-supplied photographs; qualitative morphology, not digitized patient samples."
+  },
+  "corroboration": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6730946/",
+  "scope": "Mirror-image dextrocardia with standard limb and left precordial positions. Not non-mirror dextrocardia, dextroposition or arm wiring reversal. No right-precordial channels in this template.",
+  "constraints": [
+    "I inverted; II/III and aVR/aVL exchanged; aVF unchanged relative to the reference.",
+    "Left precordial R amplitude regresses, V2-V6 are S-dominant and distant left chest voltage diminishes.",
+    "Book V3R/V5R/V6R are right chest positions, not ordinary V3/V5/V6. The printed 1/2 is a gain annotation, not a physiological amplitude multiplier."
+  ],
+  "authored_note": "All amplitudes and timing are teaching choices, not measurements from the photograph or pediatric reference limits. Reference sinus timing and perfusion are retained.",
+  "phase_length": 128,
+  "phase_landmarks": {
+    "Early": [
+      [
+        0,
+        0
+      ],
+      [
+        8,
+        1
+      ],
+      [
+        16,
+        0
+      ],
+      [
+        128,
+        0
+      ]
+    ],
+    "Main": [
+      [
+        0,
+        0
+      ],
+      [
+        16,
+        0
+      ],
+      [
+        48,
+        1
+      ],
+      [
+        104,
+        0
+      ],
+      [
+        128,
+        0
+      ]
+    ],
+    "Terminal": [
+      [
+        0,
+        0
+      ],
+      [
+        48,
+        0
+      ],
+      [
+        104,
+        1
+      ],
+      [
+        128,
+        0
+      ]
+    ]
+  },
+  "chest_component_microvolts": [
+    [
+      0,
+      600,
+      -200
+    ],
+    [
+      0,
+      200,
+      -1000
+    ],
+    [
+      0,
+      100,
+      -600
+    ],
+    [
+      0,
+      60,
+      -400
+    ],
+    [
+      0,
+      40,
+      -250
+    ],
+    [
+      0,
+      20,
+      -150
+    ]
+  ],
+  "limb_qrs_weights_per_1000": [
+    400,
+    -200,
+    0,
+    800
+  ],
+  "p_t_electrode_weights_per_1000": [
+    [
+      400,
+      250
+    ],
+    [
+      -400,
+      -100
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      600,
+      550
+    ],
+    [
+      100,
+      400
+    ],
+    [
+      -100,
+      250
+    ],
+    [
+      -150,
+      -150
+    ],
+    [
+      -100,
+      -100
+    ],
+    [
+      -60,
+      -60
+    ],
+    [
+      -40,
+      -40
+    ]
+  ]
+}

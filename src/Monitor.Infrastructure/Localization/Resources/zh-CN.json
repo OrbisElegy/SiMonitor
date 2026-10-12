@@ -1051,5 +1051,7 @@
   "pressureRange.cvp": "CVP 最低可测压力（mmHg）",
   "pressureRange.abpPulse": "ABP 最小搏动幅度（mmHg）",
   "pressureRange.paPulse": "PA 最小搏动幅度（mmHg）",
-  "pressureRange.invalid": "量程下限须为 −100 至 400 mmHg，最小搏动幅度须为 2 至 100 mmHg，最多两位小数。"
+  "pressureRange.invalid": "量程下限须为 −100 至 400 mmHg，最小搏动幅度须为 2 至 100 mmHg，最多两位小数。",
+  "ecgTemplate.t180": "镜像右位心（常规导联）",
+  "summary.dextrocardia": "常规肢体与左胸导联；Ⅰ导联倒置，左胸 R 波递减。"
 }

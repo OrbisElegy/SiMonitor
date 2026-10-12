@@ -57,6 +57,7 @@ public sealed record PhysiologyIllustrationConfiguration(
     bool AivrCapture = false,
     bool AtrialEscape = false)
 {
+    public bool Dextrocardia { get; init; }
     public PacingIllustration? Pacing { get; init; }
     public PacingOutputSettings? PacingOutput { get; init; }
     public EcgChestInfarctionPlan? Infarction { get; init; }
@@ -158,6 +159,20 @@ public sealed record PhysiologyIllustrationConfiguration(
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (Dextrocardia && (Pacing is not null || PacingOutput is not null || ConductionPattern != AvConductionPattern.FixedPr || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+            VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || IndependentVentricularPeriodMilliseconds is not null ||
+            IndependentVentricularOffsetMilliseconds is not null || MechanicalEveryCycles != 1 || MechanicalAfterCycles is not null ||
+            MechanicalDurationCycles is not null || SeededRate is not null ||
+            BundleBlock != EcgBundleBlockIllustration.Reference || Infarction is not null || Zones is not null || TContour is not null ||
+            VentricularShape != EcgVentricularIllustration.Reference || AtrialShape != EcgAtrialIllustration.Reference ||
+            Quinidine != QuinidineIllustration.Reference || QuinidineNotchedP || DigitalisEffect || DigitalisShape != DigitalisTShape.FishHook ||
+            Calcium != CalciumIllustration.Reference || HypokalemiaRepolarization || HypokalemiaInvertedT || HypokalemiaTuFusion || HypokalemiaConduction ||
+            HyperkalemiaRepolarization || HyperkalemiaConduction || HyperkalemiaAbsentP || HyperkalemiaFusion ||
+            IllustrateAfSystemicPulseDeficit || IllustrateAfAberrancy || Wpw || WpwNegativeV1 || WpwSmallerDelta || ShortPr || NormalPrDelta ||
+            ProlongedPrDelta || Svt || SvtRbbb || SvtLbbb || Vt || VtFusion || VtCapture || VtBidirectional || VtTwisting ||
+            Aivr || AivrFusion || AivrCapture || Ajr || Aar || AtrialEscape))
+        { throw new ArgumentException("Dextrocardia.ConflictingModes"); }
+
         if (Pacing is { } pacing)
         {
             if (ConductionPattern != AvConductionPattern.FixedPr || CardiacActivity != CardiacActivity.AtrialAndVentricular ||

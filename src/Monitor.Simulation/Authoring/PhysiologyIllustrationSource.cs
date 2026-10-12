@@ -70,6 +70,7 @@ public static class PhysiologyIllustrationSource
         // pressure across missing and resumed ejections. Teaching parameters only.
         PhysiologyWaveformChannelPlan[] channels =
             [new(plan, new(ChannelId(0), "AcqECGMonitor250@1", 1, 1, 0, 1),
+                configuration.Dextrocardia ? DextrocardiaReference.CreateLeadIIBands() :
                 configuration.Pacing is { } pacing ? PacingReference.CreateLeadIIBands(pacing, configuration.PacingOutput) :
                 sinusArrest ? SinusArrestReference.CreateLeadIIBands() :
                 sinusArrhythmia ? SinusArrhythmiaReference.CreateLeadIIBands() :

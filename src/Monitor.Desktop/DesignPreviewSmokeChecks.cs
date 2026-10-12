@@ -55,7 +55,7 @@ internal static class DesignPreviewSmokeChecks
     private static void VerifyUiRefinement()
     {
         var groups = Enumerable.Range(0, DesignPreviewSettings.EcgChoiceCount).GroupBy(EcgChooserGroups.For).ToArray();
-        Require(groups.Sum(g => g.Count()) == 180 && groups.All(g => g.Count() <= 10) &&
+        Require(groups.Sum(g => g.Count()) == 181 && groups.All(g => g.Count() <= 10) &&
             groups.Select(g => g.Key).ToHashSet().SetEquals(EcgChooserGroups.Ordered) && EcgChooserGroups.Ordered.Distinct().Count() == EcgChooserGroups.Ordered.Count, "all ECG presets have bounded explicit groups");
         Require(EcgChooserGroups.For(2) != EcgChooserGroups.For(26) && EcgChooserGroups.For(26) != EcgChooserGroups.For(21) &&
             EcgChooserGroups.For(75) != EcgChooserGroups.For(87), "ectopy, tachycardia, fibrillation and drug groups stay distinct");
@@ -969,6 +969,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(EcgMonitoringAlarmSmokeChecks.VerifyAberrantAtrialBeats);
         NativeSmokePartition.Run(VerifyPacingProductStyles);
         NativeSmokePartition.Run(ElectricalConversionSmokeChecks.Verify);
+        NativeSmokePartition.Run(DextrocardiaSmokeChecks.Verify);
         EcgTemplateDetectionSmokeChecks.Register();
         NativeSmokePartition.Run(DeepOxygenationSmokeChecks.Verify);
         NativeSmokePartition.Run(RealtimeOxygenationSmokeChecks.Verify);
@@ -1116,7 +1117,7 @@ internal static class DesignPreviewSmokeChecks
             var templates = window.Settings.TemplatePages[0];
             Button Card(DesignPreviewSettings.TemplatePage page, string name) => page.CardButtons.Single(button => AutomationProperties.GetName(button)?.StartsWith(name + "，", StringComparison.Ordinal) == true);
             Require(!templates.Compact && templates.Groups.IsEffectivelyVisible && templates.Groups.ItemCount == EcgChooserGroups.Ordered.Count &&
-                templates.CardButtons.Count() == 3 && AutomationProperties.GetName((ListBoxItem)templates.Groups.Items[0]!) == "窦性心律，含当前选择",
+                templates.CardButtons.Count() == 4 && AutomationProperties.GetName((ListBoxItem)templates.Groups.Items[0]!) == "窦性心律，含当前选择",
                 "wide ECG tab lists every group beside the current group's previews");
             Capture(window, "ui-preview-chooser.png");
             Require(window.Settings.PreviewCacheCount >= 3, "grouped choices own distinct cached source configurations");

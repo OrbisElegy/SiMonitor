@@ -336,6 +336,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     manifest = json.loads((root / 'eng/physiology/textbook-ecg-reference.json').read_text(encoding='utf-8'))
     chest = json.loads((root / 'eng/physiology/textbook-chest-progression.json').read_text(encoding='utf-8'))
+    dextrocardia = json.loads((root / 'eng/physiology/mirror-image-dextrocardia.json').read_text(encoding='utf-8'))
     wpw = json.loads((root / 'eng/physiology/wpw-positive-v1.json').read_text(encoding='utf-8'))
     wpw_smaller = json.loads((root / 'eng/physiology/wpw-smaller-delta.json').read_text(encoding='utf-8'))
     wpw_negative = json.loads((root / 'eng/physiology/wpw-negative-v1.json').read_text(encoding='utf-8'))
@@ -400,6 +401,8 @@ def main():
             'Monitor.Simulation.Physiology', 'VentricularEscapeTables', conduction_shapes(escape)),
         root / 'src/Monitor.Simulation/Physiology/TContourTables.cs': render(
             'Monitor.Simulation.Physiology', 'TContourTables', t_contour['tables']),
+        root / 'src/Monitor.Simulation/Physiology/DextrocardiaTables.cs': render(
+            'Monitor.Simulation.Physiology', 'DextrocardiaTables', electrode_shapes(dextrocardia, manifest)),
         root / 'src/Monitor.Simulation/Physiology/SevereRightVentricularQrsTables.cs': render(
             'Monitor.Simulation.Physiology', 'SevereRightVentricularQrsTables', ventricular_shapes(severe_right, chest)),
         root / 'src/Monitor.Simulation/Physiology/PulmonaryHeartQrsTables.cs': render(

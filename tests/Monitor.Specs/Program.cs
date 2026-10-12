@@ -118,6 +118,7 @@ internal static class Program
             .. VascularPressureVariationSpecifications.All,
             .. PhysiologyForkSpecifications.All,
             .. EcgLimbPlacementSpecifications.All,
+            .. DextrocardiaSpecifications.All,
             .. CapnogramSpecifications.All,
             .. CapnogramPlateauSpecifications.All,
             .. CapnogramTransportSpecifications.All,

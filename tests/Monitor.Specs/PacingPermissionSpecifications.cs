@@ -62,7 +62,7 @@ internal static class PacingPermissionSpecifications
             new Dictionary<string, bool>(), new Dictionary<string, int>())
         { PacingPermissions = EcgPacingPermissions.Snapshot(map) };
         map.Clear();
-        Check.That(generator.PacingPermissions.Count == 180, "the permission bank owns its snapshot");
+        Check.That(generator.PacingPermissions.Count == EcgPacingPermissions.TemplateIds.Count, "the permission bank owns its snapshot");
         string path = Path.Combine(Path.GetTempPath(), "pacing-permissions-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {

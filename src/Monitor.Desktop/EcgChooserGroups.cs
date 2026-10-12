@@ -21,7 +21,7 @@ internal static class EcgChooserGroups
     }
     internal static string For(int index) => index switch
     {
-        0 or 1 or 3 => "窦性心律",
+        0 or 1 or 3 or 180 => "窦性心律",
         4 or 40 or 41 => "房性早搏",
         6 or 7 or >= 66 and <= 71 => "心房颤动",
         8 or 9 or 37 or 38 or 39 => "心房扑动",

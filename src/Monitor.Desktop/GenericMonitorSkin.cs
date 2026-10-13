@@ -180,6 +180,7 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     public string Id => "generic";
     public IBrush Background => Brushes.Black;
     public IBrush ChannelBrush(int channel) => Brush.Parse(Colors[channel]);
+    public void RefreshLayout() => _monitorArea?.InvalidateMeasure();
     internal TextBlock Feedback { get; } = new()
     {
         Foreground = Brush.Parse("#BAC5D1"),
@@ -197,20 +198,8 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         var body = _body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
         Grid.SetRow(body, 1);
         root.Children.Add(body);
-        var monitor = _monitorArea = new Grid { RowDefinitions = new("*,100"), ColumnDefinitions = new("*,200"), Margin = new Thickness(0, 0, 8, 0) };
+        var monitor = _monitorArea = new GenericMonitorArea(content) { Margin = new Thickness(0, 0, 8, 0) };
         body.Children.Add(monitor);
-        monitor.Children.Add(content.Waveforms);
-        Grid.SetColumn(content.Numerics, 1);
-        monitor.Children.Add(content.Numerics);
-        var extras = new UniformGrid { Columns = 3 };
-        extras.Children.Add(content.Temperature);
-        extras.Children.Add(content.Custom1);
-        extras.Children.Add(content.Custom2);
-        Grid.SetRow(extras, 1);
-        monitor.Children.Add(extras);
-        Grid.SetRow(content.Nibp, 1);
-        Grid.SetColumn(content.Nibp, 1);
-        monitor.Children.Add(content.Nibp);
         var therapy = new StackPanel { Spacing = 8 };
         therapy.Children.Add(Caption("skin.therapyControls"));
         therapy.Children.Add(Panel("skin.defibrillator", [Defibrillator], []));

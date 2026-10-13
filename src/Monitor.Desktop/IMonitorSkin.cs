@@ -5,7 +5,7 @@ using Monitor.Application.Therapy;
 
 namespace Monitor.Desktop;
 
-// In-process desktop composition port. Skins receive presentation controls only;
+// In-process desktop composition port. Skins receive controls and layout metadata;
 // acquisition, measurement validity, alarm projection and commands belong to the host.
 internal interface IMonitorSkin
 {
@@ -15,6 +15,7 @@ internal interface IMonitorSkin
     public IBrush Background { get; }
     public IBrush ChannelBrush(int channel);
     public Control Compose(MonitorSkinContent content);
+    public void RefreshLayout() { }
 }
 
 internal sealed record MonitorSkinContent(
@@ -24,4 +25,5 @@ internal sealed record MonitorSkinContent(
     Control Temperature,
     Control Custom1,
     Control Custom2,
-    Control Nibp);
+    Control Nibp,
+    Func<int> WaveformRowCount);

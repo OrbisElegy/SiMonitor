@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -79,6 +80,7 @@ internal static class GenericSkinSmokeChecks
             Require(window.MonitorView.NumericTexts.SequenceEqual(ExpectedReadings),
                 "four visible rows show acquired values in the requested order");
             VerifyLayout(window);
+            VerifyNumericScaling(window);
             foreach (var size in new[] { new Size(1440, 940), new Size(960, 640) })
             {
                 DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
@@ -89,6 +91,79 @@ internal static class GenericSkinSmokeChecks
         }
         finally { window.Close(); }
         VerifyLayoutPreferences();
+    }
+
+    private static void VerifyNumericScaling(DesignPreviewWindow window)
+    {
+        var view = window.MonitorView;
+        var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+        var session = window.Session;
+        long time = session.SimulationTimeNs;
+        double FontHeight(TextBlock text) =>
+            text.TranslatePoint(new Point(0, text.FontSize), view)!.Value.Y - text.TranslatePoint(default, view)!.Value.Y;
+        foreach (int rows in new[] { 0, 1 })
+        {
+            skin.LayoutRows.SelectedIndex = rows;
+            foreach (bool therapy in new[] { true, false })
+            {
+                skin.ShowTherapy.IsChecked = therapy;
+                foreach (string locale in new[] { "zh-CN", "en" })
+                {
+                    window.Localization.Select(locale);
+                    double compactHeight = 0, previousHeight = 0;
+                    foreach (var size in new[] { new Size(960, 640), new Size(1920, 1080), new Size(2560, 1440), new Size(960, 640) })
+                    {
+                        DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
+                        var qt = view.NumericBlocks[1];
+                        double height = FontHeight(qt);
+                        if (compactHeight == 0) { compactHeight = height; }
+                        if (size.Width > 960)
+                        {
+                            Require(height > previousHeight && height >= compactHeight * 1.5,
+                                "QT/QTc visibly enlarge with the viewport instead of remaining fixed-size text");
+                        }
+                        else { Require(Math.Abs(height - compactHeight) < .01, "restoring a compact window restores its readable scale"); }
+                        previousHeight = height;
+                        foreach (var text in view.NumericBlocks.Where((_, index) => index % 2 == 1).Where(text => text.IsVisible))
+                        {
+                            Require(Math.Abs(FontHeight(text) - height) < .01, "all secondary readings share the numeric scale");
+                            Require(text.TextLayout.Width <= text.Bounds.Width + 1 && text.TextLayout.Height <= text.Bounds.Height + 1,
+                                "auxiliary readings fit without clipping, including QT/QTc and localized units");
+                        }
+                        var pi = view.GetVisualDescendants().OfType<TextBlock>().Single(text =>
+                            AutomationProperties.GetName(text) == window.Localization.Get("monitor.piName"));
+                        Require(Math.Abs(FontHeight(pi) - height) < .01 && pi.TextLayout.Width <= pi.Bounds.Width + 1,
+                            "PI grows alongside PR and fits its column");
+                        var nibp = view.ManualTiles[3];
+                        double numericLeft = nibp.TranslatePoint(default, view)!.Value.X;
+                        double traceRight = window.MonitorTrace.TranslatePoint(new Point(window.MonitorTrace.Bounds.Width, 0), view)!.Value.X;
+                        Require(Math.Abs(numericLeft - traceRight) <= 1 && window.MonitorTrace.Bounds.Width > 200,
+                            "the enlarged numeric column stays aligned with NIBP and leaves room for waveforms");
+                        if (locale == "zh-CN" && size.Width > 960)
+                        {
+                            using var image = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
+                            image.Render((Control)window.Content!);
+                            image.Save($"artifacts/generic-numerics-{rows + 3}-{(therapy ? "therapy" : "monitor")}-{size.Width:0}.png", PngBitmapEncoderOptions.Default);
+                        }
+                    }
+                }
+            }
+        }
+        skin.ShowTherapy.IsChecked = true;
+        window.Localization.Select("zh-CN");
+        var original = session.Display;
+        foreach (var layout in new[] { MonitorSkin.FiveRows, MonitorSkin.SevenRows })
+        {
+            session.UpdateDisplay(MonitorDisplayConfiguration.Default(layout));
+            view.RefreshDisplay();
+            DesktopViewportSmokeChecks.Layout(window, 1920, 1080);
+            Require(FontHeight(view.NumericBlocks[0]) >= 24,
+                $"legacy dense layouts reserve enough height for the primary ECG reading: {layout}, font {FontHeight(view.NumericBlocks[0])}, bounds {view.NumericBlocks[0].Bounds}, QT {view.NumericBlocks[1].Bounds}, trace {window.MonitorTrace.Bounds}");
+        }
+        session.UpdateDisplay(original);
+        view.RefreshDisplay();
+        Require(ReferenceEquals(session, window.Session) && session.SimulationTimeNs == time && window.ActiveTimer is null,
+            "resizing and changing numeric layout preserve the paused acquisition session");
     }
 
     private static void VerifyLayout(DesignPreviewWindow window)

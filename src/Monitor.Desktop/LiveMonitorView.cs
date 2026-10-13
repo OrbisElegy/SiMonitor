@@ -94,7 +94,8 @@ internal sealed class LiveMonitorView : UserControl
         BuildRows();
         Grid.SetRow(_manualPanel, 2);
         if (skin is null) { root.Children.Add(_manualPanel); }
-        Content = skin?.Compose(new(header, trace, _numbers, _temperature, _custom1, _custom2, _nibp)) ?? root;
+        Content = skin?.Compose(new(header, trace, _numbers, _temperature, _custom1, _custom2, _nibp,
+            () => trace.Session.Display.Slots.Count)) ?? root;
         Refresh();
     }
     internal void RefreshDisplay()
@@ -106,6 +107,7 @@ internal sealed class LiveMonitorView : UserControl
         _highlightNotices = null;
         _lastMeasurementBucket = -1;
         BuildRows();
+        _skin?.RefreshLayout();
         _trace.RefreshDisplay();
         Refresh();
     }
@@ -175,7 +177,8 @@ internal sealed class LiveMonitorView : UserControl
             }
             else
             {
-                // Keep labels at readable sizes; only digits scale into the remaining height.
+                // Labels and auxiliary readings share the skin's overall numeric scale;
+                // digits additionally fit into the remaining row height.
                 var grid = new Grid { RowDefinitions = new("Auto,*,Auto") };
                 grid.Children.Add(caption);
                 var digits = new Viewbox

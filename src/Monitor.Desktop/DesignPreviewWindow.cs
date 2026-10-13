@@ -52,6 +52,8 @@ internal sealed class DesignPreviewWindow : Window
     internal SystemViewCommandAssessmentPolicy MeasurementPolicy { get; private set; } = SystemViewCommandAssessmentPolicy.Enabled;
     internal LiveMonitorTrace MonitorTrace => _monitor;
     private readonly DisplayPreferenceStore? _preferences;
+    private DisplayPreferences _displayPreferences;
+    private MonitorDisplaySlot _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];
     private readonly LanguagePreferenceStore? _languagePreferences;
     private readonly MonitorTherapyPreferenceStore? _therapyPreferences;
     private readonly Func<long> _safetyClock;
@@ -91,6 +93,7 @@ internal sealed class DesignPreviewWindow : Window
         Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageRejected");
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), 0);
+        _displayPreferences = preferences;
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
         var defaults = BuildConfiguredSources();
@@ -177,10 +180,43 @@ internal sealed class DesignPreviewWindow : Window
         var skin = new GenericMonitorSkin(Localization, _therapy, SaveTherapy, SetPacing,
             _defibrillator.Configuration, RunDefibrillatorCommand,
             energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
+        if (_session.Display.Slots.Count >= 4) { _layoutFourthSlot = _session.Display.Slots[3]; }
+        skin.ConfigureLayout(_session.Display.Skin, _displayPreferences.TherapyControlsVisible, ChangeMonitorLayout);
         Settings.Defibrillator.SetDeviceOverride(skin.DefibrillatorOverride);
         RefreshDefibrillator(skin);
         RefreshPacingState(skin);
         return skin;
+    }
+
+    private void ChangeMonitorLayout(MonitorSkin? layout, bool therapyVisible)
+    {
+        if (_closed || _applying) { return; }
+        if (layout is MonitorSkin.ThreeRows or MonitorSkin.FourRows && layout != _session.Display.Skin)
+        {
+            var current = _session.Display;
+            if (current.Slots.Count >= 4) { _layoutFourthSlot = current.Slots[3]; }
+            var slots = current.Slots.Take(3).ToList();
+            if (layout == MonitorSkin.FourRows) { slots.Add(_layoutFourthSlot); }
+            var display = new MonitorDisplayConfiguration(layout.Value, slots);
+            _session.UpdateDisplay(display);
+            Settings.RestoreDisplay(display, Settings.PaperLayout.SelectedIndex, Settings.MeasurementUnits.SelectedIndex == 1);
+            BindAlarmAttention();
+            MonitorView.RefreshDisplay();
+            Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
+            RefreshDefibrillator();
+            Localization.Bind(_subtitle, TextBlock.TextProperty, "shell.monitorSubtitle", display.Slots.Count);
+        }
+        _displayPreferences = _displayPreferences with { Display = _session.Display, TherapyControlsVisible = therapyVisible };
+        SaveDisplayPreferences();
+    }
+
+    private void SaveDisplayPreferences()
+    {
+        if (_preferences is null) { return; }
+        bool saved = _preferences.Save(_displayPreferences);
+        PreferenceNotice.IsVisible = !saved;
+        Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
+        if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
     }
 
     private EcgElectricalTherapyProfile CaptureSinusTherapy() =>
@@ -452,6 +488,8 @@ internal sealed class DesignPreviewWindow : Window
         Settings.Sound.Close();
         SelectLanguage(BuiltInLocalizations.DefaultLocale);
         _therapy = MonitorTherapyPreferences.Default;
+        _displayPreferences = _displayPreferences with { TherapyControlsVisible = true };
+        _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];
         bool therapySaved = _therapyPreferences?.Save(_therapy) != false;
         Settings = CreateSettings();
         ConnectSettings();
@@ -678,13 +716,9 @@ internal sealed class DesignPreviewWindow : Window
             if (restart) { SetStatus("settings.restarted"); }
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
-            if (_preferences is not null)
-            {
-                bool saved = _preferences.Save(new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters, defibrillator));
-                PreferenceNotice.IsVisible = !saved;
-                Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
-                if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
-            }
+            _displayPreferences = new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters, defibrillator)
+            { TherapyControlsVisible = _displayPreferences.TherapyControlsVisible };
+            SaveDisplayPreferences();
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
         { SetStatus("validation.baselineRestart"); }

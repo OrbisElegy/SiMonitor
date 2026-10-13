@@ -19,6 +19,48 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     private readonly Func<MonitorTherapyPreferences, bool, string>? _pacing;
     private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
     private bool _pacingFeedback;
+    private Grid? _body, _monitorArea;
+    internal Grid? TherapyArea { get; private set; }
+    internal Button LayoutButton { get; private set; } = null!;
+    internal ComboBox LayoutRows { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
+    internal ToggleSwitch ShowTherapy { get; } = new() { MinHeight = 44, IsChecked = true };
+    private Action<MonitorSkin?, bool>? _layoutChanged;
+
+    internal void ConfigureLayout(MonitorSkin layout, bool therapyVisible, Action<MonitorSkin?, bool> changed)
+    {
+        _localization.SetChoices(LayoutRows, "skin.threeRows", "skin.fourRows");
+        _localization.Bind(LayoutRows, AutomationProperties.NameProperty, "skin.waveformRows");
+        _localization.Bind(LayoutRows, ComboBox.PlaceholderTextProperty, "skin.waveformRows");
+        _localization.Bind(ShowTherapy, ContentControl.ContentProperty, "skin.showTherapy");
+        _localization.Bind(ShowTherapy, AutomationProperties.NameProperty, "skin.showTherapy");
+        _localization.Bind(ShowTherapy, ToggleSwitch.OnContentProperty, "skin.visible");
+        _localization.Bind(ShowTherapy, ToggleSwitch.OffContentProperty, "skin.hidden");
+        LayoutRows.SelectedIndex = layout == MonitorSkin.ThreeRows ? 0 : layout == MonitorSkin.FourRows ? 1 : -1;
+        ShowTherapy.IsChecked = therapyVisible;
+        _layoutChanged = changed;
+        LayoutRows.SelectionChanged += (_, _) => ChangeLayout();
+        ShowTherapy.IsCheckedChanged += (_, _) => ChangeLayout();
+    }
+
+    private void ChangeLayout()
+    {
+        UpdateTherapyVisibility();
+        _layoutChanged?.Invoke(LayoutRows.SelectedIndex switch
+        {
+            0 => MonitorSkin.ThreeRows,
+            1 => MonitorSkin.FourRows,
+            _ => null
+        }, ShowTherapy.IsChecked == true);
+    }
+
+    private void UpdateTherapyVisibility()
+    {
+        if (_body is null || _monitorArea is null || TherapyArea is null) { return; }
+        bool visible = ShowTherapy.IsChecked == true;
+        TherapyArea.IsVisible = visible;
+        _body.ColumnDefinitions[1].Width = new GridLength(visible ? 190 : 0);
+        _monitorArea.Margin = new Thickness(0, 0, visible ? 8 : 0, 0);
+    }
     internal TextBlock PacingStatus { get; } = new() { Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
     internal DefibrillatorControls Defibrillator { get; }
     internal ComboBox Energy => Defibrillator.Energy;
@@ -150,12 +192,12 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
 
     public Control Compose(MonitorSkinContent content)
     {
-        var root = new Grid { RowDefinitions = new("Auto,*,Auto"), Background = Background };
+        var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto"), Background = Background };
         root.Children.Add(content.Header);
-        var body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
+        var body = _body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
         Grid.SetRow(body, 1);
         root.Children.Add(body);
-        var monitor = new Grid { RowDefinitions = new("*,100"), ColumnDefinitions = new("*,200"), Margin = new Thickness(0, 0, 8, 0) };
+        var monitor = _monitorArea = new Grid { RowDefinitions = new("*,100"), ColumnDefinitions = new("*,200"), Margin = new Thickness(0, 0, 8, 0) };
         body.Children.Add(monitor);
         monitor.Children.Add(content.Waveforms);
         Grid.SetColumn(content.Numerics, 1);
@@ -175,16 +217,25 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         therapy.Children.Add(Panel("skin.pacer", [Field("skin.pacingType", PacingType), Field("skin.pacingRate", Rate),
             Field("skin.pacingCurrent", Current), PacingStatus, ApplyPacing, StopPacing], []));
         var scroll = new ScrollViewer { Content = therapy, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        var therapyArea = new Grid { RowDefinitions = new("*,Auto") };
+        var therapyArea = TherapyArea = new Grid();
         therapyArea.Children.Add(scroll);
-        Grid.SetRow(Feedback, 1);
-        therapyArea.Children.Add(Feedback);
+        Grid.SetRow(Feedback, 2);
+        root.Children.Add(Feedback);
         Grid.SetColumn(therapyArea, 1);
         body.Children.Add(therapyArea);
         var toolbar = new UniformGrid { Columns = 8, Margin = new Thickness(8, 0, 8, 8) };
-        foreach (string key in new[] { "skin.layout", "skin.ecg", "skin.leads", "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
+        LayoutButton = ToolbarButton("skin.layout");
+        _localization.Bind(LayoutButton, AutomationProperties.NameProperty, "skin.layout");
+        var layoutPanel = new StackPanel { Spacing = 12, MinWidth = 240 };
+        layoutPanel.Children.Add(ShowTherapy);
+        layoutPanel.Children.Add(Caption("skin.waveformRows"));
+        layoutPanel.Children.Add(LayoutRows);
+        LayoutButton.Flyout = new Flyout { Content = layoutPanel, Placement = PlacementMode.Top };
+        toolbar.Children.Add(LayoutButton);
+        UpdateTherapyVisibility();
+        foreach (string key in new[] { "skin.ecg", "skin.leads", "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
         { toolbar.Children.Add(DummyButton(key)); }
-        Grid.SetRow(toolbar, 2);
+        Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);
         return new ThemeVariantScope { RequestedThemeVariant = ThemeVariant.Dark, Child = root };
     }
@@ -227,7 +278,7 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         return text;
     }
 
-    private Button DummyButton(string key)
+    private Button ToolbarButton(string key)
     {
         var caption = new TextBlock { TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
         _localization.Bind(caption, TextBlock.TextProperty, key);
@@ -244,6 +295,12 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
             CornerRadius = new CornerRadius(5),
             FontSize = 14
         };
+        return button;
+    }
+
+    private Button DummyButton(string key)
+    {
+        var button = ToolbarButton(key);
         button.Classes.Add("skin-dummy");
         _localization.Bind(button, AutomationProperties.NameProperty, text => text.GetString(key) + " · " + text.GetString("skin.preview"));
         button.Click += (_, _) =>

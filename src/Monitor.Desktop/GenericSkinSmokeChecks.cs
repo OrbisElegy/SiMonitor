@@ -47,13 +47,15 @@ internal static class GenericSkinSmokeChecks
             long time = session.SimulationTimeNs;
             var manual = session.ManualVitals;
             var buttons = view.GetVisualDescendants().OfType<Button>().Where(button => button.Classes.Contains("skin-dummy")).ToArray();
-            Require(buttons.Length == 8 && buttons.All(button => button.MinHeight >= 44), "dummy actions retain keyboard and pointer targets");
+            Require(buttons.Length == 7 && buttons.All(button => button.MinHeight >= 44), "dummy actions retain keyboard and pointer targets");
             foreach (var button in buttons) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
             Require(session.SimulationTimeNs == time && session.ManualVitals == manual && window.ActiveTimer is null &&
                 ReferenceEquals(session, window.Session), "dummy buttons do not mutate the paused session");
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
             Require(skin.Feedback.Text!.Contains("功能尚未接入", StringComparison.Ordinal), "dummy feedback is explicit");
             window.Settings.Language.SelectedIndex = 0;
+            Require(skin.ShowTherapy.Content?.ToString() == "Show therapy controls" && skin.ShowTherapy.OnContent?.ToString() == "Visible" &&
+                skin.LayoutRows.Items[0]?.ToString() == window.Localization.Get("skin.threeRows"), "layout choices localize");
             Require(view.ManualNumericTexts.All(string.IsNullOrEmpty) &&
                 skin.Feedback.Text!.Contains("not connected yet", StringComparison.Ordinal), "paused skin placeholders and feedback localize");
             string path = Path.Combine(Path.GetTempPath(), "generic-display-" + Guid.NewGuid().ToString("N") + ".json");
@@ -76,6 +78,7 @@ internal static class GenericSkinSmokeChecks
             window.Pause();
             Require(window.MonitorView.NumericTexts.SequenceEqual(ExpectedReadings),
                 "four visible rows show acquired values in the requested order");
+            VerifyLayout(window);
             foreach (var size in new[] { new Size(1440, 940), new Size(960, 640) })
             {
                 DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
@@ -85,6 +88,121 @@ internal static class GenericSkinSmokeChecks
             }
         }
         finally { window.Close(); }
+        VerifyLayoutPreferences();
+    }
+
+    private static void VerifyLayout(DesignPreviewWindow window)
+    {
+        var session = window.Session;
+        var trace = window.MonitorTrace;
+        var view = window.MonitorView;
+        var skin = (GenericMonitorSkin)trace.Skin!;
+        var defibrillator = window.Defibrillator;
+        var original = session.Display;
+        var customized = original.Slots.ToArray();
+        customized[0] = customized[0] with { SpeedTenthsMmPerSecond = 125 };
+        customized[3] = new(3, false, new(-10, 180), 500);
+        session.UpdateDisplay(new(MonitorSkin.FourRows, customized));
+        view.RefreshDisplay();
+        long time = session.SimulationTimeNs;
+        ulong revision = session.DataRevision;
+        skin.Rate.Value = 85;
+        Require(!skin.LayoutButton.Classes.Contains("skin-dummy") && skin.LayoutButton.Flyout is Flyout,
+            "layout is an active toolbar action with a flyout");
+        foreach (var size in new[] { new Size(1440, 940), new Size(960, 640) })
+        {
+            foreach (bool visible in new[] { false, true })
+            {
+                skin.ShowTherapy.IsChecked = visible;
+                foreach (int rows in new[] { 0, 1 })
+                {
+                    skin.LayoutRows.SelectedIndex = rows;
+                    DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
+                    Require(session.Display.Slots.Count == rows + 3 && view.NumericTexts.Count == rows + 3 &&
+                        window.Settings.ReadDisplay().Slots.SequenceEqual(session.Display.Slots), "layout updates waveforms, numerics and settings together");
+                    Require(session.Display.Slots.SequenceEqual(customized.Take(rows + 3)), "roundtrip preserves channel, scale and speed including the hidden fourth row");
+                    Require(skin.TherapyArea!.IsVisible == visible && trace.Bounds.Width > (visible ? 200 : 398),
+                        "therapy visibility and waveform space respond at both viewport sizes");
+                    using var image = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
+                    image.Render((Control)window.Content!);
+                    image.Save($"artifacts/generic-layout-{rows + 3}-{(visible ? "therapy" : "monitor")}-{size.Width:0}.png", PngBitmapEncoderOptions.Default);
+                }
+            }
+            double narrow = trace.Bounds.Width;
+            skin.ShowTherapy.IsChecked = false;
+            DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
+            Require(Math.Abs(trace.Bounds.Width - narrow - 198) <= 1, "hiding therapy returns the whole sidebar and gutter to waveforms");
+            skin.ShowTherapy.IsChecked = true;
+        }
+        DesktopViewportSmokeChecks.Layout(window);
+        skin.LayoutButton.Flyout!.ShowAt(skin.LayoutButton);
+        DesktopViewportSmokeChecks.Layout(window);
+        Require(skin.LayoutButton.Flyout.IsOpen && skin.ShowTherapy.IsEffectivelyVisible && skin.LayoutRows.IsEffectivelyVisible,
+            "layout flyout exposes both controls");
+        if (TopLevel.GetTopLevel(skin.ShowTherapy) is { } popup)
+        {
+            using var image = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(popup.Bounds.Width), (int)Math.Ceiling(popup.Bounds.Height)), new Vector(96, 96));
+            image.Render(popup);
+            image.Save("artifacts/generic-layout-popup.png", PngBitmapEncoderOptions.Default);
+        }
+        skin.LayoutButton.Flyout.Hide();
+        Require(ReferenceEquals(session, window.Session) && ReferenceEquals(trace, window.MonitorTrace) && ReferenceEquals(view, window.MonitorView) &&
+            ReferenceEquals(defibrillator, window.Defibrillator) && session.SimulationTimeNs == time && session.DataRevision == revision &&
+            window.ActiveTimer is null && skin.Rate.Value == 85, "paused layout changes preserve runtime, therapy drafts and acquired history");
+        window.Start();
+        var timer = window.ActiveTimer;
+        skin.LayoutRows.SelectedIndex = 0;
+        skin.ShowTherapy.IsChecked = false;
+        window.Pulse(timer, 50_000_000);
+        Require(ReferenceEquals(timer, window.ActiveTimer) && session.SimulationTimeNs > time, "live acquisition continues through layout changes");
+        window.Pause();
+        skin.LayoutRows.SelectedIndex = 1;
+        skin.ShowTherapy.IsChecked = true;
+        session.UpdateDisplay(original);
+        window.Settings.RestoreDisplay(original, 0);
+        view.RefreshDisplay();
+    }
+
+    private static void VerifyLayoutPreferences()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "monitor-layout-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(directory, "display.json");
+        try
+        {
+            var window = new DesignPreviewWindow(path);
+            window.Show();
+            try
+            {
+                window.Pause();
+                // A quick layout change must not apply or persist unrelated settings drafts.
+                window.Settings.PaperLayout.SelectedIndex = 1;
+                var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+                skin.LayoutRows.SelectedIndex = 0;
+                skin.ShowTherapy.IsChecked = false;
+                var saved = new DisplayPreferenceStore(path).Load(out bool rejected);
+                Require(!rejected && saved.Display.Skin == MonitorSkin.ThreeRows && !saved.TherapyControlsVisible &&
+                    saved.PaperLayout == 0 && saved.Generator is null, "quick layout saves only layout preferences");
+            }
+            finally { window.Close(); }
+            var reopened = new DesignPreviewWindow(path);
+            reopened.Show();
+            try
+            {
+                reopened.Pause();
+                var skin = (GenericMonitorSkin)reopened.MonitorTrace.Skin!;
+                Require(reopened.Session.Display.Skin == MonitorSkin.ThreeRows && skin.ShowTherapy.IsChecked == false &&
+                    skin.TherapyArea!.IsVisible == false, "saved layout and therapy visibility restore on reopen");
+                reopened.RestartSettings();
+                Require(((GenericMonitorSkin)reopened.MonitorTrace.Skin!).ShowTherapy.IsChecked == false, "settings rebuild retains therapy visibility");
+            }
+            finally { reopened.Close(); }
+            var legacy = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            legacy.Remove("TherapyControlsVisible");
+            File.WriteAllText(path, legacy.ToJsonString());
+            Require(new DisplayPreferenceStore(path).Load(out bool rejectedLegacy).TherapyControlsVisible && !rejectedLegacy,
+                "existing preference files retain visible therapy controls");
+        }
+        finally { if (Directory.Exists(directory)) { Directory.Delete(directory, recursive: true); } }
     }
 
     private static void Require(bool condition, string message)

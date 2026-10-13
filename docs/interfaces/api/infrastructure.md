@@ -624,6 +624,7 @@ public sealed class EncryptedSqliteBackupService
 ```csharp
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
+    public bool TherapyControlsVisible { get; init; } = true;
 }
 public sealed class DisplayPreferenceStore(string path)
 {

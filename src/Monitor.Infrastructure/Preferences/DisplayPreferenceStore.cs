@@ -6,7 +6,10 @@ using Monitor.Application.Therapy;
 
 namespace Monitor.Infrastructure.Preferences;
 
-public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null);
+public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
+{
+    public bool TherapyControlsVisible { get; init; } = true;
+}
 
 // Local preferences and generator inputs; no runtime waveform or playback state.
 public sealed class DisplayPreferenceStore(string path)
@@ -22,6 +25,7 @@ public sealed class DisplayPreferenceStore(string path)
         public required MonitorSkin Skin { get; init; }
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
+        public bool TherapyControlsVisible { get; init; } = true;
         public bool MeasurementMillimeters { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
         public MonitorSoundPreferences? Sound { get; init; }
@@ -71,7 +75,8 @@ public sealed class DisplayPreferenceStore(string path)
             if (data.Version >= 16 && data.Defibrillator is null) { throw new ArgumentException("Preferences.MissingDefibrillator"); }
             var defibrillator = data.Defibrillator?.Snapshot() ?? DefibrillatorConfiguration.Default;
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
-                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, alarms, data.Sound, generator, data.MeasurementMillimeters, defibrillator);
+                new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, alarms, data.Sound, generator, data.MeasurementMillimeters, defibrillator)
+            { TherapyControlsVisible = data.TherapyControlsVisible };
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
@@ -88,6 +93,7 @@ public sealed class DisplayPreferenceStore(string path)
         var data = new Document
         {
             Version = 18,
+            TherapyControlsVisible = preferences.TherapyControlsVisible,
             Defibrillator = (preferences.Defibrillator ?? DefibrillatorConfiguration.Default).Snapshot(),
             Generator = preferences.Generator,
             Sound = sound,

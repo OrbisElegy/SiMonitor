@@ -58,6 +58,12 @@ internal sealed class LiveMonitorTrace : Control
     internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(MonitorChannels.None,
         (channels, slot) => channels | MonitorChannelMapping.ForChannel(slot.Channel)) & (Skin?.Channels ?? MonitorChannels.All);
     internal IBrush ChannelBrush(int channel) => Skin?.ChannelBrush(channel) ?? Brush.Parse(Colors[channel]);
+    internal void RefreshDisplay()
+    {
+        _revision = ulong.MaxValue;
+        InvalidateVisual();
+    }
+
     private void Build()
     {
         if (_revision == _session.DataRevision && _cycle == _session.Ranges.Cycle) { return; }

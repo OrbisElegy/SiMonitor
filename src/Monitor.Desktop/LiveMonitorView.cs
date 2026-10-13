@@ -16,6 +16,7 @@ namespace Monitor.Desktop;
 internal sealed class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
+    private readonly Grid _numbers = new();
     private readonly IMonitorSkin? _skin;
     private readonly MonitorManualTile _temperature = new(), _custom1 = new(), _custom2 = new(), _nibp = new();
     internal IReadOnlyList<MonitorManualTile> ManualTiles => [_temperature, _custom1, _custom2, _nibp];
@@ -88,15 +89,35 @@ internal sealed class LiveMonitorView : UserControl
         var body = new Grid { ColumnDefinitions = new("*,190") };
         Grid.SetRow(body, 1);
         if (skin is null) { root.Children.Add(body); body.Children.Add(trace); }
-        var numbers = new Grid();
-        Grid.SetColumn(numbers, 1);
-        if (skin is null) { body.Children.Add(numbers); }
-        foreach (var slot in trace.Session.Display.Slots)
+        Grid.SetColumn(_numbers, 1);
+        if (skin is null) { body.Children.Add(_numbers); }
+        BuildRows();
+        Grid.SetRow(_manualPanel, 2);
+        if (skin is null) { root.Children.Add(_manualPanel); }
+        Content = skin?.Compose(new(header, trace, _numbers, _temperature, _custom1, _custom2, _nibp)) ?? root;
+        Refresh();
+    }
+    internal void RefreshDisplay()
+    {
+        _numbers.Children.Clear();
+        _numbers.RowDefinitions.Clear();
+        _rows.Clear();
+        _opticalRows.Clear();
+        _highlightNotices = null;
+        _lastMeasurementBucket = -1;
+        BuildRows();
+        _trace.RefreshDisplay();
+        Refresh();
+    }
+
+    private void BuildRows()
+    {
+        foreach (var slot in _trace.Session.Display.Slots)
         {
-            int row = numbers.RowDefinitions.Count;
-            numbers.RowDefinitions.Add(new RowDefinition(GridLength.Star));
-            if ((trace.MonitoredChannels & MonitorChannelMapping.ForChannel(slot.Channel)) == 0) { continue; }
-            var color = trace.ChannelBrush(slot.Channel);
+            int row = _numbers.RowDefinitions.Count;
+            _numbers.RowDefinitions.Add(new RowDefinition(GridLength.Star));
+            if ((_trace.MonitoredChannels & MonitorChannelMapping.ForChannel(slot.Channel)) == 0) { continue; }
+            var color = _trace.ChannelBrush(slot.Channel);
             string label = slot.Channel switch
             {
                 0 => "monitor.labelHr",
@@ -107,7 +128,7 @@ internal sealed class LiveMonitorView : UserControl
                 5 => "monitor.labelPa",
                 _ => "monitor.labelCvp"
             };
-            var primary = new TextBlock { Text = "---", FontSize = skin is null ? 52 : 64, FontWeight = FontWeight.SemiBold, Foreground = color };
+            var primary = new TextBlock { Text = "---", FontSize = _skin is null ? 52 : 64, FontWeight = FontWeight.SemiBold, Foreground = color };
             var secondary = new TextBlock { FontSize = slot.Channel == 0 ? 13 : 17, Foreground = color, IsVisible = slot.Channel is 0 or 2 or 3 or 4 or 5 };
             _localization.Bind(primary, AutomationProperties.NameProperty, label);
             _localization.Bind(secondary, AutomationProperties.NameProperty, slot.Channel switch
@@ -136,7 +157,7 @@ internal sealed class LiveMonitorView : UserControl
                 _opticalRows.Add((pi, bar));
             }
             Control content;
-            if (skin is null)
+            if (_skin is null)
             {
                 var stack = new StackPanel { Width = 166, Spacing = 2 };
                 stack.Children.Add(caption);
@@ -189,13 +210,10 @@ internal sealed class LiveMonitorView : UserControl
                 ClipToBounds = true,
                 Child = content
             };
-            Grid.SetRow(border, row); numbers.Children.Add(border); _rows.Add((slot.Channel, primary, secondary));
+            Grid.SetRow(border, row); _numbers.Children.Add(border); _rows.Add((slot.Channel, primary, secondary));
         }
-        Grid.SetRow(_manualPanel, 2);
-        if (skin is null) { root.Children.Add(_manualPanel); }
-        Content = skin?.Compose(new(header, trace, numbers, _temperature, _custom1, _custom2, _nibp)) ?? root;
-        Refresh();
     }
+
     private static Border HighlightHost(TextBlock text) => new() { CornerRadius = new CornerRadius(0), Child = text };
     internal static IBrush? NumericBackground(TextBlock text) => ((Border)text.Parent!).Background;
 

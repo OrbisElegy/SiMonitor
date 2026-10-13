@@ -22,6 +22,24 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     private Grid? _body, _monitorArea;
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
+    internal Button EcgButton { get; private set; } = null!;
+    internal bool TwelveLeadVisible { get; private set; }
+    internal event Action? EcgViewChanged;
+    private Control? _waveforms, _twelveLeadWaveforms;
+
+    internal void SetTwelveLeadVisible(bool visible)
+    {
+        bool changed = TwelveLeadVisible != visible;
+        TwelveLeadVisible = visible;
+        if (_waveforms is null || _twelveLeadWaveforms is null) { return; }
+        _waveforms.IsVisible = !visible;
+        _twelveLeadWaveforms.IsVisible = visible;
+        _twelveLeadWaveforms.InvalidateVisual();
+        EcgButton.Background = Brush.Parse(visible ? "#145AA3" : "#222C38");
+        _localization.Bind(EcgButton, AutomationProperties.NameProperty, visible ? "skin.ecgSelected" : "skin.ecg");
+        _localization.Bind(EcgButton, ToolTip.TipProperty, visible ? "skin.returnMonitor" : "skin.ecg");
+        if (changed) { EcgViewChanged?.Invoke(); }
+    }
     internal ComboBox LayoutRows { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
     internal ToggleSwitch ShowTherapy { get; } = new() { MinHeight = 44, IsChecked = true };
     private Action<MonitorSkin?, bool>? _layoutChanged;
@@ -177,6 +195,7 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
 
     private static readonly string[] Colors = ["#53F28C", "#FFE16A", "#49BFFF", "#FF7777", "#F4F6FA", "#CAA7EA", "#F2B67D"];
     public MonitorChannels Channels => MonitorChannels.All;
+    public MonitorChannels AdditionalMonitoredChannels => TwelveLeadVisible ? MonitorChannels.Ecg : MonitorChannels.None;
     public string Id => "generic";
     public IBrush Background => Brushes.Black;
     public IBrush ChannelBrush(int channel) => Brush.Parse(Colors[channel]);
@@ -198,7 +217,12 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         var body = _body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
         Grid.SetRow(body, 1);
         root.Children.Add(body);
-        var monitor = _monitorArea = new GenericMonitorArea(content) { Margin = new Thickness(0, 0, 8, 0) };
+        _waveforms = content.Waveforms;
+        _twelveLeadWaveforms = content.TwelveLeadWaveforms;
+        var waves = new Panel();
+        waves.Children.Add(_waveforms);
+        waves.Children.Add(_twelveLeadWaveforms);
+        var monitor = _monitorArea = new GenericMonitorArea(content with { Waveforms = waves }) { Margin = new Thickness(0, 0, 8, 0) };
         body.Children.Add(monitor);
         var therapy = new StackPanel { Spacing = 8 };
         therapy.Children.Add(Caption("skin.therapyControls"));
@@ -221,8 +245,12 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         layoutPanel.Children.Add(LayoutRows);
         LayoutButton.Flyout = new Flyout { Content = layoutPanel, Placement = PlacementMode.Top };
         toolbar.Children.Add(LayoutButton);
+        EcgButton = ToolbarButton("skin.ecg");
+        EcgButton.Click += (_, _) => SetTwelveLeadVisible(!TwelveLeadVisible);
+        toolbar.Children.Add(EcgButton);
+        SetTwelveLeadVisible(TwelveLeadVisible);
         UpdateTherapyVisibility();
-        foreach (string key in new[] { "skin.ecg", "skin.leads", "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
+        foreach (string key in new[] { "skin.leads", "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
         { toolbar.Children.Add(DummyButton(key)); }
         Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);

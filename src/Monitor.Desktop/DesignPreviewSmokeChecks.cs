@@ -416,7 +416,7 @@ internal static class DesignPreviewSmokeChecks
             var (period, inspiration) = window.Settings.ReadBreathingTiming();
             var config = DesignPreviewWindow.ResolveStyle(0, 2, 0).Physiology with
             { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration, Co2EndExpiratoryMmHg = 45 };
-            var reference = new LocalMonitorPreviewSession(config, window.Session.Display);
+            var reference = new LocalMonitorPreviewSession(config, window.Session.Display, enableTwelveLead: true);
             reference.DiscardStartup();
             for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
@@ -449,10 +449,10 @@ internal static class DesignPreviewSmokeChecks
                     var (period, inspiration) = window.Settings.ReadBreathingTiming();
                     var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with
                     { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
-                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display, enableTwelveLead: true);
                     original.DiscardStartup();
                     var expected = new LocalMonitorPreviewSession(baseline with
-                    { Co2BaselineMmHg = custom ? 5 : 0, Co2PlateauStartCentiMmHg = custom ? 3225 : null }, window.Session.Display);
+                    { Co2BaselineMmHg = custom ? 5 : 0, Co2PlateauStartCentiMmHg = custom ? 3225 : null }, window.Session.Display, enableTwelveLead: true);
                     expected.DiscardStartup();
                     for (int i = 0; i < 200; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
@@ -526,9 +526,9 @@ internal static class DesignPreviewSmokeChecks
                     var live = window.Session; window.RestartSettings();
                     Require(!ReferenceEquals(live, window.Session), "CO2 shape timing applies to all respiratory templates");
                     var expected = new LocalMonitorPreviewSession(baseline with
-                    { Co2DeadSpaceMilliseconds = timing.DeadSpace, Co2RiseMilliseconds = timing.Rise, Co2FallMilliseconds = timing.Fall }, window.Session.Display);
+                    { Co2DeadSpaceMilliseconds = timing.DeadSpace, Co2RiseMilliseconds = timing.Rise, Co2FallMilliseconds = timing.Fall }, window.Session.Display, enableTwelveLead: true);
                     expected.DiscardStartup();
-                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display, enableTwelveLead: true);
                     original.DiscardStartup();
                     for (int i = 0; i < 240; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
@@ -596,9 +596,9 @@ internal static class DesignPreviewSmokeChecks
                     var previous = window.Session; window.RestartSettings();
                     Require(!ReferenceEquals(previous, window.Session), "valid CO2 response applies across respiratory templates");
                     var expected = new LocalMonitorPreviewSession(baseline with
-                    { Co2TransportDelayMilliseconds = response.Delay, Co2DispersionStepMilliseconds = response.Dispersion }, window.Session.Display);
+                    { Co2TransportDelayMilliseconds = response.Delay, Co2DispersionStepMilliseconds = response.Dispersion }, window.Session.Display, enableTwelveLead: true);
                     expected.DiscardStartup();
-                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                    var original = new LocalMonitorPreviewSession(baseline, window.Session.Display, enableTwelveLead: true);
                     original.DiscardStartup();
                     for (int i = 0; i < 240; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
@@ -649,9 +649,9 @@ internal static class DesignPreviewSmokeChecks
                 window.RestartSettings();
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var baseline = DesignPreviewWindow.ResolveStyle(0, pattern, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
-                var expected = new LocalMonitorPreviewSession(baseline with { RespAmplitudeCounts = pattern == 3 ? 1000 : -400, RespCardiacArtifactCounts = 120 }, window.Session.Display);
+                var expected = new LocalMonitorPreviewSession(baseline with { RespAmplitudeCounts = pattern == 3 ? 1000 : -400, RespCardiacArtifactCounts = 120 }, window.Session.Display, enableTwelveLead: true);
                 expected.DiscardStartup();
-                var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+                var original = new LocalMonitorPreviewSession(baseline, window.Session.Display, enableTwelveLead: true);
                 original.DiscardStartup();
                 for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                 long end = expected.SimulationTimeNs;
@@ -1531,9 +1531,9 @@ internal static class DesignPreviewSmokeChecks
             Require(edited is { PeakMicrovolts: 450, SecondPeakMicrovolts: 150, CrossingPositionPermille: 250 }, "advanced contour preserves independent lobes and crossing");
             var (period, inspiration) = window.Settings.ReadBreathingTiming();
             var baseline = DesignPreviewWindow.ResolveStyle(107, 0, 0).Physiology with { BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
-            var expected = new LocalMonitorPreviewSession(baseline with { TContour = edited }, window.Session.Display);
+            var expected = new LocalMonitorPreviewSession(baseline with { TContour = edited }, window.Session.Display, enableTwelveLead: true);
             expected.DiscardStartup();
-            var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
+            var original = new LocalMonitorPreviewSession(baseline, window.Session.Display, enableTwelveLead: true);
             original.DiscardStartup();
             for (int i = 0; i < 100; i++)
             {
@@ -1556,7 +1556,7 @@ internal static class DesignPreviewSmokeChecks
                 { Require(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(107, 0, 0).Ecg with { TContour = plan }).Contains("V2、V4", StringComparison.Ordinal), "summary identifies selected chest leads"); }
                 live = window.Session; window.RestartSettings();
                 Require(!ReferenceEquals(live, window.Session), "each target applies through shared monitor and paper path");
-                var targetSource = new LocalMonitorPreviewSession(baseline with { TContour = plan }, window.Session.Display);
+                var targetSource = new LocalMonitorPreviewSession(baseline with { TContour = plan }, window.Session.Display, enableTwelveLead: true);
                 targetSource.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); targetSource.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
@@ -1679,7 +1679,7 @@ internal static class DesignPreviewSmokeChecks
                 Require(!ReferenceEquals(live, window.Session) && window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) &&
                     window.Settings.ShapeEditSummary.Text!.Contains("局部 QT 440 ms", StringComparison.Ordinal), "regional delay and mask apply atomically with accepted extended QT summary");
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
-                var source = new LocalMonitorPreviewSession(pair.Physiology with { Infarction = edited, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration }, window.Session.Display);
+                var source = new LocalMonitorPreviewSession(pair.Physiology with { Infarction = edited, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration }, window.Session.Display, enableTwelveLead: true);
                 source.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); source.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
@@ -1716,9 +1716,9 @@ internal static class DesignPreviewSmokeChecks
                     !window.Settings.ShapeEditSummary.Text.Contains("ST–T 融合", StringComparison.Ordinal), "component mode summary does not claim stage fusion");
                 var (period, inspiration) = window.Settings.ReadBreathingTiming();
                 var config = pair.Physiology with { Infarction = plan, BreathPeriodMilliseconds = period, InspirationMilliseconds = inspiration };
-                var expected = new LocalMonitorPreviewSession(config, window.Session.Display);
+                var expected = new LocalMonitorPreviewSession(config, window.Session.Display, enableTwelveLead: true);
                 expected.DiscardStartup();
-                var stage = new LocalMonitorPreviewSession(config with { Infarction = pair.Physiology.Infarction }, window.Session.Display);
+                var stage = new LocalMonitorPreviewSession(config with { Infarction = pair.Physiology.Infarction }, window.Session.Display, enableTwelveLead: true);
                 stage.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); stage.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
@@ -1744,7 +1744,7 @@ internal static class DesignPreviewSmokeChecks
             window.RestartSettings();
             Require(window.Settings.ShapeEditStatus.Text!.Contains("已应用", StringComparison.Ordinal) && window.Settings.ShapeEditSummary.Text!.Contains("缺血：下壁", StringComparison.Ordinal), "zone summary and applied status identify separate regions");
             var zoneTiming = window.Settings.ReadBreathingTiming();
-            var zoneSource = new LocalMonitorPreviewSession(zonePair.Physiology with { Infarction = null, Zones = zones, BreathPeriodMilliseconds = zoneTiming.Item1, InspirationMilliseconds = zoneTiming.Item2 }, window.Session.Display);
+            var zoneSource = new LocalMonitorPreviewSession(zonePair.Physiology with { Infarction = null, Zones = zones, BreathPeriodMilliseconds = zoneTiming.Item1, InspirationMilliseconds = zoneTiming.Item2 }, window.Session.Display, enableTwelveLead: true);
             zoneSource.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); zoneSource.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
@@ -1784,7 +1784,7 @@ internal static class DesignPreviewSmokeChecks
                 Infarction = new(0, Monitor.Simulation.Physiology.InfarctionIllustrationStage.None),
                 BreathPeriodMilliseconds = zoneTiming.Item1,
                 InspirationMilliseconds = zoneTiming.Item2
-            }, window.Session.Display);
+            }, window.Session.Display, enableTwelveLead: true);
             reference.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
@@ -2575,7 +2575,7 @@ internal static class DesignPreviewSmokeChecks
                     // User accepts morphology-dependent single-lead fluctuations;
                     // never replace measured HR with the authored ventricular rate.
                     var independent = new LocalMonitorPreviewSession(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Physiology,
-                        MonitorDisplayConfiguration.Default(), enableMeasurements: true);
+                        MonitorDisplayConfiguration.Default(), enableMeasurements: true, enableTwelveLead: true);
                     independent.DiscardStartup();
                     while (independent.SimulationTimeNs < window.Session.SimulationTimeNs) { independent.Advance(50_000_000); }
                     Require(reading.HeartRate.Status != WaveformMeasurementStatus.Uncountable &&

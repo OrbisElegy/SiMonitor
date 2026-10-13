@@ -68,6 +68,7 @@ internal static class Program
             .. ManualVitalSpecifications.All,
             .. MonitorDisplaySpecifications.All,
             .. MonitorContinuationSpecifications.All,
+            .. LiveEcg12Specifications.All,
             .. CapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
             .. TextMessageSpecifications.All,

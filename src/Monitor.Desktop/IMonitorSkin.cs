@@ -11,6 +11,7 @@ internal interface IMonitorSkin
 {
     public DefibrillatorConfiguration? DefibrillatorOverride => null;
     public MonitorChannels Channels { get; }
+    public MonitorChannels AdditionalMonitoredChannels => MonitorChannels.None;
     public string Id { get; }
     public IBrush Background { get; }
     public IBrush ChannelBrush(int channel);
@@ -21,6 +22,7 @@ internal interface IMonitorSkin
 internal sealed record MonitorSkinContent(
     Control Header,
     Control Waveforms,
+    Control TwelveLeadWaveforms,
     Control Numerics,
     Control Temperature,
     Control Custom1,

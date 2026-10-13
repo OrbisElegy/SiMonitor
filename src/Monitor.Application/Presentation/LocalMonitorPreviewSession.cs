@@ -32,6 +32,8 @@ public sealed class LocalMonitorPreviewSession
     public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
+    private LiveEcgProjection? _ecgSource;
+    private readonly List<(long TimeNs, IReadOnlyList<short> Values)> _ecgSamples = [];
     private WaveformEnvelope[] _blocks = [];
     private readonly Dictionary<Guid, List<(long TimeNs, double Value, uint QualityFlags)>> _samples;
     private readonly Dictionary<Guid, WaveformBlockPlaneConfiguration> _planeConfigurations;
@@ -92,7 +94,8 @@ public sealed class LocalMonitorPreviewSession
         bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000,
         SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null,
         RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null,
-        EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null)
+        EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null,
+        bool enableTwelveLead = false)
     {
         ArgumentNullException.ThrowIfNull(display);
         electricalTherapy?.Validate();
@@ -103,6 +106,7 @@ public sealed class LocalMonitorPreviewSession
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
+        _ecgSource = enableTwelveLead ? LiveEcgIllustrationSource.Create(configuration) : null;
         _planeConfigurations = _source.CaptureState().Assembler.Planes.ToDictionary(plane => plane.Configuration.ChannelId, plane => plane.Configuration);
         _channelSequences = _planeConfigurations.Keys.ToDictionary(id => id, _ => 0UL);
         _samples = _planeConfigurations.Keys.ToDictionary(id => id, _ => new List<(long TimeNs, double Value, uint QualityFlags)>());
@@ -167,14 +171,17 @@ public sealed class LocalMonitorPreviewSession
         if (SimulationTimeNs != 0 || _sourceTimeOffsetNs != 0 || _pendingSource is not null)
         { throw new InvalidOperationException("Preview.StartupAlreadyStarted"); }
         var source = _source.Fork();
+        var ecgSource = _ecgSource?.Fork();
         if (_pendingVentilationSource is not null) { source.ContinueWith(_pendingVentilationSource); }
         var oxygenation = _realtimeOxygenation?.Fork();
         for (long time = 50_000_000; time <= StartupDiscardNs; time += 50_000_000)
         {
             oxygenation?.AdvanceTo(time);
             source.AdvanceTo(time, 50, 1, 100);
+            ecgSource?.GenerateBefore(time, 50, 100);
         }
         _source = source;
+        _ecgSource = ecgSource;
         _realtimeOxygenation = oxygenation;
         _pendingVentilationSource = null;
         _sourceTimeOffsetNs = StartupDiscardNs;
@@ -192,6 +199,8 @@ public sealed class LocalMonitorPreviewSession
         { throw new ArgumentException("Preview.OxygenationBaselineRequiresRestart"); }
         var trial = _source.Fork();
         trial.ContinueWith(definition._source);
+        var ecgTrial = _ecgSource?.Fork();
+        ecgTrial?.ContinueWith(definition._ecgSource ?? LiveEcgIllustrationSource.Create(definition._configuration));
     }
 
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs)
@@ -254,7 +263,8 @@ public sealed class LocalMonitorPreviewSession
             OxygenDemandMultiplier = _realtimeOxygenation.Snapshot.OxygenDemandMultiplier
         };
         return new LocalMonitorPreviewSession(configuration, Display, _measurements is not null,
-            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: profile, pressureTransducers: PressureTransducers)
+            realtimeOxygenation: realtime, manualVitals: ManualVitals, electricalTherapy: profile, pressureTransducers: PressureTransducers,
+            enableTwelveLead: _ecgSource is not null)
         {
             _opticalSource = _opticalSource,
             _opticalModulationPermille = _opticalModulationPermille,
@@ -331,6 +341,8 @@ public sealed class LocalMonitorPreviewSession
         long sourceTime = checked(SimulationTimeNs + _sourceTimeOffsetNs);
         var source = _source.Fork();
         source.ContinueWith(definition._source);
+        var ecgSource = _ecgSource?.Fork();
+        ecgSource?.ContinueWith(definition._ecgSource ?? LiveEcgIllustrationSource.Create(definition._configuration));
         RealtimeOxygenationSource? oxygenation = null;
         if (definition._realtimeConfiguration is { } config)
         {
@@ -340,6 +352,7 @@ public sealed class LocalMonitorPreviewSession
             oxygenation.ChangeTransport(transport, sourceTime, config.OxygenDemandMultiplier);
         }
         _source = source;
+        _ecgSource = ecgSource;
         _realtimeOxygenation = oxygenation;
         _configuration = definition._configuration;
         _realtimeConfiguration = definition._realtimeConfiguration;
@@ -411,9 +424,20 @@ public sealed class LocalMonitorPreviewSession
             // Prepare sampling, optical conversion and all measurements before
             // publishing this chunk. A failed source-time read can be retried.
             var source = _source.Fork();
+            var ecgSource = _ecgSource?.Fork();
+            var ecgSamples = ecgSource?.GenerateBefore(sourceNext, 50, 100);
             var records = source.AdvanceTo(sourceNext, 50, 1, 100, out var samples)
-                .Select(wire => ApplyShockArtifacts(WaveformEnvelopeCodec.Decode(wire)))
-                .Where(block => block.StartSimTimeNs >= _sourceTimeOffsetNs).Select(Rebase).ToArray();
+                .Select(wire => WaveformEnvelopeCodec.Decode(wire))
+                .Where(block => block.StartSimTimeNs >= _sourceTimeOffsetNs)
+                .Select(block => Rebase(ApplyShockArtifacts(ProjectEcgRecord(block, ecgSamples)))).ToArray();
+            if (ecgSamples is not null)
+            {
+                // Monitoring, detection and the twelve-lead view share projected II.
+                // The legacy single-channel illustration is not another live ECG.
+                Guid ecgId = PhysiologyIllustrationSource.ChannelId(0);
+                samples = samples.Where(sample => sample.ChannelId != ecgId).Concat(ecgSamples.Select(sample =>
+                    new PhysiologyWaveformSample(ecgId, sample.Tick.SimTimeNs, sample.MicrovoltValues[(int)EcgLead.II], 0))).ToArray();
+            }
             var channelBlocks = CreateSampleBlocks(samples, optics);
             var ecg = channelBlocks.SingleOrDefault(block => block.Planes[0].ChannelId == PhysiologyIllustrationSource.ChannelId(0));
             var pacing = ecg is null ? null : PacingEvidence(ecg);
@@ -432,6 +456,12 @@ public sealed class LocalMonitorPreviewSession
                 else { pulses.Clear(); }
             }
             _source = source;
+            _ecgSource = ecgSource;
+            if (ecgSamples is not null)
+            {
+                _ecgSamples.AddRange(ecgSamples.Select(sample =>
+                    (sample.Tick.SimTimeNs - _sourceTimeOffsetNs, sample.MicrovoltValues)));
+            }
             _realtimeOxygenation = oxygenation;
             _opticalSource = optics;
             foreach (var block in rebased)
@@ -454,6 +484,7 @@ public sealed class LocalMonitorPreviewSession
                 pacingPulseTimesNs.AddRange(pacing.AtrialPulseTimesNs);
             }
             long oldestTimeNs = next - RetainedBlockCount * 200_000_000L;
+            _ecgSamples.RemoveAll(sample => sample.TimeNs < oldestTimeNs);
             foreach (var history in _samples.Values)
             {
                 int expired = history.FindIndex(sample => sample.TimeNs >= oldestTimeNs);
@@ -504,6 +535,21 @@ public sealed class LocalMonitorPreviewSession
         return blocks.ToArray();
     }
 
+    private WaveformEnvelope ProjectEcgRecord(WaveformEnvelope block, IReadOnlyList<ElectrodeSignalSample>? current)
+    {
+        if (current is null) { return block; }
+        long start = block.StartSimTimeNs, end = start + block.DurationNs;
+        short[] values = _ecgSamples.Where(sample => sample.TimeNs + _sourceTimeOffsetNs >= start && sample.TimeNs + _sourceTimeOffsetNs < end)
+            .Select(sample => sample.Values[(int)EcgLead.II])
+            .Concat(current.Where(sample => sample.Tick.SimTimeNs >= start && sample.Tick.SimTimeNs < end)
+                .Select(sample => sample.MicrovoltValues[(int)EcgLead.II])).ToArray();
+        return block with
+        {
+            Planes = block.Planes.Select(plane => plane.ChannelId == PhysiologyIllustrationSource.ChannelId(0)
+                ? plane with { Samples = values } : plane).ToArray()
+        };
+    }
+
     private void WithdrawShockBeatCues()
     {
         DetectedBeats = [];
@@ -539,6 +585,24 @@ public sealed class LocalMonitorPreviewSession
 
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs) =>
         ReadSamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
+
+    public IEnumerable<(long TimeNs, double Value)> EcgSamples(EcgLead lead, long fromSimTimeNs, long toExclusiveSimTimeNs)
+    {
+        if (!Enum.IsDefined(lead)) { throw new ArgumentOutOfRangeException(nameof(lead)); }
+        // The rhythm strip and the monitor both consume the canonical II samples.
+        if (lead == EcgLead.II) { return Samples(0, fromSimTimeNs, toExclusiveSimTimeNs); }
+        return ReadProjectedEcg();
+
+        IEnumerable<(long TimeNs, double Value)> ReadProjectedEcg()
+        {
+            foreach (var sample in _ecgSamples)
+            {
+                if (sample.TimeNs < fromSimTimeNs || sample.TimeNs >= toExclusiveSimTimeNs) { continue; }
+                var artifact = _shockArtifacts.LastOrDefault(item => item.Contains(sample.TimeNs));
+                yield return (sample.TimeNs, artifact?.EvaluateMicrovolts(sample.TimeNs) ?? sample.Values[(int)lead]);
+            }
+        }
+    }
 
     private IEnumerable<(long TimeNs, double Value)> ReadSamples(int channel, long fromSimTimeNs,
         long toExclusiveSimTimeNs, bool usableOnly)

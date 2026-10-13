@@ -48,6 +48,20 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 5. 普通应用设置使用 `ScheduleSource(next, delayNs)` 接续，在生效时切换记录快照和已应用配置；再次应用可替换未生效设置。重新开始才新建会话、裁去启动段并重置相关通知与声音状态。
 6. `Pause` 停止并解绑 timer，暂停监护声音；关闭窗口还释放声音输出资源。
 
+监护页底部“12 导联”切换 [LiveEcg12Trace](../../src/Monitor.Desktop/LiveEcg12Trace.cs)，
+不导航到侧栏纸图页，也不重建或暂停会话。波形区按 3 × 4 同时显示十二导联；
+当前布局为四行及以上时另加长 II，三行时隐藏长 II。右侧数字、手工参数、
+报警区、治疗控制及其显隐设置保留；再次点击恢复原监护波形。
+短条各显示 2.5 秒，长 II 显示 10 秒，电压范围统一为 ±2 mV，并绘制 1 mV 标尺；
+窗口缩放不代表物理纸速。视图选择仅保存在当前窗口，普通应用设置和重启会话后保留。
+
+桌面会话启用 `enableTwelveLead`，由 `LiveEcgIllustrationSource` 使用当前生理配置创建
+电极投影；`LiveEcgProjection` 复用监护源的事件尾部接续，在一次采样推进中发布所有导联，
+不经过记录组包或延迟队列。`EcgSamples` 的时间已裁去启动段，历史保留上限与普通监护一致；
+所有导联在电极投影后一次量化，投影 II 同时作为普通监护、测量和记录的 ECG 输入；
+短／长 II 直接读取 `Samples(0, ...)`，避免沿用旧单通道示意幅度而破坏肢体导联关系。起搏、参数切换、除颤后的
+静默／复律和电击伪迹使用同一会话边界，不能从静态纸图循环取样。
+
 偏好路径由 `Environment.SpecialFolder.LocalApplicationData` 加 `Monitor/display-preferences.json` 构成；不依赖启动工作目录。保存失败时本次内存配置仍可生效，由界面报告不能持久保存。具体字段、版本和错误语义见[音频与持久化](audio-persistence.md)。
 
 语言选择位于“设置 → 通用”，即时切换已迁移的中英文文案，并独立保存至

@@ -537,6 +537,17 @@ public static class IllustrationVentricularTiming
 }
 ```
 
+## Authoring/LiveEcgIllustrationSource.cs
+
+源码：[LiveEcgIllustrationSource.cs](../../../src/Monitor.Simulation/Authoring/LiveEcgIllustrationSource.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public static class LiveEcgIllustrationSource
+{
+    public static LiveEcgProjection Create(PhysiologyIllustrationConfiguration configuration);
+}
+```
+
 ## Authoring/PhysiologyIllustrationConfiguration.cs
 
 源码：[PhysiologyIllustrationConfiguration.cs](../../../src/Monitor.Simulation/Authoring/PhysiologyIllustrationConfiguration.cs) · 命名空间：`Monitor.Simulation.Authoring`
@@ -1758,6 +1769,20 @@ public static class LeftBundleBlockReference
     public static RegularPhysiologyPlan CreatePlan();
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes();
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands();
+}
+```
+
+## Physiology/LiveEcgProjection.cs
+
+源码：[LiveEcgProjection.cs](../../../src/Monitor.Simulation/Physiology/LiveEcgProjection.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed class LiveEcgProjection
+{
+    public LiveEcgProjection(RegularPhysiologyPlan plan, IReadOnlyList<ElectrodeWaveformPlan> electrodes);
+    public LiveEcgProjection Fork();
+    public void ContinueWith(LiveEcgProjection definition);
+    public IReadOnlyList<ElectrodeSignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples, int maximumEvents);
 }
 ```
 

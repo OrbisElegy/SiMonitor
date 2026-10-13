@@ -1504,7 +1504,7 @@ public sealed class LocalMonitorPreviewSession
     public RealtimeOxygenationSnapshot? Oxygenation { get; }
     public OxygenReservoirParameters? OxygenationParameters { get; private set; }
 
-    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null);
+    public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null, bool enableTwelveLead = false);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
     public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
@@ -1518,6 +1518,7 @@ public sealed class LocalMonitorPreviewSession
     public void UpdateDisplay(MonitorDisplayConfiguration display);
     public void Advance(long deltaNs);
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
+    public IEnumerable<(long TimeNs, double Value)> EcgSamples(EcgLead lead, long fromSimTimeNs, long toExclusiveSimTimeNs);
 }
 ```
 

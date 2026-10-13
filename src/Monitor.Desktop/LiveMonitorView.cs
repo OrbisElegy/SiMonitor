@@ -16,6 +16,7 @@ namespace Monitor.Desktop;
 internal sealed class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
+    internal LiveEcg12Trace TwelveLeadTrace { get; }
     private readonly Grid _numbers = new();
     private readonly IMonitorSkin? _skin;
     private readonly MonitorManualTile _temperature = new(), _custom1 = new(), _custom2 = new(), _nibp = new();
@@ -67,6 +68,7 @@ internal sealed class LiveMonitorView : UserControl
     internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null, IMonitorSkin? skin = null)
     {
         _trace = trace;
+        TwelveLeadTrace = new(trace, localization ?? new DesktopLocalization()) { IsVisible = false };
         _skin = skin;
         trace.Skin = skin;
         _localization = localization ?? new DesktopLocalization();
@@ -94,7 +96,7 @@ internal sealed class LiveMonitorView : UserControl
         BuildRows();
         Grid.SetRow(_manualPanel, 2);
         if (skin is null) { root.Children.Add(_manualPanel); }
-        Content = skin?.Compose(new(header, trace, _numbers, _temperature, _custom1, _custom2, _nibp,
+        Content = skin?.Compose(new(header, trace, TwelveLeadTrace, _numbers, _temperature, _custom1, _custom2, _nibp,
             () => trace.Session.Display.Slots.Count)) ?? root;
         Refresh();
     }
@@ -281,6 +283,7 @@ internal sealed class LiveMonitorView : UserControl
 
     internal void Refresh()
     {
+        if (TwelveLeadTrace.IsVisible) { TwelveLeadTrace.InvalidateVisual(); }
         RefreshManualVitals();
         RefreshClock();
         RefreshPulseIndicator();

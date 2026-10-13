@@ -182,6 +182,14 @@ internal sealed class DesignPreviewWindow : Window
             energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
         if (_session.Display.Slots.Count >= 4) { _layoutFourthSlot = _session.Display.Slots[3]; }
         skin.ConfigureLayout(_session.Display.Skin, _displayPreferences.TherapyControlsVisible, ChangeMonitorLayout);
+        skin.EcgViewChanged += () =>
+        {
+            if (_closed || _applying) { return; }
+            BindAlarmAttention();
+            MonitorView.Refresh();
+            Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
+            RefreshDefibrillator();
+        };
         Settings.Defibrillator.SetDeviceOverride(skin.DefibrillatorOverride);
         RefreshDefibrillator(skin);
         RefreshPacingState(skin);
@@ -630,7 +638,7 @@ internal sealed class DesignPreviewWindow : Window
             var next = new LocalMonitorPreviewSession(config, display, enableMeasurements: true,
                 opticalSaturationMilliPercent: opticalTarget, opticalModulationPermille: modulation,
                 opticalVariation: opticalVariation, realtimeOxygenation: oxygenation, manualVitals: manualVitals, electricalTherapy: electricalTherapy,
-                pressureTransducers: pressureTransducers);
+                pressureTransducers: pressureTransducers, enableTwelveLead: true);
             return (next, ecgConfig, CapturePaper(ecgConfig), config);
         };
     }
@@ -702,8 +710,10 @@ internal sealed class DesignPreviewWindow : Window
             _aed = new(_defibrillator);
             _therapy = _therapy with { EnergyJoules = _defibrillator.EnergyJoules };
             _sinusTherapy = sinusTherapy;
+            bool twelveLeadVisible = (_monitor.Skin as GenericMonitorSkin)?.TwelveLeadVisible == true;
             _monitor = new(_session, Localization);
             MonitorView = new(_monitor, Localization, CreateSkin());
+            ((GenericMonitorSkin)_monitor.Skin!).SetTwelveLeadVisible(twelveLeadVisible);
             BindAlarmAttention();
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
             MonitorView.AdditionalNotices = CurrentNotices;

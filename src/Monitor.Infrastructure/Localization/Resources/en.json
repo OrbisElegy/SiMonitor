@@ -971,6 +971,8 @@
   "skin.showTherapy": "Show therapy controls",
   "skin.layout": "Layout",
   "skin.ecg": "12 leads",
+  "skin.ecgSelected": "12 leads (selected)",
+  "skin.returnMonitor": "Return to monitoring",
   "skin.leads": "Leads",
   "skin.print": "Print",
   "skin.nibpStart": "Start NIBP",

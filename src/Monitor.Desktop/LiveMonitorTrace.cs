@@ -55,7 +55,7 @@ internal sealed class LiveMonitorTrace : Control
         }
         InvalidateVisual();
     }
-    internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(MonitorChannels.None,
+    internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(Skin?.AdditionalMonitoredChannels ?? MonitorChannels.None,
         (channels, slot) => channels | MonitorChannelMapping.ForChannel(slot.Channel)) & (Skin?.Channels ?? MonitorChannels.All);
     internal IBrush ChannelBrush(int channel) => Skin?.ChannelBrush(channel) ?? Brush.Parse(Colors[channel]);
     internal void RefreshDisplay()

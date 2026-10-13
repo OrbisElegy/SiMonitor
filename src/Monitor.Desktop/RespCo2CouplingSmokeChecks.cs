@@ -10,7 +10,7 @@ internal static class RespCo2CouplingSmokeChecks
     {
         var source = PhysiologyDemoSource.Create();
         List<WaveformEnvelope> blocks = [];
-        for (int step = 1; step <= 60; step++)
+        for (int step = 1; step <= 50; step++)
         {
             blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100)
                 .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));

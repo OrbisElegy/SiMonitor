@@ -201,7 +201,9 @@ internal static class DeepOxygenationSpecifications
                 critical = true;
                 deepRestored |= time >= 94_000_000_000;
             }
-            if (time is >= 80_000_000_000 and < 90_000_000_000)
+            // Mechanical activity resumes at source time 88 s; the first new
+            // pulses reach the optical window immediately on that same clock.
+            if (time is >= 80_000_000_000 and < 88_000_000_000)
             {
                 Check.That(reading.Status == WaveformMeasurementStatus.PoorSignal && reading.SaturationMilliPercent is null &&
                     notice is null && rotation.CriticalElapsedNs("spo2-low") is null && pitch.Unavailable,

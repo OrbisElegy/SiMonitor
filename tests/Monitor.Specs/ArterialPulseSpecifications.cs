@@ -20,11 +20,11 @@ internal static class ArterialPulseSpecifications
         new(nameof(ArterialInvalidPlansAndLateFailureAreAtomic), ArterialInvalidPlansAndLateFailureAreAtomic),
     ];
 
-    private static IReadOnlyList<PhysiologySignalSample> Samples(ArterialPulsePlan pulse)
+    private static IReadOnlyList<PhysiologySignalSample> Samples(ArterialPulsePlan pulse, long toExclusiveSimTimeNs = 1_600_000_000)
     {
         var channel = pulse.CreateChannel(Timeline, Abp, 0);
         return PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands)
-            .GenerateBefore(1_600_000_000, 200, 100);
+            .GenerateBefore(toExclusiveSimTimeNs, 225, 100);
     }
 
     private static void ArterialSeedRetainsPressureScaleAndMechanicalTiming()
@@ -55,14 +55,14 @@ internal static class ArterialPulseSpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Abp, 1, 1, 1, 0, 16,
-        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
+        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
          Pulse.CreateChannel(Timeline, Abp, 7)]);
 
     private static void ArterialWireAndRestorePreservePressure()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(271_999_999, 68, 1, 100).Count == 0, "pressure plane retains its native80ms processing delay");
-        Check.That(boundary.AdvanceTo(272_000_000, 1, 1, 100).Count == 1, "first complete block releases at272ms");
+        Check.That(boundary.AdvanceTo(196_000_000, 49, 1, 100).Count == 0, "recording waits only for the last native ECG sample");
+        Check.That(boundary.AdvanceTo(196_000_001, 1, 1, 100).Count == 1, "first complete block is available immediately after the last ECG source tick");
         var expected = Group().AdvanceTo(1_800_000_000, 450, 9, 100);
         var split = Group();
         List<byte[]> actual = [];
@@ -72,11 +72,11 @@ internal static class ArterialPulseSpecifications
             split = PhysiologyWaveformGroup.Restore(split.CaptureState());
         }
         Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "ECG/ABP blocks preserve exact bytes across active pulse and delay recovery");
+            "ECG/ABP blocks preserve exact bytes across active pulse recovery");
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Abp)).ToArray();
         Check.That(planes.All(plane => plane.ScaleNumerator == 1 && plane.ScaleDenominator == 100 && plane.OffsetNumerator == 80 &&
             plane.OffsetDenominator == 1 && plane.SampleRateNumerator == 125) &&
-            planes.SelectMany(plane => plane.Samples).SequenceEqual(Samples(Pulse).Select(sample => sample.NormalizedValue)),
+            planes.SelectMany(plane => plane.Samples).SequenceEqual(Samples(Pulse, 1_800_000_000).Select(sample => sample.NormalizedValue)),
             "wire pressure metadata and counts preserve physical baseline and native amplitude resolution");
     }
 

@@ -44,7 +44,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     private bool _monitorRunning;
     private readonly MonitorBeatSource _source = new();
     private LiveMeasurementSnapshot? _sourceMeasurement;
-    private MonitorBeatEvidence? _liveBeatEvidence;
+    private MonitorBeatEvidence? _beatEvidence;
     internal long? LastHeartbeatConfirmedAtNs { get; private set; }
     internal void WithdrawHeartbeat() => _alarms.CancelHeartbeat();
     private readonly TextBlock _sourceStatus = Text();
@@ -295,15 +295,15 @@ internal sealed class SoundSettingsPanel : StackPanel
 
     internal void UpdateAlarm(MonitorNoticeLevel? level, MonitorSoundTiming timing, IReadOnlyList<DetectedEcgBeat>? beats = null,
         IReadOnlyList<DetectedPlethPulse>? pulses = null, LiveMeasurementSnapshot? measurement = null, IReadOnlyList<MonitorNotice>? notices = null,
-        MonitorBeatEvidence? liveBeatEvidence = null)
+        MonitorBeatEvidence? beatEvidence = null)
     {
         if (measurement is not null) { _sourceMeasurement = measurement; }
-        if (liveBeatEvidence is not null) { _liveBeatEvidence = liveBeatEvidence; }
-        if (_liveBeatEvidence is not null)
+        if (beatEvidence is not null) { _beatEvidence = beatEvidence; }
+        if (_beatEvidence is not null)
         {
-            // A non-live settings refresh must not fall back to delayed packets.
-            beats = liveBeatEvidence?.EcgBeats;
-            pulses = liveBeatEvidence?.PlethPulses;
+            // A settings refresh must not replay the previous acquisition events.
+            beats = beatEvidence?.EcgBeats;
+            pulses = beatEvidence?.PlethPulses;
         }
         UpdateBeatSource();
         if (PitchSource.SelectedIndex == 1) { _pitch.Update(measurement?.SpO2, measurement?.SampleTimeNs ?? 0); }
@@ -334,9 +334,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         if (BeatSource.SelectedIndex is < 0 or > 2) { return; }
         if (!_source.Update((MonitorBeatMode)BeatSource.SelectedIndex,
-            _liveBeatEvidence?.EcgStatus ?? _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
-            _liveBeatEvidence?.PlethStatus ?? _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData,
-            _liveBeatEvidence?.SampleTimeNs ?? _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
+            _beatEvidence?.EcgStatus ?? _sourceMeasurement?.HeartRate?.Status ?? WaveformMeasurementStatus.NoData,
+            _beatEvidence?.PlethStatus ?? _sourceMeasurement?.PulseRate?.Status ?? WaveformMeasurementStatus.NoData,
+            _beatEvidence?.SampleTimeNs ?? _sourceMeasurement?.SampleTimeNs ?? 0)) { return; }
         _alarms.SetHeartbeatEnabled(false);
         RefreshSourceText();
         BeatSourceChanged?.Invoke();
@@ -349,7 +349,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     }
     internal void ResetBeatSource()
     {
-        _source.Reset(); _sourceMeasurement = null; _liveBeatEvidence = null; LastHeartbeatConfirmedAtNs = null;
+        _source.Reset(); _sourceMeasurement = null; _beatEvidence = null; LastHeartbeatConfirmedAtNs = null;
         _alarms.CancelHeartbeat(); UpdateBeatSource();
     }
     internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }

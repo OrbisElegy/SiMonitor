@@ -95,6 +95,6 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
             ulong? resume = physiology.ActivityDurationBreaths is { } durationBreaths ? limit + durationBreaths : null;
             bands = Array.AsReadOnly(bands.Select(band => band with { TriggerCycleLimit = limit, TriggerCycleResume = resume }).ToArray());
         }
-        return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, 200, qualityFlags);
+        return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, qualityFlags);
     }
 }

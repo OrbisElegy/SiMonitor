@@ -193,7 +193,7 @@ internal static class MonitorContinuationSpecifications
     {
         var prepared = Session();
         prepared.DiscardStartup();
-        Check.That(prepared.SimulationTimeNs == 0 && prepared.FrontierNs == 0 && prepared.Blocks.Count == 0 &&
+        Check.That(prepared.SimulationTimeNs == 0 && prepared.Blocks.Count == 0 &&
             prepared.DetectedBeats.Count == 0 && prepared.DetectedPulses.Count == 0, "startup pre-roll is never published");
         var raw = Session();
         Advance(raw, LocalMonitorPreviewSession.StartupDiscardNs + 5_000_000_000);
@@ -201,9 +201,9 @@ internal static class MonitorContinuationSpecifications
         for (int channel = 0; channel < 7; channel++)
         {
             var expected = raw.Samples(channel, LocalMonitorPreviewSession.StartupDiscardNs,
-                LocalMonitorPreviewSession.StartupDiscardNs + prepared.FrontierNs)
+                LocalMonitorPreviewSession.StartupDiscardNs + prepared.SimulationTimeNs)
                 .Select(s => (s.TimeNs - LocalMonitorPreviewSession.StartupDiscardNs, s.Value));
-            Check.That(prepared.Samples(channel, 0, prepared.FrontierNs).SequenceEqual(expected),
+            Check.That(prepared.Samples(channel, 0, prepared.SimulationTimeNs).SequenceEqual(expected),
                 "startup discards all initial transients and rebases every channel to zero");
         }
         Check.That(prepared.Blocks[0].StartSimTimeNs == 0 && prepared.Blocks[0].Planes.All(p => p.FirstSampleIndex == 0),
@@ -266,8 +266,8 @@ internal static class MonitorContinuationSpecifications
             Advance(control, 25_000_000_000);
             for (int channel = 0; channel < 7; channel++)
             {
-                var actual = live.Samples(channel, 0, live.FrontierNs).ToArray();
-                var expected = control.Samples(channel, 0, live.FrontierNs).ToArray();
+                var actual = live.Samples(channel, 0, live.SimulationTimeNs).ToArray();
+                var expected = control.Samples(channel, 0, live.SimulationTimeNs).ToArray();
                 Check.That(actual.Length > 0 && actual.Length == expected.Length && actual.Zip(expected).All(pair =>
                     pair.First.TimeNs == pair.Second.TimeNs && Math.Abs(pair.First.Value - pair.Second.Value -
                         (channel == 6 && pair.First.TimeNs >= boundary ? (baseline - 600) / 100d : 0)) < 1e-9),
@@ -315,7 +315,7 @@ internal static class MonitorContinuationSpecifications
         Check.That(live.Oxygenation!.Value.SourceSimTimeNs == 10_008_000_000 &&
             live.Oxygenation.Value.Reservoirs != next.Oxygenation!.Value.Reservoirs && before.SourceSimTimeNs == 10_000_000_000,
             "live reconfiguration preserves evolved reserves and their clock");
-        // Repeated optical changes inside the two-second acquisition buffer.
+        // Repeated optical changes keep current readings tied to the active source.
         live.ScheduleSource(Session(), 0);
         Advance(live, 10_250_000_000);
         live.ScheduleSource(Session(oxygenation: RealtimeOxygenationConfiguration.ReferenceAdult), 0);

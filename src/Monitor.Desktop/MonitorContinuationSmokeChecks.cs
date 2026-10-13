@@ -22,12 +22,11 @@ internal static class MonitorContinuationSmokeChecks
             var blocks = session.Blocks.ToArray();
             var readings = session.Measurements;
             long time = session.SimulationTimeNs;
-            long frontier = session.FrontierNs;
             window.Settings.ApplyDelaySeconds.Value = 1.3m;
             window.Settings.EcgSelection = 72;
             SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
-                session.SimulationTimeNs == time && session.FrontierNs == frontier && session.Blocks.SequenceEqual(blocks) &&
+                session.SimulationTimeNs == time && session.Blocks.SequenceEqual(blocks) &&
                 session.Measurements == readings && session.PendingSourceTimeNs == time + 1_400_000_000,
                 "default Apply queues a source change and retains live time, history, readings and timer");
             Require(new DisplayPreferenceStore(path).Load(out _).Generator?.ApplyDelaySeconds == 1.3m,
@@ -81,13 +80,12 @@ internal static class MonitorContinuationSmokeChecks
             var blocks = session.Blocks.ToArray();
             var readings = session.Measurements;
             long time = session.SimulationTimeNs;
-            long frontier = session.FrontierNs;
-            var cvpHistory = session.Samples(6, 0, frontier).ToArray();
+            var cvpHistory = session.Samples(6, 0, time).ToArray();
             window.Settings.CvpBaseline.Value = 12;
             window.Settings.ApplyDelaySeconds.Value = 3;
             SettingsApplySmokeChecks.ApplySynchronously(window);
             Require(ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer) &&
-                session.SimulationTimeNs == time && session.FrontierNs == frontier && session.Blocks.SequenceEqual(blocks) &&
+                session.SimulationTimeNs == time && session.Blocks.SequenceEqual(blocks) &&
                 session.Measurements == readings && session.PendingSourceTimeNs == time + 3_000_000_000,
                 "CVP Apply schedules a valid baseline change without clearing time, samples or readings");
             window.Pause();
@@ -104,7 +102,7 @@ internal static class MonitorContinuationSmokeChecks
             for (int i = 0; i < 400; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
             Require(ReferenceEquals(session, window.Session) && session.PendingSourceTimeNs is null &&
                 session.Measurements!.CvpMean.MeanCentiMmHg == ReferenceCvpMeanCentiMmHg(session.SimulationTimeNs) + 600 &&
-                session.Samples(6, 0, frontier).SequenceEqual(cvpHistory),
+                session.Samples(6, 0, time).SequenceEqual(cvpHistory),
                 "accepted CVP shifts the sampled mean while retaining history and ignoring the newer draft");
             window.Pause();
             window.Settings.ApplyDelaySeconds.Value = 0;

@@ -13,9 +13,8 @@ public sealed record LiveMeasurementSnapshot(long SampleTimeNs, EcgHeartRateRead
     public EcgRhythmReading EcgRhythm { get; init; } = new(WaveformMeasurementStatus.NoData, null, null, null);
 }
 
-// Serialized acquired-packet owner for the local illustration channel binding.
-// Presentation/review never feeds this class. Measured values use samples;
-// simulated pulse sideband and its startup reference have explicit provenance.
+// One measurement owner for the local illustration channel binding. Live native
+// sample batches and recorded packets share the same detectors and quality gates.
 public sealed class LiveWaveformMeasurements
 {
     private EcgHeartRateMeasurement _ecg;
@@ -55,21 +54,75 @@ public sealed class LiveWaveformMeasurements
         out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents,
         out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null)
     {
-        monitoringEvents = [];
-        detectedBeats = [];
-        detectedPulses = [];
-        rhythmEvents = [];
         var block = WaveformEnvelopeCodec.Decode(wire);
         if (block.DurationNs != 200_000_000) { throw new ArgumentException("LiveMeasurement.BlockDuration", nameof(wire)); }
         long sampleTime = checked(block.StartSimTimeNs + block.DurationNs - 1);
-        var red = block.Planes.SingleOrDefault(p => p.ChannelId == PulseOximeterIllustrationSource.RedChannelId);
-        var infrared = block.Planes.SingleOrDefault(p => p.ChannelId == PulseOximeterIllustrationSource.InfraredChannelId);
-        if ((red is null) != (infrared is null)) { throw new ArgumentException("LiveMeasurement.IncompleteOptics", nameof(wire)); }
+        Dictionary<Guid, WaveformEnvelope> channels = [];
+        for (int channel = 0; channel < 7; channel++)
+        {
+            Guid id = PhysiologyIllustrationSource.ChannelId(channel);
+            if (block.Planes.All(plane => plane.ChannelId != id))
+            { throw new ArgumentException("LiveMeasurement.ChannelMissing", nameof(wire)); }
+            channels.Add(id, block);
+        }
+        return ConsumeBatch(channels, sampleTime, out detectedBeats, out detectedPulses, out rhythmEvents, out monitoringEvents, pacingEvidence);
+    }
+
+    // Each envelope has one native-rate channel; PLETH may include its paired
+    // optical planes. Channels with no new sample in this frame are omitted.
+    // Their next sample grid may lie beyond asOfSampleTimeNs, but no consumed
+    // sample may do so. A failed channel leaves every detector unchanged.
+    public LiveMeasurementSnapshot ConsumeSamples(IReadOnlyList<WaveformEnvelope> channelBlocks, long asOfSampleTimeNs,
+        out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses,
+        out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents,
+        EcgPacingEvidence? pacingEvidence = null)
+    {
+        ArgumentNullException.ThrowIfNull(channelBlocks);
+        if (asOfSampleTimeNs < 0 || _lastSampleTime is { } last && asOfSampleTimeNs < last)
+        { throw new ArgumentException("LiveMeasurement.TimeBeforeFrontier", nameof(asOfSampleTimeNs)); }
+        Dictionary<Guid, WaveformEnvelope> channels = [];
+        foreach (var block in channelBlocks)
+        {
+            ArgumentNullException.ThrowIfNull(block);
+            var primary = block.Planes.Where(plane => plane.ChannelId != PulseOximeterIllustrationSource.RedChannelId &&
+                plane.ChannelId != PulseOximeterIllustrationSource.InfraredChannelId).ToArray();
+            if (primary.Length != 1 || !Enumerable.Range(0, 7).Any(channel => PhysiologyIllustrationSource.ChannelId(channel) == primary[0].ChannelId) ||
+                !channels.TryAdd(primary[0].ChannelId, block))
+            { throw new ArgumentException("LiveMeasurement.InvalidSampleChannels", nameof(channelBlocks)); }
+            if (block.Planes.Count != 1 && primary[0].ChannelId != _pleth.ChannelId)
+            { throw new ArgumentException("LiveMeasurement.UnpairedPleth", nameof(channelBlocks)); }
+            foreach (var plane in block.Planes)
+            {
+                if (plane.SampleRateNumerator == 0 || plane.SampleRateDenominator == 0 || plane.Samples.Count == 0)
+                { throw new ArgumentException("LiveMeasurement.InvalidSampling", nameof(channelBlocks)); }
+                long lastSampleTime = checked(block.StartSimTimeNs + (long)((Int128)(plane.Samples.Count - 1) *
+                    1_000_000_000 * plane.SampleRateDenominator / plane.SampleRateNumerator));
+                if (lastSampleTime > asOfSampleTimeNs)
+                { throw new ArgumentException("LiveMeasurement.FutureSample", nameof(channelBlocks)); }
+            }
+        }
+        return ConsumeBatch(channels, asOfSampleTimeNs, out detectedBeats, out detectedPulses, out rhythmEvents, out monitoringEvents, pacingEvidence);
+    }
+
+    private LiveMeasurementSnapshot ConsumeBatch(Dictionary<Guid, WaveformEnvelope> channels, long sampleTime,
+        out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses,
+        out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents,
+        EcgPacingEvidence? pacingEvidence)
+    {
+        detectedBeats = [];
+        detectedPulses = [];
+        rhythmEvents = [];
+        monitoringEvents = [];
+        bool hasPleth = channels.TryGetValue(_pleth.ChannelId, out var plethBlock);
+        var red = plethBlock?.Planes.SingleOrDefault(plane => plane.ChannelId == PulseOximeterIllustrationSource.RedChannelId);
+        var infrared = plethBlock?.Planes.SingleOrDefault(plane => plane.ChannelId == PulseOximeterIllustrationSource.InfraredChannelId);
+        if ((red is null) != (infrared is null))
+        { throw new ArgumentException("LiveMeasurement.IncompleteOptics", nameof(channels)); }
         if (red is not null)
         {
-            var plethPlane = block.Planes.SingleOrDefault(p => p.ChannelId == _pleth.ChannelId);
-            if (plethPlane is null || plethPlane.FirstSampleIndex != red.FirstSampleIndex || plethPlane.Samples.Count != red.Samples.Count)
-            { throw new ArgumentException("LiveMeasurement.UnpairedPleth", nameof(wire)); }
+            var plethPlane = plethBlock!.Planes.Single(plane => plane.ChannelId == _pleth.ChannelId);
+            if (plethPlane.FirstSampleIndex != red.FirstSampleIndex || plethPlane.Samples.Count != red.Samples.Count)
+            { throw new ArgumentException("LiveMeasurement.UnpairedPleth", nameof(channels)); }
         }
         var ecg = EcgHeartRateMeasurement.Restore(_ecg.Capture());
         var resp = ImpedanceRespirationMeasurement.Restore(_resp.Capture());
@@ -78,15 +131,34 @@ public sealed class LiveWaveformMeasurements
         var abp = MeanPressureMeasurement.Restore(_abp.Capture());
         var pa = MeanPressureMeasurement.Restore(_pa.Capture());
         var cvp = MeanPressureMeasurement.Restore(_cvp.Capture());
-        var optical = red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
-        var beats = ecg.Consume(wire, out var transitions, out var monitoring, pacingEvidence);
-        resp.Consume(wire);
-        var pulses = pleth.Consume(wire);
-        co2.Consume(wire);
-        if (red is not null) { optical.Consume(wire); }
-        abp.Consume(wire);
-        pa.Consume(wire);
-        cvp.Consume(wire);
+        var optical = hasPleth && red is null ? NewOptical() : OpticalSaturationAcquisition.Restore(_optical.Capture());
+        IReadOnlyList<DetectedEcgBeat> beats = [];
+        IReadOnlyList<DetectedPlethPulse> pulses = [];
+        IReadOnlyList<DetectedEcgRhythmEvent> transitions = [];
+        IReadOnlyList<DetectedEcgMonitoringEvent> monitoring = [];
+        Dictionary<WaveformEnvelope, byte[]> encoded = new(ReferenceEqualityComparer.Instance);
+        byte[] Wire(WaveformEnvelope block)
+        {
+            if (!encoded.TryGetValue(block, out byte[]? wire))
+            {
+                wire = WaveformEnvelopeCodec.EncodeRaw(block);
+                encoded.Add(block, wire);
+            }
+            return wire;
+        }
+        if (channels.TryGetValue(ecg.ChannelId, out var ecgBlock))
+        { beats = ecg.Consume(Wire(ecgBlock), out transitions, out monitoring, pacingEvidence); }
+        if (channels.TryGetValue(resp.ChannelId, out var respBlock)) { resp.Consume(Wire(respBlock)); }
+        if (hasPleth)
+        {
+            byte[] plethWire = Wire(plethBlock!);
+            pulses = pleth.Consume(plethWire);
+            if (red is not null) { optical.Consume(plethWire); }
+        }
+        if (channels.TryGetValue(co2.ChannelId, out var co2Block)) { co2.Consume(Wire(co2Block)); }
+        if (channels.TryGetValue(abp.ChannelId, out var abpBlock)) { abp.Consume(Wire(abpBlock)); }
+        if (channels.TryGetValue(pa.ChannelId, out var paBlock)) { pa.Consume(Wire(paBlock)); }
+        if (channels.TryGetValue(cvp.ChannelId, out var cvpBlock)) { cvp.Consume(Wire(cvpBlock)); }
         var snapshot = new LiveMeasurementSnapshot(sampleTime, ecg.Read(sampleTime), resp.Read(sampleTime),
             pleth.Read(sampleTime), co2.Read(sampleTime), optical.Read(sampleTime), abp.Read(sampleTime), pa.Read(sampleTime), cvp.Read(sampleTime))
         { EcgRhythm = ecg.ReadRhythm(sampleTime), EcgMonitoring = ecg.ReadMonitoring(sampleTime) };

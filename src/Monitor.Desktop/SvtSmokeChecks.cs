@@ -38,7 +38,7 @@ internal static class SvtSmokeChecks
             }
             foreach (int sample in new[] { 0, 35, 75, 110 })
                 EcgLimbPlacementSmokeChecks.VerifyPixels(window, blocks.ToArray(), sample, [EcgLead.I, EcgLead.II, EcgLead.V1, EcgLead.V5]);
-            // Compare the completed raw record range, excluding samples still in acquisition delay.
+            // Compare the completed raw record interval on the native sample grid.
             long capturedEnd = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
             var expected = ElectrodeSignalGenerator.Start(SupraventricularTachycardiaReference.CreatePlan(), "AcqECGMonitor250@1", 1, SupraventricularTachycardiaReference.CreateElectrodes(rbbb, lbbb)).GenerateBefore(capturedEnd, 1500, 200);
             foreach (var lead in Enum.GetValues<EcgLead>())

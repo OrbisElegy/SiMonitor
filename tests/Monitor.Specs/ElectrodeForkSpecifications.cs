@@ -21,7 +21,7 @@ internal static class ElectrodeForkSpecifications
             tWave: new([1000, 1000, 1000, 1000, -1000, 0, 1250, 1000, 1000, 1000]), tShape: new(500),
             stSegment: new([0, 0, 0, 0, 200, 200, 200, 200, 200, 200], [0, 0, 0, 0, -100, -100, -100, -100, -100, -100])) : TextbookElectrodeReference.CreateElectrodes();
         var channels = Enum.GetValues<EcgLead>().Select(lead => new ElectrodeChannelPlan(lead,
-            Guid.Parse($"00000000-0000-4000-8000-{(int)lead + 1:D12}"), 10, 0)).ToArray();
+            Guid.Parse($"00000000-0000-4000-8000-{(int)lead + 1:D12}"), 0)).ToArray();
         return ElectrodeWaveformGroup.Start(channels[0].ChannelId, channels[1].ChannelId, 1, 1, 1, 0, 16, plan, electrodes, channels, EcgLimbPlacement.SwapRaLa);
     }
 
@@ -44,7 +44,7 @@ internal static class ElectrodeForkSpecifications
                 actual = actual.Fork();
                 observed.AddRange(actual.AdvanceTo(frame * 16_000_000L, 50, 1, 100));
             }
-            Check.That(expected.Count == 99 && expected.Count == observed.Count && expected.Zip(observed).All(pair => pair.First.SequenceEqual(pair.Second)) &&
+            Check.That(expected.Count == 100 && expected.Count == observed.Count && expected.Zip(observed).All(pair => pair.First.SequenceEqual(pair.Second)) &&
                 Snapshot(reference) == Snapshot(actual), "trusted frame copies preserve20s bytes, pending values, wiring, independent phase and all optional morphology");
         }
     }

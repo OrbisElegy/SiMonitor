@@ -157,15 +157,14 @@ internal static class PeriodicSignalGeneratorSpecifications
     {
         PeriodicSignalPlan plan = Plan();
         var generator = PeriodicSignalGenerator.Start(plan);
-        var delay = SignalAcquisitionDelayLine.Start(plan.ProfileId, plan.StreamEpoch, plan.EpochAnchorSimTimeNs, 50);
         IReadOnlyList<GeneratedSignalSample> samples = generator.GenerateBefore(1_200_000_000, 50);
-        foreach (GeneratedSignalSample sample in samples) { delay.Enqueue(sample.Tick, sample.NormalizedValue, 0x80000000); }
-        Check.That(delay.DrainAvailable(1_039_999_999).Count == 0, "ECG acquisition keeps its frozen 40ms latency");
-        IReadOnlyList<DelayedSignalSample> available = delay.DrainAvailable(1_236_000_000);
-        Check.That(available.Count == 50 && available[^1].SourceSimTimeNs == 1_196_000_000 &&
-            available[^1].AvailableSimTimeNs == 1_236_000_000 && available.All(sample => sample.QualityFlags == 0x80000000) &&
+        AcquiredSignalSample[] available = samples.Select(sample => new AcquiredSignalSample(
+            sample.Tick.ProfileId, sample.Tick.StreamEpoch, sample.Tick.SampleIndex,
+            sample.Tick.SimTimeNs, sample.NormalizedValue, 0x80000000)).ToArray();
+        Check.That(available.Length == 50 && available[^1].SourceSimTimeNs == 1_196_000_000 &&
+            available.All(sample => sample.QualityFlags == 0x80000000) &&
             available.Select(sample => sample.NormalizedValue).SequenceEqual(samples.Select(sample => sample.NormalizedValue)),
-            "generated samples integrate with acquisition while preserving raw values and caller-supplied quality flags");
+            "generated samples retain source time, raw values and caller-supplied quality without an availability clock");
         var channel = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var assembler = WaveformBlockAssembler.Start(channel,
             Guid.Parse("22222222-2222-4222-8222-222222222222"), 3, plan.StreamEpoch, 11, 100,

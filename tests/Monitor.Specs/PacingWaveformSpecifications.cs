@@ -95,7 +95,7 @@ internal static class PacingWaveformSpecifications
             electricalTherapy: new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default) { PacingAllowed = true });
         for (int i = 0; i < 80; i++) { session.Advance(200_000_000); }
         long now = session.SimulationTimeNs;
-        long frontier = session.FrontierNs;
+        long frontier = session.SimulationTimeNs;
         var samples = session.Samples(0, frontier - 1_000_000_000, frontier).ToArray();
         long at = session.SchedulePacing(PacingIllustration.DualChamberDdd, new(90, 60));
         Check.That(at == now && session.SimulationTimeNs == now && session.ManualVitals == manual && session.Oxygenation is not null,

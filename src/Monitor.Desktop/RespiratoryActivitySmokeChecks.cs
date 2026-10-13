@@ -48,7 +48,9 @@ internal static class RespiratoryActivitySmokeChecks
                 { throw new InvalidOperationException("Activity change did not restart the source and fence prior work."); }
                 var source = PhysiologyDemoSource.Create(config);
                 List<WaveformEnvelope> blocks = [];
-                for (int step = 1; step <= (durationBreaths is null ? 42 : 78); step++)
+                // Stop at the observed source interval so all landmarks remain
+                // inside the eight-second viewport, including after resumption.
+                for (int step = 1; step <= (durationBreaths is null ? 32 : 68); step++)
                 {
                     Click(window.StepButton);
                     blocks.AddRange(source.AdvanceTo(step * 200_000_000L, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));

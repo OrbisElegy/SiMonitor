@@ -169,12 +169,18 @@ internal static class AedSpecifications
             for (int i = 0; i < 600 && aed.Phase is not (AedPhase.ShockAdvised or AedPhase.Cpr); i++)
             {
                 session.Advance(StepNs);
-                Check.That(aed.Tick(session.SimulationTimeNs, session.SimulationTimeNs, session.LiveEcgEvidence) is null,
+                Check.That(aed.Tick(session.SimulationTimeNs, session.SimulationTimeNs, session.EcgEvidence) is null,
                     "waveform analysis has no automatic discharge");
             }
             Check.That(aed.Phase == expected && session.ElectricalTherapy is null,
-                "live samples classify VF/asystole/sinus/VT without template conversion metadata: " + session.LiveEcgEvidence);
-            Check.That(session.LiveEcgEvidence!.SampleTimeNs > session.FrontierNs, "AED evidence follows immediate ECG, not delayed acquisition");
+                "live samples classify VF/asystole/sinus/VT without template conversion metadata: " + session.EcgEvidence);
+            Check.That(session.SimulationTimeNs - session.EcgEvidence!.SampleTimeNs is > 0 and <= 4_000_000 &&
+                session.EcgEvidence.HeartRate == session.Measurements!.HeartRate, "AED and monitor read the same current ECG measurement");
+            session.Advance(1);
+            long sampleTime = session.EcgEvidence!.SampleTimeNs;
+            session.Advance(1);
+            Check.That(session.EcgEvidence.SampleTimeNs == sampleTime && session.DetectedBeats.Count == 0,
+                "a sub-sample frame neither manufactures fresh AED evidence nor replays beats");
         }
     }
 
@@ -280,7 +286,7 @@ internal static class AedSpecifications
             {
                 session.Advance(StepNs);
                 long now = session.SimulationTimeNs;
-                var evidence = session.LiveEcgEvidence!;
+                var evidence = session.EcgEvidence!;
                 delivered = aed.Tick(now, now, evidence);
                 if (aed.Phase == AedPhase.ShockAdvised) { ready = true; }
                 if (now >= startNs + 12_000_000_000)

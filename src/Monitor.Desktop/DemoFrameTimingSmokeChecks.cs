@@ -43,8 +43,8 @@ internal static class DemoFrameTimingSmokeChecks
                         { throw new InvalidOperationException("Ordinary dispatcher delay lost simulation time or failed bounded generation."); }
                     }
                 }
-                if (window.SimulationTimeNs != 20_000_000_000 || window.LiveFrontierNs != (projected ? 19_760_000_000 : 17_800_000_000))
-                { throw new InvalidOperationException("20s of jittered callbacks drifted beyond the declared presentation buffer."); }
+                if (window.SimulationTimeNs != 20_000_000_000 || window.LiveFrontierNs != 20_000_000_000)
+                { throw new InvalidOperationException("20s of jittered callbacks separated sweep time from source time."); }
                 Click(window.HoldButton);
                 var held = window.Trace;
                 window.Pulse(timer, DemoFrameTiming.ResolveElapsed(TimeSpan.FromMilliseconds(250)));
@@ -57,6 +57,6 @@ internal static class DemoFrameTimingSmokeChecks
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: physiology and12-lead20s jittered50–250ms callbacks retain source time, declared buffering, held views and stale timer fencing");
+        Console.WriteLine("ok: physiology and12-lead20s jittered50–250ms callbacks retain source time, a shared sweep frontier, held views and stale timer fencing");
     }
 }

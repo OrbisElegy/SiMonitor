@@ -211,26 +211,19 @@ internal static class VascularPressureSpecifications
         }
         Check.That(expectedSamples.SequenceEqual(samples) && Snapshot(wholeSource) == Snapshot(splitSource),
             "pressure runoff and refilling preserve Q32 values and source cursors under every-batch restoration");
-        Check.That(expected.Count == 23 && actual.Count == expected.Count &&
+        Check.That(expected.Count == 24 && actual.Count == expected.Count &&
             expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)) && Snapshot(whole) == Snapshot(split),
             "ECG, ABP, PA and their pending native samples retain canonical bytes and exact state after every block restore");
-        Check.That(Samples(actual, Abp).SequenceEqual(expectedSamples.Take(575).Select(sample => sample.NormalizedValue)),
+        Check.That(Samples(actual, Abp).SequenceEqual(expectedSamples.Select(sample => sample.NormalizedValue)),
             "encoded absolute pressure matches source quantization through interruption and recovery");
     }
 
     private static void VascularCheckpointRecomputesPendingPressure()
     {
         var group = Group(Interrupted, Pulmonary);
-        _ = group.AdvanceTo(400_000_000, 100, 2, 100);
+        _ = group.AdvanceTo(300_000_000, 75, 2, 100);
         var state = group.CaptureState();
         var arterial = state.Channels.Single(channel => channel.ChannelId == Abp);
-        var pending = arterial.Delay.PendingSamples.ToArray();
-        pending[0] = pending[0] with { NormalizedValue = (short)(pending[0].NormalizedValue + 1) };
-        RejectGroup(() => PhysiologyWaveformGroup.Restore(state with
-        {
-            Channels = state.Channels.Select(channel => channel.ChannelId == Abp
-                ? arterial with { Delay = arterial.Delay with { PendingSamples = pending } } : channel).ToArray(),
-        }), "PhysiologyGroup.InvalidCheckpoint");
         var plane = state.Assembler.Planes.Single(item => item.Configuration.ChannelId == Abp);
         var assembled = plane.PendingSamples.ToArray();
         assembled[0] = assembled[0] with { NormalizedValue = (short)(assembled[0].NormalizedValue + 1) };
@@ -351,8 +344,8 @@ internal static class VascularPressureSpecifications
         Cancelled(() => group.AdvanceTo(4_000_000_000, 1000, 20, 100, cancellation.Token));
         RejectGroup(() => group.AdvanceTo(4_000_000_000, 1000, 1, 100), "PhysiologyGroup.BlockLimitExceeded");
         Check.That(sourceBefore == Snapshot(generator) && groupBefore == Snapshot(group),
-            "cancellation and late output capacity failure preserve all source, delay and assembler frontiers");
-        Check.That(group.AdvanceTo(4_000_000_000, 1000, 20, 100).Count == 19,
+            "cancellation and late output capacity failure preserve all source and recording frontiers");
+        Check.That(group.AdvanceTo(4_000_000_000, 1000, 20, 100).Count == 20,
             "the same pressure generation remains available after rejected publication");
     }
 
@@ -381,7 +374,7 @@ internal static class VascularPressureSpecifications
         string profile = "AcqPressure125@1") => PhysiologySignalGenerator.Start(physiology, profile, 1, [], pressure);
     private static PhysiologyWaveformGroup Group(RegularPhysiologyPlan physiology, VascularPressurePlan pulmonary) =>
         PhysiologyWaveformGroup.Start(Ecg, Abp, 1, 1, 1, 0, 32,
-        [new(physiology, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
+        [new(physiology, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
          Arterial.CreateChannel(physiology, Abp, 7), pulmonary.CreateChannel(physiology, Pa, 3)]);
     private static short[] Samples(IReadOnlyList<byte[]> blocks, Guid channel) => blocks.SelectMany(bytes =>
         WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == channel).Samples).ToArray();

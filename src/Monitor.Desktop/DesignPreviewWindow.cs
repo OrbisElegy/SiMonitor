@@ -287,7 +287,7 @@ internal sealed class DesignPreviewWindow : Window
     }
 
     private AedEcgEvidence? AedEvidence => _monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) &&
-        _session.ActivePacing is null ? _session.LiveEcgEvidence : null;
+        _session.ActivePacing is null ? _session.EcgEvidence : null;
 
     private void TickDefibrillator()
     {
@@ -298,7 +298,7 @@ internal sealed class DesignPreviewWindow : Window
         if (!DefibrillatorAvailable && !recovering) { DisarmDefibrillator(); return; }
         var delivery = _aed.Enabled ? _aed.Tick(_safetyClock(), _session.SimulationTimeNs, AedEvidence) :
             _defibrillator.Tick(_safetyClock(), _session.SimulationTimeNs,
-            (_monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) ? _session.SynchronizationBeats : []).Select(beat => beat.PeakTimeNs));
+            (_monitor.MonitoredChannels.HasFlag(MonitorChannels.Ecg) ? _session.DetectedBeats : []).Select(beat => beat.PeakTimeNs));
         if (delivery is null) { return; }
         // A host-wide token survives device configuration changes on the same session.
         delivery = delivery with { DeliverySequence = ++_shockSequence };
@@ -862,7 +862,7 @@ internal sealed class DesignPreviewWindow : Window
             _monitor.InvalidateVisual();
             MonitorView.Refresh();
             Settings.Sound.UpdateAlarm(MonitorView.HighestNotice, Settings.Alerts.Timing, _session.DetectedBeats,
-                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices, _session.LiveBeatEvidence);
+                _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices, _session.BeatEvidence);
             UpdateState();
         }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
@@ -925,8 +925,8 @@ internal sealed class DesignPreviewWindow : Window
     private static LocalMonitorPreviewSession CreateThumbnailSource(PhysiologyDemoConfiguration configuration, long durationNs)
     {
         var preview = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default());
-        // Include presentation latency before taking the requested complete interval.
-        long end = Math.Max(5_400_000_000, durationNs + LocalMonitorPreviewSession.PresentationLatencyNs + 200_000_000);
+        // Generate exactly the requested source interval.
+        long end = durationNs;
         while (preview.SimulationTimeNs < end) { preview.Advance(50_000_000); }
         return preview;
     }
@@ -936,7 +936,7 @@ internal sealed class DesignPreviewWindow : Window
         // pauses; use the exact same respiratory configuration as Apply.
         var source = PhysiologyDemoSource.Create(ResolveStyle(0, resp, 0).Physiology);
         List<(long, double)> samples = [];
-        for (int step = 1; step <= 217; step++)
+        for (int step = 1; step <= (DesignPreviewSettings.RespirationPreviewDurationNs + 199_999_999) / 200_000_000; step++)
             foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             {
                 var block = WaveformEnvelopeCodec.Decode(wire);
@@ -954,9 +954,9 @@ internal sealed class DesignPreviewWindow : Window
     private static WaveformEnvelope[] CapturePaper(ProjectedEcgDemoConfiguration configuration)
     {
         var source = ProjectedEcgDemoSource.Create(configuration); List<WaveformEnvelope> output = [];
-        for (int step = 1; step <= 56; step++)
+        for (int step = 1; step <= 55; step++)
         { foreach (byte[] bytes in source.AdvanceTo(step * 200_000_000L, 50, 1, 100)) { output.Add(WaveformEnvelopeCodec.Decode(bytes)); } }
-        return output.Take(55).ToArray();
+        return output.ToArray();
     }
     private static TextBlock Text(string value, double size, bool strong = false) => new()
     { Text = value, FontSize = size, FontWeight = strong ? FontWeight.SemiBold : FontWeight.Normal, TextWrapping = TextWrapping.Wrap };

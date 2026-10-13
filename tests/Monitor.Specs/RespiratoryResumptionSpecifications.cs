@@ -76,7 +76,7 @@ internal static class RespiratoryResumptionSpecifications
     private static void ResumedSamplesAndGasResponseSurviveRecovery()
     {
         var normalPlan = Plan() with { RespiratoryActivity = RespiratoryActivity.Breathing, ActivityAfterBreaths = null, ActivityDurationBreaths = null };
-        var normal = Group(normalPlan).AdvanceTo(14_000_000_000, 1750, 60, 150);
+        var normal = Group(normalPlan).AdvanceTo(14_000_000_000, 1750, 70, 150);
         foreach (var activity in new[] { RespiratoryActivity.Absent, RespiratoryActivity.EffortOnly })
         {
             var plan = Plan(activity);
@@ -84,7 +84,7 @@ internal static class RespiratoryResumptionSpecifications
                 [2_190_000_000, 3_999_999_999, 4_000_000_000, 4_000_000_001,
                  4_800_000_000, 7_999_999_999, 8_000_000_000, 8_000_000_001,
                  10_600_000_000, 10_725_000_000, 10_800_000_000, 12_800_000_000, 14_000_000_000],
-                1750, 60, 150, 60, $"resumed {activity}");
+                1750, 70, 150, 70, $"resumed {activity}");
             short[] resp = Samples(whole, Resp);
             Check.That(resp.Skip(1000).SequenceEqual(Samples(normal, Resp).Skip(1000)) &&
                 (activity == RespiratoryActivity.EffortOnly || resp.Skip(500).Take(500).All(value => value == 0)),

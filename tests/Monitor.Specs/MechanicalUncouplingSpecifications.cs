@@ -43,8 +43,8 @@ internal static class MechanicalUncouplingSpecifications
     {
         var plan = Plan(enabled);
         return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
-            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-             new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
+            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+             new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 0),
              new RespirationPlan(800, artifact).CreateChannel(plan, Resp, 0)]);
     }
     private static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.SelectMany(bytes =>
@@ -56,7 +56,7 @@ internal static class MechanicalUncouplingSpecifications
         var off = NativeRecoveryChecks.Verify(() => Group(false, 160),
             [160_000_000, 240_000_000, 320_000_000, 2_000_000_000, 2_191_999_999,
              2_192_000_000, 4_000_000_000, 8_000_000_000],
-            2000, 40, 100, 30, "uncoupled ECG, Pleth and Resp");
+            2000, 40, 100, 40, "uncoupled ECG, Pleth and Resp");
         Check.That(Samples(off, Ecg).SequenceEqual(Samples(normal, Ecg)) && Samples(off, Ecg).Any(value => value > 500),
             "QRS and repolarization continue with unchanged native ECG");
         Check.That(Samples(off, Pleth).All(value => value == 0) && Samples(normal, Pleth).Any(value => value > 0),

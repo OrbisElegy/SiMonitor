@@ -30,7 +30,7 @@ internal static class VentricularPhaseSpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Id, Id, 1, 1, 1, 0, 50,
-        [new(Plan(900_000_000), new(Id, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0)]);
+        [new(Plan(900_000_000), new(Id, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0)]);
 
     private static void LatePhasePreservesDelayedWaveTailsAndRecovery()
     {

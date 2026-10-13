@@ -18,6 +18,7 @@ internal static class GenericSkinSmokeChecks
 
     internal static void Verify()
     {
+        PlethIndicatorSmokeChecks.Verify();
         var window = new DesignPreviewWindow();
         window.Show();
         try

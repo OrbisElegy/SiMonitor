@@ -60,20 +60,20 @@ internal static class RespiratoryTransitionSpecifications
 
     private static PhysiologyWaveformGroup Group(RespiratoryActivity activity, ulong? after) => PhysiologyWaveformGroup.Start(Resp, Co2, 1, 1, 1, 0, 60,
         [new RespirationPlan(800).CreateChannel(Plan(activity, after), Resp, 0),
-         new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 40, 4000, 600_000_000, 100_000_000)
+         new CapnogramPlan(125_000_000, 250_000_000, 200_000_000, 0, 50, 4000, 600_000_000, 100_000_000)
              .CreateChannel(Plan(activity, after), Co2, 0)]);
     private static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
         .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
 
     private static void TransitionPreservesPrefixAndCo2Response()
     {
-        var normal = Group(RespiratoryActivity.Breathing, null).AdvanceTo(10_000_000_000, 1250, 40, 100);
+        var normal = Group(RespiratoryActivity.Breathing, null).AdvanceTo(10_000_000_000, 1250, 50, 100);
         foreach (var activity in new[] { RespiratoryActivity.Absent, RespiratoryActivity.EffortOnly })
         {
             var changed = NativeRecoveryChecks.Verify(() => Group(activity, 1),
                 [1_200_000_000, 2_190_000_000, 3_200_000_000, 3_999_999_999, 4_000_000_000,
                  4_000_000_001, 4_600_000_000, 4_800_000_000, 5_000_000_000, 8_000_000_000, 10_000_000_000],
-                1250, 40, 100, 40, $"scheduled {activity}");
+                1250, 50, 100, 50, $"scheduled {activity}");
             Check.That(changed.Take(20).Zip(normal.Take(20)).All(pair => pair.First.SequenceEqual(pair.Second)),
                 "all wire samples before the completed-breath boundary remain identical");
             short[] co2 = Samples(changed, Co2);

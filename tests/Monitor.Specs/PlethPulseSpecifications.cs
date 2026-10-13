@@ -18,7 +18,7 @@ internal static class PlethPulseSpecifications
         new(nameof(PlethShoulderSurvivesDurationGainAndNativeSampling), PlethShoulderSurvivesDurationGainAndNativeSampling),
         new(nameof(PlethNeedsMechanicalEventsAndExplicitTransit), PlethNeedsMechanicalEventsAndExplicitTransit),
         new(nameof(PlethHasFastRiseOptionalNotchAndIndependentAmplitude), PlethHasFastRiseOptionalNotchAndIndependentAmplitude),
-        new(nameof(PlethNativeDelayAndGroupRestorePreserveSamples), PlethNativeDelayAndGroupRestorePreserveSamples),
+        new(nameof(PlethNativeSamplingAndGroupRestorePreserveSamples), PlethNativeSamplingAndGroupRestorePreserveSamples),
         new(nameof(PlethRejectsInvalidPlansAndPreservesFailedGroup), PlethRejectsInvalidPlansAndPreservesFailedGroup),
     ];
 
@@ -87,16 +87,16 @@ internal static class PlethPulseSpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 32,
-        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-         new(Timeline, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), Pulse.CreateBands(), 250, 0)]);
+        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+         new(Timeline, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), Pulse.CreateBands(), 0)]);
 
-    private static void PlethNativeDelayAndGroupRestorePreserveSamples()
+    private static void PlethNativeSamplingAndGroupRestorePreserveSamples()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(2_191_999_999, 548, 1, 100).Count == 0, "PPG processing delay is additional to source transit");
-        var first = WaveformEnvelopeCodec.Decode(boundary.AdvanceTo(2_192_000_000, 1, 1, 100).Single());
+        Check.That(boundary.AdvanceTo(196_000_000, 49, 1, 100).Count == 0, "shared recording waits for its final native ECG sample");
+        var first = WaveformEnvelopeCodec.Decode(boundary.AdvanceTo(196_000_001, 1, 1, 100).Single());
         Check.That(first.StartSimTimeNs == 0 && first.Planes.Single(plane => plane.ChannelId == Pleth).Samples.Count == 25,
-            "first shared block waits for the last 125Hz sample's two-second acquisition delay");
+            "the first recording contains native125Hz PLETH without an acquisition delay");
         var expected = Group().AdvanceTo(4_000_000_000, 1000, 20, 100);
         var split = Group();
         List<byte[]> actual = [];
@@ -106,9 +106,9 @@ internal static class PlethPulseSpecifications
             split = PhysiologyWaveformGroup.Restore(split.CaptureState());
         }
         Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "mixed ECG/Pleth wire bytes survive split generation and restore during active pulses and delay");
+            "mixed ECG/Pleth wire bytes survive split generation and restore during active pulses");
         var source = PhysiologySignalGenerator.Start(Timeline, "AcqPleth125@1", 1, Pulse.CreateBands())
-            .GenerateBefore(2_000_000_000, 250, 100);
+            .GenerateBefore(4_000_000_000, 500, 100);
         var decoded = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).SelectMany(block => block.Planes.Single(plane => plane.ChannelId == Pleth).Samples);
         Check.That(decoded.SequenceEqual(source.Select(sample => sample.NormalizedValue)) && source[60].NormalizedValue == 1000,
             "published 125Hz raw counts exactly match mechanical source samples");
@@ -129,6 +129,6 @@ internal static class PlethPulseSpecifications
         bool limited = false;
         try { group.AdvanceTo(4_000_000_000, 1000, 1, 100); }
         catch (PhysiologyWaveformGroupException exception) { limited = exception.ReasonCode == "PhysiologyGroup.BlockLimitExceeded"; }
-        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late block limit preserves every source and delay cursor");
+        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late block limit preserves every source and recording cursor");
     }
 }

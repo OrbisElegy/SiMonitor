@@ -74,19 +74,19 @@ internal static class EventWaveformSpecifications
         var source = Ecg();
         const string profile = "AcqECGMonitor250@1";
         var clock = SignalSampleClock.Start(profile, 1, 0);
-        var delay = SignalAcquisitionDelayLine.Start(profile, 1, 0, 50);
+        List<AcquiredSignalSample> acquired = [];
         List<short> expected = [];
         foreach (var tick in clock.DrainBefore(200_000_000))
         {
             short sample = (short)FixedPointMath.RoundDivideTiesToEven(source.EvaluateAt(tick.SimTimeNs), Q);
             expected.Add(sample);
-            delay.Enqueue(tick, sample, 0);
+            acquired.Add(new(tick.ProfileId, tick.StreamEpoch, tick.SampleIndex, tick.SimTimeNs, sample, 0));
         }
         var id = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var assembler = WaveformBlockAssembler.Start(id, id, 1, 1, 1, 0, 0, 1, [new(id, profile, 1, 1, 0, 1)]);
-        Check.That(assembler.Push(id, delay.DrainAvailable(235_999_999)).Count == 0, "event-driven samples retain acquisition latency");
-        byte[] wire = WaveformEnvelopeCodec.EncodeRaw(assembler.Push(id, delay.DrainAvailable(236_000_000)).Single());
-        Check.That(WaveformEnvelopeCodec.Decode(wire).Planes[0].Samples.SequenceEqual(expected), "event waveform survives native sampling, delay and 200ms binary encoding");
+        Check.That(assembler.Push(id, acquired.Take(49).ToArray()).Count == 0, "recording waits only for a complete source window");
+        byte[] wire = WaveformEnvelopeCodec.EncodeRaw(assembler.Push(id, acquired.Skip(49).ToArray()).Single());
+        Check.That(WaveformEnvelopeCodec.Decode(wire).Planes[0].Samples.SequenceEqual(expected), "event waveform survives native sampling and 200ms binary encoding");
     }
 
     private static void Reject(Action action, string reason)

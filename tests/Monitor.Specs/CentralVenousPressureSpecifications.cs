@@ -22,7 +22,7 @@ internal static class CentralVenousPressureSpecifications
         new(nameof(CvpComponentsFollowAtrialAndVentricularEvents), CvpComponentsFollowAtrialAndVentricularEvents),
         new(nameof(CvpAtrialSuppressionLeavesOtherWavesIntact), CvpAtrialSuppressionLeavesOtherWavesIntact),
         new(nameof(CvpRespiratoryPressureHasExplicitSignAndTiming), CvpRespiratoryPressureHasExplicitSignAndTiming),
-        new(nameof(CvpPressureSurvivesNativeDelayAndRecovery), CvpPressureSurvivesNativeDelayAndRecovery),
+        new(nameof(CvpPressureSurvivesNativeSamplingAndRecovery), CvpPressureSurvivesNativeSamplingAndRecovery),
         new(nameof(CvpRejectsInvalidSupportAndAmplitudeBudget), CvpRejectsInvalidSupportAndAmplitudeBudget),
         new(nameof(CvpLateFailureAndCancellationPreserveState), CvpLateFailureAndCancellationPreserveState),
     ];
@@ -130,14 +130,14 @@ internal static class CentralVenousPressureSpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Cvp, 1, 1, 1, 0, 32,
-        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
+        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
          (Plan with { RespiratoryDeltaCentiMmHg = -100 }).CreateChannel(Timeline, Cvp, 0)]);
 
-    private static void CvpPressureSurvivesNativeDelayAndRecovery()
+    private static void CvpPressureSurvivesNativeSamplingAndRecovery()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(271_999_999, 68, 1, 100).Count == 0 && boundary.AdvanceTo(272_000_000, 1, 1, 100).Count == 1,
-            "CVP retains native125Hz and80ms processing delay");
+        Check.That(boundary.AdvanceTo(196_000_000, 49, 1, 100).Count == 0 && boundary.AdvanceTo(196_000_001, 1, 1, 100).Count == 1,
+            "CVP retains native125Hz without an acquisition delay");
         var expected = Group().AdvanceTo(4_000_000_000, 1000, 20, 100);
         var group = Group();
         List<byte[]> actual = [];
@@ -151,7 +151,7 @@ internal static class CentralVenousPressureSpecifications
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Cvp)).ToArray();
         var channel = (Plan with { RespiratoryDeltaCentiMmHg = -100 }).CreateChannel(Timeline, Cvp, 0);
         var samples = PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands,
-            pressureBaselineCentiMmHg: channel.PressureBaselineCentiMmHg).GenerateBefore(3_800_000_000, 475, 100);
+            pressureBaselineCentiMmHg: channel.PressureBaselineCentiMmHg).GenerateBefore(4_000_000_000, 500, 100);
         Check.That(planes.All(plane => plane.ScaleNumerator == 1 && plane.ScaleDenominator == 100 && plane.OffsetNumerator == 0 &&
             plane.OffsetDenominator == 1 && plane.SampleRateNumerator == 125) &&
             planes.SelectMany(plane => plane.Samples).SequenceEqual(samples.Select(sample => sample.NormalizedValue)),

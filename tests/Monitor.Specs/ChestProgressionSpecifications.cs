@@ -129,7 +129,7 @@ internal static class ChestProgressionSpecifications
         Guid Id(int index) => Guid.Parse($"00000000-0000-4000-8000-{index + 1:D12}");
         var group = ElectrodeWaveformGroup.Start(Id(20), Id(21), 1, 1, 1, 0, 16, Plan,
             TextbookElectrodeReference.CreateElectrodes(), Enum.GetValues<EcgLead>()
-                .Select(lead => new ElectrodeChannelPlan(lead, Id((int)lead), 10, 0)).ToArray());
+                .Select(lead => new ElectrodeChannelPlan(lead, Id((int)lead), 0)).ToArray());
         var blocks = group.AdvanceTo(436_000_000, 109, 2, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
         var expected = Source().GenerateBefore(400_000_000, 100, 100);
         foreach (EcgLead lead in Enum.GetValues<EcgLead>())

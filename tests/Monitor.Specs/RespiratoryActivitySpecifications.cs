@@ -94,7 +94,7 @@ internal static class RespiratoryActivitySpecifications
                 actual.AddRange(group.AdvanceTo(step * 200_000_000L, 25, 1, 100));
                 group = PhysiologyWaveformGroup.Restore(group.CaptureState());
             }
-            Check.That(actual.Count == 30 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+            Check.That(actual.Count == 40 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
                 "source activity and pending mixed-channel samples restore byte-for-byte");
             var fresh = Group(activity);
             string before = JsonSerializer.Serialize(fresh.CaptureState());

@@ -29,8 +29,8 @@ internal static class ProjectedEcgDemoSmokeChecks
             Layout();
             byte[] calibration = CalibrationPixels(window.Trace, 1044);
             Click(window.StepButton);
-            if (window.BlockCount != 0 || window.ShapeButton.IsVisible)
-            { throw new InvalidOperationException("Projected demo bypassed latency or enabled unrelated shape controls."); }
+            if (window.BlockCount != 1 || window.ShapeButton.IsVisible)
+            { throw new InvalidOperationException("Projected demo did not publish its first source interval or enabled unrelated shape controls."); }
             Click(window.StepButton);
             Click(window.StepButton);
             Layout();
@@ -61,7 +61,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             window.Trace.Measure(new Size(700, Height));
             window.Trace.Arrange(new Rect(0, 0, 700, Height));
             _ = CalibrationPixels(window.Trace, 700);
-            if (window.SimulationTimeNs != timeBeforeResize || window.BlockCount != 2)
+            if (window.SimulationTimeNs != timeBeforeResize || window.BlockCount != 3)
             { throw new InvalidOperationException("Calibration resize changed acquisition."); }
             Layout();
             Click(window.StepButton);
@@ -71,7 +71,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             Click(window.HoldButton);
             Control held = window.Trace;
             for (int step = 0; step < 45; step++) { Click(window.StepButton); }
-            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 48)
+            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 49)
             { throw new InvalidOperationException("Projected background retention changed the held view."); }
             Click(window.HoldButton);
             Layout();
@@ -87,7 +87,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             Click(window.RunButton);
             var timer = window.ActiveTimer;
             for (int frame = 0; frame < 30; frame++) { window.Pulse(timer); }
-            if (window.LiveFrontierNs != 240_000_000 || window.Trace.Height != Height)
+            if (window.LiveFrontierNs != 480_000_000 || window.Trace.Height != Height)
             { throw new InvalidOperationException("Projected mode lost sub-block pacing or twelve-row height."); }
             Click(window.RunButton);
             window.Pulse(timer);
@@ -102,7 +102,7 @@ internal static class ProjectedEcgDemoSmokeChecks
             VerifyRateConfiguration(window);
         }
         finally { window.Close(); }
-        Console.WriteLine("ok: twelve projected native rows match decoded leads, labels, delay, hold, pacing and reset");
+        Console.WriteLine("ok: twelve projected native rows match decoded leads, labels, shared time, hold, pacing and reset");
         Console.WriteLine("ok: twelve independent 1mV/200ms glyphs share patient scales across empty, live, wrap, hold and resize");
     }
 

@@ -100,17 +100,17 @@ internal static class RespirationSpecifications
     private static void RespCo2NativeRecoveryPreservesUnequalPhases()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(2_189_999_999, 548, 1, 100).Count == 0 &&
-            boundary.AdvanceTo(2_190_000_000, 1, 1, 100).Count == 1, "shared CO2 processing delay still gates Resp publication");
+        Check.That(boundary.AdvanceTo(192_000_000, 24, 1, 100).Count == 0 &&
+            boundary.AdvanceTo(192_000_001, 1, 1, 100).Count == 1, "RESP and CO2 are recorded together as soon as their native samples arrive");
         var actual = NativeRecoveryChecks.Verify(Group,
             [1_250_000_000, 1_375_000_000, 2_190_000_000, 3_750_000_000, 3_850_000_000, 3_950_000_000, 6_000_000_000],
-            750, 30, 100, 20, nameof(RespCo2NativeRecoveryPreservesUnequalPhases));
+            750, 30, 100, 30, nameof(RespCo2NativeRecoveryPreservesUnequalPhases));
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Resp)).ToArray();
         var plan = Timeline(1_250_000_000);
         var source = PhysiologySignalGenerator.Start(plan, "AcqResp125@1", 1, new RespirationPlan(-1000).CreateChannel(plan, Resp, 7).Bands);
         Check.That(planes.All(plane => plane.SampleRateNumerator == 125 && plane.ScaleNumerator == 1 &&
             plane.ScaleDenominator == 1 && plane.OffsetNumerator == 0) && planes.SelectMany(plane => plane.Samples).SequenceEqual(
-                source.GenerateBefore(4_000_000_000, 500, 100).Select(frame => frame.NormalizedValue)),
+                source.GenerateBefore(6_000_000_000, 750, 100).Select(frame => frame.NormalizedValue)),
             "native125Hz relative counts remain unchanged through the actual shared wire plane");
     }
 

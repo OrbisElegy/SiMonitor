@@ -44,7 +44,7 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 1. 创建配置、显示与氧合源，再调用 `DiscardStartup()` 裁去源的启动过渡段。
 2. UI `DispatcherTimer` 按约 16 ms 唤醒；由 `Stopwatch` 得到经过时间并传给本地预览。单次延迟超过 250 ms 时按 50 ms 推进，不补算整个挂起时间。仿真内部仍使用显式纳秒时间。
 3. `Pulse` 只接受当前活动 timer；旧 timer 回调、已暂停或已关闭窗口不推进会话。随后刷新波形、测量、通知与声音。
-4. 数字显示按 200 ms 的仿真时间桶刷新，扫线绘制可更频繁；`Measurements`、`FrontierNs` 与 `SimulationTimeNs` 各自代表不同边界。所有波形使用 `PresentedSamples` 的实时源样本，`PresentationFrontierNs(channel) == SimulationTimeNs`；ECG、PLETH 与压力波形共享源时间，保留原有脉搏传播和机械响应延迟。电击不等待慢速通道合包，同扫速的行同时换扫。测量与采集包仍使用原来的采集队列。
+4. 数字显示按 200 ms 的仿真时间桶刷新，测量有效性变化或新监测／节律事件立即刷新数字与通知；电击后不可判读状态不等待下一时间桶。扫线绘制可更频繁。所有波形读取统一的 `Samples` 历史，以 `SimulationTimeNs` 为共同前沿；`Measurements`、`BeatEvidence` 与治疗证据在同一采样推进中更新。ECG、PLETH 与压力波形保留源模型的脉搏传播和机械响应延迟。同扫速的行同时换扫，电击与测量无需等待 200 ms 记录包组块。
 5. 普通应用设置使用 `ScheduleSource(next, delayNs)` 接续，在生效时切换记录快照和已应用配置；再次应用可替换未生效设置。重新开始才新建会话、裁去启动段并重置相关通知与声音状态。
 6. `Pause` 停止并解绑 timer，暂停监护声音；关闭窗口还释放声音输出资源。
 

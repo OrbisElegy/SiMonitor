@@ -6,6 +6,16 @@
 
 位置 record 的参数也定义其同名属性；编译器合成的构造器、相等性方法以及继承成员不重复展开。`internal` 类型即使有 `public` 成员也不属于本索引。按开发构建的预处理分支读取；桌面产品构建差异见[桌面与命令行入口](../desktop-tools.md)。行为约束和集成顺序见总览中的分模块文档。
 
+## Acquisition/AcquiredSignalSample.cs
+
+源码：[AcquiredSignalSample.cs](../../../src/Monitor.Simulation/Acquisition/AcquiredSignalSample.cs) · 命名空间：`Monitor.Simulation.Acquisition`
+
+```csharp
+public readonly record struct AcquiredSignalSample(string ProfileId, ulong StreamEpoch, ulong SampleIndex, long SourceSimTimeNs, short NormalizedValue, uint QualityFlags)
+{
+}
+```
+
 ## Acquisition/PeriodicSignalGenerator.cs
 
 源码：[PeriodicSignalGenerator.cs](../../../src/Monitor.Simulation/Acquisition/PeriodicSignalGenerator.cs) · 命名空间：`Monitor.Simulation.Acquisition`
@@ -45,10 +55,10 @@ public sealed class PeriodicWaveformGroupException(string reasonCode, string par
 {
     public string ReasonCode { get; }
 }
-public sealed record PeriodicWaveformChannelPlan(PeriodicSignalPlan Source, WaveformBlockPlaneConfiguration Plane, int DelayCapacity, uint QualityFlags)
+public sealed record PeriodicWaveformChannelPlan(PeriodicSignalPlan Source, WaveformBlockPlaneConfiguration Plane, uint QualityFlags)
 {
 }
-public sealed record PeriodicWaveformChannelState(Guid ChannelId, PeriodicSignalState Generator, SignalAcquisitionDelayState Delay, uint QualityFlags)
+public sealed record PeriodicWaveformChannelState(Guid ChannelId, PeriodicSignalState Generator, uint QualityFlags)
 {
 }
 public sealed record PeriodicWaveformGroupState(IReadOnlyList<PeriodicWaveformChannelState> Channels, WaveformBlockAssemblerState Assembler)
@@ -72,12 +82,12 @@ public sealed class PeriodicWaveformPipelineException(string reasonCode, string 
 {
     public string ReasonCode { get; }
 }
-public sealed record PeriodicWaveformPipelineState(PeriodicSignalState Generator, SignalAcquisitionDelayState Delay, WaveformBlockAssemblerState Assembler, uint QualityFlags)
+public sealed record PeriodicWaveformPipelineState(PeriodicSignalState Generator, WaveformBlockAssemblerState Assembler, uint QualityFlags)
 {
 }
 public sealed class PeriodicWaveformPipeline
 {
-    public static PeriodicWaveformPipeline Start(PeriodicSignalPlan source, Guid sessionId, Guid instanceId, ulong timebaseEpoch, ulong configurationRevision, ulong firstBlockSequence, WaveformBlockPlaneConfiguration channel, int delayCapacity, uint qualityFlags);
+    public static PeriodicWaveformPipeline Start(PeriodicSignalPlan source, Guid sessionId, Guid instanceId, ulong timebaseEpoch, ulong configurationRevision, ulong firstBlockSequence, WaveformBlockPlaneConfiguration channel, uint qualityFlags);
     public PeriodicWaveformPipelineState CaptureState();
     public static PeriodicWaveformPipeline Restore(PeriodicWaveformPipelineState state);
     public IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamples, int maximumBlocks, CancellationToken cancellationToken = default);
@@ -139,40 +149,6 @@ public sealed class SensorFaultStateMachine
 }
 ```
 
-## Acquisition/SignalAcquisitionDelayLine.cs
-
-源码：[SignalAcquisitionDelayLine.cs](../../../src/Monitor.Simulation/Acquisition/SignalAcquisitionDelayLine.cs) · 命名空间：`Monitor.Simulation.Acquisition`
-
-```csharp
-public sealed class SignalAcquisitionDelayException(string reasonCode, string parameterName) : ArgumentException(reasonCode, parameterName)
-{
-    public string ReasonCode { get; }
-}
-public readonly record struct DelayedSignalSample(string ProfileId, ulong StreamEpoch, ulong SampleIndex, long SourceSimTimeNs, long AvailableSimTimeNs, short NormalizedValue, uint QualityFlags)
-{
-}
-public sealed record SignalAcquisitionDelayState(string ProfileId, ulong StreamEpoch, long EpochAnchorSimTimeNs, ulong NextInputSampleIndex, long ReleaseCursorSimTimeNs, int Capacity, IReadOnlyList<DelayedSignalSample> PendingSamples)
-{
-}
-public sealed class SignalAcquisitionDelayLine
-{
-    public const int MaximumCapacity = 1_000_000;
-    public string ProfileId { get; }
-    public ulong StreamEpoch { get; }
-    public long EpochAnchorSimTimeNs { get; }
-    public ulong NextInputSampleIndex { get; private set; }
-    public long ReleaseCursorSimTimeNs { get; private set; }
-    public int Capacity { get; }
-    public int PendingCount { get; }
-    public long LatencyNs { get; }
-    public static SignalAcquisitionDelayLine Start(string profileId, ulong streamEpoch, long epochAnchorSimTimeNs, int capacity);
-    public static SignalAcquisitionDelayLine Restore(SignalAcquisitionDelayState state);
-    public void Enqueue(SignalSampleTick tick, short normalizedValue, uint qualityFlags = 0);
-    public IReadOnlyList<DelayedSignalSample> DrainAvailable(long simTimeNs);
-    public SignalAcquisitionDelayState CaptureState();
-}
-```
-
 ## Acquisition/SignalSampleClock.cs
 
 源码：[SignalSampleClock.cs](../../../src/Monitor.Simulation/Acquisition/SignalSampleClock.cs) · 命名空间：`Monitor.Simulation.Acquisition`
@@ -187,7 +163,6 @@ public sealed class SignalAcquisitionProfileDescriptor
     public string ProfileId { get; }
     public string ChannelClass { get; }
     public uint SampleRateHz { get; }
-    public long LatencyNs { get; }
     public string FilterPrimitive { get; }
     public string Quantization { get; }
     public string EvidenceStatus { get; }
@@ -242,7 +217,7 @@ public sealed class WaveformBlockAssemblerException(string reasonCode, string pa
 public sealed record WaveformBlockPlaneConfiguration(Guid ChannelId, string ProfileId, int ScaleNumerator, uint ScaleDenominator, int OffsetNumerator, uint OffsetDenominator)
 {
 }
-public sealed record WaveformBlockPlaneState(WaveformBlockPlaneConfiguration Configuration, ulong NextInputSampleIndex, IReadOnlyList<DelayedSignalSample> PendingSamples)
+public sealed record WaveformBlockPlaneState(WaveformBlockPlaneConfiguration Configuration, ulong NextInputSampleIndex, IReadOnlyList<AcquiredSignalSample> PendingSamples)
 {
 }
 public sealed record WaveformBlockAssemblerState(Guid SessionId, Guid InstanceId, ulong TimebaseEpoch, ulong StreamEpoch, ulong ConfigurationRevision, ulong NextBlockSequence, long EpochAnchorSimTimeNs, long NextBlockStartSimTimeNs, int MaximumBufferedBlocks, IReadOnlyList<WaveformBlockPlaneState> Planes)
@@ -263,7 +238,7 @@ public sealed class WaveformBlockAssembler
     public int MaximumBufferedBlocks { get; }
     public static WaveformBlockAssembler Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch, ulong streamEpoch, ulong configurationRevision, ulong firstBlockSequence, long epochAnchorSimTimeNs, int maximumBufferedBlocks, IReadOnlyList<WaveformBlockPlaneConfiguration> planes);
     public static WaveformBlockAssembler Restore(WaveformBlockAssemblerState state);
-    public IReadOnlyList<WaveformEnvelope> Push(Guid channelId, IReadOnlyList<DelayedSignalSample> samples);
+    public IReadOnlyList<WaveformEnvelope> Push(Guid channelId, IReadOnlyList<AcquiredSignalSample> samples);
     public WaveformBlockAssemblerState CaptureState();
 }
 ```
@@ -1582,10 +1557,10 @@ public sealed class ElectrodeWaveformGroupException(string reasonCode, string pa
 {
     public string ReasonCode { get; }
 }
-public sealed record ElectrodeChannelPlan(EcgLead Lead, Guid ChannelId, int DelayCapacity, uint QualityFlags)
+public sealed record ElectrodeChannelPlan(EcgLead Lead, Guid ChannelId, uint QualityFlags)
 {
 }
-public sealed record ElectrodeChannelState(EcgLead Lead, Guid ChannelId, SignalAcquisitionDelayState Delay, uint QualityFlags)
+public sealed record ElectrodeChannelState(EcgLead Lead, Guid ChannelId, uint QualityFlags)
 {
 }
 public sealed record ElectrodeWaveformGroupState(ElectrodeSignalState Generator, IReadOnlyList<ElectrodeChannelState> Channels, WaveformBlockAssemblerState Assembler)
@@ -1971,10 +1946,10 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 {
     public string ReasonCode { get; }
 }
-public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, int DelayCapacity, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
+public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
 }
-public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator, SignalAcquisitionDelayState Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)
+public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)
 {
 }
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels, WaveformBlockAssemblerState Assembler)

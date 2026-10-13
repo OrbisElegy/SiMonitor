@@ -14,7 +14,6 @@ public sealed class SignalAcquisitionProfileDescriptor
         string profileId,
         string channelClass,
         uint sampleRateHz,
-        long latencyNs,
         string filterPrimitive,
         string quantization,
         string evidenceStatus)
@@ -22,7 +21,6 @@ public sealed class SignalAcquisitionProfileDescriptor
         ProfileId = profileId;
         ChannelClass = channelClass;
         SampleRateHz = sampleRateHz;
-        LatencyNs = latencyNs;
         FilterPrimitive = filterPrimitive;
         Quantization = quantization;
         EvidenceStatus = evidenceStatus;
@@ -33,8 +31,6 @@ public sealed class SignalAcquisitionProfileDescriptor
     public string ChannelClass { get; }
 
     public uint SampleRateHz { get; }
-
-    public long LatencyNs { get; }
 
     public string FilterPrimitive { get; }
 
@@ -52,11 +48,11 @@ public static class FrozenSignalAcquisitionProfiles
         ArgumentNullException.ThrowIfNull(profileId);
         return profileId switch
         {
-            "AcqECGMonitor250@1" => New(profileId, "ECG-monitor", 250, 40),
-            "AcqResp125@1" => New(profileId, "IMP-Resp", 125, 80),
-            "AcqPleth125@1" => New(profileId, "Pleth", 125, 2_000),
-            "AcqPressure125@1" => New(profileId, "Pressure", 125, 80),
-            "AcqCO2_100@1" => New(profileId, "CO2", 100, 2_000),
+            "AcqECGMonitor250@1" => New(profileId, "ECG-monitor", 250),
+            "AcqResp125@1" => New(profileId, "IMP-Resp", 125),
+            "AcqPleth125@1" => New(profileId, "Pleth", 125),
+            "AcqPressure125@1" => New(profileId, "Pressure", 125),
+            "AcqCO2_100@1" => New(profileId, "CO2", 100),
             _ => throw new SignalSampleClockException(
                 "SignalSampleClock.UnknownProfile",
                 nameof(profileId)),
@@ -66,8 +62,7 @@ public static class FrozenSignalAcquisitionProfiles
     private static SignalAcquisitionProfileDescriptor New(
         string profileId,
         string channelClass,
-        uint sampleRateHz,
-        int latencyMs)
+        uint sampleRateHz)
     {
         if (1_000_000_000 % sampleRateHz != 0)
         {
@@ -80,7 +75,6 @@ public static class FrozenSignalAcquisitionProfiles
             profileId,
             channelClass,
             sampleRateHz,
-            latencyMs * 1_000_000L,
             "Identity@1",
             "Int16Normalized",
             "ProjectTeachingProfile");

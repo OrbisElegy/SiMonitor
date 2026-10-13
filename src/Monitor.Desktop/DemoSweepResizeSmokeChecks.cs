@@ -43,19 +43,19 @@ internal static class DemoSweepResizeSmokeChecks
         {
             for (int step = 0; step < 55; step++) { window.Advance(200_000_000); }
             byte[] narrow = Render(window.Trace, 500);
-            if (window.DisplayStartNs != 5_000_000_000)
+            if (window.DisplayStartNs != 7_000_000_000)
             { throw new InvalidOperationException("Narrow wrap chose the wrong source interval."); }
             byte[] wide = Render(window.Trace, 1000);
-            if (window.DisplayStartNs != 1_000_000_000)
+            if (window.DisplayStartNs != 3_000_000_000)
             { throw new InvalidOperationException("Widening failed to recover available earlier source samples."); }
             int Columns(byte[] pixels, int width) => Enumerable.Range(0, width).Count(x =>
                 Enumerable.Range(0, 120).Any(y => pixels[(y * width + x) * 4 + 1] > 100));
             if (Columns(narrow, 500) < 460 || Columns(wide, 1000) < 960)
             { throw new InvalidOperationException("Resized wrap lost acquired history or joined across the erase gap."); }
-            // At frontier 9s the 200ms gap is x=125..150 at either width.
+            // At frontier 11s the 200ms gap is x=375..400 at either width.
             foreach (var (pixels, width) in new[] { (narrow, 500), (wide, 1000) })
             {
-                if (Enumerable.Range(0, 240).Any(y => pixels[(y * width + 137) * 4 + 1] != 0))
+                if (Enumerable.Range(0, 240).Any(y => pixels[(y * width + 387) * 4 + 1] != 0))
                 { throw new InvalidOperationException("Resize stretched the 200ms erase gap."); }
             }
             Click(window.HoldButton);
@@ -69,7 +69,7 @@ internal static class DemoSweepResizeSmokeChecks
             { throw new InvalidOperationException("Bounded history eviction altered pinned pixels."); }
             Click(window.HoldButton);
             _ = Render(window.Trace, 1000);
-            if (window.DisplayStartNs != 63_000_000_000 || window.SimulationTimeNs != 73_000_000_000)
+            if (window.DisplayStartNs != 65_000_000_000 || window.SimulationTimeNs != 73_000_000_000)
             { throw new InvalidOperationException("Return replayed history instead of joining the resized Live window."); }
         }
         finally { window.Close(); }

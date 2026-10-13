@@ -108,7 +108,7 @@ internal static class InspiratoryPauseSpecifications
             var actual = NativeRecoveryChecks.Verify(() => createGroup(800_000_000),
                 [1_199_999_999, 1_200_000_000, 1_600_000_000, 2_000_000_000, 2_190_000_000,
                  3_200_000_000, 3_600_000_000, 4_000_000_000, 4_800_000_000, 8_000_000_000],
-                1000, 40, 100, 30, name);
+                1000, 40, 100, 40, name);
             var previous = createGroup(0).AdvanceTo(8_000_000_000, 1000, 40, 100);
             short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
                 .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();

@@ -18,11 +18,11 @@ internal static class SignalSampleClockSpecifications
     {
         ProfileVector[] vectors =
         [
-            new("AcqECGMonitor250@1", "ECG-monitor", 250, 40_000_000, 50),
-            new("AcqResp125@1", "IMP-Resp", 125, 80_000_000, 25),
-            new("AcqPleth125@1", "Pleth", 125, 2_000_000_000, 25),
-            new("AcqPressure125@1", "Pressure", 125, 80_000_000, 25),
-            new("AcqCO2_100@1", "CO2", 100, 2_000_000_000, 20),
+            new("AcqECGMonitor250@1", "ECG-monitor", 250, 50),
+            new("AcqResp125@1", "IMP-Resp", 125, 25),
+            new("AcqPleth125@1", "Pleth", 125, 25),
+            new("AcqPressure125@1", "Pressure", 125, 25),
+            new("AcqCO2_100@1", "CO2", 100, 20),
         ];
 
         foreach (ProfileVector vector in vectors)
@@ -31,7 +31,6 @@ internal static class SignalSampleClockSpecifications
                 FrozenSignalAcquisitionProfiles.Get(vector.ProfileId);
             Check.That(profile.ChannelClass == vector.ChannelClass &&
                 profile.SampleRateHz == vector.SampleRateHz &&
-                profile.LatencyNs == vector.LatencyNs &&
                 profile.FilterPrimitive == "Identity@1" &&
                 profile.Quantization == "Int16Normalized" &&
                 profile.EvidenceStatus == "ProjectTeachingProfile",
@@ -160,6 +159,5 @@ internal static class SignalSampleClockSpecifications
         string ProfileId,
         string ChannelClass,
         uint SampleRateHz,
-        long LatencyNs,
         int SamplesPerBlock);
 }

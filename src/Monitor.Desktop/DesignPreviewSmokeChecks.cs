@@ -391,13 +391,13 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Co2TransportDelay.Value = 600; window.Settings.Co2DispersionStep.Value = 150;
             window.RestartSettings();
             for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
-            var live = window.Session; var timer = window.ActiveTimer; long frontier = live.FrontierNs;
+            var live = window.Session; var timer = window.ActiveTimer; long frontier = live.SimulationTimeNs;
             window.SelectPage(2); window.Settings.OpenAdvanced(1);
             void Reset(int group)
             {
                 window.Settings.RespirationGroups.SelectedIndex = group;
                 window.Settings.ResetRespirationPage.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-                Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) && live.FrontierNs == frontier &&
+                Require(ReferenceEquals(live, window.Session) && ReferenceEquals(timer, window.ActiveTimer) && live.SimulationTimeNs == frontier &&
                     window.Settings.RespirationSelection == 2 && window.Settings.RespiratoryRate.Value == 20 && window.Settings.EtCo2Target.Value == 45 &&
                     window.Settings.Status.Text!.Contains("尚未应用", StringComparison.Ordinal), "reset only edits draft and preserves template, vitals and session");
             }
@@ -420,9 +420,9 @@ internal static class DesignPreviewSmokeChecks
             reference.DiscardStartup();
             for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
-            { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "applied reset recovers source with retained template and vitals"); }
+            { Require(window.Session.Samples(channel, 0, reference.SimulationTimeNs).SequenceEqual(reference.Samples(channel, 0, reference.SimulationTimeNs)), "applied reset recovers source with retained template and vitals"); }
             window.Settings.RespirationSelection = 3; window.Settings.RespSignalAmplitude.Value = -400;
-            live = window.Session; timer = window.ActiveTimer; frontier = live.FrontierNs;
+            live = window.Session; timer = window.ActiveTimer; frontier = live.SimulationTimeNs;
             window.Settings.ResetRespirationPage.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Require(!window.Settings.RespSignalAmplitude.IsEnabled && window.Settings.RespSignalAmplitude.Value == 1000 &&
                 ReferenceEquals(live, window.Session), "signal reset retains absent respiration applicability");
@@ -458,9 +458,9 @@ internal static class DesignPreviewSmokeChecks
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                     for (int channel = 0; channel < 7; channel++)
                     {
-                        var actual = window.Session.Samples(channel, 0, expected.FrontierNs);
-                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "CO2 levels match acquired source");
-                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.FrontierNs)) == (channel != 4 || !custom),
+                        var actual = window.Session.Samples(channel, 0, expected.SimulationTimeNs);
+                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.SimulationTimeNs)), "CO2 levels match acquired source");
+                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.SimulationTimeNs)) == (channel != 4 || !custom),
                             "CO2 levels isolate gas channel and restore exact reference ratio");
                     }
                 }
@@ -534,9 +534,9 @@ internal static class DesignPreviewSmokeChecks
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
                     for (int channel = 0; channel < 7; channel++)
                     {
-                        var actual = window.Session.Samples(channel, 0, expected.FrontierNs);
-                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "CO2 timing matches acquired shared model");
-                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.FrontierNs)) ==
+                        var actual = window.Session.Samples(channel, 0, expected.SimulationTimeNs);
+                        Require(actual.SequenceEqual(expected.Samples(channel, 0, expected.SimulationTimeNs)), "CO2 timing matches acquired shared model");
+                        Require(actual.SequenceEqual(original.Samples(channel, 0, expected.SimulationTimeNs)) ==
                             (channel != 4 || pattern == 3 || timing == (125, 250, 200)), "CO2 timing isolates gas channel and restores exact defaults");
                     }
                 }
@@ -602,7 +602,7 @@ internal static class DesignPreviewSmokeChecks
                     original.DiscardStartup();
                     for (int i = 0; i < 240; i++)
                     { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
-                    long end = expected.FrontierNs;
+                    long end = expected.SimulationTimeNs;
                     for (int channel = 0; channel < 7; channel++)
                     {
                         var actual = window.Session.Samples(channel, 0, end);
@@ -654,7 +654,7 @@ internal static class DesignPreviewSmokeChecks
                 var original = new LocalMonitorPreviewSession(baseline, window.Session.Display);
                 original.DiscardStartup();
                 for (int i = 0; i < 200; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); original.Advance(50_000_000); }
-                long end = expected.FrontierNs;
+                long end = expected.SimulationTimeNs;
                 for (int channel = 0; channel < 7; channel++)
                 {
                     Require(window.Session.Samples(channel, 0, end).SequenceEqual(expected.Samples(channel, 0, end)), "RESP signal edits match acquired shared source");
@@ -672,8 +672,8 @@ internal static class DesignPreviewSmokeChecks
             }
             window.Settings.RespSignalAmplitude.Value = 0; window.Settings.RespCardiacArtifact.Value = 0; window.RestartSettings();
             for (int i = 0; i < 160; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
-            Require(window.Session.Samples(1, 0, window.Session.FrontierNs).All(s => s.Value == 0) &&
-                window.Session.Samples(4, 0, window.Session.FrontierNs).Any(s => s.Value > 0), "zero impedance signal is not apnea or absent CO2");
+            Require(window.Session.Samples(1, 0, window.Session.SimulationTimeNs).All(s => s.Value == 0) &&
+                window.Session.Samples(4, 0, window.Session.SimulationTimeNs).Any(s => s.Value > 0), "zero impedance signal is not apnea or absent CO2");
             window.Settings.RespCardiacArtifact.Value = null; live = window.Session; window.RestartSettings();
             Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("心源性干扰", StringComparison.Ordinal), "missing cardiac artifact gives actionable rejection");
             window.Settings.RespCardiacArtifact.Value = 120; window.Settings.RespSignalAmplitude.Value = -400;
@@ -992,7 +992,7 @@ internal static class DesignPreviewSmokeChecks
                 "standalone starts with explicit sound opt-in and truthful development title");
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
-            Require(window.Page == 0 && window.Session.FrontierNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");
+            Require(window.Page == 0 && window.Session.SimulationTimeNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");
             Require(window.MonitorView.NumericTexts[0] == "75" && window.MonitorView.NumericTexts[1] == "---", "sample-derived HR visible, absent optical source not invented");
             VerifyGapAndCalibration(window.MonitorTrace);
             Capture(window, "ui-preview-monitor.png");
@@ -1393,8 +1393,8 @@ internal static class DesignPreviewSmokeChecks
                     var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                     var cached = StylePreviewCatalog.Get(choice, 0, 0);
                     long duration = StylePreviewCatalog.DurationNs(choice);
-                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                        cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                        cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "flutter card uses the selected waveform and its perfusion source");
                     if (choice == 39)
                     { Require(duration == 3_600_000_000, "variable flutter preview spans two complete conduction groups"); }
@@ -1428,7 +1428,7 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "atrial shape preserves sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "atrial shape card is actual selected acquired ECG");
                 Require(EcgTemplateSummary.Describe(pair.Ecg).Contains($"P {(choice is 99 or 101 ? 140 : 100)} ms", StringComparison.Ordinal),
                     "advanced summary reports resolved P duration");
@@ -1464,7 +1464,7 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "ventricular shape preserves sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "ventricular shape card is actual selected acquired ECG");
                 Require(EcgTemplateSummary.Describe(pair.Ecg).Contains($"QRS {(choice is 102 or 104 ? 100 : 80)} ms", StringComparison.Ordinal),
                     "advanced summary reports resolved QRS duration");
@@ -1501,7 +1501,7 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "T contour preserves sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "T contour card is actual selected acquired ECG");
                 if (choice != 0)
                 {
@@ -1540,7 +1540,7 @@ internal static class DesignPreviewSmokeChecks
                 window.Pulse(window.ActiveTimer, 50_000_000);
                 expected.Advance(50_000_000); original.Advance(50_000_000);
             }
-            long end = window.Session.FrontierNs;
+            long end = window.Session.SimulationTimeNs;
             Require(window.Session.Samples(0, 0, end).SequenceEqual(expected.Samples(0, 0, end)) &&
                 !window.Session.Samples(0, 0, end).SequenceEqual(original.Samples(0, 0, end)), "edited contour reaches acquired monitor signal");
             for (int channel = 1; channel < 7; channel++)
@@ -1560,7 +1560,7 @@ internal static class DesignPreviewSmokeChecks
                 targetSource.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); targetSource.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
-                { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(targetSource.Samples(channel, 0, targetSource.FrontierNs)), "selected target retains projected acquisition parity across channels"); }
+                { Require(window.Session.Samples(channel, 0, window.Session.SimulationTimeNs).SequenceEqual(targetSource.Samples(channel, 0, targetSource.SimulationTimeNs)), "selected target retains projected acquisition parity across channels"); }
             }
             editor.Target.SelectedIndex = 0;
             foreach (var lead in editor.ChestLeads) { lead.IsChecked = false; }
@@ -1596,9 +1596,9 @@ internal static class DesignPreviewSmokeChecks
                 Require(pair.Physiology.Pacing == pair.Ecg.Pacing, "monitor and paper select the same pacing mode");
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 var preview = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
-                long from = preview.FrontierNs - StylePreviewCatalog.DurationNs(choice);
+                long from = preview.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice);
                 var projected = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg,
-                    Monitor.Simulation.Physiology.EcgLead.II, from, preview.FrontierNs);
+                    Monitor.Simulation.Physiology.EcgLead.II, from, preview.SimulationTimeNs);
                 Require(choice == 0 || cached.Ecg.SequenceEqual(projected), $"pacing card {choice} and twelve-lead II agree; {cached.Ecg.Length}/{projected.Length}, first mismatch {cached.Ecg.Zip(projected).FirstOrDefault(p => p.First != p.Second)}");
                 for (int i = 0; i < 240; i++) { window.Pulse(window.ActiveTimer, 50_000_000); }
                 window.SelectPage(1);
@@ -1634,7 +1634,7 @@ internal static class DesignPreviewSmokeChecks
                 if (choice is >= 125 and <= 164)
                 {
                     Require(cached.Lead == (choice < 135 ? Monitor.Simulation.Physiology.EcgLead.I : choice < 145 ? Monitor.Simulation.Physiology.EcgLead.V2 : choice < 155 ? Monitor.Simulation.Physiology.EcgLead.V4 : Monitor.Simulation.Physiology.EcgLead.V3), "regional cards identify the affected lead");
-                    long from = source.FrontierNs - StylePreviewCatalog.DurationNs(choice), to = source.FrontierNs;
+                    long from = source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), to = source.SimulationTimeNs;
                     var projected = StylePreviewCatalog.CreateProjectedPreview(pair.Ecg, cached.Lead, from, to);
                     var baseline = StylePreviewCatalog.CreateProjectedPreview(ProjectedEcgDemoConfiguration.Default, cached.Lead, from, to);
                     Require(cached.Ecg.SequenceEqual(projected) && cached.Ecg.Length == 750 &&
@@ -1645,7 +1645,7 @@ internal static class DesignPreviewSmokeChecks
                 else
                 {
                     Require(cached.Lead == Monitor.Simulation.Physiology.EcgLead.II &&
-                        cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                        cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                         "ordinary cards retain sampled monitor II");
                 }
                 if (choice != 0)
@@ -1683,7 +1683,7 @@ internal static class DesignPreviewSmokeChecks
                 source.DiscardStartup();
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); source.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
-                { Require(window.Session.Samples(channel, 0, window.Session.FrontierNs).SequenceEqual(source.Samples(channel, 0, source.FrontierNs)), "edited region reaches shared acquired source"); }
+                { Require(window.Session.Samples(channel, 0, window.Session.SimulationTimeNs).SequenceEqual(source.Samples(channel, 0, source.SimulationTimeNs)), "edited region reaches shared acquired source"); }
                 if (choice >= 135)
                 {
                     foreach (var lead in Enum.GetValues<Monitor.Simulation.Physiology.EcgLead>())
@@ -1723,8 +1723,8 @@ internal static class DesignPreviewSmokeChecks
                 for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); expected.Advance(50_000_000); stage.Advance(50_000_000); }
                 for (int channel = 0; channel < 7; channel++)
                 {
-                    Require(window.Session.Samples(channel, 0, expected.FrontierNs).SequenceEqual(expected.Samples(channel, 0, expected.FrontierNs)), "component editing reaches acquired samples");
-                    if (channel > 0) { Require(expected.Samples(channel, 0, expected.FrontierNs).SequenceEqual(stage.Samples(channel, 0, stage.FrontierNs)), "component editing preserves mechanical and respiratory channels"); }
+                    Require(window.Session.Samples(channel, 0, expected.SimulationTimeNs).SequenceEqual(expected.Samples(channel, 0, expected.SimulationTimeNs)), "component editing reaches acquired samples");
+                    if (channel > 0) { Require(expected.Samples(channel, 0, expected.SimulationTimeNs).SequenceEqual(stage.Samples(channel, 0, stage.SimulationTimeNs)), "component editing preserves mechanical and respiratory channels"); }
                 }
                 live = window.Session; controls.JPoint.Value = null; window.RestartSettings();
                 Require(ReferenceEquals(live, window.Session) && window.Settings.Status.Text!.Contains("ST／T", StringComparison.Ordinal), "incomplete independent components reject atomically");
@@ -1748,7 +1748,7 @@ internal static class DesignPreviewSmokeChecks
             zoneSource.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); zoneSource.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
-            { Require(window.Session.Samples(channel, 0, zoneSource.FrontierNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.FrontierNs)), "zone edits reach shared acquired monitor channels"); }
+            { Require(window.Session.Samples(channel, 0, zoneSource.SimulationTimeNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.SimulationTimeNs)), "zone edits reach shared acquired monitor channels"); }
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 6;
             var acceptedZones = zoneEditor.ReadZones(zonePair.Ecg.Infarction);
             live = window.Session;
@@ -1788,7 +1788,7 @@ internal static class DesignPreviewSmokeChecks
             reference.DiscardStartup();
             for (int i = 0; i < 60; i++) { window.Pulse(window.ActiveTimer, 50_000_000); reference.Advance(50_000_000); }
             for (int channel = 0; channel < 7; channel++)
-            { Require(window.Session.Samples(channel, 0, reference.FrontierNs).SequenceEqual(reference.Samples(channel, 0, reference.FrontierNs)), "all closed regions produce the unmodified electrode-reference acquisition"); }
+            { Require(window.Session.Samples(channel, 0, reference.SimulationTimeNs).SequenceEqual(reference.Samples(channel, 0, reference.SimulationTimeNs)), "all closed regions produce the unmodified electrode-reference acquisition"); }
             live = window.Session;
             foreach (var region in new[] { zoneEditor.IschemiaRegion, zoneEditor.InjuryRegion, zoneEditor.NecrosisRegion })
             {
@@ -1860,7 +1860,7 @@ internal static class DesignPreviewSmokeChecks
                 Require(reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "independent mechanical measurements remain available during fused ECG");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "fusion card contains actual source samples");
                 window.SelectPage(1); Capture(window, $"ui-preview-high-k-fusion-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "fusion paper retains complete twelve-lead record"); window.SelectPage(0);
@@ -1898,7 +1898,7 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "notched P, wide QRS and late U retain sample-derived rates");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "quinidine preview is the selected acquired shape");
                 if (choice != 0)
                 {
@@ -1943,7 +1943,7 @@ internal static class DesignPreviewSmokeChecks
                     reading.PulseRate.Status == WaveformMeasurementStatus.Valid && reading.AbpMean.Status == WaveformMeasurementStatus.Valid,
                     "joined QRS/ST-T preserves measured cardiac and perfusion rates");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0); var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "digitalis card uses actual selected joined contour");
                 if (choice != 0)
                 {
@@ -1987,7 +1987,7 @@ internal static class DesignPreviewSmokeChecks
                     "calcium templates retain sample-derived electrical and mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "calcium card uses actual selected acquired samples");
                 if (choice != 0)
                 {
@@ -2034,7 +2034,7 @@ internal static class DesignPreviewSmokeChecks
                     "low-potassium ECG and mechanical measurements remain sample-derived");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)),
                     "low-potassium card uses selected acquired ECG");
                 if (choice >= 78)
                 {
@@ -2078,7 +2078,7 @@ internal static class DesignPreviewSmokeChecks
                     "repolarization preserves sampled mechanical measurements");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                long end = source.FrontierNs, start = end - StylePreviewCatalog.DurationNs(choice);
+                long end = source.SimulationTimeNs, start = end - StylePreviewCatalog.DurationNs(choice);
                 Require(cached.Ecg.SequenceEqual(source.Samples(0, start, end)) && cached.Abp.SequenceEqual(source.Samples(3, start, end)),
                     "high-T preview uses actual selected source samples");
                 if (choice == 75)
@@ -2180,7 +2180,7 @@ internal static class DesignPreviewSmokeChecks
                     $"sampled flat ECG is stale, P-only is uncountable and PEA retains HR: {choice}/{reading.HeartRate}");
                 Require(noPulse ? reading.PulseRate.Status == WaveformMeasurementStatus.Stale : reading.PulseRate.Status == WaveformMeasurementStatus.Valid,
                     "sampled pulse rate follows mechanical activity independently of ECG");
-                long end = window.Session.FrontierNs, start = end - 3_000_000_000;
+                long end = window.Session.SimulationTimeNs, start = end - 3_000_000_000;
                 foreach (int channel in new[] { 2, 3, 5 })
                 {
                     double[] values = window.Session.Samples(channel, start, end).Select(p => p.Value).ToArray();
@@ -2195,8 +2195,8 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "standstill/PEA cards retain actual electrical and mechanical samples");
                 Require(cached.Ecg.All(p => p.Value == 0) == absent, "only standstill has flat ECG");
                 if (noPulse)
@@ -2239,17 +2239,17 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "AF preview uses actual selected electrical and mechanical samples");
                 if (choice >= 66)
                 {
                     Require(duration == 12_000_000_000, "AF variant preview includes the authored early long-short examples");
                     var reference = DesignPreviewWindow.CreateStylePreview(choice % 2 == 0 ? 6 : 7, 0, 0);
                     while (reference.SimulationTimeNs < source.SimulationTimeNs) { reference.Advance(50_000_000); }
-                    long start = source.FrontierNs - duration, end = source.FrontierNs;
+                    long start = source.SimulationTimeNs - duration, end = source.SimulationTimeNs;
                     Require(cached.Ecg.SequenceEqual(reference.Samples(0, start, end)) == !aberrant,
-                        $"aberrancy changes ECG while mechanical deficit does not: choice={choice}, samples={cached.Ecg.Length}/{reference.Samples(0, start, end).Count()}, frontier={source.FrontierNs}/{reference.FrontierNs}");
+                        $"aberrancy changes ECG while mechanical deficit does not: choice={choice}, samples={cached.Ecg.Length}/{reference.Samples(0, start, end).Count()}, frontier={source.SimulationTimeNs}/{reference.SimulationTimeNs}");
                     Require(cached.Abp.SequenceEqual(reference.Samples(3, start, end)) == !deficit &&
                         source.Samples(2, start, end).SequenceEqual(reference.Samples(2, start, end)) == !deficit,
                         "systemic deficit changes ABP and Pleth independently of aberrancy");
@@ -2299,8 +2299,8 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "preexcitation preview matches selected source and mechanical timing");
                 window.SelectPage(1); Capture(window, $"ui-preview-preexcitation-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "preexcitation has full twelve-lead snapshot");
@@ -2340,8 +2340,8 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "bundle card shows actual selected source samples");
                 if (choice != 0)
                 {
@@ -2398,8 +2398,8 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "PVC cached electrical and weighted mechanical samples match the selected live source");
                 if (choice >= 44)
                 {
@@ -2416,16 +2416,16 @@ internal static class DesignPreviewSmokeChecks
                     int baselineChoice = choice == 50 ? 46 : 2;
                     var baseline = DesignPreviewWindow.CreateStylePreview(baselineChoice, 0, 0);
                     while (baseline.SimulationTimeNs < source.SimulationTimeNs) { baseline.Advance(50_000_000); }
-                    Require(!cached.Ecg.SequenceEqual(baseline.Samples(0, source.FrontierNs - duration, source.FrontierNs)),
+                    Require(!cached.Ecg.SequenceEqual(baseline.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "diverse and R-on-T cards contain their selected morphology/timing");
                     if (choice is 48 or 50 or 51)
                     {
-                        Require(cached.Abp.SequenceEqual(baseline.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        Require(cached.Abp.SequenceEqual(baseline.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "electrical-only variant retains the existing matched mechanical schedule");
                     }
                     if (choice is 49 or 52)
                     {
-                        Require(!cached.Abp.SequenceEqual(baseline.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        Require(!cached.Abp.SequenceEqual(baseline.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "changed coupling or absent short-coupled ejection reaches the pressure preview");
                     }
                     if (choice == 52)
@@ -2479,8 +2479,8 @@ internal static class DesignPreviewSmokeChecks
                 long duration = StylePreviewCatalog.DurationNs(choice);
                 Require(duration == (choice is 4 or 40 or 41 ? 6_200_000_000 : 6_400_000_000),
                     "PAC/PJC previews show two complete early-beat/pause groups");
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "PAC/PJC preview contains actual selected ECG and weighted ejection");
                 if (choice >= 40)
                 {
@@ -2532,16 +2532,16 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "automatic rhythm cached samples match live electrical and perfusion source");
                 if (choice is 34 or 35)
                 {
                     Require(duration == 12_000_000_000, "AIVR preview includes the full sixteen-beat group");
                     var regular = DesignPreviewWindow.CreateStylePreview(33, 0, 0);
                     while (regular.SimulationTimeNs < source.SimulationTimeNs) { regular.Advance(50_000_000); }
-                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                        cached.Abp.SequenceEqual(regular.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                        cached.Abp.SequenceEqual(regular.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "fusion/capture preview differs electrically while retaining existing fixed perfusion");
                 }
                 window.SelectPage(1); Capture(window, $"ui-preview-automatic-{choice}-paper.png");
@@ -2597,19 +2597,19 @@ internal static class DesignPreviewSmokeChecks
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
                 long duration = StylePreviewCatalog.DurationNs(choice);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - duration, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                     "VT preview samples match selected electrical and perfusion source");
                 if (choice > 26)
                 {
                     Require(duration == (choice <= 28 ? 12_000_000_000 : 3_000_000_000), "VT previews cover the full authored morphology group");
                     var regular = DesignPreviewWindow.CreateStylePreview(26, 0, 0);
                     while (regular.SimulationTimeNs < source.SimulationTimeNs) { regular.Advance(50_000_000); }
-                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.FrontierNs - duration, source.FrontierNs)),
+                    Require(!cached.Ecg.SequenceEqual(regular.Samples(0, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                         "long preview actually contains the selected variant");
                     if (choice >= 29)
                     {
-                        Require(cached.Abp.SequenceEqual(regular.Samples(3, source.FrontierNs - duration, source.FrontierNs)),
+                        Require(cached.Abp.SequenceEqual(regular.Samples(3, source.SimulationTimeNs - duration, source.SimulationTimeNs)),
                             "rotating electrical vector does not invert or modulate the fixed perfusion preset");
                     }
                 }
@@ -2647,8 +2647,8 @@ internal static class DesignPreviewSmokeChecks
                     pair.Physiology.SvtLbbb == pair.Ecg.SvtLbbb, "SVT monitor and paper use identical bundle variant");
                 var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                 var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - 3_000_000_000, source.FrontierNs)) &&
-                    cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - 3_000_000_000, source.FrontierNs)),
+                Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - 3_000_000_000, source.SimulationTimeNs)) &&
+                    cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - 3_000_000_000, source.SimulationTimeNs)),
                     "SVT cached electrical and perfusion samples match source");
                 window.SelectPage(1); Capture(window, $"ui-preview-svt-{choice}-paper.png");
                 Require(window.CurrentPaper!.BlockCount == 55, "SVT twelve-lead capture is complete");
@@ -2682,8 +2682,8 @@ internal static class DesignPreviewSmokeChecks
                         "monitor and paper share disorganized pattern without effective ejection");
                     var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
                     var cached = StylePreviewCatalog.Get(choice, 0, 0);
-                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - 3_000_000_000, source.FrontierNs)) &&
-                        cached.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - 3_000_000_000, source.FrontierNs)),
+                    Require(cached.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - 3_000_000_000, source.SimulationTimeNs)) &&
+                        cached.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - 3_000_000_000, source.SimulationTimeNs)),
                         "disorganized preview matches actual electrical and mechanical samples");
                     window.SelectPage(1); Capture(window, $"ui-preview-disorganized-{choice}-paper.png");
                     Require(window.CurrentPaper!.BlockCount == 55, "disorganized twelve-lead capture is complete");
@@ -2745,14 +2745,14 @@ internal static class DesignPreviewSmokeChecks
         Require(count == StylePreviewCatalog.CombinationCount, "catalog covers all current compatible combinations");
         var reference = DesignPreviewWindow.CreateStylePreview(2, 1, 1);
         var cached = StylePreviewCatalog.Get(2, 1, 1);
-        Require(cached.Abp.SequenceEqual(reference.Samples(3, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)) &&
-            cached.Ecg.SequenceEqual(reference.Samples(0, reference.FrontierNs - 3_000_000_000, reference.FrontierNs)), "build-time samples match the actual selected physiology");
+        Require(cached.Abp.SequenceEqual(reference.Samples(3, reference.SimulationTimeNs - 3_000_000_000, reference.SimulationTimeNs)) &&
+            cached.Ecg.SequenceEqual(reference.Samples(0, reference.SimulationTimeNs - 3_000_000_000, reference.SimulationTimeNs)), "build-time samples match the actual selected physiology");
         for (int choice = 6; choice < 10; choice++)
         {
             var atrial = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
             var asset = StylePreviewCatalog.Get(choice, 0, 0);
-            Require(asset.Ecg.SequenceEqual(atrial.Samples(0, atrial.FrontierNs - 3_000_000_000, atrial.FrontierNs)) &&
-                asset.Abp.SequenceEqual(atrial.Samples(3, atrial.FrontierNs - 3_000_000_000, atrial.FrontierNs)), "atrial rhythm cached ECG and pressure match live authoring");
+            Require(asset.Ecg.SequenceEqual(atrial.Samples(0, atrial.SimulationTimeNs - 3_000_000_000, atrial.SimulationTimeNs)) &&
+                asset.Abp.SequenceEqual(atrial.Samples(3, atrial.SimulationTimeNs - 3_000_000_000, atrial.SimulationTimeNs)), "atrial rhythm cached ECG and pressure match live authoring");
             var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
             Require(pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern && pair.Physiology.VentricularConductionRatio == pair.Ecg.VentricularConductionRatio,
                 "monitor and twelve-lead share atrial rhythm and conduction ratio");
@@ -2761,8 +2761,8 @@ internal static class DesignPreviewSmokeChecks
         {
             var source = DesignPreviewWindow.CreateStylePreview(choice, 0, 0);
             var cachedBlock = StylePreviewCatalog.Get(choice, 0, 0);
-            Require(cachedBlock.Ecg.SequenceEqual(source.Samples(0, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)) &&
-                cachedBlock.Abp.SequenceEqual(source.Samples(3, source.FrontierNs - StylePreviewCatalog.DurationNs(choice), source.FrontierNs)), "block previews match actual ECG and ejection waveforms");
+            Require(cachedBlock.Ecg.SequenceEqual(source.Samples(0, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)) &&
+                cachedBlock.Abp.SequenceEqual(source.Samples(3, source.SimulationTimeNs - StylePreviewCatalog.DurationNs(choice), source.SimulationTimeNs)), "block previews match actual ECG and ejection waveforms");
             var pair = DesignPreviewWindow.ResolveStyle(choice, 0, 0);
             Require(pair.Physiology.ConductionPattern == pair.Ecg.ConductionPattern && pair.Physiology.ConductedBeatsPerGroup == pair.Ecg.ConductedBeatsPerGroup &&
                 pair.Physiology.IndependentVentricularPeriodMilliseconds == pair.Ecg.IndependentVentricularPeriodMilliseconds,
@@ -2861,7 +2861,7 @@ internal static class DesignPreviewSmokeChecks
         for (int step = 0; step < 15; step++)
         {
             byte[] before = Raster(trace, 1000, 700);
-            int right = (int)(132 + 850 * session.PresentationFrontierNs(0) / 20_000_000_000d) - 3;
+            int right = (int)(132 + 850 * session.SimulationTimeNs / 20_000_000_000d) - 3;
             session.Advance(200_000_000);
             byte[] after = Raster(trace, 1000, 700);
             foreach (int row in Enumerable.Range(0, slots.Length).Where(i => slots[i].Channel != 0))
@@ -2870,7 +2870,7 @@ internal static class DesignPreviewSmokeChecks
                     {
                         int offset = (y * 1000 + x) * 4;
                         Require(before.AsSpan(offset, 4).SequenceEqual(after.AsSpan(offset, 4)),
-                            $"new slow-sweep CO2/ABP/PA samples never repaint visible slopes: step {step}, row {row}, pixel {x}/{y}, frontier {session.FrontierNs}, source end {session.Blocks[^1].StartSimTimeNs + 200_000_000}");
+                            $"new slow-sweep CO2/ABP/PA samples never repaint visible slopes: step {step}, row {row}, pixel {x}/{y}, frontier {session.SimulationTimeNs}, source end {session.Blocks[^1].StartSimTimeNs + 200_000_000}");
                     }
         }
     }
@@ -2887,7 +2887,7 @@ internal static class DesignPreviewSmokeChecks
         Require(Math.Abs((inkRows[0] + inkRows[^1]) / 2d - baselineY) < 2,
             "monitor calibration is centered on baseline, from minus to plus 0.5mV");
         data = Raster(trace, 800, 600);
-        double phase = trace.Session.PresentationFrontierNs(0) % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
+        double phase = trace.Session.SimulationTimeNs % MonitorDisplayConfiguration.SweepDurationNs / (double)MonitorDisplayConfiguration.SweepDurationNs;
         int headX = (int)(132 + gutter + phase * (650 - gutter));
         Require(Enumerable.Range(10, 95).Count(y => Green(headX, y) || Green(headX + 1, y)) < 12, "no vertical sweep cursor");
         Require(!Enumerable.Range(10, 95).Any(y => Green(headX + 4, y)), "erase gap contains no trace");

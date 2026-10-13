@@ -19,10 +19,10 @@ internal static class PulmonaryArterySpecifications
         new(nameof(PulmonaryInvalidPlansAndLateFailuresRejectAtomically), PulmonaryInvalidPlansAndLateFailuresRejectAtomically),
     ];
 
-    private static IReadOnlyList<PhysiologySignalSample> Samples(PulmonaryArteryPulsePlan pulse)
+    private static IReadOnlyList<PhysiologySignalSample> Samples(PulmonaryArteryPulsePlan pulse, long toExclusiveSimTimeNs = 1_600_000_000)
     {
         var channel = pulse.CreateChannel(Timeline, Pa, 0);
-        return PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands).GenerateBefore(1_600_000_000, 200, 100);
+        return PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, channel.Bands).GenerateBefore(toExclusiveSimTimeNs, 225, 100);
     }
 
     private static void PulmonarySeedHasIndependentPeakNotchAndTail()
@@ -53,14 +53,14 @@ internal static class PulmonaryArterySpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Pa, 1, 1, 1, 0, 16,
-        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
+        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
          Pulse.CreateChannel(Timeline, Pa, 3)]);
 
     private static void PulmonaryNativePressureSurvivesWireRecovery()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(271_999_999, 68, 1, 100).Count == 0 && boundary.AdvanceTo(272_000_000, 1, 1, 100).Count == 1,
-            "PA source retains native125Hz and80ms processing delay");
+        Check.That(boundary.AdvanceTo(196_000_000, 49, 1, 100).Count == 0 && boundary.AdvanceTo(196_000_001, 1, 1, 100).Count == 1,
+            "PA source retains native125Hz without an acquisition delay");
         var expected = Group().AdvanceTo(1_800_000_000, 450, 9, 100);
         var group = Group();
         List<byte[]> actual = [];
@@ -70,11 +70,11 @@ internal static class PulmonaryArterySpecifications
             group = PhysiologyWaveformGroup.Restore(group.CaptureState());
         }
         Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
-            "active PA pulse and processing delay preserve exact mixed ECG wire bytes across restore");
+            "active PA pulses preserve exact mixed ECG wire bytes across restore");
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Pa)).ToArray();
         Check.That(planes.All(plane => plane.ScaleNumerator == 1 && plane.ScaleDenominator == 100 && plane.OffsetNumerator == 10 &&
             plane.OffsetDenominator == 1 && plane.SampleRateNumerator == 125) &&
-            planes.SelectMany(plane => plane.Samples).SequenceEqual(Samples(Pulse).Select(sample => sample.NormalizedValue)),
+            planes.SelectMany(plane => plane.Samples).SequenceEqual(Samples(Pulse, 1_800_000_000).Select(sample => sample.NormalizedValue)),
             "PA wire pressure is its own10mmHg baseline plus hundredth-mmHg increments");
     }
 
@@ -93,6 +93,6 @@ internal static class PulmonaryArterySpecifications
         bool limited = false;
         try { group.AdvanceTo(1_800_000_000, 450, 1, 100); }
         catch (PhysiologyWaveformGroupException exception) { limited = exception.ReasonCode == "PhysiologyGroup.BlockLimitExceeded"; }
-        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late failure preserves both source and delay cursors");
+        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late failure preserves source and recording cursors");
     }
 }

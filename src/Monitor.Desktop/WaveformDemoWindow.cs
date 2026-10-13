@@ -202,7 +202,6 @@ internal sealed class WaveformDemoWindow : Window
     private bool _closed;
     private long _lastTick;
     internal long LiveFrontierNs { get; private set; }
-    private long PresentationLatencyNs => _projected ? 240_000_000 : 2_200_000_000;
     private readonly TextBlock _runStatus = new();
     internal Button RunButton { get; } = new() { Content = "连续扫屏" };
     internal DispatcherTimer? ActiveTimer => _timer;
@@ -242,15 +241,15 @@ internal sealed class WaveformDemoWindow : Window
         Height = projected ? 900 : physiology ? 700 : 520;
         StackPanel panel = new() { Margin = new Thickness(16), Spacing = 12 };
         panel.Children.Add(new TextBlock { Text = projected ? "电极模型示意：12 导联均由电极电位投影；非已验证正常成人预设，无屏幕毫米标定。" : physiology ? "教材约束的单导联参考：ECG 每计数 1 μV；Resp、Pleth 为相对量。非验证预设，无屏幕毫米标定。" : "合成周期信号，非生理模型；纵轴为原始计数 ±1000，无物理标定。" });
-        panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz／40 ms 延迟；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "第一行 ECG（绿）250 Hz / 40 ms；第二行 Resp（黄）125 Hz / 80 ms；第三行 Pleth（青）125 Hz / 2 s。延迟为采集处理延迟。" : "上：ECG 采集档 250 Hz / 40 ms 延迟；下：Pleth 采集档 125 Hz / 2 s 延迟。" });
+        panel.Children.Add(new TextBlock { Text = projected ? "同步监护采样 250 Hz；每计数 1 μV。此视图为连续监护扫屏，不是诊断型 10 s 记录。" : physiology ? "第一行 ECG（绿）250 Hz；第二行 Resp（黄）125 Hz；第三行 Pleth（青）125 Hz。各通道沿同一源时间采样。" : "上：ECG 采集档 250 Hz；下：Pleth 采集档 125 Hz。" });
         if (_physiology)
         {
-            panel.Children.Add(new TextBlock { Text = "第四行 ABP（红）：125 Hz / 80 ms；固定压力尺度 0–160 mmHg。按实际样本的比例与偏移换算压力，未计算 SYS/DIA/MAP。" });
-            panel.Children.Add(new TextBlock { Text = "第五行 CO₂（白）：100 Hz / 2 s；固定尺度 0–80 mmHg。由呼气事件驱动，下一吸气触发下降，管路滞后另计；未计算 EtCO₂ 或 RR-CO₂。" });
+            panel.Children.Add(new TextBlock { Text = "第四行 ABP（红）：125 Hz；固定压力尺度 0–160 mmHg。按实际样本的比例与偏移换算压力，未计算 SYS/DIA/MAP。" });
+            panel.Children.Add(new TextBlock { Text = "第五行 CO₂（白）：100 Hz；固定尺度 0–80 mmHg。由呼气事件驱动，下一吸气触发下降，管路滞后另计；未计算 EtCO₂ 或 RR-CO₂。" });
             panel.Children.Add(new TextBlock { Text = "潮式／间停示例：深度序列驱动CO₂储库响应；深呼吸后浓度滞后下降，浅呼吸/暂停时储库回升。无呼气时无新呼气末值；输入呼气末及平台值在潮式／间停模式中为参考值。Resp计数幅度仅为信号标度，不直接当作潮气量。" });
-            panel.Children.Add(new TextBlock { Text = "第六行 PA（紫红）：125 Hz / 80 ms；固定尺度 0–40 mmHg。使用独立肺动脉压参数，未计算 PAP SYS/DIA/MEAN。" });
-            panel.Children.Add(new TextBlock { Text = "第七行 CVP（橙）：125 Hz / 80 ms；固定尺度 −5–15 mmHg。a/c/v 波与 x/y 下降，基线 6 mmHg，吸气压力变化 −1 mmHg；未计算平均 CVP。" });
-            panel.Children.Add(new TextBlock { Text = "Pleth、ABP、PA 由机械搏动触发；示意电机械延迟 80 ms，传播延迟 Pleth/ABP 80 ms、PA 40 ms，处理延迟另计。七通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
+            panel.Children.Add(new TextBlock { Text = "第六行 PA（紫红）：125 Hz；固定尺度 0–40 mmHg。使用独立肺动脉压参数，未计算 PAP SYS/DIA/MEAN。" });
+            panel.Children.Add(new TextBlock { Text = "第七行 CVP（橙）：125 Hz；固定尺度 −5–15 mmHg。a/c/v 波与 x/y 下降，基线 6 mmHg，吸气压力变化 −1 mmHg；未计算平均 CVP。" });
+            panel.Children.Add(new TextBlock { Text = "Pleth、ABP、PA 由机械搏动触发；示意电机械延迟 80 ms，传播延迟 Pleth/ABP 80 ms、PA 40 ms。七通道共用源时间；不显示估计的 SpO₂ 或脉率。" });
         }
         panel.Children.Add(new TextBlock { Text = "共享块等待全部通道齐备；横向速度固定为 125 逻辑像素/秒，1000 像素对应 8 秒。拉宽窗口显示更多时间，波形不拉伸。" });
         panel.Children.Add(new TextBlock { Text = "演示擦除间隙 200 ms；可见时间随绘图区宽度变化，最多 60 秒。冻结画面保留原时间范围。" });
@@ -527,7 +526,7 @@ internal sealed class WaveformDemoWindow : Window
             settings.Children.Add(ApplyBreathButton);
             foreach (Control item in settings.Children) { item.Margin = new Thickness(0, 0, 8, 8); }
             panel.Children.Add(settings);
-            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。仅胸廓努力：保留 Resp/CVP 呼吸分量，CO₂ 保持配置基线；无呼吸分量：停止胸廓周期，心源伪差和心搏仍可继续。先完成次数可填 1～100（仅用于后两种状态），届时连续改变源状态并保留 CO₂ 尾部；留空则从零采用所选状态。设置先完成次数后，还可填状态持续周期数 1～100，届时恢复正常呼吸；留空不恢复。此为信号源状态，不是测得的呼吸暂停。周期 1000–10000 ms；吸气末停顿包含在吸气总时长内，须 ≥0 且短于吸气总时长，0 关闭。呼气末停顿包含在呼气总时长内，须 ≥0 且短于呼气总时长，保持 Resp 和 CVP 呼吸分量的基线。两种停顿均不改变 CO₂ 时程。下降时长不超过吸气，死腔与上升时长之和须短于呼气；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。Resp 心源伪差幅度 −200～200，0 关闭；随心搏叠加，不能据此计为有效呼吸。CO₂ 基线和呼气末目标为 0～80 mmHg，平台起始位于两者之间（精确到 0.01）。各时长须为正整数。CO₂ 管路滞后可填 0～5000 ms，独立于 2 秒采集处理延迟。展宽步长 0～500 ms，0 关闭；三路加权示意会额外产生一个步长的平均滞后。" });
+            panel.Children.Add(new TextBlock { Text = "应用后暂停并从零生成，清空实时及固定画面。仅胸廓努力：保留 Resp/CVP 呼吸分量，CO₂ 保持配置基线；无呼吸分量：停止胸廓周期，心源伪差和心搏仍可继续。先完成次数可填 1～100（仅用于后两种状态），届时连续改变源状态并保留 CO₂ 尾部；留空则从零采用所选状态。设置先完成次数后，还可填状态持续周期数 1～100，届时恢复正常呼吸；留空不恢复。此为信号源状态，不是测得的呼吸暂停。周期 1000–10000 ms；吸气末停顿包含在吸气总时长内，须 ≥0 且短于吸气总时长，0 关闭。呼气末停顿包含在呼气总时长内，须 ≥0 且短于呼气总时长，保持 Resp 和 CVP 呼吸分量的基线。两种停顿均不改变 CO₂ 时程。下降时长不超过吸气，死腔与上升时长之和须短于呼气；幅度 −1000～1000，仅改变 Resp，零幅度不代表气流停止。Resp 心源伪差幅度 −200～200，0 关闭；随心搏叠加，不能据此计为有效呼吸。CO₂ 基线和呼气末目标为 0～80 mmHg，平台起始位于两者之间（精确到 0.01）。各时长须为正整数。CO₂ 管路滞后可填 0～5000 ms。展宽步长 0～500 ms，0 关闭；三路加权示意会额外产生一个步长的平均滞后。" });
             panel.Children.Add(_activeBreathConfiguration);
             panel.Children.Add(BreathConfigurationStatus);
         }
@@ -698,7 +697,7 @@ internal sealed class WaveformDemoWindow : Window
         _timer.Start();
         RunButton.Content = "暂停扫屏";
         StepButton.IsEnabled = false;
-        _runStatus.Text = "连续扫屏：约 60 帧／秒；缓冲完整数据块后逐步显示，长时间卡顿不追赶。";
+        _runStatus.Text = "连续扫屏：约 60 帧／秒；按源时间显示已完成数据块，长时间卡顿不追赶。";
     }
 
     private void OnTick(object? sender, EventArgs args)
@@ -719,7 +718,7 @@ internal sealed class WaveformDemoWindow : Window
             while (deltaNs > 0)
             {
                 long chunk = Math.Min(deltaNs, DemoFrameTiming.MaximumChunkNs);
-                Advance(chunk, progressive: true);
+                Advance(chunk);
                 deltaNs -= chunk;
             }
         }
@@ -744,7 +743,7 @@ internal sealed class WaveformDemoWindow : Window
         _runStatus.Text = "扫屏已暂停；可手动步进。";
     }
 
-    internal void Advance(long deltaNs, bool progressive = false)
+    internal void Advance(long deltaNs)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(deltaNs);
         long next = checked(SimulationTimeNs + deltaNs);
@@ -754,10 +753,7 @@ internal sealed class WaveformDemoWindow : Window
         IReadOnlyList<byte[]> wires = electrodeTrial is not null ? electrodeTrial.AdvanceTo(next, 50, 1, 100) : eventTrial is not null ? eventTrial.AdvanceTo(next, 50, 1, 100) : trial!.AdvanceTo(next, 50, 1);
         WaveformEnvelope[] blocks = _blocks.Concat(wires
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes))).TakeLast(DemoSweepLayout.RetainedBlockCount).ToArray();
-        long frontier = blocks.Length == 0 ? 0 : progressive
-            ? Math.Max(LiveFrontierNs, Math.Min(blocks[^1].StartSimTimeNs + 200_000_000,
-                Math.Max(0, next - PresentationLatencyNs)))
-            : blocks[^1].StartSimTimeNs + 200_000_000;
+        long frontier = next;
         RawTrace? control = IsHeld ? null : new(blocks, _physiology, frontier, _projected);
         if (trial is not null) { _source = trial; }
         if (eventTrial is not null) { _physiologySource = eventTrial; }
@@ -1447,12 +1443,12 @@ internal sealed class WaveformDemoWindow : Window
         long[] table = pulse
             ? [0, 0, 0, 1000 * FixedPointMath.Q32One, -500 * FixedPointMath.Q32One, 0, 0, 0]
             : [0, 1000 * FixedPointMath.Q32One, 0, -1000 * FixedPointMath.Q32One];
-        PeriodicWaveformChannelPlan Channel(Guid id, string profile, int capacity, ulong increment) => new(
+        PeriodicWaveformChannelPlan Channel(Guid id, string profile, ulong increment) => new(
             new(profile, 1, 0, 0, increment, table),
-            new(id, profile, 1, 1, 0, 1), capacity, 0);
+            new(id, profile, 1, 1, 0, 1), 0);
         return PeriodicWaveformGroup.Start(Ecg, Pleth, 1, 1, 0, 16,
-            [Channel(Ecg, "AcqECGMonitor250@1", 10, 0x0100000000000000),
-             Channel(Pleth, "AcqPleth125@1", 250, 0x0200000000000000)]);
+            [Channel(Ecg, "AcqECGMonitor250@1", 0x0100000000000000),
+             Channel(Pleth, "AcqPleth125@1", 0x0200000000000000)]);
     }
 
     private sealed class RawTrace : Control

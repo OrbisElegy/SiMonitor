@@ -92,14 +92,14 @@ internal static class CapnogramSpecifications
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Co2, 1, 1, 1, 0, 40,
-        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
+        [new(Timeline, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
          Plan.CreateChannel(Timeline, Co2, 0)]);
 
     private static void CapnogramNativeBlocksPreserveActiveFallAcrossRestore()
     {
         var boundary = Group();
-        Check.That(boundary.AdvanceTo(2_189_999_999, 548, 1, 100).Count == 0 &&
-            boundary.AdvanceTo(2_190_000_000, 1, 1, 100).Count == 1, "source phase timing does not bypass two-second CO2 processing delay");
+        Check.That(boundary.AdvanceTo(196_000_000, 49, 1, 100).Count == 0 &&
+            boundary.AdvanceTo(196_000_001, 1, 1, 100).Count == 1, "source phase timing is preserved without an additional acquisition delay");
         var expected = Group().AdvanceTo(6_000_000_000, 1500, 30, 100);
         var group = Group();
         List<byte[]> actual = [];
@@ -112,7 +112,7 @@ internal static class CapnogramSpecifications
             "mixed ECG/CO2 wire bytes and active prior-expiration fall survive split/restore");
         var planes = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Co2)).ToArray();
         Check.That(planes.All(plane => plane.ScaleDenominator == 100 && plane.OffsetNumerator == 5 && plane.SampleRateNumerator == 100) &&
-            planes.SelectMany(plane => plane.Samples).SequenceEqual(Source().GenerateBefore(4_000_000_000, 400, 100).Select(frame => frame.NormalizedValue)),
+            planes.SelectMany(plane => plane.Samples).SequenceEqual(Source().GenerateBefore(6_000_000_000, 600, 100).Select(frame => frame.NormalizedValue)),
             "encoded samples match the native source while preserving CO2 pressure units");
     }
 

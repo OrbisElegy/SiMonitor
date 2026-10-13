@@ -49,7 +49,10 @@ internal static class DeepOxygenationSmokeChecks
                 view.RefreshNumericHighlights(0);
                 window.Settings.Sound.UpdateAlarm(view.HighestNotice, window.Settings.Alerts.Timing, measurement: snapshot);
                 long time = session.SimulationTimeNs;
-                if (time is >= 8_000_000_000 and < 14_000_000_000 || time is >= 30_000_000_000 and < 34_000_000_000)
+                // Mechanical activity stops at 12 s and resumes at 24 s.
+                // Observe clean four-second optical windows before the target
+                // starts rising at 32 s; no acquisition wait shifts these times.
+                if (time is >= 8_000_000_000 and < 12_000_000_000 || time is >= 28_000_000_000 and < 32_000_000_000)
                 {
                     Require(snapshot.SpO2.Status == WaveformMeasurementStatus.Valid && snapshot.SpO2.SaturationMilliPercent < 45000 &&
                         int.TryParse(view.NumericTexts[1], out int numeric) && numeric < 45 &&
@@ -58,9 +61,9 @@ internal static class DeepOxygenationSmokeChecks
                         (LiveMonitorView.NumericBackground(view.NumericBlocks[2]) as ISolidColorBrush)?.Color == Color.Parse("#ffb51f2c"),
                         "deep paired optics drive number, critical banner, red highlight and sound request");
                     deep = true;
-                    recoveredLow |= time >= 30_000_000_000;
+                    recoveredLow |= time >= 28_000_000_000;
                 }
-                if (time is >= 18_000_000_000 and < 26_000_000_000)
+                if (time is >= 18_000_000_000 and < 24_000_000_000)
                 {
                     Require(view.NumericTexts[1] == "---" && snapshot.SpO2.Status == WaveformMeasurementStatus.PoorSignal &&
                         view.ActiveNotices.Any(n => n.Text == "SpO₂信号质量不足") &&

@@ -197,7 +197,7 @@ internal static class OxygenationTransportSpecifications
             large.Advance(250_000_000);
             for (int sub = 0; sub < 10; sub++) { small.Advance(25_000_000); }
         }
-        Check.That(small.Measurements == large.Measurements && small.FrontierNs == large.FrontierNs &&
+        Check.That(small.Measurements == large.Measurements && small.SimulationTimeNs == large.SimulationTimeNs &&
             small.Blocks.SelectMany(b => b.Planes.SelectMany(p => p.Samples)).SequenceEqual(large.Blocks.SelectMany(b => b.Planes.SelectMany(p => p.Samples))),
             "UI chunk size does not change original-time oxygenation, measurements or display waveforms");
         var reading = small.Measurements!;
@@ -212,20 +212,20 @@ internal static class OxygenationTransportSpecifications
         var probe = new ProbeOxygenation { AvailableThroughNs = 100_000_000 };
         var preview = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true, oxygenation: probe);
         var baseline = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true, 98000);
-        for (int step = 0; step < 43; step++) { preview.Advance(50_000_000); baseline.Advance(50_000_000); }
+        for (int step = 0; step < 2; step++) { preview.Advance(50_000_000); baseline.Advance(50_000_000); }
         long before = preview.SimulationTimeNs;
         ulong revision = preview.DataRevision;
-        var presented = Enumerable.Range(0, 7).Select(channel => preview.PresentedSamples(channel, 0, before).ToArray()).ToArray();
+        var presented = Enumerable.Range(0, 7).Select(channel => preview.Samples(channel, 0, before).ToArray()).ToArray();
         Reject(() => preview.Advance(50_000_000));
         Check.That(preview.SimulationTimeNs == before && preview.Blocks.Count == 0 && preview.DataRevision == revision &&
-            Enumerable.Range(0, 7).All(channel => preview.PresentedSamples(channel, 0, before + 50_000_000).SequenceEqual(presented[channel])),
-            "missing old oxygen sample rejects the acquisition chunk before its source cursor commits");
+            Enumerable.Range(0, 7).All(channel => preview.Samples(channel, 0, before + 50_000_000).SequenceEqual(presented[channel])),
+            "missing current oxygen sample rejects the acquisition chunk before its source cursor commits");
         probe.AvailableThroughNs = long.MaxValue;
         preview.Advance(50_000_000);
         baseline.Advance(50_000_000);
         Check.That(preview.Measurements == baseline.Measurements && preview.Blocks.Count == baseline.Blocks.Count && preview.DataRevision == baseline.DataRevision &&
-            Enumerable.Range(0, 7).All(channel => preview.PresentedSamples(channel, 0, preview.SimulationTimeNs)
-                .SequenceEqual(baseline.PresentedSamples(channel, 0, baseline.SimulationTimeNs))),
+            Enumerable.Range(0, 7).All(channel => preview.Samples(channel, 0, preview.SimulationTimeNs)
+                .SequenceEqual(baseline.Samples(channel, 0, baseline.SimulationTimeNs))),
             "restoring source history lets the identical acquisition chunk retry");
     }
 

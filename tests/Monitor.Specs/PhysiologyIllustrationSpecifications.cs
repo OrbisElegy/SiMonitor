@@ -11,7 +11,8 @@ namespace Monitor.Specs;
 internal static class PhysiologyIllustrationSpecifications
 {
     // Captured from632acca before the refactor: concatenate returned raw wire
-    // envelopes from40 advances of200ms (30 completed blocks after delay).
+    // envelopes for the first six seconds of source time (30 complete blocks).
+    // These same source windows are now available without the former acquisition wait.
     // SVT/VT/1:1 flutter and AAR/AJR/AIVR goldens reflect their documented
     // filling corrections; other fixtures retain the pre-refactor outputs.
     // CVP now encodes absolute pressure; normalize only that representation back
@@ -67,7 +68,7 @@ internal static class PhysiologyIllustrationSpecifications
             var source = PhysiologyDemoSource.Create(item.Configuration);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             int count = 0;
-            for (long time = 200_000_000; time <= 8_000_000_000; time += 200_000_000)
+            for (long time = 200_000_000; time <= 6_000_000_000; time += 200_000_000)
                 foreach (byte[] wire in source.AdvanceTo(time, 50, 1, 100))
                 {
                     var envelope = WaveformEnvelopeCodec.Decode(wire);

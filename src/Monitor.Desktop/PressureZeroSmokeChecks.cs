@@ -18,7 +18,7 @@ internal static class PressureZeroSmokeChecks
             var normal = PhysiologyDemoSource.Create(config);
             var measured = PhysiologyDemoSource.Create(config, offsets);
             int blocks = 0;
-            for (int step = 1; step <= 40; step++)
+            for (int step = 1; step <= 30; step++)
             {
                 var expected = normal.AdvanceTo(step * 200_000_000L, 50, 1, 100);
                 var actual = measured.AdvanceTo(step * 200_000_000L, 50, 1, 100);

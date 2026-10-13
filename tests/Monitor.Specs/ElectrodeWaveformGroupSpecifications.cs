@@ -18,7 +18,7 @@ internal static class ElectrodeWaveformGroupSpecifications
             new EventWaveformBand[] { new(PhysiologyCycleEventKind.VentricularElectrical, index * 1_000_000, 80_000_000,
                 new long[] { 0, (index + 1) * 100 * Q + 1, -index * 10 * Q, 0 }) })).ToArray();
     private static ElectrodeChannelPlan[] Channels() => Enum.GetValues<EcgLead>().Select(lead =>
-        new ElectrodeChannelPlan(lead, Guid.Parse($"00000000-0000-4000-8000-{12 - (int)lead:D12}"), 10, (uint)lead + 1)).ToArray();
+        new ElectrodeChannelPlan(lead, Guid.Parse($"00000000-0000-4000-8000-{12 - (int)lead:D12}"), (uint)lead + 1)).ToArray();
     private static ElectrodeWaveformGroup Start(bool reverse = false) => ElectrodeWaveformGroup.Start(
         Session, Instance, 1, 7, 1, 0, 32, Plan, Electrodes(), reverse ? Channels().Reverse().ToArray() : Channels());
     public static Specification[] All =>
@@ -41,8 +41,8 @@ internal static class ElectrodeWaveformGroupSpecifications
     private static void ProjectedBlocksRespectAvailabilityAndLeadBinding()
     {
         var source = Start();
-        Check.That(source.AdvanceTo(235_999_999, 59, 1, 100).Count == 0, "last 196ms source sample waits for 236ms availability");
-        var block = WaveformEnvelopeCodec.Decode(source.AdvanceTo(236_000_000, 1, 1, 100).Single());
+        Check.That(source.AdvanceTo(196_000_000, 49, 1, 100).Count == 0, "recording receives the 196ms sample immediately after its source tick");
+        var block = WaveformEnvelopeCodec.Decode(source.AdvanceTo(196_000_001, 1, 1, 100).Single());
         Check.That(block.Planes.Count == 12 && block.StartSimTimeNs == 0, "one shared block contains all twelve leads at the same origin");
         var expected = ElectrodeSignalGenerator.Start(Plan, "AcqECGMonitor250@1", 7, Electrodes()).GenerateBefore(200_000_000, 50, 100);
         foreach (var binding in Channels())
@@ -74,7 +74,7 @@ internal static class ElectrodeWaveformGroupSpecifications
         var source = Start();
         string before = Snapshot(source);
         Reject(() => source.AdvanceTo(600_000_000, 150, 1, 100), "ElectrodeGroup.BlockLimitExceeded");
-        Check.That(Snapshot(source) == before, "late output limit failure rolls back generator, all delay lines and assembler");
+        Check.That(Snapshot(source) == before, "late output limit failure rolls back generator and recording assembler");
         bool cancelled = false;
         try { _ = source.AdvanceTo(200_000_000, 50, 1, 100, new CancellationToken(true)); }
         catch (OperationCanceledException) { cancelled = true; }
@@ -86,17 +86,18 @@ internal static class ElectrodeWaveformGroupSpecifications
     private static void ProjectedCheckpointRechecksSamplesAndBindings()
     {
         var source = Start();
-        _ = source.AdvanceTo(200_000_000, 50, 1, 100);
+        _ = source.AdvanceTo(100_000_000, 25, 1, 100);
         var state = source.CaptureState();
         var channels = state.Channels.ToArray();
-        var pending = channels[0].Delay.PendingSamples.ToArray();
+        var planes = state.Assembler.Planes.ToArray();
+        var pending = planes[0].PendingSamples.ToArray();
         pending[0] = pending[0] with { NormalizedValue = 12345 };
-        channels[0] = channels[0] with { Delay = channels[0].Delay with { PendingSamples = pending } };
-        Reject(() => ElectrodeWaveformGroup.Restore(state with { Channels = channels }), "ElectrodeGroup.InvalidCheckpoint");
+        planes[0] = planes[0] with { PendingSamples = pending };
+        Reject(() => ElectrodeWaveformGroup.Restore(state with { Assembler = state.Assembler with { Planes = planes } }), "ElectrodeGroup.InvalidCheckpoint");
         channels = state.Channels.ToArray();
         channels[0] = channels[0] with { Lead = channels[1].Lead };
         Reject(() => ElectrodeWaveformGroup.Restore(state with { Channels = channels }), "ElectrodeGroup.InvalidCheckpoint");
-        var planes = state.Assembler.Planes.ToArray();
+        planes = state.Assembler.Planes.ToArray();
         pending = planes[0].PendingSamples.ToArray();
         pending[0] = pending[0] with { QualityFlags = 999 };
         planes[0] = planes[0] with { PendingSamples = pending };

@@ -11,12 +11,12 @@
 
 | 层 | 输入 | 输出及责任 |
 | --- | --- | --- |
-| Measurements | 已采集、编码的 `WaveformEnvelope` | 实测数值、质量、因果确认事件；不读取生成器目标或历史显示 |
+| Measurements | 即时采样批次或已编码的 `WaveformEnvelope` | 实测数值、质量、因果确认事件；不读取生成器目标或历史显示 |
 | Application.Presentation | 实测快照、当前策略、记录和几何输入 | 通知投影、工作请求、完整显示快照、记录交互 |
 | Domain.Presentation | 显式时钟、连续性状态、记录坐标、比例 | 确定性的扫线状态、几何与手工测量计算 |
 | Infrastructure.Presentation | 受信任的进程内请求和显示对象 | 后台任务承载、SVG 输出、SVG 输入适配 |
 
-典型实时调用顺序是：采集包 → `LiveWaveformMeasurements.Consume` → 数值/提示/声音意图，
+典型实时调用顺序是：源采样 → `LiveWaveformMeasurements.ConsumeSamples` → 数值/提示/声音意图，
 同时采集历史 → 扫线状态和重建请求 → worker → display gate → 当前显示组合。
 记录回看通过独立的归档绑定和 study view；回看不能重新喂入实时测量器产生提示音。
 
@@ -97,6 +97,12 @@ LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire,
     out IReadOnlyList<DetectedEcgBeat> detectedBeats,
     out IReadOnlyList<DetectedPlethPulse> detectedPulses,
     out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents);
+LiveMeasurementSnapshot ConsumeSamples(IReadOnlyList<WaveformEnvelope> channelBlocks,
+    long asOfSampleTimeNs, out IReadOnlyList<DetectedEcgBeat> detectedBeats,
+    out IReadOnlyList<DetectedPlethPulse> detectedPulses,
+    out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents,
+    out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents,
+    EcgPacingEvidence? pacingEvidence = null);
 LiveMeasurementSnapshot Read(long asOfSampleTimeNs);
 LiveWaveformMeasurements.Checkpoint Capture();
 static LiveWaveformMeasurements Restore(LiveWaveformMeasurements.Checkpoint checkpoint);
@@ -109,6 +115,11 @@ static LiveWaveformMeasurements Restore(LiveWaveformMeasurements.Checkpoint chec
 `Consume` 要求包长为 200 ms。红光与红外通道必须同时存在或同时缺省；存在时，PLETH
 必须与红光具有相同首样本索引和样本数。缺少两路光学数据会重置光学采集测量，
 而非沿用上一次 SpO₂。`SampleTimeNs` 为包起点加持续时间减 1 ns。
+
+`ConsumeSamples` 接受当前推进中有新样本的原生采样率通道，各 envelope 只包含一个
+监护通道；PLETH 可同时携带配对红光／红外平面。没有新样本的通道省略，未出现新 PLETH
+不重置既有光学窗口。帧结束可能位于不同通道的采样点之间，批次只允许实际样本时间不晚于
+`asOfSampleTimeNs`，查询时间不得倒退；返回的 `SampleTimeNs` 等于该查询时间。
 
 聚合器先复制各测量器状态，全部通道消费和读取成功后才替换状态、输出事件。
 因此单包失败不会发布半更新的数值或一次性事件；调用方应串行消费。
@@ -200,22 +211,32 @@ internal；公开边界是 `EcgHeartRateMeasurement.ReadRhythm`、`Consume` 的�
 | --- | --- |
 | `DiscardStartup()` | 仅初始状态可调用；预运行并丢弃 12 s，随后对外时间重新从零计 |
 | `Advance(long deltaNs)` | `0 < deltaNs <= 250 ms`，内部最多 50 ms 一段；本次调用事件替换上次批次 |
-| `ScheduleSource(definition, delayNs)` | fresh definition、同测量启用状态；0–60 s；生效时间向上对齐 200 ms；返回生效仿真时间 |
+| `ScheduleSource(definition, delayNs)` | fresh definition、同测量启用状态；0–60 s；生效时间向上对齐 200 ms 源配置边界；返回生效仿真时间 |
 | `UpdateOxygenationVentilation(ventilation, oxygenDemandMultiplier)` | 只用于启用实时氧合的会话；完整验证后同时安排通气与波形变化，返回生效时间 |
 | `UpdateDisplay(display)` | 替换显示槽和量程，按已有显示 frontier 重建量程投影 |
-| `Samples(channel, fromSimTimeNs, toExclusiveSimTimeNs)` | 从保留包按半开区间枚举换算后的物理值 |
+| `Samples(channel, fromSimTimeNs, toExclusiveSimTimeNs)` | 从统一采样历史按半开区间枚举物理值，包含 ECG 电击伪迹 |
 
 `ScheduleSource` 不接受自身、已经推进/丢弃启动段/已有待应用修改的 definition。
 连续实时氧合源不能热改 `OxygenationParameters` 基线；需重新开始会话。
 源码通过试算验证源可延续性后发布 pending 请求；一个 pending 槽保存最新定义。
+200 ms 对齐仅约束源配置激活，采样和测量按各自原生采样点即时推进。
 
-`SimulationTimeNs` 是本地推进时间，`FrontierNs` 是可显示的前沿，二者相差目标 2.2 s
-呈现延迟。最多保留 202 个波形包。`DataRevision` 随有新包的内部批次递增，不能当成 UI
-帧编号。`Measurements` 使用采集前沿而非显示延迟时钟；声音的本批确认事件仅保留距
-测量前沿 250 ms 内的心搏/脉搏，节律事件按本次推进批次输出。
+`SimulationTimeNs` 是本地推进时间，也是所有监护通道的共同扫线前沿。
+`Samples`、`Measurements`、`BeatEvidence` 与 `EcgEvidence` 消费同一批源采样；
+`DetectedBeats` 同时供数值测量、同步除颤标记和声音使用，不另设即时检测器。
+`Measurements.SampleTimeNs` 和 `BeatEvidence.SampleTimeNs` 表示当前仿真查询时间；
+AED 证据的样本时间仍表示最后一个实际 ECG 样本，不能用无采样的时间推进伪造新证据。
+`Blocks` 保存同一采样历史的完整 200 ms 记录包，最多保留 202 个；实时消费不等待记录包完成。
+`DataRevision` 随新采样或历史变化递增，不能当成 UI 帧编号。一次性心搏、脉搏、节律与监测
+事件按本次推进批次输出，查询、重新绘制和回看均不重放事件。
+
+PLETH 右侧脉搏立柱与扫屏每帧读取同一即时前沿的最新样本，以截至该前沿的最近 4 s
+样本范围归一化。没有新近样本、即时信号不可用或窗口内幅度恒定时立柱归零。
+PR 的确认或过期状态不延迟立柱，脉搏恢复时第一条新波形即可驱动动画；暂停时保持
+同一前沿和高度。重复显示 PLETH 或更改扫描速度不会引入立柱之间的时差。
 
 [MonitorDisplayConfiguration](../../src/Monitor.Application/Presentation/MonitorDisplayConfiguration.cs)
-支持 3/5/7 行，每槽指定通道、自动量程、参考量程与走速；默认顺序为 ECG、PLETH、ABP、
+支持 3/4/5/7 行，每槽指定通道、自动量程、参考量程与走速；默认顺序为 ECG、PLETH、ABP、
 CO₂、RESP、PA、CVP。25 mm/s 对应 10 s 显示宽度；其他走速反比改变宽度。
 `MonitorSweepRanges.Advance` 仅在行扫线边界从已经完成的前一扫线更新自动量程，
 不使用缓冲中的未来样本或当前帧极值；frontier 回退会拒绝。

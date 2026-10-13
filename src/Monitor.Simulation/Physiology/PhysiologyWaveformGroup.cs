@@ -12,10 +12,10 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 }
 
 public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology,
-    WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, int DelayCapacity, uint QualityFlags,
+    WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags,
     VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0);
 public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator,
-    SignalAcquisitionDelayState Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0);
+    uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0);
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels,
     WaveformBlockAssemblerState Assembler);
 public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long SourceSimTimeNs, short NormalizedValue, uint QualityFlags);
@@ -24,14 +24,14 @@ public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long Sour
 public sealed class PhysiologyWaveformGroup
 {
     private readonly record struct Channel(Guid Id, PhysiologySignalGenerator Generator,
-        SignalAcquisitionDelayLine Delay, uint QualityFlags, int PressureZeroOffsetCentiMmHg);
+        uint QualityFlags, int PressureZeroOffsetCentiMmHg);
     private Channel[] _channels;
     private WaveformBlockAssembler _assembler;
 
     private PhysiologyWaveformGroup(PhysiologyWaveformGroup source)
     {
         _channels = source._channels.Select(channel => new Channel(channel.Id, channel.Generator.Fork(),
-            SignalAcquisitionDelayLine.Restore(channel.Delay.CaptureState()), channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)).ToArray();
+            channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)).ToArray();
         _assembler = WaveformBlockAssembler.Restore(source._assembler.CaptureState());
     }
 
@@ -58,17 +58,11 @@ public sealed class PhysiologyWaveformGroup
             if (previous is not null && StringComparer.Ordinal.Compare(previous, key) >= 0) { throw InvalidCheckpoint(); }
             previous = key;
             var generator = PhysiologySignalGenerator.Restore(item.Generator);
-            var delay = SignalAcquisitionDelayLine.Restore(item.Delay);
             PhysiologySignalState source = generator.CaptureState();
-            SignalAcquisitionDelayState waiting = delay.CaptureState();
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
             if (plane is null || plane.Configuration.ProfileId != source.Clock.ProfileId ||
                 assembly.StreamEpoch != source.Clock.StreamEpoch || assembly.EpochAnchorSimTimeNs != source.Clock.EpochAnchorSimTimeNs ||
-                waiting.ProfileId != source.Clock.ProfileId || waiting.StreamEpoch != source.Clock.StreamEpoch ||
-                waiting.EpochAnchorSimTimeNs != source.Clock.EpochAnchorSimTimeNs ||
-                waiting.ReleaseCursorSimTimeNs != source.Clock.CursorSimTimeNs ||
-                waiting.NextInputSampleIndex != source.Clock.NextSampleIndex ||
-                plane.NextInputSampleIndex != waiting.NextInputSampleIndex - (ulong)waiting.PendingSamples.Count ||
+                plane.NextInputSampleIndex != source.Clock.NextSampleIndex ||
                 cursor is { } common && common != source.Clock.CursorSimTimeNs)
             { throw InvalidCheckpoint(); }
             if (item.PressureZeroOffsetCentiMmHg is < short.MinValue or > short.MaxValue) { throw InvalidCheckpoint(); }
@@ -87,7 +81,7 @@ public sealed class PhysiologyWaveformGroup
             if (sharedPlan is not null && sharedPlan != source.Timeline.Plan) { throw InvalidCheckpoint(); }
             sharedPlan = source.Timeline.Plan;
             cursor = source.Clock.CursorSimTimeNs;
-            DelayedSignalSample[] pending = waiting.PendingSamples.Concat(plane.PendingSamples).ToArray();
+            AcquiredSignalSample[] pending = plane.PendingSamples.ToArray();
             EventWaveformComposition? composition = null;
             if (pending.Length > 0 && generator.VascularPressure is null && generator.PlethRunoff is null)
             {
@@ -96,7 +90,7 @@ public sealed class PhysiologyWaveformGroup
                 var timeline = RegularPhysiologyTimeline.Restore(source.Timeline with { CursorSimTimeNs = start });
                 composition = EventWaveformComposition.Restore(new(source.Bands, timeline.AdvanceBefore(checked(pending.Max(sample => sample.SourceSimTimeNs) + 1), EventWaveformComposition.MaximumEventCount)));
             }
-            foreach (DelayedSignalSample sample in pending)
+            foreach (AcquiredSignalSample sample in pending)
             {
                 long value = source.ActiveFromEventTimeNs is not null ? generator.EvaluateAt(sample.SourceSimTimeNs) : generator.VascularPressure is { } pressure
                     ? pressure.EvaluateAt(sample.SourceSimTimeNs)
@@ -106,7 +100,7 @@ public sealed class PhysiologyWaveformGroup
                 short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(checked(value + (long)item.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), FixedPointMath.Q32One));
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
-            _channels[index] = new(item.ChannelId, generator, delay, item.QualityFlags, item.PressureZeroOffsetCentiMmHg);
+            _channels[index] = new(item.ChannelId, generator, item.QualityFlags, item.PressureZeroOffsetCentiMmHg);
         }
     }
 
@@ -127,8 +121,7 @@ public sealed class PhysiologyWaveformGroup
         plans = plans.OrderBy(plan => plan.Plane.ChannelId.ToString("N"), StringComparer.Ordinal).ToArray();
         PhysiologyWaveformChannelState[] sources = plans.Select(plan => new PhysiologyWaveformChannelState(plan.Plane.ChannelId,
             PhysiologySignalGenerator.Start(plan.Physiology, plan.Plane.ProfileId, streamEpoch, plan.Bands, plan.VascularPressure, plan.PlethRunoff, plan.PressureBaselineCentiMmHg).CaptureState(),
-            SignalAcquisitionDelayLine.Start(plan.Plane.ProfileId, streamEpoch,
-                plan.Physiology.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags, plan.PressureZeroOffsetCentiMmHg)).ToArray();
+            plan.QualityFlags, plan.PressureZeroOffsetCentiMmHg)).ToArray();
         var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
             streamEpoch, configurationRevision, firstBlockSequence, plans[0].Physiology.EpochAnchorSimTimeNs,
             maximumBufferedBlocks, plans.Select(plan => plan.Plane).ToArray());
@@ -143,7 +136,7 @@ public sealed class PhysiologyWaveformGroup
             !_assembler.CaptureState().Planes.Select(p => p.Configuration)
                 .SequenceEqual(definition._assembler.CaptureState().Planes.Select(p => p.Configuration)))
         { throw new ArgumentException("PhysiologyGroup.ChannelMismatch", nameof(definition)); }
-        // Validate every new generator before publishing. Delays, assembler,
+        // Validate every new generator before publishing. The recording assembler,
         // sample indices and already acquired samples stay on the same stream.
         var channels = _channels.Select((channel, index) => channel with
         {
@@ -153,7 +146,7 @@ public sealed class PhysiologyWaveformGroup
     }
 
     public PhysiologyWaveformGroupState CaptureState() => new(Array.AsReadOnly(_channels.Select(channel =>
-        new PhysiologyWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.Delay.CaptureState(), channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)).ToArray()),
+        new PhysiologyWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)).ToArray()),
         _assembler.CaptureState());
 
     public static PhysiologyWaveformGroup Restore(PhysiologyWaveformGroupState state)
@@ -193,7 +186,6 @@ public sealed class PhysiologyWaveformGroup
             foreach (PhysiologySignalSample sample in samples)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Release(sample.Tick.SimTimeNs);
                 // Apply sensor zero error after the true source, before wire quantization.
                 // Overflow rejects the whole trial; never silently clip pressure.
                 long measuredValue = channel.PressureZeroOffsetCentiMmHg == 0 ? sample.NormalizedValue
@@ -202,16 +194,16 @@ public sealed class PhysiologyWaveformGroup
                 if (measuredValue is < short.MinValue or > short.MaxValue)
                 { throw new PhysiologyWaveformGroupException("PhysiologyGroup.MeasuredPressureOutOfRange", nameof(simTimeNs)); }
                 short measured = (short)measuredValue;
-                channel.Delay.Enqueue(sample.Tick, measured, channel.QualityFlags);
+                Record(new(sample.Tick.ProfileId, sample.Tick.StreamEpoch, sample.Tick.SampleIndex,
+                    sample.Tick.SimTimeNs, measured, channel.QualityFlags));
                 if (captureImmediateSamples)
                 { immediate.Add(new(channel.Id, sample.Tick.SimTimeNs, measured, channel.QualityFlags)); }
             }
-            Release(simTimeNs);
 
-            void Release(long cursor)
+            void Record(AcquiredSignalSample sample)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, channel.Delay.DrainAvailable(cursor)))
+                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, [sample]))
                 {
                     if (output.Count == maximumBlocks)
                     { throw new PhysiologyWaveformGroupException("PhysiologyGroup.BlockLimitExceeded", nameof(maximumBlocks)); }

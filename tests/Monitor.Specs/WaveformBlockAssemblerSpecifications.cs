@@ -33,7 +33,7 @@ internal static class WaveformBlockAssemblerSpecifications
     {
         WaveformBlockPlaneConfiguration[] configurations = AllConfigurations();
         WaveformBlockAssembler assembler = CreateAssembler(configurations, 12, 7);
-        Dictionary<Guid, DelayedSignalSample[]> batches = new()
+        Dictionary<Guid, AcquiredSignalSample[]> batches = new()
         {
             [EcgChannel] = Produce(
                 "AcqECGMonitor250@1",
@@ -122,7 +122,7 @@ internal static class WaveformBlockAssemblerSpecifications
             "WaveformBlockAssembler.CapacityExceeded" &&
             Equivalent(assembler.CaptureState(), empty),
             "a fast plane cannot exceed the configured block backlog");
-        Check.That(Reason(() => assembler.Push(Guid.Empty, new DelayedSignalSample[1])) ==
+        Check.That(Reason(() => assembler.Push(Guid.Empty, new AcquiredSignalSample[1])) ==
             "WaveformBlockAssembler.UnknownChannel" &&
             Equivalent(assembler.CaptureState(), empty),
             "an unregistered channel must reject without mutation");
@@ -136,7 +136,22 @@ internal static class WaveformBlockAssemblerSpecifications
             Produce("AcqResp125@1", 4, 200_000_000))) ==
             "WaveformBlockAssembler.InputDiscontinuous" &&
             Equivalent(assembler.CaptureState(), waiting),
-            "a plane cannot accept another profile's delayed samples");
+            "a plane cannot accept another profile's samples");
+        AcquiredSignalSample[] valid = Produce("AcqPleth125@1", 4, 200_000_000);
+        foreach (AcquiredSignalSample invalid in new[]
+        {
+            valid[^1] with { StreamEpoch = 5 },
+            valid[^1] with { SampleIndex = valid[^1].SampleIndex + 1 },
+            valid[^1] with { SourceSimTimeNs = valid[^1].SourceSimTimeNs + 1 },
+        })
+        {
+            AcquiredSignalSample[] corrupt = [.. valid[..^1], invalid];
+            Check.That(Reason(() => assembler.Push(PlethChannel, corrupt)) ==
+                "WaveformBlockAssembler.InputDiscontinuous" && Equivalent(assembler.CaptureState(), waiting),
+                "invalid final sample identity or source time rejects the entire batch without consuming earlier samples");
+        }
+        Check.That(assembler.Push(PlethChannel, valid).Count == 1,
+            "a valid retry records the same complete window after rejected samples");
     }
 
     private static void AssemblerCheckpointRestoresBufferedPlanes()
@@ -146,8 +161,8 @@ internal static class WaveformBlockAssemblerSpecifications
              Configuration(PlethChannel, "AcqPleth125@1")],
             4,
             20);
-        DelayedSignalSample[] ecg = Produce("AcqECGMonitor250@1", 4, 400_000_000);
-        DelayedSignalSample[] pleth = Produce("AcqPleth125@1", 4, 400_000_000);
+        AcquiredSignalSample[] ecg = Produce("AcqECGMonitor250@1", 4, 400_000_000);
+        AcquiredSignalSample[] pleth = Produce("AcqPleth125@1", 4, 400_000_000);
         _ = original.Push(EcgChannel, ecg);
         _ = original.Push(PlethChannel, pleth[..25]);
         WaveformBlockAssemblerState checkpoint = original.CaptureState();
@@ -207,28 +222,16 @@ internal static class WaveformBlockAssemblerSpecifications
         Guid channelId,
         string profileId) => new(channelId, profileId, 1, 1, 0, 1);
 
-    private static DelayedSignalSample[] Produce(
+    private static AcquiredSignalSample[] Produce(
         string profileId,
         ulong streamEpoch,
         long exclusiveSimTimeNs,
         Func<ulong, uint>? quality = null)
     {
         var clock = SignalSampleClock.Start(profileId, streamEpoch, 0);
-        var delay = SignalAcquisitionDelayLine.Start(
-            profileId,
-            streamEpoch,
-            0,
-            1_000);
-        foreach (SignalSampleTick tick in clock.DrainBefore(exclusiveSimTimeNs))
-        {
-            delay.Enqueue(
-                tick,
-                checked((short)tick.SampleIndex),
-                quality?.Invoke(tick.SampleIndex) ?? 0);
-        }
-
-        long latency = FrozenSignalAcquisitionProfiles.Get(profileId).LatencyNs;
-        return [.. delay.DrainAvailable(exclusiveSimTimeNs + latency)];
+        return clock.DrainBefore(exclusiveSimTimeNs).Select(tick => new AcquiredSignalSample(
+            tick.ProfileId, tick.StreamEpoch, tick.SampleIndex, tick.SimTimeNs,
+            checked((short)tick.SampleIndex), quality?.Invoke(tick.SampleIndex) ?? 0)).ToArray();
     }
 
     private static bool Equivalent(

@@ -48,7 +48,7 @@ internal static class EcgLimbPlacementSpecifications
     private static ElectrodeWaveformGroup Group(EcgLimbPlacement placement) => ElectrodeWaveformGroup.Start(
         Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), Guid.Parse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
         1, 1, 1, 0, 16, Plan, TextbookElectrodeReference.CreateElectrodes(), Enum.GetValues<EcgLead>().Select(lead =>
-            new ElectrodeChannelPlan(lead, Guid.Parse($"00000000-0000-4000-8000-{(int)lead + 1:D12}"), 10, 0)).ToArray(), placement);
+            new ElectrodeChannelPlan(lead, Guid.Parse($"00000000-0000-4000-8000-{(int)lead + 1:D12}"), 0)).ToArray(), placement);
 
     private static void LimbWiringChangesOnlyLimbSamples()
     {

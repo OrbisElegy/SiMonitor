@@ -237,7 +237,6 @@ internal static class Program
             .. CentralVenousPressureSpecifications.All,
             .. PeriodicWaveformPipelineSpecifications.All,
             .. PeriodicWaveformGroupSpecifications.All,
-            .. SignalAcquisitionDelaySpecifications.All,
             .. SensorFaultSpecifications.All,
             .. WaveformEnvelopeCodecSpecifications.All,
             .. WaveformBlockAssemblerSpecifications.All,

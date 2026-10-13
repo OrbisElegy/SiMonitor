@@ -67,7 +67,7 @@ internal static class VentilationWaveformSpecifications
         {
             var a = group.AdvanceTo(time, 50, 1, 100);
             var b = restored.AdvanceTo(time, 50, 1, 100);
-            Check.That(a.Count == b.Count && a.Zip(b).All(pair => pair.First.SequenceEqual(pair.Second)), "coupled delayed samples survive checkpoint replay");
+            Check.That(a.Count == b.Count && a.Zip(b).All(pair => pair.First.SequenceEqual(pair.Second)), "coupled native samples survive checkpoint replay");
         }
     }
 

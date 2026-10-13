@@ -166,7 +166,7 @@ internal static class EcgDetectionRegressionSpecifications
     {
         var source = PhysiologyIllustrationSource.Create(configuration);
         var samples = new List<short>();
-        for (int step = 1; step <= (seconds + 3) * 5; step++)
+        for (int step = 1; step <= seconds * 5; step++)
         {
             foreach (byte[] wire in source.AdvanceTo(step * 200_000_000L, 50, 1, 100))
             {
@@ -176,8 +176,8 @@ internal static class EcgDetectionRegressionSpecifications
                 samples.AddRange(plane.Samples);
             }
         }
-        Check.That(samples.Count >= seconds * 250, "acquisition delay is flushed before slicing the fixture");
-        return samples.Take(seconds * 250).ToArray();
+        Check.That(samples.Count == seconds * 250, "every source sample is available at the requested fixture boundary");
+        return samples.ToArray();
     }
 
     private static byte[] Wire(short[] samples, int firstSampleIndex, ulong sequence, bool poor = false)

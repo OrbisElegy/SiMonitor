@@ -17,7 +17,7 @@ internal static class PrematureAtrialSmokeChecks
         foreach (var (selection, projected) in new[] { (22, false), (22, true), (23, false), (23, true), (24, false), (24, true), (25, false), (25, true), (26, false), (26, true), (27, false), (27, true), (28, false), (28, true), (29, false), (29, true), (30, false), (30, true), (31, false), (31, true), (32, false), (32, true), (33, false), (33, true), (34, false), (34, true), (35, false), (35, true), (36, false), (36, true), (37, false), (37, true) })
         {
             bool blocked = selection == 23, aberrant = selection == 24, junctional = selection is >= 25 and <= 27, ventricular = selection >= 28;
-            int steps = selection >= 31 ? 40 : 30; // Include second PVC after the shared Pleth delay.
+            int steps = selection >= 31 ? 40 : 30; // Include the second PVC's complete QRS/T window.
             int pvcQrs = selection switch { 29 => 165, 30 => 365, 33 => 665, 37 => 490, _ => 565 };
             int resumedQrs = selection switch { 29 => 440, 30 => 640, 33 => 790, 34 or 35 => 1040, _ => junctional || ventricular ? 840 : 815 };
             int pStart = selection switch { 23 => 500, 25 => 545, 26 => 595, 27 => 565, _ => 525 };
@@ -75,6 +75,7 @@ internal static class PrematureAtrialSmokeChecks
                 if (expected.Count != recovered.Count || expected.Zip(recovered).Any(p => !p.First.SequenceEqual(p.Second)))
                 { throw new InvalidOperationException("PAC checkpoint changed wire images across P-prime and sinus reset."); }
                 var blocks = expected.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
+                long recordEndNs = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
                 var id = projected ? ProjectedEcgDemoSource.ChannelId(EcgLead.II) : PhysiologyDemoSource.ChannelId(0);
                 short[] samples = blocks.SelectMany(b => b.Planes.Single(p => p.ChannelId == id).Samples).ToArray();
                 if ((ventricular ? (selection is not (36 or 37) && samples.Skip(pvcQrs - 40).Take(40).Any(v => v != 0)) || samples.Skip(pvcQrs).Take(40).Max(v => Math.Abs((int)v)) < 600 : blocked ? Enumerable.Range(500, 20).Min(i => samples[i] - samples[i - 400]) > -150 || samples.Skip(520).Take(255).Any(v => v != 0)
@@ -148,7 +149,7 @@ internal static class PrematureAtrialSmokeChecks
                     }
                     if (selection == 28)
                     {
-                        var junctionalBlocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureJunctional, 4_000_000_000);
+                        var junctionalBlocks = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureJunctional, recordEndNs);
                         foreach (int row in new[] { 2, 3, 5 })
                         {
                             if (MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(junctionalBlocks, row)))
@@ -162,7 +163,7 @@ internal static class PrematureAtrialSmokeChecks
                     }
                     if (aberrant)
                     {
-                        var narrow = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureAtrial, 4_000_000_000);
+                        var narrow = PhysiologyChannelSmokeChecks.DecodeCompletedOutput(PhysiologyDemoConfiguration.PrematureAtrial, recordEndNs);
                         foreach (int row in Enumerable.Range(1, 6))
                         {
                             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(narrow, row)))

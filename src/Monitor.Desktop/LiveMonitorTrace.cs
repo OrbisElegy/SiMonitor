@@ -46,7 +46,7 @@ internal sealed class LiveMonitorTrace : Control
         }
         if (enabled)
         {
-            foreach (var beat in _session.SynchronizationBeats)
+            foreach (var beat in _session.DetectedBeats)
             {
                 if (beat.PeakTimeNs >= _synchronizedSinceNs && (_synchronizationPeaks.Count == 0 || beat.PeakTimeNs > _synchronizationPeaks[^1]))
                 { _synchronizationPeaks.Add(beat.PeakTimeNs); }
@@ -83,7 +83,7 @@ internal sealed class LiveMonitorTrace : Control
                 {
                     bool started = false;
                     int channel = _session.Display.Slots[row].Channel;
-                    var samples = _session.PresentedSamples(channel, from, from + duration).ToArray();
+                    var samples = _session.Samples(channel, from, from + duration).ToArray();
                     var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
@@ -112,7 +112,7 @@ internal sealed class LiveMonitorTrace : Control
         {
             long duration = _session.Display.Slots[row].DurationNs;
             int channel = _session.Display.Slots[row].Channel;
-            long frontierNs = _session.PresentationFrontierNs(channel);
+            long frontierNs = _session.SimulationTimeNs;
             double phase = (frontierNs % duration) / (double)duration;
             if ((MonitoredChannels & MonitorChannelMapping.ForChannel(channel)) == 0) { continue; }
             var color = ChannelBrush(channel);

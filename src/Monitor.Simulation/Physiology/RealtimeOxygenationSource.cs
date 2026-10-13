@@ -17,7 +17,7 @@ public readonly record struct RealtimeOxygenationSnapshot(long SourceSimTimeNs, 
 public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
 {
     private readonly record struct TransportChange(long AtSimTimeNs, PhysiologyTransportSource Transport, decimal OxygenDemandMultiplier);
-    public const int HistoryCapacity = 1024; // 8.184s, including the 2s acquisition delay.
+    public const int HistoryCapacity = 1024; // 8.184s of source-time history for bounded optical lookups.
     private readonly OxygenReservoirParameters _parameters;
     private readonly decimal _initialOxygenMl;
     private PhysiologyTransportSource _transport;

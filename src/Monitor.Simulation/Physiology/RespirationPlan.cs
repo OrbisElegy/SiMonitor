@@ -37,6 +37,6 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
             bands.Add(new(PhysiologyCycleEventKind.VentricularMechanical, 0, support,
                 Array.AsReadOnly(artifact)));
         }
-        return new(physiology, new(channelId, "AcqResp125@1", 1, 1, 0, 1), bands.AsReadOnly(), 10, qualityFlags);
+        return new(physiology, new(channelId, "AcqResp125@1", 1, 1, 0, 1), bands.AsReadOnly(), qualityFlags);
     }
 }

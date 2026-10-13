@@ -35,7 +35,7 @@ internal static class CapnogramTransportSpecifications
             Check.That(restored.EvaluateAt(delay + 375_000_000) == original.EvaluateAt(375_000_000), "transport and phase landmarks remain owned across restore");
             var channel = Plan(delay).CreateChannel(Timeline, Co2, 0);
             Check.That(channel.Physiology == Timeline && channel.Plane.ProfileId == "AcqCO2_100@1" &&
-                channel.Plane.OffsetNumerator == 5 && channel.Plane.ScaleDenominator == 100 && channel.DelayCapacity == 200,
+                channel.Plane.OffsetNumerator == 5 && channel.Plane.ScaleDenominator == 100,
                 "transport does not change patient breath timing, physical pressure units or processing profile");
         }
     }
@@ -48,9 +48,9 @@ internal static class CapnogramTransportSpecifications
         foreach (long delay in new[] { 0L, 5_000_000_000 })
         {
             var group = Group(delay);
-            Check.That(group.AdvanceTo(2_189_999_999, 548, 1, 100).Count == 0 &&
-                group.AdvanceTo(2_190_000_000, 1, 1, 100).Count == 1,
-                "processing latency still gates the first block while transported pre-arrival samples carry baseline");
+            Check.That(group.AdvanceTo(192_000_000, 24, 1, 100).Count == 0 &&
+                group.AdvanceTo(192_000_001, 1, 1, 100).Count == 1,
+                "recording preserves transported pre-arrival baselines without delaying acquisition");
         }
     }
 
@@ -58,12 +58,12 @@ internal static class CapnogramTransportSpecifications
     {
         var actual = NativeRecoveryChecks.Verify(() => Group(5_000_000_000),
             [1_875_000_000, 2_189_999_999, 2_190_000_000, 3_750_000_000, 5_000_000_000, 6_875_000_000, 7_000_000_000, 8_750_000_000, 8_950_000_000, 12_000_000_000],
-            1500, 60, 100, 50, nameof(LongTransportSurvivesNativeRecovery));
+            1500, 60, 100, 60, nameof(LongTransportSurvivesNativeRecovery));
         var original = Group(0).AdvanceTo(12_000_000_000, 1500, 60, 100);
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
         short[] delayedCo2 = Samples(actual, Co2);
-        Check.That(delayedCo2.Take(500).All(value => value == 0) && delayedCo2.Skip(500).SequenceEqual(Samples(original, Co2).Take(500)) &&
+        Check.That(delayedCo2.Take(500).All(value => value == 0) && delayedCo2.Skip(500).SequenceEqual(Samples(original, Co2).Take(700)) &&
             Samples(actual, Resp).SequenceEqual(Samples(original, Resp)),
             "five-second observed CO2 shift leaves Resp samples unchanged on their original shared sample clocks");
     }
@@ -82,7 +82,7 @@ internal static class CapnogramTransportSpecifications
         bool limited = false;
         try { group.AdvanceTo(12_000_000_000, 1500, 1, 100); }
         catch (PhysiologyWaveformGroupException exception) { limited = exception.ReasonCode == "PhysiologyGroup.BlockLimitExceeded"; }
-        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late publication failure retains both channel clocks and delayed evidence");
+        Check.That(limited && JsonSerializer.Serialize(group.CaptureState()) == before, "late publication failure retains both channel clocks and partial recording evidence");
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
         bool cancelled = false;

@@ -9,10 +9,6 @@ internal static class PhysiologyChannelSmokeChecks
 {
     private const long BlockDurationNs = 200_000_000;
 
-    private static long AcquisitionLatencyNs => Math.Max(
-        FrozenSignalAcquisitionProfiles.Get("AcqPleth125@1").LatencyNs,
-        FrozenSignalAcquisitionProfiles.Get("AcqCO2_100@1").LatencyNs);
-
     internal static WaveformEnvelope[] Verify(string name, PhysiologyDemoConfiguration config,
         RegularPhysiologyPlan expectedPlan, IReadOnlyList<EventWaveformBand> ecgBands,
         FixedPerfusionPreset perfusion, bool verifyMechanicalSuppression = false)
@@ -25,7 +21,7 @@ internal static class PhysiologyChannelSmokeChecks
             if (!MechanicalUncouplingSmokeChecks.Samples(blocks, row).SequenceEqual(MechanicalUncouplingSmokeChecks.Samples(normal, row)))
             { throw new InvalidOperationException(name + " changed respiration/CO2."); }
         if (MechanicalUncouplingSmokeChecks.Samples(blocks, 0).Length != 1500)
-        { throw new InvalidOperationException(name + " test must include six seconds of completed raw ECG after acquisition delay."); }
+        { throw new InvalidOperationException(name + " test must include six seconds of completed raw ECG at source time."); }
         var ii = PhysiologySignalGenerator.Start(plan, "AcqECGMonitor250@1", 1, ecgBands).GenerateBefore(6_000_000_000, 1500, 100);
         short[] ecgSamples = MechanicalUncouplingSmokeChecks.Samples(blocks, 0);
         if (ecgSamples.Length != ii.Count || ecgSamples.Zip(ii).Any(p => Math.Abs(p.First - p.Second.NormalizedValue) > 1))
@@ -75,13 +71,12 @@ internal static class PhysiologyChannelSmokeChecks
         }
         return blocks;
     }
-    // Advance through acquisition latency so the requested output interval is
-    // complete on every channel, including the slow Pleth and CO2 channels.
+    // Complete the requested source interval on every channel.
     internal static WaveformEnvelope[] DecodeCompletedOutput(PhysiologyDemoConfiguration config, long toExclusiveSimTimeNs)
     {
         var source = PhysiologyDemoSource.Create(config);
         var blocks = new List<WaveformEnvelope>();
-        for (long timeNs = BlockDurationNs; timeNs <= toExclusiveSimTimeNs + AcquisitionLatencyNs; timeNs += BlockDurationNs)
+        for (long timeNs = BlockDurationNs; timeNs <= toExclusiveSimTimeNs; timeNs += BlockDurationNs)
         {
             blocks.AddRange(source.AdvanceTo(timeNs, 50, 1, 100).Select(bytes => WaveformEnvelopeCodec.Decode(bytes)));
         }
@@ -98,7 +93,7 @@ internal static class PhysiologyChannelSmokeChecks
         for (long timeNs = BlockDurationNs; timeNs <= checkpointSimTimeNs; timeNs += BlockDurationNs)
         { source.AdvanceTo(timeNs, 50, 1, 100); }
         var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
-        long throughSimTimeNs = Math.Max(checkpointSimTimeNs + BlockDurationNs, AcquisitionLatencyNs + BlockDurationNs);
+        long throughSimTimeNs = checkpointSimTimeNs + BlockDurationNs;
         int comparedBlocks = 0;
         for (long timeNs = checkpointSimTimeNs + BlockDurationNs; timeNs <= throughSimTimeNs; timeNs += BlockDurationNs)
         {

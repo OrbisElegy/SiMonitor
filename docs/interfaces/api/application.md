@@ -608,6 +608,7 @@ public sealed class LiveWaveformMeasurements
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents);
     public LiveMeasurementSnapshot Consume(ReadOnlySpan<byte> wire, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null);
+    public LiveMeasurementSnapshot ConsumeSamples(IReadOnlyList<WaveformEnvelope> channelBlocks, long asOfSampleTimeNs, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null);
     public LiveMeasurementSnapshot Read(long asOfSampleTimeNs);
     public Checkpoint Capture();
     public static LiveWaveformMeasurements Restore(Checkpoint checkpoint);
@@ -1479,7 +1480,6 @@ public sealed class EcgAlarmNotices
 ```csharp
 public sealed class LocalMonitorPreviewSession
 {
-    public const long PresentationLatencyNs = 2_200_000_000;
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
     public IReadOnlyList<DefibrillationEcgArtifact> ShockArtifacts { get; }
@@ -1490,17 +1490,14 @@ public sealed class LocalMonitorPreviewSession
     public ManualVitalSigns ManualVitals { get; }
     public PressureTransducerLimits PressureTransducers { get; private set; }
     public long SimulationTimeNs { get; private set; }
-    public long FrontierNs { get; private set; }
-    public long PresentationFrontierNs(int channel);
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; }
     public IReadOnlyList<DetectedEcgMonitoringEvent> DetectedMonitoringEvents { get; private set; }
     public IReadOnlyList<DetectedEcgRhythmEvent> DetectedRhythmEvents { get; private set; }
     public IReadOnlyList<DetectedEcgBeat> DetectedBeats { get; private set; }
     public IReadOnlyList<long> EmittedPacingPulseTimesNs { get; private set; }
-    public IReadOnlyList<DetectedEcgBeat> SynchronizationBeats { get; private set; }
-    public AedEcgEvidence? LiveEcgEvidence { get; private set; }
-    public MonitorBeatEvidence? LiveBeatEvidence { get; private set; }
+    public AedEcgEvidence? EcgEvidence { get; }
+    public MonitorBeatEvidence? BeatEvidence { get; private set; }
     public IReadOnlyList<WaveformEnvelope> Blocks { get; }
     public MonitorDisplayConfiguration Display { get; private set; }
     public MonitorSweepRanges Ranges { get; private set; }
@@ -1521,7 +1518,6 @@ public sealed class LocalMonitorPreviewSession
     public void UpdateDisplay(MonitorDisplayConfiguration display);
     public void Advance(long deltaNs);
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
-    public IEnumerable<(long TimeNs, double Value)> PresentedSamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
 }
 ```
 

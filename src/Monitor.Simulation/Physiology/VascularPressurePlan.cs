@@ -26,6 +26,6 @@ public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDura
         // Full physical pressure uses centi-mmHg counts. A fixed affine offset
         // must not stand in for the changing diastolic reservoir pressure.
         return new(physiology, new WaveformBlockPlaneConfiguration(channelId, "AcqPressure125@1",
-            1, 100, 0, 1), Array.Empty<EventWaveformBand>(), 10, qualityFlags, this);
+            1, 100, 0, 1), Array.Empty<EventWaveformBand>(), qualityFlags, this);
     }
 }

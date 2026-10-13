@@ -21,8 +21,8 @@ internal static class PhysiologyForkSpecifications
         RegularPhysiologyPlan plan = new(0, 800_000_000, 160_000_000, 80_000_000, 240_000_000, 4_000_000_000, 2_000_000_000,
             VentricularMechanicalEnabled: false, MechanicalAfterCycles: 2, MechanicalDurationCycles: 3);
         return PhysiologyWaveformGroup.Start(ecg, pleth, 1, 1, 1, 0, 32,
-            [new(plan, new(ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-             new(plan, new(pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
+            [new(plan, new(ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+             new(plan, new(pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 0),
              new VascularPressurePlan(80_000_001, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
                  Morphology: morphology ? new(VascularPressureMorphologyKind.Arterial, 600_000_000, 4000) : null).CreateChannel(plan, pressure, 7)]);
     }

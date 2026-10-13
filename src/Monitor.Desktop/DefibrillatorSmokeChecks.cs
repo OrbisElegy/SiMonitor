@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Monitor.Application.Measurements;
 using Monitor.Application.Therapy;
 using Monitor.Domain.Therapy;
 using Monitor.Infrastructure.Audio;
@@ -147,29 +148,37 @@ internal static class DefibrillatorSmokeChecks
                     {
                         liveHeartbeatCues++;
                         Require(window.Session.SimulationTimeNs - cue <= 50_000_000 &&
-                            window.Session.LiveBeatEvidence!.EcgBeats.Any(beat => beat.ConfirmedAtNs == cue),
-                            "audible QRS follows this frame's visible ECG, never a delayed measurement packet");
+                            window.Session.BeatEvidence!.EcgBeats.Any(beat => beat.ConfirmedAtNs == cue),
+                            "audible QRS and measured ECG share this frame's confirmed beat");
                     }
                 }
             }
             Advance(200);
-            Require(window.Session.Display.Slots.All(slot => window.Session.PresentationFrontierNs(slot.Channel) == window.Session.SimulationTimeNs) &&
+            Require(window.Session.Measurements!.SampleTimeNs == window.Session.SimulationTimeNs &&
                 Enumerable.Range(0, window.Session.Display.Slots.Count).All(row => window.Session.Ranges.RowCycle(row) == 1),
                 "all monitor rows use the same live time and sweep boundary before charging");
             Click(skin.Defibrillator.Charge);
             Advance(3);
             KeyEvent(skin.Defibrillator.Shock, keyDown: true);
-            Advance(10);
+            Advance(9);
+            long numericBucket = window.Session.SimulationTimeNs / 200_000_000;
+            Require(window.Session.Measurements!.HeartRate.Status is WaveformMeasurementStatus.Valid or WaveformMeasurementStatus.Uncountable &&
+                window.MonitorView.NumericTexts[0] != "---", "the pre-shock ECG has its current measured or uncountable readout");
+            Advance(1);
             KeyEvent(skin.Defibrillator.Shock, keyDown: false);
             Require(window.Session.ShockArtifacts.Count == 1, "a confirmed native shock reaches the acquired ECG path");
+            Require(window.Session.SimulationTimeNs / 200_000_000 == numericBucket &&
+                window.Session.Measurements!.HeartRate.Status == WaveformMeasurementStatus.PoorSignal &&
+                window.MonitorView.NumericTexts[0] == "---" &&
+                window.MonitorView.ActiveNotices.Any(notice => notice.Id == "measurement:HR:PoorSignal"),
+                "shock validity changes clear the number and update notices within the current numeric refresh bucket");
             var artifact = window.Session.ShockArtifacts[0];
-            long shockFrontier = window.Session.PresentationFrontierNs(0);
+            long shockFrontier = window.Session.SimulationTimeNs;
             Require(shockFrontier == artifact.DeliveredAtSimTimeNs, "the shock is anchored at the live ECG sweep position");
             Advance(1);
-            Require(window.Session.PresentedSamples(0, shockFrontier, window.Session.PresentationFrontierNs(0))
-                .Any(sample => Math.Abs(sample.Value) > 3000), "the next rendered frame contains the shock before delayed packets arrive");
-            Require(Enumerable.Range(0, 7).All(channel => window.Session.PresentationFrontierNs(channel) == window.Session.SimulationTimeNs &&
-                window.Session.PresentedSamples(channel, shockFrontier, window.Session.SimulationTimeNs).Any()),
+            Require(window.Session.Samples(0, shockFrontier, window.Session.SimulationTimeNs)
+                .Any(sample => Math.Abs(sample.Value) > 3000), "the next rendered frame contains the shock on the unified acquisition timeline");
+            Require(Enumerable.Range(0, 7).All(channel => window.Session.Samples(channel, shockFrontier, window.Session.SimulationTimeNs).Any()),
                 "the shock frame advances ECG, PLETH and all pressure channels together");
             Capture(window, "generic-post-shock-immediate.png");
             Advance(7);
@@ -264,7 +273,7 @@ internal static class DefibrillatorSmokeChecks
             Advance(180);
             Require(window.Aed.Phase == AedPhase.Cpr && window.Aed.Advice == AedAdvice.NoShock &&
                 window.Defibrillator.State.DeliveredCount == 1, "converted sinus gets no-shock advice without a second discharge: " +
-                window.Aed.Phase + "/" + window.Aed.Advice + " " + window.Session.LiveEcgEvidence);
+                window.Aed.Phase + "/" + window.Aed.Advice + " " + window.Session.EcgEvidence);
             window.Pause();
             Require(window.Aed.Phase == AedPhase.Suspended && !controls.Charge.IsEnabled, "pause suspends the complete AED workflow");
             Require(window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Silent, "pause removes all therapy sound intent");

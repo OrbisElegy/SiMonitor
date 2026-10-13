@@ -58,7 +58,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
             RespiratoryPhaseMap.Create(physiology, CvpComponentTables.Respiratory.Count), DepthPattern: physiology.RespiratoryPattern));
         // The patient baseline belongs to the source, not the wire calibration.
         // Continuation can then change it without reinterpreting acquired samples.
-        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, 0, 1), bands.AsReadOnly(), 10, qualityFlags,
+        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, 0, 1), bands.AsReadOnly(), qualityFlags,
             PressureBaselineCentiMmHg: BaselineCentiMmHg);
     }
 

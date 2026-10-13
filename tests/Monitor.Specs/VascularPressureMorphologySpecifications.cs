@@ -148,6 +148,7 @@ internal static class VascularPressureMorphologySpecifications
         }
         Check.That(actual.Count == expected.Count && actual.Zip(expected).All(pair => pair.First.SequenceEqual(pair.Second)),
             "morphology, pressure state and fractional pending samples preserve canonical wire bytes across every block restore");
+        _ = split.AdvanceTo(4_900_000_000, 25, 1, 100);
         var checkpoint = split.CaptureState();
         var channel = checkpoint.Channels[0];
         var changed = channel.Generator.VascularPressure!;

@@ -10,9 +10,9 @@ public sealed class ElectrodeWaveformGroupException(string reasonCode, string pa
     public string ReasonCode { get; } = reasonCode;
 }
 
-public sealed record ElectrodeChannelPlan(EcgLead Lead, Guid ChannelId, int DelayCapacity, uint QualityFlags);
+public sealed record ElectrodeChannelPlan(EcgLead Lead, Guid ChannelId, uint QualityFlags);
 public sealed record ElectrodeChannelState(EcgLead Lead, Guid ChannelId,
-    SignalAcquisitionDelayState Delay, uint QualityFlags);
+    uint QualityFlags);
 public sealed record ElectrodeWaveformGroupState(ElectrodeSignalState Generator,
     IReadOnlyList<ElectrodeChannelState> Channels, WaveformBlockAssemblerState Assembler);
 
@@ -20,7 +20,7 @@ public sealed record ElectrodeWaveformGroupState(ElectrodeSignalState Generator,
 public sealed class ElectrodeWaveformGroup
 {
     private readonly record struct Channel(EcgLead Lead, Guid Id,
-        SignalAcquisitionDelayLine Delay, uint QualityFlags);
+        uint QualityFlags);
     private Channel[] _channels;
     private ElectrodeSignalGenerator _generator;
     private WaveformBlockAssembler _assembler;
@@ -29,7 +29,7 @@ public sealed class ElectrodeWaveformGroup
     {
         _generator = source._generator.Fork();
         _channels = source._channels.Select(channel => new Channel(channel.Lead, channel.Id,
-            SignalAcquisitionDelayLine.Restore(channel.Delay.CaptureState()), channel.QualityFlags)).ToArray();
+            channel.QualityFlags)).ToArray();
         _assembler = WaveformBlockAssembler.Restore(source._assembler.CaptureState());
     }
 
@@ -57,19 +57,13 @@ public sealed class ElectrodeWaveformGroup
             string key = item.ChannelId.ToString("N");
             if (previous is not null && StringComparer.Ordinal.Compare(previous, key) >= 0) { throw InvalidCheckpoint(); }
             previous = key;
-            var delay = SignalAcquisitionDelayLine.Restore(item.Delay);
-            SignalAcquisitionDelayState waiting = delay.CaptureState();
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
             if (plane is null || plane.Configuration.ScaleNumerator != 1 || plane.Configuration.ScaleDenominator != 1 ||
                 plane.Configuration.OffsetNumerator != 0 || plane.Configuration.OffsetDenominator != 1 || plane.Configuration.ProfileId != source.Clock.ProfileId ||
                 assembly.StreamEpoch != source.Clock.StreamEpoch || assembly.EpochAnchorSimTimeNs != source.Clock.EpochAnchorSimTimeNs ||
-                waiting.ProfileId != source.Clock.ProfileId || waiting.StreamEpoch != source.Clock.StreamEpoch ||
-                waiting.EpochAnchorSimTimeNs != source.Clock.EpochAnchorSimTimeNs ||
-                waiting.ReleaseCursorSimTimeNs != source.Clock.CursorSimTimeNs ||
-                waiting.NextInputSampleIndex != source.Clock.NextSampleIndex ||
-                plane.NextInputSampleIndex != waiting.NextInputSampleIndex - (ulong)waiting.PendingSamples.Count)
+                plane.NextInputSampleIndex != source.Clock.NextSampleIndex)
             { throw InvalidCheckpoint(); }
-            DelayedSignalSample[] pending = waiting.PendingSamples.Concat(plane.PendingSamples).ToArray();
+            AcquiredSignalSample[] pending = plane.PendingSamples.ToArray();
             ElectrodeWaveformComposition? composition = null;
             if (pending.Any(sample => !projections.ContainsKey(sample.SourceSimTimeNs)))
             {
@@ -78,7 +72,7 @@ public sealed class ElectrodeWaveformGroup
                 var timeline = RegularPhysiologyTimeline.Restore(source.Timeline with { CursorSimTimeNs = start });
                 composition = ElectrodeWaveformComposition.Restore(new(source.Electrodes, timeline.AdvanceBefore(checked(pending.Max(sample => sample.SourceSimTimeNs) + 1), EventWaveformComposition.MaximumEventCount), source.Placement));
             }
-            foreach (DelayedSignalSample sample in pending)
+            foreach (AcquiredSignalSample sample in pending)
             {
                 if (!projections.TryGetValue(sample.SourceSimTimeNs, out var projection))
                 {
@@ -88,7 +82,7 @@ public sealed class ElectrodeWaveformGroup
                 short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(projection[item.Lead].Numerator, 6 * (Int128)FixedPointMath.Q32One));
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
-            _channels[index] = new(item.Lead, item.ChannelId, delay, item.QualityFlags);
+            _channels[index] = new(item.Lead, item.ChannelId, item.QualityFlags);
         }
     }
 
@@ -102,8 +96,7 @@ public sealed class ElectrodeWaveformGroup
         var plans = channels.OrderBy(plan => plan.ChannelId.ToString("N"), StringComparer.Ordinal).ToArray();
         var source = ElectrodeSignalGenerator.Start(physiology, "AcqECGMonitor250@1", streamEpoch, electrodes, placement);
         var sources = plans.Select(plan => new ElectrodeChannelState(plan.Lead, plan.ChannelId,
-            SignalAcquisitionDelayLine.Start("AcqECGMonitor250@1", streamEpoch,
-                physiology.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags)).ToArray();
+            plan.QualityFlags)).ToArray();
         var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
             streamEpoch, configurationRevision, firstBlockSequence, physiology.EpochAnchorSimTimeNs,
             maximumBufferedBlocks, plans.Select(plan => new WaveformBlockPlaneConfiguration(
@@ -113,7 +106,7 @@ public sealed class ElectrodeWaveformGroup
 
     public ElectrodeWaveformGroupState CaptureState() => new(_generator.CaptureState(),
         Array.AsReadOnly(_channels.Select(channel => new ElectrodeChannelState(channel.Lead,
-            channel.Id, channel.Delay.CaptureState(), channel.QualityFlags)).ToArray()), _assembler.CaptureState());
+            channel.Id, channel.QualityFlags)).ToArray()), _assembler.CaptureState());
 
     public static ElectrodeWaveformGroup Restore(ElectrodeWaveformGroupState state)
     {
@@ -140,15 +133,14 @@ public sealed class ElectrodeWaveformGroup
             foreach (ElectrodeSignalSample sample in samples)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Release(sample.Tick.SimTimeNs);
-                channel.Delay.Enqueue(sample.Tick, sample.MicrovoltValues[(int)channel.Lead], channel.QualityFlags);
+                Record(new(sample.Tick.ProfileId, sample.Tick.StreamEpoch, sample.Tick.SampleIndex,
+                    sample.Tick.SimTimeNs, sample.MicrovoltValues[(int)channel.Lead], channel.QualityFlags));
             }
-            Release(simTimeNs);
 
-            void Release(long cursor)
+            void Record(AcquiredSignalSample sample)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, channel.Delay.DrainAvailable(cursor)))
+                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, [sample]))
                 {
                     if (output.Count == maximumBlocks)
                     { throw new ElectrodeWaveformGroupException("ElectrodeGroup.BlockLimitExceeded", nameof(maximumBlocks)); }

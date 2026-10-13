@@ -69,7 +69,7 @@ internal static class PlethRunoffSpecifications
         { Check.That(ectopic.EvaluateAt(t) >= ectopic.EvaluateAt(t + 1_000_000), "zero-gain short PVC does not erase or restart preceding runoff"); }
     }
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Id, Id, 1, 1, 1, 0, 32,
-        [new(Plan, new(Id, "AcqPleth125@1", 1, 1, 0, 1), [], 250, 0, PlethRunoff: Pulse)]);
+        [new(Plan, new(Id, "AcqPleth125@1", 1, 1, 0, 1), [], 0, PlethRunoff: Pulse)]);
     private static void PlethRunoffRestoresPendingSamplesAndRejectsAtomically()
     {
         var expected = Group().AdvanceTo(4_000_000_000, 500, 20, 100);
@@ -86,6 +86,7 @@ internal static class PlethRunoffSpecifications
         try { group.AdvanceTo(6_000_000_000, 250, 1, 100); }
         catch (PhysiologyWaveformGroupException) { rejected = true; }
         Check.That(rejected && before == JsonSerializer.Serialize(group.CaptureState()), "failed block budget preserves all cursors");
+        _ = group.AdvanceTo(4_100_000_000, 13, 1, 100);
         var state = group.CaptureState();
         rejected = false;
         try { PhysiologyWaveformGroup.Restore(state with { Channels = state.Channels.Select(c => c with { Generator = c.Generator with { PlethRunoff = Pulse with { AmplitudeCounts = 900 } } }).ToArray() }); }

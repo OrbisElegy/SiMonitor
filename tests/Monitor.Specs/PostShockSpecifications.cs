@@ -186,7 +186,7 @@ internal static class PostShockSpecifications
         {
             Check.That(first.Samples(channel, 0, 10_000_000_000).SequenceEqual(second.Samples(channel, 0, 10_000_000_000)),
                 "shock sequence is independent of advance partition and startup source offset");
-            Check.That(first.PresentedSamples(channel, 0, 10_000_000_000).SequenceEqual(second.PresentedSamples(channel, 0, 10_000_000_000)),
+            Check.That(first.Samples(channel, 0, 10_000_000_000).SequenceEqual(second.Samples(channel, 0, 10_000_000_000)),
                 "the immediate presentation remains independent of frame partition");
         }
         Check.That(first.Measurements == second.Measurements, "post-shock measured readings are deterministic");
@@ -201,28 +201,30 @@ internal static class PostShockSpecifications
                     var session = Session(0);
                     if (discardStartup) { session.DiscardStartup(); }
                     Advance(session, deliveredAtNs);
-                    var history = session.PresentedSamples(0, 0, deliveredAtNs).ToArray();
-                    long frontier = session.PresentationFrontierNs(0);
+                    var history = session.Samples(0, 0, deliveredAtNs).ToArray();
+                    long frontier = session.SimulationTimeNs;
                     var outcome = session.ApplyElectricalShock(Shock(session, energy), Sinus(session), 500);
-                    Check.That(frontier == deliveredAtNs && session.PresentationFrontierNs(0) == frontier,
+                    Check.That(frontier == deliveredAtNs && session.SimulationTimeNs == frontier,
                         "delivery uses the existing live sweep position without jumping or moving the shock timestamp");
                     session.Advance(20_000_000);
-                    Check.That(session.PresentedSamples(0, frontier, session.PresentationFrontierNs(0))
+                    Check.That(session.Samples(0, frontier, session.SimulationTimeNs)
                         .Any(sample => Math.Abs(sample.Value) > 3000), "shock appears in the first frame, including during startup and across sweep wraps");
-                    Check.That(!session.Samples(0, frontier, frontier + 20_000_000).Any(),
-                        "visibility does not depend on the delayed acquisition packet arriving");
-                    Check.That(history.SequenceEqual(session.PresentedSamples(0, 0, deliveredAtNs)), "delivery preserves every already displayed ECG sample");
+                    Check.That(session.Measurements!.SampleTimeNs == session.SimulationTimeNs &&
+                        session.Measurements.HeartRate.Status == WaveformMeasurementStatus.PoorSignal &&
+                        session.EcgEvidence!.HeartRate == session.Measurements.HeartRate,
+                        "numeric and therapy evidence immediately reflect the same unusable shock samples");
+                    Check.That(history.SequenceEqual(session.Samples(0, 0, deliveredAtNs)), "delivery preserves every already displayed ECG sample");
                     Advance(session, deliveredAtNs + 4_000_000_000);
-                    var presented = session.PresentedSamples(0, deliveredAtNs, deliveredAtNs + 1_500_000_000).ToArray();
-                    Check.That(presented.SequenceEqual(session.Samples(0, deliveredAtNs, deliveredAtNs + 1_500_000_000)),
-                        "later acquired ECG agrees exactly with the immediate trace, including recovery and successful conversion");
-                    Check.That(!session.PresentedSamples(0, deliveredAtNs + 2_200_000_000, deliveredAtNs + 3_000_000_000)
+                    var presented = session.Samples(0, deliveredAtNs, deliveredAtNs + 1_500_000_000).ToArray();
+                    Check.That(presented.SequenceEqual(RecordedSamples(session, 0, deliveredAtNs, deliveredAtNs + 1_500_000_000)),
+                        "recorded ECG agrees exactly with the live trace, including recovery and successful conversion");
+                    Check.That(!session.Samples(0, deliveredAtNs + 2_200_000_000, deliveredAtNs + 3_000_000_000)
                         .Any(sample => Math.Abs(sample.Value) > 3000), "packet arrival cannot replay the saturated shock transient");
                     for (int channel = 0; channel < 7; channel++)
                     {
-                        Check.That(session.PresentedSamples(channel, 0, session.FrontierNs).SequenceEqual(session.Samples(channel, 0, session.FrontierNs)) &&
-                            session.PresentationFrontierNs(channel) == session.SimulationTimeNs,
-                            "all channels share the live frontier and retain their authored response to the same delivered shock");
+                        long recordedUntil = Math.Min(session.SimulationTimeNs, session.Blocks[^1].StartSimTimeNs + session.Blocks[^1].DurationNs);
+                        Check.That(session.Samples(channel, 0, recordedUntil).SequenceEqual(RecordedSamples(session, channel, 0, recordedUntil)),
+                            "every recording channel projects the same live samples across the shock and source transition");
                     }
                     Check.That(outcome.Outcome == (energy == 200 ? ElectricalConversionOutcome.ConversionScheduled : ElectricalConversionOutcome.EnergyTooLow),
                         "immediate presentation does not change the conversion energy rule");
@@ -235,29 +237,30 @@ internal static class PostShockSpecifications
             MonitorDisplayConfiguration.Default(), true);
         session.DiscardStartup();
         List<DetectedEcgBeat> immediate = [];
-        List<DetectedEcgBeat> acquired = [];
         List<DetectedPlethPulse> livePulses = [];
-        List<DetectedPlethPulse> acquiredPulses = [];
         while (session.SimulationTimeNs < 6_000_000_000)
         {
             session.Advance(17_000_000);
-            immediate.AddRange(session.SynchronizationBeats);
-            acquired.AddRange(session.DetectedBeats);
-            livePulses.AddRange(session.LiveBeatEvidence!.PlethPulses);
-            acquiredPulses.AddRange(session.DetectedPulses);
-            Check.That(session.SynchronizationBeats.All(beat => beat.ConfirmedAtNs < session.SimulationTimeNs &&
+            immediate.AddRange(session.DetectedBeats);
+            livePulses.AddRange(session.BeatEvidence!.PlethPulses);
+            Check.That(session.BeatEvidence.EcgBeats.SequenceEqual(session.DetectedBeats) &&
+                session.BeatEvidence.PlethPulses.SequenceEqual(session.DetectedPulses) &&
+                session.BeatEvidence.EcgStatus == session.Measurements!.HeartRate.Status &&
+                session.EcgEvidence!.HeartRate == session.Measurements.HeartRate,
+                "audio, synchronization and numeric consumers use the same committed detector output");
+            Check.That(session.DetectedBeats.All(beat => beat.ConfirmedAtNs < session.SimulationTimeNs &&
                 session.SimulationTimeNs - beat.ConfirmedAtNs < 17_000_000), "live QRS confirmations arrive in their actual frame");
         }
-        Check.That(immediate.Count >= 6 && immediate.Select(beat => beat.PeakTimeNs).Distinct().Count() == immediate.Count &&
-            acquired.Count > 0 && acquired.All(immediate.Contains), "live and delayed detectors agree on exact peaks without replay");
-        Check.That(livePulses.Count >= 5 && acquiredPulses.Count > 0 && acquiredPulses.All(livePulses.Contains),
-            "live PLETH confirms the same acquired peaks without waiting for delayed packets");
+        Check.That(immediate.Count >= 6 && immediate.Select(beat => beat.PeakTimeNs).Distinct().Count() == immediate.Count,
+            "one ECG detector publishes each confirmed peak exactly once");
+        Check.That(livePulses.Count >= 5 && livePulses.Distinct().Count() == livePulses.Count,
+            "one PLETH detector publishes each confirmed pulse exactly once");
         session.ApplyElectricalShock(Shock(session), Sinus(session), 600);
         long start = session.SimulationTimeNs;
         while (session.SimulationTimeNs < start + 600_000_000)
         {
             session.Advance(17_000_000);
-            Check.That(!session.SynchronizationBeats.Any(beat => beat.PeakTimeNs >= start), "a discharge transient cannot create a synchronization marker or authorize a shock");
+            Check.That(!session.DetectedBeats.Any(beat => beat.PeakTimeNs >= start), "a discharge transient cannot create a synchronization marker or authorize a shock");
         }
     }
 
@@ -271,19 +274,18 @@ internal static class PostShockSpecifications
                 Advance(session, 5_123_000_000);
                 var delivery = Shock(session);
                 session.ApplyElectricalShock(delivery, Sinus(session), 700);
-                Check.That(session.LiveBeatEvidence!.EcgBeats.Count == 0 &&
-                    session.LiveBeatEvidence.EcgStatus == WaveformMeasurementStatus.PoorSignal,
+                Check.That(session.BeatEvidence!.EcgBeats.Count == 0 &&
+                    session.BeatEvidence.EcgStatus == WaveformMeasurementStatus.PoorSignal,
                     "delivery withdraws the current frame's ECG cues before the next sample arrives");
                 var source = new MonitorBeatSource();
                 List<long> cues = [];
                 int plethCues = 0;
-                bool delayedPacketsObserved = false;
                 long until = session.SimulationTimeNs + 14_000_000_000;
                 while (session.SimulationTimeNs < until)
                 {
                     session.Advance(50_000_000);
-                    var live = session.LiveBeatEvidence!;
-                    Check.That(live.SampleTimeNs == session.PresentationFrontierNs(0), "beat routing uses the visible sweep clock");
+                    var live = session.BeatEvidence!;
+                    Check.That(live.SampleTimeNs == session.SimulationTimeNs, "beat routing uses the visible sweep clock");
                     source.Update(MonitorBeatMode.Ecg, live.EcgStatus, live.PlethStatus, live.SampleTimeNs);
                     foreach (var beat in live.EcgBeats)
                     {
@@ -293,7 +295,7 @@ internal static class PostShockSpecifications
                             "discharge and recovery artifacts cannot emit QRS tones");
                         // PeakTime is the detector's filtered deflection, which
                         // need not equal the raw trace's largest positive sample.
-                        var visibleQrs = session.PresentedSamples(0, beat.PeakTimeNs - 80_000_000, beat.PeakTimeNs + 80_000_000).ToArray();
+                        var visibleQrs = session.Samples(0, beat.PeakTimeNs - 80_000_000, beat.PeakTimeNs + 80_000_000).ToArray();
                         Check.That(visibleQrs.Length > 0 && visibleQrs.Max(sample => sample.Value) - visibleQrs.Min(sample => sample.Value) >= 200,
                             "the detected QRS complex is present on the displayed ECG");
                         cues.Add(beat.PeakTimeNs);
@@ -301,10 +303,31 @@ internal static class PostShockSpecifications
                     Check.That(live.PlethPulses.All(pulse => live.SampleTimeNs - pulse.ConfirmedAtNs is >= 0 and <= 50_000_000),
                         "PLETH fallback uses the same live clock, not delayed packets");
                     plethCues += live.PlethPulses.Count;
-                    delayedPacketsObserved |= session.DetectedBeats.Any(beat => live.SampleTimeNs - beat.ConfirmedAtNs > 1_000_000_000);
+                    Check.That(session.DetectedBeats.All(beat => live.SampleTimeNs - beat.ConfirmedAtNs <= 50_000_000) &&
+                        session.Measurements!.SampleTimeNs == live.SampleTimeNs,
+                        "record packet completion never publishes old beats or rewinds measured time");
                 }
-                Check.That(cues.Count >= 8 && cues.Distinct().Count() == cues.Count && plethCues >= 6 && delayedPacketsObserved,
-                    "recovered QRS/PLETH cues remain live and unique while delayed measurement packets continue independently");
+                Check.That(cues.Count >= 8 && cues.Distinct().Count() == cues.Count && plethCues >= 6,
+                    "recovered QRS/PLETH cues remain current and unique across recording packet boundaries");
             }
+    }
+
+    private static IEnumerable<(long TimeNs, double Value)> RecordedSamples(LocalMonitorPreviewSession session,
+        int channel, long fromSimTimeNs, long toExclusiveSimTimeNs)
+    {
+        foreach (var block in session.Blocks)
+        {
+            var plane = block.Planes.Single(plane => plane.ChannelId == PhysiologyIllustrationSource.ChannelId(channel));
+            long stepNs = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
+            for (int index = 0; index < plane.Samples.Count; index++)
+            {
+                long time = block.StartSimTimeNs + index * stepNs;
+                if (time >= fromSimTimeNs && time < toExclusiveSimTimeNs)
+                {
+                    yield return (time, (double)plane.Samples[index] * plane.ScaleNumerator / plane.ScaleDenominator +
+                        (double)plane.OffsetNumerator / plane.OffsetDenominator);
+                }
+            }
+        }
     }
 }

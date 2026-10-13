@@ -75,19 +75,20 @@ internal static class MonitorDisplaySpecifications
     {
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default());
         for (int i = 0; i < 125; i++) { session.Advance(20_000_000); }
-        long before = session.FrontierNs;
+        long before = session.SimulationTimeNs;
         session.Advance(16_000_000);
-        Check.That(session.FrontierNs - before == 16_000_000, "display progresses between 200ms block arrivals");
+        Check.That(session.SimulationTimeNs - before == 16_000_000, "display progresses between 200ms block arrivals");
         while (session.SimulationTimeNs < 48_000_000_000) { session.Advance(50_000_000); }
         Check.That(session.Blocks.Count <= LocalMonitorPreviewSession.RetainedBlockCount &&
-            session.FrontierNs == session.SimulationTimeNs - LocalMonitorPreviewSession.PresentationLatencyNs,
-            "bounded retained history and exact acquisition/presentation lag");
+            session.Blocks[^1].StartSimTimeNs + session.Blocks[^1].DurationNs >= session.SimulationTimeNs - 200_000_000,
+            "bounded recording history stays within one packet of the current samples");
         for (int channel = 0; channel < 7; channel++)
         {
-            var samples = session.PresentedSamples(channel, 0, session.SimulationTimeNs).ToArray();
+            var samples = session.Samples(channel, 0, session.SimulationTimeNs).ToArray();
             Check.That(samples.Length <= LocalMonitorPreviewSession.RetainedBlockCount * (channel == 0 ? 50 : 25) &&
                 samples[0].TimeNs >= session.SimulationTimeNs - LocalMonitorPreviewSession.RetainedBlockCount * 200_000_000L &&
-                session.PresentationFrontierNs(channel) == session.SimulationTimeNs, "all live histories are bounded independently of the delayed packet queue");
+                session.SimulationTimeNs - samples[^1].TimeNs <= (channel == 0 ? 4_000_000 : channel == 4 ? 10_000_000 : 8_000_000),
+                "bounded live histories include every native sample through the current frame");
         }
         long time = session.SimulationTimeNs;
         Reject(() => session.Advance(0));
@@ -189,12 +190,12 @@ internal static class MonitorDisplaySpecifications
             session.DiscardStartup();
             while (session.SimulationTimeNs < 10_050_000_000) { session.Advance(50_000_000); }
             long frontier = session.SimulationTimeNs;
-            var live = Enumerable.Range(0, 7).Select(channel => session.PresentedSamples(channel, frontier - 3_000_000_000, frontier).ToArray()).ToArray();
+            var live = Enumerable.Range(0, 7).Select(channel => session.Samples(channel, frontier - 3_000_000_000, frontier).ToArray()).ToArray();
             for (int channel = 0; channel < 7; channel++)
             {
                 var plane = session.Blocks[^1].Planes.Single(candidate => candidate.ChannelId == PhysiologyIllustrationSource.ChannelId(channel));
                 long samplePeriodNs = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
-                Check.That(session.PresentationFrontierNs(channel) == frontier && frontier - live[channel][^1].TimeNs <= samplePeriodNs,
+                Check.That(session.SimulationTimeNs == frontier && frontier - live[channel][^1].TimeNs <= samplePeriodNs,
                     "ECG, PLETH and all pressure channels reach the same current time at their own native sample rate");
             }
             Check.That(Enumerable.Range(0, 7).All(row => session.Ranges.RowCycle(row) == 1),
@@ -204,8 +205,14 @@ internal static class MonitorDisplaySpecifications
             {
                 Check.That(live[channel].SequenceEqual(session.Samples(channel, frontier - 3_000_000_000, frontier)),
                     "live irregular beats and their mechanical/pulse responses preserve exact acquired timestamps, amplitudes and pressure units");
-                Check.That(live[channel].SequenceEqual(session.PresentedSamples(channel, frontier - 3_000_000_000, frontier)),
-                    "arriving packets cannot shift or repaint any already displayed channel");
+                var recorded = session.Blocks.SelectMany(block =>
+                {
+                    var plane = block.Planes.Single(candidate => candidate.ChannelId == PhysiologyIllustrationSource.ChannelId(channel));
+                    long stepNs = 1_000_000_000L * plane.SampleRateDenominator / plane.SampleRateNumerator;
+                    return plane.Samples.Select((value, index) => (TimeNs: block.StartSimTimeNs + index * stepNs,
+                        Value: (double)value * plane.ScaleNumerator / plane.ScaleDenominator + (double)plane.OffsetNumerator / plane.OffsetDenominator));
+                }).Where(sample => sample.TimeNs >= frontier - 3_000_000_000 && sample.TimeNs < frontier);
+                Check.That(live[channel].SequenceEqual(recorded), "recording preserves the exact samples already displayed");
             }
         }
     }

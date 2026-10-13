@@ -111,8 +111,8 @@ internal static class CardiacActivitySpecifications
     {
         var plan = Plan(activity);
         return PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
-            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-             new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
+            [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+             new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 0),
              new RespirationPlan(800, artifact).CreateChannel(plan, Resp, 0),
              new CentralVenousPressurePlan(600, new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
@@ -152,7 +152,7 @@ internal static class CardiacActivitySpecifications
                 actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
                 group = PhysiologyWaveformGroup.Restore(group.CaptureState());
             }
-            Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+            Check.That(actual.Count == 40 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
                 "native planes, empty cardiac bands and original acquisition clocks survive split recovery");
         }
     }

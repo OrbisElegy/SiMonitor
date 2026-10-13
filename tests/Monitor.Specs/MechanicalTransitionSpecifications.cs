@@ -34,8 +34,8 @@ internal static class MechanicalTransitionSpecifications
     }
 
     internal static PhysiologyWaveformGroup Group(RegularPhysiologyPlan plan) => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
-        [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-         new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(1_080_000_000, 512_000_000, 1000).CreateBands(), 250, 0)]);
+        [new(plan, new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+         new(plan, new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(1_080_000_000, 512_000_000, 1000).CreateBands(), 0)]);
     internal static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.SelectMany(bytes =>
         WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == id).Samples).ToArray();
 
@@ -74,7 +74,7 @@ internal static class MechanicalTransitionSpecifications
                 if (boundaryNs != boundariesNs[^1])
                     group = PhysiologyWaveformGroup.Restore(group.CaptureState());
             }
-            Check.That(actual.Count == 30 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+            Check.That(actual.Count == 40 && actual.Count == expected.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
                 $"{name}: original clocks, partial blocks and delayed tails recover as exact native wire bytes");
         }
     }

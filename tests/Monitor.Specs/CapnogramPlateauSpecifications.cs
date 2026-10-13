@@ -75,10 +75,10 @@ internal static class CapnogramPlateauSpecifications
     {
         var actual = NativeRecoveryChecks.Verify(Group,
             [1_875_000_000, 2_000_000_000, 2_190_000_000, 2_250_000_000, 3_750_000_000, 3_950_000_000, 6_000_000_000],
-            750, 30, 100, 20, nameof(ExplicitPlateauSurvivesNativeRecovery));
+            750, 30, 100, 30, nameof(ExplicitPlateauSurvivesNativeRecovery));
         short[] samples = actual.Select(bytes => WaveformEnvelopeCodec.Decode(bytes).Planes.Single(plane => plane.ChannelId == Co2))
             .SelectMany(plane => plane.Samples).ToArray();
-        Check.That(samples.Length == 400 && samples[225] == 734 && samples[375] == 3500 && samples[395] == 0,
+        Check.That(samples.Length == 600 && samples[225] == 734 && samples[375] == 3500 && samples[395] == 0,
             "native100Hz samples preserve explicit plateau resolution, end-expiratory target and source timing");
     }
 

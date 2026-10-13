@@ -25,6 +25,6 @@ public sealed record ArterialPulsePlan(long TransitDelayNs, long DurationNs,
                 Array.AsReadOnly(ArterialPulseTables.Pulse.Select(value => checked(value * PulseHeightMmHg * 100)).ToArray())),
         });
         return new(physiology, new WaveformBlockPlaneConfiguration(channelId, "AcqPressure125@1",
-            1, 100, BaselineMmHg, 1), bands, 10, qualityFlags);
+            1, 100, BaselineMmHg, 1), bands, qualityFlags);
     }
 }

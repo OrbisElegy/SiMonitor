@@ -8,9 +8,9 @@ public sealed class PeriodicWaveformGroupException(string reasonCode, string par
 }
 
 public sealed record PeriodicWaveformChannelPlan(PeriodicSignalPlan Source,
-    WaveformBlockPlaneConfiguration Plane, int DelayCapacity, uint QualityFlags);
+    WaveformBlockPlaneConfiguration Plane, uint QualityFlags);
 public sealed record PeriodicWaveformChannelState(Guid ChannelId, PeriodicSignalState Generator,
-    SignalAcquisitionDelayState Delay, uint QualityFlags);
+    uint QualityFlags);
 public sealed record PeriodicWaveformGroupState(IReadOnlyList<PeriodicWaveformChannelState> Channels,
     WaveformBlockAssemblerState Assembler);
 
@@ -18,7 +18,7 @@ public sealed record PeriodicWaveformGroupState(IReadOnlyList<PeriodicWaveformCh
 public sealed class PeriodicWaveformGroup
 {
     private readonly record struct Channel(Guid Id, PeriodicSignalGenerator Generator,
-        SignalAcquisitionDelayLine Delay, uint QualityFlags);
+        uint QualityFlags);
     private Channel[] _channels;
     private WaveformBlockAssembler _assembler;
 
@@ -40,26 +40,20 @@ public sealed class PeriodicWaveformGroup
             if (previous is not null && StringComparer.Ordinal.Compare(previous, key) >= 0) { throw InvalidCheckpoint(); }
             previous = key;
             var generator = PeriodicSignalGenerator.Restore(item.Generator);
-            var delay = SignalAcquisitionDelayLine.Restore(item.Delay);
             PeriodicSignalState source = generator.CaptureState();
-            SignalAcquisitionDelayState waiting = delay.CaptureState();
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
             if (plane is null || plane.Configuration.ProfileId != source.Plan.ProfileId ||
                 assembly.StreamEpoch != source.Plan.StreamEpoch || assembly.EpochAnchorSimTimeNs != source.Plan.EpochAnchorSimTimeNs ||
-                waiting.ProfileId != source.Plan.ProfileId || waiting.StreamEpoch != source.Plan.StreamEpoch ||
-                waiting.EpochAnchorSimTimeNs != source.Plan.EpochAnchorSimTimeNs ||
-                waiting.ReleaseCursorSimTimeNs != source.Clock.CursorSimTimeNs ||
-                waiting.NextInputSampleIndex != source.Clock.NextSampleIndex ||
-                plane.NextInputSampleIndex != waiting.NextInputSampleIndex - (ulong)waiting.PendingSamples.Count ||
+                plane.NextInputSampleIndex != source.Clock.NextSampleIndex ||
                 cursor is { } common && common != source.Clock.CursorSimTimeNs)
             { throw InvalidCheckpoint(); }
             cursor = source.Clock.CursorSimTimeNs;
-            foreach (DelayedSignalSample sample in waiting.PendingSamples.Concat(plane.PendingSamples))
+            foreach (AcquiredSignalSample sample in plane.PendingSamples)
             {
                 short expected = generator.EvaluateAt(sample.SampleIndex).NormalizedValue;
                 if (sample.NormalizedValue != expected || sample.QualityFlags != item.QualityFlags) { throw InvalidCheckpoint(); }
             }
-            _channels[index] = new(item.ChannelId, generator, delay, item.QualityFlags);
+            _channels[index] = new(item.ChannelId, generator, item.QualityFlags);
         }
     }
 
@@ -80,8 +74,7 @@ public sealed class PeriodicWaveformGroup
         plans = plans.OrderBy(plan => plan.Plane.ChannelId.ToString("N"), StringComparer.Ordinal).ToArray();
         PeriodicWaveformChannelState[] sources = plans.Select(plan => new PeriodicWaveformChannelState(plan.Plane.ChannelId,
             PeriodicSignalGenerator.Start(plan.Source).CaptureState(),
-            SignalAcquisitionDelayLine.Start(plan.Source.ProfileId, plan.Source.StreamEpoch,
-                plan.Source.EpochAnchorSimTimeNs, plan.DelayCapacity).CaptureState(), plan.QualityFlags)).ToArray();
+            plan.QualityFlags)).ToArray();
         var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
             plans[0].Source.StreamEpoch, configurationRevision, firstBlockSequence, plans[0].Source.EpochAnchorSimTimeNs,
             maximumBufferedBlocks, plans.Select(plan => plan.Plane).ToArray());
@@ -89,7 +82,7 @@ public sealed class PeriodicWaveformGroup
     }
 
     public PeriodicWaveformGroupState CaptureState() => new(Array.AsReadOnly(_channels.Select(channel =>
-        new PeriodicWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.Delay.CaptureState(), channel.QualityFlags)).ToArray()),
+        new PeriodicWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.QualityFlags)).ToArray()),
         _assembler.CaptureState());
 
     public static PeriodicWaveformGroup Restore(PeriodicWaveformGroupState state)
@@ -117,15 +110,14 @@ public sealed class PeriodicWaveformGroup
             foreach (GeneratedSignalSample sample in samples)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Release(sample.Tick.SimTimeNs);
-                channel.Delay.Enqueue(sample.Tick, sample.NormalizedValue, channel.QualityFlags);
+                Record(new(sample.Tick.ProfileId, sample.Tick.StreamEpoch, sample.Tick.SampleIndex,
+                    sample.Tick.SimTimeNs, sample.NormalizedValue, channel.QualityFlags));
             }
-            Release(simTimeNs);
 
-            void Release(long cursor)
+            void Record(AcquiredSignalSample sample)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, channel.Delay.DrainAvailable(cursor)))
+                foreach (WaveformEnvelope envelope in trial._assembler.Push(channel.Id, [sample]))
                 {
                     if (output.Count == maximumBlocks)
                     { throw new PeriodicWaveformGroupException("PeriodicGroup.BlockLimitExceeded", nameof(maximumBlocks)); }

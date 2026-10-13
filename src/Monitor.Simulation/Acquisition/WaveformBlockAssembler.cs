@@ -19,7 +19,7 @@ public sealed record WaveformBlockPlaneConfiguration(
 public sealed record WaveformBlockPlaneState(
     WaveformBlockPlaneConfiguration Configuration,
     ulong NextInputSampleIndex,
-    IReadOnlyList<DelayedSignalSample> PendingSamples);
+    IReadOnlyList<AcquiredSignalSample> PendingSamples);
 
 public sealed record WaveformBlockAssemblerState(
     Guid SessionId,
@@ -114,7 +114,7 @@ public sealed class WaveformBlockAssembler
             planeStates[index] = new WaveformBlockPlaneState(
                 canonicalPlanes[index],
                 0,
-                Array.Empty<DelayedSignalSample>());
+                Array.Empty<AcquiredSignalSample>());
         }
 
         return new WaveformBlockAssembler(new WaveformBlockAssemblerState(
@@ -139,7 +139,7 @@ public sealed class WaveformBlockAssembler
 
     public IReadOnlyList<WaveformEnvelope> Push(
         Guid channelId,
-        IReadOnlyList<DelayedSignalSample> samples)
+        IReadOnlyList<AcquiredSignalSample> samples)
     {
         ArgumentNullException.ThrowIfNull(samples);
         int planeIndex = FindPlane(channelId);
@@ -167,21 +167,18 @@ public sealed class WaveformBlockAssembler
             throw Error("WaveformBlockAssembler.StateOverflow", nameof(samples));
         }
 
-        var accepted = new DelayedSignalSample[samples.Count];
+        var accepted = new AcquiredSignalSample[samples.Count];
         for (int index = 0; index < accepted.Length; index++)
         {
-            DelayedSignalSample sample = samples[index];
+            AcquiredSignalSample sample = samples[index];
             ulong expectedIndex = target.NextInputSampleIndex + (uint)index;
             Int128 expectedSourceTime = (Int128)EpochAnchorSimTimeNs +
                 (Int128)expectedIndex * target.Profile.SamplePeriodNs;
-            Int128 expectedAvailableTime = expectedSourceTime + target.Profile.LatencyNs;
             if (!StringComparer.Ordinal.Equals(sample.ProfileId, target.Configuration.ProfileId) ||
                 sample.StreamEpoch != StreamEpoch ||
                 sample.SampleIndex != expectedIndex ||
                 expectedSourceTime > long.MaxValue ||
-                sample.SourceSimTimeNs != expectedSourceTime ||
-                expectedAvailableTime > long.MaxValue ||
-                sample.AvailableSimTimeNs != expectedAvailableTime)
+                sample.SourceSimTimeNs != expectedSourceTime)
             {
                 throw Error("WaveformBlockAssembler.InputDiscontinuous", nameof(samples));
             }
@@ -221,7 +218,7 @@ public sealed class WaveformBlockAssembler
             for (int index = 0; index < _planes.Count; index++)
             {
                 PlaneBuffer plane = _planes[index];
-                DelayedSignalSample[] blockSamples = plane.PendingSamples
+                AcquiredSignalSample[] blockSamples = plane.PendingSamples
                     .GetRange(0, plane.SamplesPerBlock)
                     .ToArray();
                 plane.PendingSamples.RemoveRange(0, plane.SamplesPerBlock);
@@ -291,7 +288,7 @@ public sealed class WaveformBlockAssembler
     }
 
     private static WaveformQualityRange[] BuildQualityRanges(
-        DelayedSignalSample[] samples)
+        AcquiredSignalSample[] samples)
     {
         List<WaveformQualityRange> ranges = [];
         int index = 0;
@@ -401,20 +398,17 @@ public sealed class WaveformBlockAssembler
 
             for (int index = 0; index < plane.PendingSamples.Count; index++)
             {
-                DelayedSignalSample sample = plane.PendingSamples[index];
+                AcquiredSignalSample sample = plane.PendingSamples[index];
                 ulong expectedIndex = expectedFirstIndex + (uint)index;
                 Int128 expectedSourceTime = (Int128)state.EpochAnchorSimTimeNs +
                     (Int128)expectedIndex * profile.SamplePeriodNs;
-                Int128 expectedAvailableTime = expectedSourceTime + profile.LatencyNs;
                 if (!StringComparer.Ordinal.Equals(
                         sample.ProfileId,
                         plane.Configuration.ProfileId) ||
                     sample.StreamEpoch != state.StreamEpoch ||
                     sample.SampleIndex != expectedIndex ||
                     expectedSourceTime > long.MaxValue ||
-                    sample.SourceSimTimeNs != expectedSourceTime ||
-                    expectedAvailableTime > long.MaxValue ||
-                    sample.AvailableSimTimeNs != expectedAvailableTime)
+                    sample.SourceSimTimeNs != expectedSourceTime)
                 {
                     throw InvalidState();
                 }
@@ -443,7 +437,7 @@ public sealed class WaveformBlockAssembler
         WaveformBlockPlaneConfiguration configuration,
         SignalAcquisitionProfileDescriptor profile,
         ulong nextInputSampleIndex,
-        DelayedSignalSample[] pendingSamples)
+        AcquiredSignalSample[] pendingSamples)
     {
         public WaveformBlockPlaneConfiguration Configuration { get; } = configuration;
 
@@ -454,6 +448,6 @@ public sealed class WaveformBlockAssembler
 
         public ulong NextInputSampleIndex { get; set; } = nextInputSampleIndex;
 
-        public List<DelayedSignalSample> PendingSamples { get; } = new(pendingSamples);
+        public List<AcquiredSignalSample> PendingSamples { get; } = new(pendingSamples);
     }
 }

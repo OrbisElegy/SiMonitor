@@ -71,15 +71,15 @@ internal static class CapnogramDispersionSpecifications
     {
         var actual = NativeRecoveryChecks.Verify(() => Group(100_000_000),
             [1_875_000_000, 2_190_000_000, 2_475_000_000, 2_575_000_000, 2_675_000_000, 4_350_000_000, 4_650_000_000, 4_750_000_000, 8_000_000_000],
-            1000, 40, 100, 30, nameof(DispersedNativeSamplesSurviveRecovery));
+            1000, 40, 100, 40, nameof(DispersedNativeSamplesSurviveRecovery));
         var undispersed = Group(0).AdvanceTo(8_000_000_000, 1000, 40, 100);
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
         Check.That(Samples(actual, Resp).SequenceEqual(Samples(undispersed, Resp)) &&
             !Samples(actual, Co2).SequenceEqual(Samples(undispersed, Co2)), "only the CO2 measurement path changes");
         var boundary = Group(100_000_000);
-        Check.That(boundary.AdvanceTo(2_189_999_999, 548, 1, 100).Count == 0 && boundary.AdvanceTo(2_190_000_000, 1, 1, 100).Count == 1,
-            "response spread does not silently alter acquisition processing latency");
+        Check.That(boundary.AdvanceTo(192_000_000, 24, 1, 100).Count == 0 && boundary.AdvanceTo(192_000_001, 1, 1, 100).Count == 1,
+            "physiological response spread does not add an acquisition wait");
     }
 
     private static void InvalidDispersionAndLateFailureAreAtomic()

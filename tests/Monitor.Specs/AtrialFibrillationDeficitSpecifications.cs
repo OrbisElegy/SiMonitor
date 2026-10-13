@@ -74,7 +74,7 @@ internal static class AtrialFibrillationDeficitSpecifications
         var id = Guid.Parse("22222222-2222-4222-8222-222222222222");
         var abp = Guid.Parse("33333333-3333-4333-8333-333333333333");
         PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(id, id, 1, 1, 1, 0, 32,
-            [new(plan, new(id, "AcqPleth125@1", 1, 1, 0, 1), [], 250, 0, PlethRunoff: Pleth), Pressure.CreateChannel(plan, abp, 0)]);
+            [new(plan, new(id, "AcqPleth125@1", 1, 1, 0, 1), [], 0, PlethRunoff: Pleth), Pressure.CreateChannel(plan, abp, 0)]);
         var continuous = Group(); var recovered = Group();
         for (int i = 1; i <= 85; i++)
         {
@@ -84,7 +84,9 @@ internal static class AtrialFibrillationDeficitSpecifications
             recovered = PhysiologyWaveformGroup.Restore(recovered.CaptureState());
             if (i == 70)
             {
-                var state = recovered.CaptureState();
+                var pending = recovered.Fork();
+                _ = pending.AdvanceTo(14_100_000_000, 13, 1, 100);
+                var state = pending.CaptureState();
                 Reject(() => PhysiologyWaveformGroup.Restore(state with
                 {
                     Channels = state.Channels.Select(c => c.Generator.PlethRunoff is null ? c : c with

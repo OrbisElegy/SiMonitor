@@ -28,6 +28,7 @@ internal sealed class LiveMonitorView : UserControl
     private string? _shownManualCaption;
     private readonly DesktopLocalization _localization;
     private long _lastMeasurementBucket = -1;
+    private LiveMeasurementSnapshot? _shownMeasurements;
     private readonly List<(int Channel, TextBlock Primary, TextBlock Secondary)> _rows = [];
     private readonly List<(TextBlock Pi, PulseIndicator Bar)> _opticalRows = [];
     private readonly MonitorNoticeRotation _rotation = new();
@@ -38,7 +39,6 @@ internal sealed class LiveMonitorView : UserControl
     internal Func<string, AlarmAttentionSnapshot?>? AttentionFor { get; set; }
     private MonitorNotice[]? _highlightNotices;
     private bool? _highlightOn, _highlightNoticeColor;
-    private double _pulseMinimum, _pulseMaximum;
     internal Func<LiveMeasurementSnapshot, IEnumerable<MonitorNotice>>? AdditionalNotices { get; set; }
     internal Func<bool>? NoticeColorEnabled { get; set; }
     internal IReadOnlyList<TextBlock> NumericBlocks => _rows.SelectMany(r => new[] { r.Primary, r.Secondary }).ToArray();
@@ -222,7 +222,8 @@ internal sealed class LiveMonitorView : UserControl
 
     private void RefreshLanguage()
     {
-        Refresh();
+        RefreshManualVitals();
+        RefreshClock();
         RefreshNotice();
     }
 
@@ -281,28 +282,57 @@ internal sealed class LiveMonitorView : UserControl
     internal void Refresh()
     {
         RefreshManualVitals();
+        RefreshClock();
+        RefreshPulseIndicator();
+        // Numeric presentation has its own cadence; measurements advance every frame.
+        long bucket = _trace.Session.SimulationTimeNs / 200_000_000;
+        var snapshot = _trace.Session.Measurements;
+        if (snapshot is null) { return; }
+        if (bucket == _lastMeasurementBucket && _trace.Session.DetectedMonitoringEvents.Count == 0 &&
+            _trace.Session.DetectedRhythmEvents.Count == 0 && _shownMeasurements is { } shown && SameStatuses(shown, snapshot))
+        { RefreshNotice(); return; }
+        _lastMeasurementBucket = bucket;
+        RefreshReadings(snapshot);
+    }
+
+    private void RefreshClock()
+    {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
         string clock = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
         Clock.Text = _localization.Format("monitor.clock", clock) + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
-        if (_opticalRows.Count > 0)
+    }
+
+    private static bool SameStatuses(LiveMeasurementSnapshot left, LiveMeasurementSnapshot right) =>
+        left.HeartRate.Status == right.HeartRate.Status && left.PulseRate.Status == right.PulseRate.Status &&
+        left.ImpedanceRespiration.Status == right.ImpedanceRespiration.Status && left.SpO2.Status == right.SpO2.Status &&
+        left.SpO2.IsQuestionable == right.SpO2.IsQuestionable &&
+        left.Capnography.EndTidalCentiMmHg.Status == right.Capnography.EndTidalCentiMmHg.Status &&
+        left.Capnography.RespirationsMilliPerMinute.Status == right.Capnography.RespirationsMilliPerMinute.Status &&
+        left.AbpMean.Status == right.AbpMean.Status && left.AbpMean.Pulse?.Status == right.AbpMean.Pulse?.Status &&
+        left.PaMean.Status == right.PaMean.Status && left.PaMean.Pulse?.Status == right.PaMean.Pulse?.Status &&
+        left.CvpMean.Status == right.CvpMean.Status && left.EcgRhythm.Status == right.EcgRhythm.Status &&
+        left.EcgMonitoring.Status == right.EcgMonitoring.Status && left.EcgMonitoring.Learning == right.EcgMonitoring.Learning &&
+        left.EcgMonitoring.Repolarization.StStatus == right.EcgMonitoring.Repolarization.StStatus &&
+        left.EcgMonitoring.Repolarization.QtStatus == right.EcgMonitoring.Repolarization.QtStatus;
+
+    private void RefreshPulseIndicator()
+    {
+        if (_opticalRows.Count == 0) { return; }
+        var session = _trace.Session;
+        long frontier = session.SimulationTimeNs;
+        // Use the sweep's acquired samples for both amplitude and normalization;
+        // pulse animation does not wait for rate confirmation or numeric refresh.
+        var samples = session.Samples(2, Math.Max(0, frontier - 4_000_000_000), frontier).ToArray();
+        double level = 0;
+        // Stale PR does not hide the first returning pulse before it is confirmed.
+        if (samples.Length > 0 && samples[^1].TimeNs >= frontier - 32_000_000 &&
+            session.BeatEvidence?.PlethStatus is not (WaveformMeasurementStatus.NoData or WaveformMeasurementStatus.PoorSignal))
         {
-            var pulse = _trace.Session.Samples(2, Math.Max(0, _trace.Session.FrontierNs - 32_000_000), _trace.Session.FrontierNs).LastOrDefault();
-            double level = _pulseMaximum > _pulseMinimum ? Math.Clamp((pulse.Value - _pulseMinimum) / (_pulseMaximum - _pulseMinimum), 0, 1) : 0;
-            foreach (var (_, bar) in _opticalRows) { bar.Level = level; bar.InvalidateVisual(); }
+            double minimum = samples.Min(sample => sample.Value);
+            double maximum = samples.Max(sample => sample.Value);
+            if (maximum > minimum) { level = Math.Clamp((samples[^1].Value - minimum) / (maximum - minimum), 0, 1); }
         }
-        // Numeric updates follow acquisition cadence, not the 60Hz sweep.
-        long bucket = _trace.Session.SimulationTimeNs / 200_000_000;
-        if (bucket == _lastMeasurementBucket && _trace.Session.DetectedMonitoringEvents.Count == 0 &&
-            _trace.Session.DetectedRhythmEvents.Count == 0) { RefreshNotice(); return; }
-        _lastMeasurementBucket = bucket;
-        var snapshot = _trace.Session.Measurements;
-        if (snapshot is null) { return; }
-        var samples = _trace.Session.Samples(2, Math.Max(0, _trace.Session.FrontierNs - 4_000_000_000), _trace.Session.FrontierNs).ToArray();
-        _pulseMinimum = samples.Length > 0 ? samples.Min(s => s.Value) : 0;
-        _pulseMaximum = samples.Length > 0 ? samples.Max(s => s.Value) : 0;
-        if (snapshot.PulseRate.Status is WaveformMeasurementStatus.NoData or WaveformMeasurementStatus.PoorSignal or WaveformMeasurementStatus.Stale)
-        { _pulseMaximum = _pulseMinimum; }
-        RefreshReadings(snapshot);
+        foreach (var (_, bar) in _opticalRows) { bar.Level = level; bar.InvalidateVisual(); }
     }
     internal void RefreshAttention()
     {
@@ -360,6 +390,7 @@ internal sealed class LiveMonitorView : UserControl
         { pi.Text = "PI " + (snapshot.SpO2.PerfusionMilliPercent is { } value ? ((decimal)value / 1000).ToString("0.00", CultureInfo.InvariantCulture) : "---") + " %"; }
         _rawNotices = notices.DistinctBy(notice => notice.Id).Concat(AdditionalNotices?.Invoke(snapshot) ?? []).ToArray();
         RefreshAttention();
+        _shownMeasurements = snapshot;
     }
     private static string RepolarizationText(EcgMonitoringReading reading)
     {

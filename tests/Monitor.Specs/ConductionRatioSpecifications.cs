@@ -40,8 +40,8 @@ internal static class ConductionRatioSpecifications
     }
 
     private static PhysiologyWaveformGroup Group(int ratio) => PhysiologyWaveformGroup.Start(Ecg, Pleth, 1, 1, 1, 0, 50,
-        [new(Plan(ratio), new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 10, 0),
-         new(Plan(ratio), new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 250, 0),
+        [new(Plan(ratio), new(Ecg, "AcqECGMonitor250@1", 1, 1, 0, 1), TextbookEcgReference.CreateBands(), 0),
+         new(Plan(ratio), new(Pleth, "AcqPleth125@1", 1, 1, 0, 1), new PlethPulsePlan(80_000_000, 512_000_000, 1000).CreateBands(), 0),
          new RespirationPlan(800).CreateChannel(Plan(ratio), Resp, 0)]);
     private static short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
         .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
@@ -70,7 +70,7 @@ internal static class ConductionRatioSpecifications
             actual.AddRange(group.AdvanceTo(step * 200_000_000L, 50, 1, 100));
             group = PhysiologyWaveformGroup.Restore(group.CaptureState());
         }
-        Check.That(actual.Count == 30 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+        Check.That(actual.Count == 40 && expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
             "conducted ECG and mechanical pulse planes recover together with unchanged native sample clocks");
     }
 

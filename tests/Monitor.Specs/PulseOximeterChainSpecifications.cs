@@ -44,8 +44,8 @@ internal static class PulseOximeterChainSpecifications
                     var reading = snapshot.SpO2;
                     var notice = SpO2LimitNotice.Evaluate(true, 92000, 85000, reading);
                     long timeNs = session.SimulationTimeNs;
-                    bool beforeStop = afterCycles is not null && timeNs is >= 6_000_000_000 and < 10_000_000_000;
-                    bool afterRecovery = durationCycles is not null && timeNs >= 26_000_000_000;
+                    bool beforeStop = afterCycles is not null && timeNs is >= 6_000_000_000 and < 8_000_000_000;
+                    bool afterRecovery = durationCycles is not null && timeNs >= 24_000_000_000;
                     if (beforeStop || afterRecovery)
                     {
                         Check.That(reading.Status == WaveformMeasurementStatus.Valid &&
@@ -60,9 +60,10 @@ internal static class PulseOximeterChainSpecifications
                         recovered |= afterRecovery;
                     }
                     // Ten 800ms cycles stop at source time8s, resuming at20s when
-                    // requested. Allow the2s acquisition delay and4s optical window.
+                    // requested. The optical window observes this same source
+                    // clock, including physical runoff after the final ejection.
                     bool withoutPulses = afterCycles is null ? timeNs >= 6_000_000_000
-                        : timeNs >= 14_000_000_000 && (durationCycles is null || timeNs < 22_000_000_000);
+                        : timeNs >= 14_000_000_000 && (durationCycles is null || timeNs < 20_000_000_000);
                     if (withoutPulses)
                     {
                         Check.That(reading.Status == WaveformMeasurementStatus.PoorSignal &&

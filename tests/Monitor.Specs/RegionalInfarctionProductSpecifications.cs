@@ -101,7 +101,7 @@ internal static class RegionalInfarctionProductSpecifications
                 }
                 if (step == 19) { source = PhysiologyWaveformGroup.Restore(source.CaptureState()); }
             }
-            Check.That(count == 25, "one QRS per cycle remains detected");
+            Check.That(count == 28, "one QRS per cycle remains detected across the complete 22-second source interval");
             if (shape.Territory == InfarctionTerritory.Inferior)
             { Check.That(changed, "inferior morphology changes monitored II"); }
         }

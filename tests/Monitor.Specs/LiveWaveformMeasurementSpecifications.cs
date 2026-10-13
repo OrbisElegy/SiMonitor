@@ -12,6 +12,8 @@ internal static class LiveWaveformMeasurementSpecifications
     [
         new(nameof(LiveMeasurementsCommitTogetherAndRestore), LiveMeasurementsCommitTogetherAndRestore),
         new(nameof(LiveOpticsAndQualityRemainSourceSpecific), LiveOpticsAndQualityRemainSourceSpecific),
+        new(nameof(NativeSampleBatchesPreserveMeasurementsAndEvents), NativeSampleBatchesPreserveMeasurementsAndEvents),
+        new(nameof(NativeSampleBatchesCommitAtomicallyAndRejectFutureSamples), NativeSampleBatchesCommitAtomicallyAndRejectFutureSamples),
         new(nameof(PreviewMeasurementsFollowAcquisitionNotSweep), PreviewMeasurementsFollowAcquisitionNotSweep),
     ];
     private static List<byte[]> Input()
@@ -88,14 +90,142 @@ internal static class LiveWaveformMeasurementSpecifications
         var reading = measured.Measurements!;
         Check.That(plain.Measurements is null && reading.HeartRate.Status == WaveformMeasurementStatus.Valid && reading.SpO2.Status == WaveformMeasurementStatus.Valid,
             "opt-in live calculation, thumbnail/default runtime stays cheap");
-        Check.That(reading.SampleTimeNs >= measured.FrontierNs && reading.SampleTimeNs < measured.SimulationTimeNs,
-            "measurement clock follows acquired samples, separate from display and simulation");
-        Check.That(plain.Blocks.SelectMany(b => b.Planes.SelectMany(p => p.Samples)).SequenceEqual(measured.Blocks.SelectMany(b => b.Planes.SelectMany(p => p.Samples))) && plain.FrontierNs == measured.FrontierNs,
-            "measurements preserve original display waveforms and sweep pacing");
+        Check.That(reading.SampleTimeNs == measured.SimulationTimeNs,
+            "all measurements use the current source time without an acquisition backlog");
+        Check.That(Enumerable.Range(0, 7).All(channel => plain.Samples(channel, 0, plain.SimulationTimeNs)
+                .SequenceEqual(measured.Samples(channel, 0, measured.SimulationTimeNs))),
+            "measurements preserve the source samples used by the display");
         Check.That(measured.Measurements == reading, "reading or paused preview never consumes/replays events");
         var noOptics = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true);
         for (int i = 0; i < 200; i++) { noOptics.Advance(50_000_000); }
         Check.That(noOptics.Measurements!.SpO2.Status == WaveformMeasurementStatus.NoData, "main preview has no hidden98% fallback");
+    }
+
+    private static void NativeSampleBatchesPreserveMeasurementsAndEvents()
+    {
+        var optical = new PulseOximeterIllustrationSource(PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+            Guid.Parse("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"), 90000);
+        WaveformEnvelope[] blocks = Input().Take(80).Select(wire =>
+        {
+            var original = WaveformEnvelopeCodec.Decode(wire);
+            var light = WaveformEnvelopeCodec.Decode(optical.ConvertAcquiredPulse(wire));
+            return original with
+            {
+                InstanceId = light.InstanceId,
+                Planes = original.Planes.Concat(light.Planes.Where(plane => plane.ChannelId != PhysiologyIllustrationSource.ChannelId(2))).ToArray()
+            };
+        }).ToArray();
+        var recorded = LiveWaveformMeasurements.CreateIllustration();
+        List<DetectedEcgBeat> recordedBeats = [];
+        List<DetectedPlethPulse> recordedPulses = [];
+        List<DetectedEcgRhythmEvent> recordedRhythms = [];
+        List<DetectedEcgMonitoringEvent> recordedMonitoring = [];
+        foreach (var block in blocks)
+        {
+            recorded.Consume(WaveformEnvelopeCodec.EncodeRaw(block), out var beats, out var pulses, out var rhythms, out var monitoring);
+            recordedBeats.AddRange(beats);
+            recordedPulses.AddRange(pulses);
+            recordedRhythms.AddRange(rhythms);
+            recordedMonitoring.AddRange(monitoring);
+        }
+        var live = LiveWaveformMeasurements.CreateIllustration();
+        LiveWaveformMeasurements? restored = null;
+        List<DetectedEcgBeat> liveBeats = [];
+        List<DetectedPlethPulse> livePulses = [];
+        List<DetectedEcgRhythmEvent> liveRhythms = [];
+        List<DetectedEcgMonitoringEvent> liveMonitoring = [];
+        int frames = 0;
+        bool partialChannels = false;
+        foreach (var (time, channels) in NativeFrames(blocks))
+        {
+            var reading = live.ConsumeSamples(channels, time, out var beats, out var pulses, out var rhythms, out var monitoring);
+            liveBeats.AddRange(beats);
+            livePulses.AddRange(pulses);
+            liveRhythms.AddRange(rhythms);
+            liveMonitoring.AddRange(monitoring);
+            partialChannels |= channels.Count is > 0 and < 7;
+            if (restored is not null)
+            {
+                Check.That(restored.ConsumeSamples(channels, time, out var restoredBeats, out var restoredPulses,
+                    out var restoredRhythms, out var restoredMonitoring) == reading &&
+                    beats.SequenceEqual(restoredBeats) && pulses.SequenceEqual(restoredPulses) &&
+                    rhythms.SequenceEqual(restoredRhythms) && monitoring.SequenceEqual(restoredMonitoring),
+                    "native partial-frame checkpoint resumes all readings and event identities");
+            }
+            if (++frames == 40) { restored = LiveWaveformMeasurements.Restore(live.Capture()); }
+            Check.That(reading.SampleTimeNs == time && reading == live.Read(time), "querying the current frame does not consume or replay samples");
+        }
+        const long finalTime = 16_000_000_000;
+        Check.That(partialChannels && live.Read(finalTime) == recorded.Read(finalTime),
+            "uneven frame lengths and omitted sample grids preserve every recorded-packet measurement including saturation");
+        Check.That(liveBeats.SequenceEqual(recordedBeats) && livePulses.SequenceEqual(recordedPulses) &&
+            liveRhythms.SequenceEqual(recordedRhythms) && liveMonitoring.SequenceEqual(recordedMonitoring),
+            "one detector owner preserves sample-time events independently of rendering frame boundaries");
+    }
+
+    private static void NativeSampleBatchesCommitAtomicallyAndRejectFutureSamples()
+    {
+        WaveformEnvelope[] blocks = Input().Take(2).Select(wire => WaveformEnvelopeCodec.Decode(wire)).ToArray();
+        var frames = NativeFrames(blocks).Where(frame => frame.Channels.Count == 7).Take(2).ToArray();
+        var owner = LiveWaveformMeasurements.CreateIllustration();
+        var first = frames[0];
+        owner.ConsumeSamples(first.Channels, first.Time, out _, out _, out _, out _);
+        var restored = LiveWaveformMeasurements.Restore(owner.Capture());
+        var before = owner.Read(first.Time);
+        var next = frames[1];
+        var invalid = next.Channels.Select(block => block.Planes[0].ChannelId == PhysiologyIllustrationSource.ChannelId(4)
+            ? block with { Planes = [block.Planes[0] with { OffsetNumerator = int.MaxValue }] } : block).ToArray();
+        Reject(() => owner.ConsumeSamples(invalid, next.Time, out _, out _, out _, out _));
+        Reject(() => owner.ConsumeSamples(next.Channels, first.Time, out _, out _, out _, out _));
+        Reject(() => owner.ConsumeSamples([next.Channels[0], next.Channels[0]], next.Time, out _, out _, out _, out _));
+        Check.That(owner.Read(first.Time) == before, "late detector failure, future samples and duplicate channels preserve the whole committed batch");
+        Check.That(owner.ConsumeSamples(next.Channels, next.Time, out var beats, out var pulses, out var rhythms, out var monitoring) ==
+            restored.ConsumeSamples(next.Channels, next.Time, out var restoredBeats, out var restoredPulses, out var restoredRhythms, out var restoredMonitoring) &&
+            beats.SequenceEqual(restoredBeats) && pulses.SequenceEqual(restoredPulses) && rhythms.SequenceEqual(restoredRhythms) &&
+            monitoring.SequenceEqual(restoredMonitoring), "valid native retry commits once without hidden detector progress");
+        Reject(() => owner.ConsumeSamples(next.Channels, next.Time, out _, out _, out _, out _));
+        Check.That(owner.ConsumeSamples([], next.Time, out beats, out pulses, out rhythms, out monitoring) == owner.Read(next.Time) &&
+            beats.Count + pulses.Count + rhythms.Count + monitoring.Count == 0,
+            "an empty or paused frame publishes no historical events");
+    }
+
+    private static IEnumerable<(long Time, IReadOnlyList<WaveformEnvelope> Channels)> NativeFrames(WaveformEnvelope[] blocks)
+    {
+        long[] frameDurations = [1_000_000, 16_000_000, 33_000_000, 50_000_000, 125_000_000];
+        var template = blocks[0];
+        var samples = template.Planes.ToDictionary(plane => plane.ChannelId,
+            plane => blocks.SelectMany(block => block.Planes.Single(candidate => candidate.ChannelId == plane.ChannelId).Samples).ToArray());
+        int[] positions = new int[7];
+        ulong[] sequences = new ulong[7];
+        long end = blocks[^1].StartSimTimeNs + blocks[^1].DurationNs;
+        long time = template.StartSimTimeNs;
+        int frame = 0;
+        while (time < end)
+        {
+            time = Math.Min(end, time + frameDurations[frame++ % frameDurations.Length]);
+            List<WaveformEnvelope> channels = [];
+            for (int channel = 0; channel < 7; channel++)
+            {
+                Guid id = PhysiologyIllustrationSource.ChannelId(channel);
+                var primary = template.Planes.Single(plane => plane.ChannelId == id);
+                long step = 1_000_000_000L * primary.SampleRateDenominator / primary.SampleRateNumerator;
+                int from = positions[channel];
+                int to = Math.Min(samples[id].Length, checked((int)((time - template.StartSimTimeNs + step - 1) / step)));
+                if (from == to) { continue; }
+                WaveformPlane[] planes = template.Planes.Where(plane => plane.ChannelId == id || channel == 2 &&
+                    (plane.ChannelId == PulseOximeterIllustrationSource.RedChannelId || plane.ChannelId == PulseOximeterIllustrationSource.InfraredChannelId))
+                    .Select(plane => plane with { FirstSampleIndex = plane.FirstSampleIndex + (ulong)from, Samples = samples[plane.ChannelId][from..to] }).ToArray();
+                channels.Add(template with
+                {
+                    BlockSequence = sequences[channel]++,
+                    StartSimTimeNs = template.StartSimTimeNs + from * step,
+                    DurationNs = checked((uint)((to - from) * step)),
+                    Planes = planes
+                });
+                positions[channel] = to;
+            }
+            yield return (time, channels);
+        }
     }
     private static void Reject(Action action)
     {

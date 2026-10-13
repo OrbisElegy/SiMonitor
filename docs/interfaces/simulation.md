@@ -14,7 +14,6 @@
 | `SimTimeNs`、`SourceSimTimeNs` | 数据仿真时间，单位 ns；不是墙钟、UI 帧时间或到达时间 |
 | `EpochAnchorSimTimeNs` | 本采样网格的时间原点；样本时间为原点加索引乘采样周期 |
 | `GenerateBefore`、`DrainBefore`、`AdvanceBefore` | 右端点排除；只生成时间小于 `exclusiveSimTimeNs` 的样本或事件 |
-| `DrainAvailable(simTimeNs)` | 释放可用时间小于等于指定时间的样本；与源时间区分 |
 | `FromSimTimeNs` / `ToExclusiveSimTimeNs` | 半开积分区间 `[from, to)` |
 | `ValueQ32`、`TableQ32` | 有符号整数值乘 `2^32`；量纲由调用的源或平面决定 |
 | `PhaseU64` | 一周映射到无符号 64 位相位空间，按模 `2^64` 递增 |
@@ -73,21 +72,21 @@ DeterminismCheckpoint Restore(ReadOnlySpan<byte> bytes);
 提供 `Create(rootSeed)` / `CreateFromLowercaseHex` / `Restore` / `Step` / `CaptureCheckpoint`；
 固定步长 4 ms，`DeterminismStepRecord.WriteTo(Span<byte>)` 输出固定 40 字节一致性记录。
 
-## 3. 采样、延迟与 200 ms 组块
+## 3. 即时采样与 200 ms 记录组块
 
 实现：[SignalSampleClock.cs](../../src/Monitor.Simulation/Acquisition/SignalSampleClock.cs)、
-[SignalAcquisitionDelayLine.cs](../../src/Monitor.Simulation/Acquisition/SignalAcquisitionDelayLine.cs)、
+[AcquiredSignalSample.cs](../../src/Monitor.Simulation/Acquisition/AcquiredSignalSample.cs)、
 [WaveformBlockAssembler.cs](../../src/Monitor.Simulation/Acquisition/WaveformBlockAssembler.cs)。
 
 `FrozenSignalAcquisitionProfiles.Get(profileId)` 只接受下列冻结 ID：
 
-| Profile ID | Hz / 周期 | 采集延迟 | 类别 |
-| --- | --- | --- | --- |
-| `AcqECGMonitor250@1` | 250 / 4 ms | 40 ms | ECG-monitor |
-| `AcqResp125@1` | 125 / 8 ms | 80 ms | IMP-Resp |
-| `AcqPleth125@1` | 125 / 8 ms | 2000 ms | Pleth |
-| `AcqPressure125@1` | 125 / 8 ms | 80 ms | Pressure |
-| `AcqCO2_100@1` | 100 / 10 ms | 2000 ms | CO2 |
+| Profile ID | Hz / 周期 | 类别 |
+| --- | --- | --- |
+| `AcqECGMonitor250@1` | 250 / 4 ms | ECG-monitor |
+| `AcqResp125@1` | 125 / 8 ms | IMP-Resp |
+| `AcqPleth125@1` | 125 / 8 ms | Pleth |
+| `AcqPressure125@1` | 125 / 8 ms | Pressure |
+| `AcqCO2_100@1` | 100 / 10 ms | CO2 |
 
 当前都声明 `Identity@1` 滤波、`Int16Normalized` 量化和 `ProjectTeachingProfile` 证据状态。
 
@@ -97,24 +96,20 @@ IReadOnlyList<SignalSampleTick> DrainBefore(long exclusiveSimTimeNs);
 SignalProfileBoundary ApplyProfileBoundary(string nextProfileId, ulong nextStreamEpoch,
     long boundarySimTimeNs, FilterStateTransitionPolicy filterStateTransitionPolicy,
     bool standardEcgRecordActive);
-static SignalAcquisitionDelayLine Start(string profileId, ulong streamEpoch,
-    long epochAnchorSimTimeNs, int capacity);
-void Enqueue(SignalSampleTick tick, short normalizedValue, uint qualityFlags = 0);
-IReadOnlyList<DelayedSignalSample> DrainAvailable(long simTimeNs);
 static WaveformBlockAssembler Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch,
     ulong streamEpoch, ulong configurationRevision, ulong firstBlockSequence,
     long epochAnchorSimTimeNs, int maximumBufferedBlocks,
     IReadOnlyList<WaveformBlockPlaneConfiguration> planes);
-IReadOnlyList<WaveformEnvelope> Push(Guid channelId, IReadOnlyList<DelayedSignalSample> samples);
+IReadOnlyList<WaveformEnvelope> Push(Guid channelId, IReadOnlyList<AcquiredSignalSample> samples);
 ```
 
 时钟批次最多 1,000,000 个 tick。切换 profile 必须位于当前 cursor、使用不同 profile 和严格递增 stream epoch，
 且不得在标准 ECG 记录活动期间进行；切换后样本索引从零开始。
 `FilterStateTransitionPolicy` 有 `Reacquire`、`Clear`、`MigrateValidated`，此入口记录所选策略，不迁移实际滤波器。
 
-延迟队列容量 1–1,000,000；`Enqueue` 校验 profile、epoch、连续索引和精确源时间，
-计算 `AvailableSimTimeNs = SourceSimTimeNs + LatencyNs`。已经晚于释放 cursor 才提交的输入被拒绝。
-调用顺序是先释放当前源时刻可用的旧数据，再加入该时刻新 tick，最后释放至本次推进终点。
+`AcquiredSignalSample` 保留 profile、epoch、连续索引、源时间、量化值及质量标记。
+采样值生成后立即交给消费者；不另设可用时间、释放游标或人为采集延迟队列。
+生理传播、机械响应和 CO₂ 管路传输仍由源模型计算，测量算法仍保留各自的观察与平均窗口。
 
 组块器接收 1–128 个唯一通道，按 UUID 规范字节顺序排列。
 `WaveformBlockPlaneConfiguration` 明确 channel、profile、比例和偏置；比例及偏置的分母均不能为零。
@@ -128,7 +123,7 @@ IReadOnlyList<WaveformEnvelope> Push(Guid channelId, IReadOnlyList<DelayedSignal
 `EvaluateAt(ulong sampleIndex)` 与 `EvaluateRange(ulong firstSampleIndex, int sampleCount, CancellationToken = default)`
 是纯索引求值，不推进时钟；`GenerateBefore(long exclusiveSimTimeNs, int maximumSamples, CancellationToken = default)` 推进时钟。
 
-[PeriodicWaveformPipeline](../../src/Monitor.Simulation/Acquisition/PeriodicWaveformPipeline.cs) 组合单通道源、延迟和组块器；
+[PeriodicWaveformPipeline](../../src/Monitor.Simulation/Acquisition/PeriodicWaveformPipeline.cs) 组合单通道源和记录组块器；
 [PeriodicWaveformGroup](../../src/Monitor.Simulation/Acquisition/PeriodicWaveformGroup.cs) 组合多通道。
 二者都有 `Start`、`CaptureState`、`Restore` 和 `AdvanceTo`；单通道参数名为 `maximumSamples`，
 组参数名为 `maximumSamplesPerChannel`，随后都是 `maximumBlocks` 和可选取消令牌，输出 `IReadOnlyList<byte[]>`。
@@ -330,13 +325,14 @@ IReadOnlyList<byte[]> AdvanceTo(long simTimeNs, int maximumSamplesPerChannel,
 void ContinueWith(PhysiologyWaveformGroup definition);
 ```
 
-`PhysiologyWaveformChannelPlan` 把 physiology、plane、bands、delay capacity、quality flags、可选 pressure/pleth 源、零偏和 `PressureBaselineCentiMmHg` 关联。
+`PhysiologyWaveformChannelPlan` 把 physiology、plane、bands、quality flags、可选 pressure/pleth 源、零偏和 `PressureBaselineCentiMmHg` 关联。
 同组共享同一 physiology plan、epoch 和 cursor；压力储库源、Pleth runoff 源、普通 band 三种路径互斥。
 单通道样本预算最多 1,000,000，事件预算最多 4096，输出块预算 1–300。
-组块 `AdvanceTo` 返回已满足采集延迟的完整 raw envelope，可能暂时为空。
+组块 `AdvanceTo` 返回已完成源时间区间的 raw envelope；不足 200 ms 的尾部保留在组块器中，
+不阻止同批即时采样供监护消费。
 
 `ContinueWith` 是同一流内接续：通道 ID、质量、零偏和 plane 配置必须完全一致，否则 `PhysiologyGroup.ChannelMismatch`。
-它保留样本时钟、索引、延迟队列和已组装数据，新定义仅处理当前 cursor 之后的新事件；旧事件已触发的尾部继续衰减。
+它保留样本时钟、索引和已组装数据，新定义仅处理当前 cursor 之后的新事件；旧事件已触发的尾部继续衰减。
 房颤 f 波、室颤和室扑属于连续活动：从生效 cursor 立即接入当前波形段，沿用既有时间轴相位，
 不等待下一个片段触发点。退出这些模式或更换粗／细波定义时，旧连续活动在边界停止，
 不作为逐搏尾部残留或叠加；已触发的 P／QRS／T 尾部仍按原规则保留。
@@ -371,7 +367,7 @@ group 的 `Start` 在通用身份/预算参数后接 `RegularPhysiologyPlan phys
 | `PlethRunoffSource.Create(RegularPhysiologyPlan, PlethRunoffPlan)` / `EvaluateAt(long, CancellationToken = default)` | counts 的 Q32 值；有限 LUT 加有界衰减尾部，公开 `SupportNs` 和 `MaximumHistoryEvents` |
 | `ArterialPulsePlan` / `PulmonaryArteryPulsePlan` / `CentralVenousPressurePlan` / `VascularPressurePlan.CreateChannel` | 返回压力 `PhysiologyWaveformChannelPlan`；当前 wire 比例 1/100，量纲 mmHg |
 | `RespirationPlan.CreateChannel(RegularPhysiologyPlan, Guid, uint)` | 125 Hz 呼吸形态，幅度 counts，可叠加独立心源伪差 |
-| `CapnogramPlan.CreateChannel(RegularPhysiologyPlan, Guid, uint)` | 100 Hz CO₂，比例 1/100，加 `BaselineMmHg` 偏置；形态运输延迟与采集延迟分开 |
+| `CapnogramPlan.CreateChannel(RegularPhysiologyPlan, Guid, uint)` | 100 Hz CO₂，比例 1/100，加 `BaselineMmHg` 偏置；管路运输延迟由源模型计算 |
 | `SeededCardiacRate` / `SeededExpirationPressure` / `SeededOpticalSaturation` | 由种子准备有界变化，公开 prepared stream 状态；索引/时间查询不依赖调用历史 |
 
 源定义见 [VascularPressurePlan.cs](../../src/Monitor.Simulation/Physiology/VascularPressurePlan.cs)、
@@ -509,7 +505,7 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 高频时缩短形态支撑；电流线性缩放教学尖峰，零电流停止刺激及诱发事件。
 非零电流的夺获／失败仍由示例决定，不提供患者特定夺获阈值。
 `PacingIllustrationConfiguration.Apply` 替换心脏示例并保留呼吸、压力输入。
-`LocalMonitorPreviewSession.SchedulePacing` / `StopPacing` 返回下一采集边界时间，保留会话、
+`LocalMonitorPreviewSession.SchedulePacing` / `StopPacing` 返回下一 200 ms 源配置边界时间，保留会话、
 历史波形和实时氧合状态；停止恢复首次启动前配置，普通源切换取消起搏覆盖。
 仿真刺激旁路时间映射到刺激开始后首个 4 ms 采集点，跨包边界不遗漏，仍标记为 Simulation。
 

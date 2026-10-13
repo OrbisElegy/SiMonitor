@@ -99,10 +99,10 @@ internal static class WaveformDemoSmokeChecks
             if (window.IsHeld || window.HoldButton.IsEnabled)
             { throw new InvalidOperationException("Empty source allowed a pinned view."); }
             for (int step = 0; step < 10; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 0 || window.SimulationTimeNs != 2_000_000_000)
-            { throw new InvalidOperationException("Slow channel did not hold back shared output."); }
+            if (window.BlockCount != 10 || window.SimulationTimeNs != 2_000_000_000)
+            { throw new InvalidOperationException("Every complete source interval must publish all channels immediately."); }
             Click(window.StepButton);
-            if (window.BlockCount != 1) { throw new InvalidOperationException("First complete block missing."); }
+            if (window.BlockCount != 11) { throw new InvalidOperationException("Completed source blocks missing."); }
             Control previous = window.Trace;
             bool rejected = false;
             try { window.Advance(400_000_000); }
@@ -110,15 +110,15 @@ internal static class WaveformDemoSmokeChecks
             if (!rejected || window.SimulationTimeNs != 2_200_000_000 || !ReferenceEquals(previous, window.Trace))
             { throw new InvalidOperationException("Rejected generation changed the displayed fixture."); }
             for (int step = 0; step < 15; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 16) { throw new InvalidOperationException("Displayed block retention is not bounded."); }
+            if (window.BlockCount != 26) { throw new InvalidOperationException("Displayed history did not retain every completed source block."); }
             window.UpdateLayout();
             VerifyPixels(window, true);
             byte[] retainedColumn = ReadColumn(window.Trace, 80);
-            VerifyGap(window.Trace, 410);
+            VerifyGap(window.Trace, 660);
             Click(window.StepButton);
             window.UpdateLayout();
-            _ = ReadColumn(window.Trace, 410);
-            VerifyGap(window.Trace, 435);
+            _ = ReadColumn(window.Trace, 650);
+            VerifyGap(window.Trace, 685);
             if (!retainedColumn.SequenceEqual(ReadColumn(window.Trace, 80)))
             { throw new InvalidOperationException("Unmodified sweep samples moved horizontally after history eviction."); }
             window.Width = 800;
@@ -137,13 +137,13 @@ internal static class WaveformDemoSmokeChecks
             { throw new InvalidOperationException("Reset retained source data."); }
             VerifyPixels(window, false);
             for (int step = 0; step < 11; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 1) { throw new InvalidOperationException("Reset source did not restart."); }
+            if (window.BlockCount != 11) { throw new InvalidOperationException("Reset source did not restart."); }
             Click(window.HoldButton);
             Control pinned = window.Trace;
             long? pinnedStart = window.DisplayStartNs;
             for (int step = 0; step < 20; step++) { Click(window.StepButton); }
             if (!window.IsHeld || !ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != pinnedStart ||
-                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 21)
+                window.SimulationTimeNs != 6_200_000_000 || window.BlockCount != 31)
             { throw new InvalidOperationException("Background generation or eviction altered the pinned view."); }
             Click(window.HoldButton);
             if (window.IsHeld || ReferenceEquals(pinned, window.Trace) || window.DisplayStartNs != 0 ||
@@ -160,7 +160,7 @@ internal static class WaveformDemoSmokeChecks
             VerifyAutomaticSteps(window);
         }
         finally { window.Close(); }
-        Console.WriteLine("ok: generated multi-rate native traces, delay, bounded retention, failure, resize and reset");
+        Console.WriteLine("ok: generated multi-rate native traces, immediate acquisition, retained history, failure, resize and reset");
         Console.WriteLine("ok: pinned generated trace survives background eviction and returns directly to latest data");
         Console.WriteLine("ok: automatic step timer, pause, stale callback fencing, held generation, reset and close");
     }
@@ -174,42 +174,42 @@ internal static class WaveformDemoSmokeChecks
             try
             {
                 int frames = 150;
-                for (int frame = 0; frame < frames; frame++) { window.Advance(16_000_000, progressive: true); }
-                if (window.LiveFrontierNs != 200_000_000 || window.BlockCount != 2)
-                { throw new InvalidOperationException("Progressive display did not buffer complete acquired blocks."); }
+                for (int frame = 0; frame < frames; frame++) { window.Advance(16_000_000); }
+                if (window.LiveFrontierNs != 2_400_000_000 || window.BlockCount != 12)
+                { throw new InvalidOperationException("Progressive display did not publish completed source intervals at the shared frontier."); }
                 void Layout()
                 {
                     window.Trace.Measure(new Size(1000, window.Trace.Height));
                     window.Trace.Arrange(new Rect(0, 0, 1000, window.Trace.Height));
                 }
                 Layout();
-                VerifyGap(window.Trace, 27);
+                VerifyGap(window.Trace, 302);
                 byte[] retained = ReadColumn(window.Trace, 8);
-                window.Advance(16_000_000, progressive: true);
-                if (window.LiveFrontierNs != 216_000_000 || window.BlockCount != 2)
+                window.Advance(16_000_000);
+                if (window.LiveFrontierNs != 2_416_000_000 || window.BlockCount != 12)
                 { throw new InvalidOperationException("Sweep frontier waited for a new block."); }
                 Layout();
-                VerifyGap(window.Trace, 27);
-                window.Advance(16_000_000, progressive: true);
+                VerifyGap(window.Trace, 302);
+                window.Advance(16_000_000);
                 Layout();
                 _ = ReadColumn(window.Trace, 27);
                 if (!retained.SequenceEqual(ReadColumn(window.Trace, 8)))
                 { throw new InvalidOperationException("Progressive reveal shifted existing source pixels."); }
                 Click(window.HoldButton);
                 Control held = window.Trace;
-                for (int frame = 0; frame < 150; frame++) { window.Advance(16_000_000, progressive: true); }
-                if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 14)
+                for (int frame = 0; frame < 150; frame++) { window.Advance(16_000_000); }
+                if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 24)
                 { throw new InvalidOperationException("Progressive wrap or eviction changed held geometry."); }
                 Click(window.HoldButton);
-                if (window.LiveFrontierNs != 2_632_000_000 || ReferenceEquals(held, window.Trace))
+                if (window.LiveFrontierNs != 4_832_000_000 || ReferenceEquals(held, window.Trace))
                 { throw new InvalidOperationException("Return failed to join the progressive frontier."); }
                 Layout();
-                VerifyGap(window.Trace, 340);
+                VerifyGap(window.Trace, 604);
                 _ = ReadColumn(window.Trace, 250);
             }
             finally { window.Close(); }
         }
-        Console.WriteLine("ok: sub-block progressive pixels, buffered availability, fixed columns, wrap, hold and return");
+        Console.WriteLine("ok: sub-block progressive frontier, immediate completed intervals, fixed columns, wrap, hold and return");
     }
 
     private static void VerifyShapes(WaveformDemoWindow window)
@@ -226,7 +226,7 @@ internal static class WaveformDemoSmokeChecks
             window.SimulationTimeNs != 0 || window.BlockCount != 0)
         { throw new InvalidOperationException("Shape change retained old source, view or timer state."); }
         for (int step = 0; step < 10; step++) { Click(window.StepButton); }
-        if (window.BlockCount != 0) { throw new InvalidOperationException("New shape bypassed acquisition latency."); }
+        if (window.BlockCount != 10) { throw new InvalidOperationException("New shape did not publish completed source intervals."); }
         Click(window.StepButton);
         window.UpdateLayout();
         byte[] pulse = ReadColumn(window.Trace, 8);
@@ -355,19 +355,20 @@ internal static class WaveformDemoSmokeChecks
             window.VascularReservoirInput.IsChecked = false;
             Click(window.ApplyBreathButton);
             for (int step = 0; step < 10; step++) { Click(window.StepButton); }
-            if (window.BlockCount != 0) { throw new InvalidOperationException("Pleth processing delay was bypassed."); }
+            if (window.BlockCount != 10) { throw new InvalidOperationException("PLETH did not share completed source intervals."); }
             Click(window.StepButton);
-            if (window.BlockCount != 1 || window.ShapeButton.IsVisible)
+            if (window.BlockCount != 11 || window.ShapeButton.IsVisible)
             { throw new InvalidOperationException("Event source did not produce its first shared block."); }
             Click(window.StepButton);
             Click(window.StepButton);
             Click(window.StepButton); // Include the entire descending shoulder past600ms.
             VerifyMechanicalPulsePixels(window);
             VerifyMechanicalPulsePixels(window, 700);
+            DemoSweepResizeSmokeChecks.VerifyFixedSpeed(window);
             Click(window.HoldButton);
             Control held = window.Trace;
             for (int step = 0; step < 19; step++) { Click(window.StepButton); }
-            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 23)
+            if (!ReferenceEquals(held, window.Trace) || window.BlockCount != 33)
             { throw new InvalidOperationException("Continuous event output lost held view or bounded retention."); }
             Click(window.HoldButton);
             window.UpdateLayout();
@@ -375,7 +376,6 @@ internal static class WaveformDemoSmokeChecks
             VerifyCapnogramPixels(window, 700);
             VerifyCvpPixels(window);
             VerifyCvpPixels(window, 700);
-            DemoSweepResizeSmokeChecks.VerifyFixedSpeed(window);
             window.UpdateLayout();
             VerifyPixels(window, true, resp: true);
             Click(window.ResetButton);
@@ -386,7 +386,7 @@ internal static class WaveformDemoSmokeChecks
             VerifyPixels(window, false, resp: true);
         }
         finally { window.Close(); }
-        Console.WriteLine("ok: event-driven ECG/Resp/Pleth/ABP/CO2/PA/CVP native pixels, shared delay, held generation and reset");
+        Console.WriteLine("ok: event-driven ECG/Resp/Pleth/ABP/CO2/PA/CVP native pixels, shared source time, held generation and reset");
     }
 
     private static void VerifyMechanicalPulsePixels(WaveformDemoWindow window, int width = 1000)
@@ -394,7 +394,7 @@ internal static class WaveformDemoSmokeChecks
         Control trace = window.Trace;
         trace.Measure(new Size(width, 840));
         trace.Arrange(new Rect(0, 0, width, 840));
-        if (window.SimulationTimeNs != 2_800_000_000 || window.LiveFrontierNs != 800_000_000 || trace.Height != 840)
+        if (window.SimulationTimeNs != 2_800_000_000 || window.LiveFrontierNs != 2_800_000_000 || trace.Height != 840)
         { throw new InvalidOperationException("Seven-channel display did not wait for the shared acquired frontier."); }
         var blocks = PhysiologyDemoSource.Create(window.BreathConfiguration).AdvanceTo(2_800_000_000, 700, 14, 100)
             .Select(bytes => WaveformEnvelopeCodec.Decode(bytes)).ToArray();
@@ -433,8 +433,8 @@ internal static class WaveformDemoSmokeChecks
 
     private static void VerifyCapnogramPixels(WaveformDemoWindow window, int width = 1000)
     {
-        if (window.SimulationTimeNs != 6_600_000_000 || window.LiveFrontierNs != 4_600_000_000)
-        { throw new InvalidOperationException("CO2 display bypassed the shared processing delay."); }
+        if (window.SimulationTimeNs != 6_600_000_000 || window.LiveFrontierNs != 6_600_000_000)
+        { throw new InvalidOperationException("CO2 display diverged from the shared source frontier."); }
         var source = PhysiologyDemoSource.Create();
         List<WaveformEnvelope> blocks = [];
         for (int step = 1; step <= 33; step++)

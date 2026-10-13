@@ -62,7 +62,7 @@ internal static class TContourProductSpecifications
                 }
                 if (step == 19) { source = PhysiologyWaveformGroup.Restore(source.CaptureState()); }
             }
-            Check.That(changed && count == 25, "actual ECG changes while all QRS remain detected");
+            Check.That(changed && count == 28, "actual ECG changes while all QRS in the complete 22-second source interval remain detected");
         }
     }
     private static void TContoursMatchProjectionAndRejectConflicts()

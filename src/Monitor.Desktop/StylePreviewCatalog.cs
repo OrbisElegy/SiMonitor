@@ -96,7 +96,7 @@ internal sealed class StylePreviewCatalog
         Parallel.For(0, keys.Count, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(32, Environment.ProcessorCount) }, i =>
         {
             var key = keys[i]; var source = DesignPreviewWindow.CreateStylePreview(key.Ecg, key.Resp, key.Ejection);
-            long from = source.FrontierNs - DurationNs(key.Ecg), to = source.FrontierNs;
+            long from = source.SimulationTimeNs - DurationNs(key.Ecg), to = source.SimulationTimeNs;
             var lead = PreviewLead(key.Ecg);
             var ecg = lead == EcgLead.II ? source.Samples(0, from, to).ToArray() :
                 CreateProjectedPreview(DesignPreviewWindow.ResolveStyle(key.Ecg, key.Resp, key.Ejection).Ecg, lead, from, to);

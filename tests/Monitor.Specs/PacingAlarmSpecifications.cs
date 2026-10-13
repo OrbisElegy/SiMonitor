@@ -76,26 +76,21 @@ internal static class PacingAlarmSpecifications
         session.DiscardStartup();
         for (int i = 0; i < 100; i++) { session.Advance(200_000_000); }
         long effective = session.ScheduleSource(Session(PacingIllustration.VentricularOutputFailure), 0);
-        bool sawOld = false, sawNew = false;
+        session.Advance(20_000_000);
+        Check.That(session.Blocks[^1].StartSimTimeNs < effective &&
+            session.Measurements!.SampleTimeNs == session.SimulationTimeNs &&
+            session.Measurements.EcgMonitoring.PacingEvidenceOrigin == EcgPacingEvidenceOrigin.Simulation,
+            "new pacing samples update the monitor before the first new recording packet completes");
         List<DetectedEcgMonitoringEvent> events = [];
         for (int i = 0; i < 50; i++)
         {
             session.Advance(200_000_000);
-            var snapshot = session.Measurements!;
-            if (session.Blocks[^1].StartSimTimeNs < effective)
-            {
-                sawOld = true;
-                Check.That(!snapshot.EcgMonitoring.PacingEvidenceAvailable, "delayed old packet keeps old pulse context");
-            }
-            else
-            {
-                sawNew = true;
-                Check.That(snapshot.EcgMonitoring.PacingEvidenceOrigin == EcgPacingEvidenceOrigin.Simulation, "new packet uses rebased sideband");
-            }
+            Check.That(session.Measurements!.EcgMonitoring.PacingEvidenceOrigin == EcgPacingEvidenceOrigin.Simulation,
+                "every current sample batch uses the active source's rebased pacing sideband");
             events.AddRange(session.DetectedMonitoringEvents);
         }
-        Check.That(sawOld && sawNew && events.Any(e => e.Condition == EcgMonitoringConditions.PacerNotPacing && e.Transition == EcgMonitoringTransition.Started),
-            "switch preserves acquisition delay and detects failure after complete evidence");
+        Check.That(events.Any(e => e.Condition == EcgMonitoringConditions.PacerNotPacing && e.Transition == EcgMonitoringTransition.Started &&
+            e.ConfirmedAtNs >= effective), "failure is confirmed from post-switch samples after its evidence window");
         session.ScheduleSource(Session(null), 0);
         for (int i = 0; i < 100; i++) { session.Advance(200_000_000); }
         Check.That(!session.Measurements!.EcgMonitoring.PacingEvidenceAvailable && session.Measurements.HeartRate.Status == WaveformMeasurementStatus.Valid,

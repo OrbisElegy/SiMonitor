@@ -200,9 +200,9 @@ Reconnecting 表示正在等待恢复，OutputActive 仅在成功 Pump 后为真
 SetVolume 设置 0–100 主音量与静音；AudioRenderSession.Gain（0–1）在 PCM 离开托管缓冲时缩放，
 同时影响已渲染的报警、心搏和试听，硬件队列中的少量 PCM 仍按原音量播放。桌面请求使用满幅报警与相对心搏音量，避免重复缩放。
 SubmitHeartbeat 单槽保留最新 cue，worker 丢弃超过 250 ms 的旧 cue。
-桌面心搏事件来自 `LocalMonitorPreviewSession.LiveBeatEvidence`：ECG 复用实时同步 QRS 检出，
-PLETH 从同一实时采样路径独立检出；来源状态、事件新鲜度和可见波形统一使用当前仿真时间。
-延迟采集包继续供数值测量和记录使用，不再作为实时心搏音的触发来源。音高仍使用既有 SpO₂ 测量。
+桌面心搏事件来自 `LocalMonitorPreviewSession.BeatEvidence`：ECG 与数值测量、同步除颤共用
+同一 QRS 检测器，PLETH 由同一测量聚合器的脉搏检测器检出。来源状态、事件新鲜度、
+可见波形与 SpO₂ 音高均消费当前仿真时间的统一采样流；记录包组块不延后心搏音。
 实际放电立即撤回当前帧 ECG 事件并调用 `CancelHeartbeat()`，清空待播事件；取消代次使播放线程
 即使未观察到短暂的禁用状态，也会撤回旧心搏排程。已提交原生设备的短队列不能追溯收回。
 恢复后仅新检出的 QRS／PLETH 事件可发声，放电伪迹不作为 QRS，来源切换仍遵循去重和稳定时间。

@@ -75,7 +75,7 @@ internal static class AtrialFibrillationPerfusionSpecifications
         var plethId = Guid.Parse("22222222-2222-4222-8222-222222222222");
         var pressureId = Guid.Parse("33333333-3333-4333-8333-333333333333");
         PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(plethId, plethId, 1, 1, 1, 0, 32,
-            [new(plan, new(plethId, "AcqPleth125@1", 1, 1, 0, 1), [], 250, 0, PlethRunoff: Pleth),
+            [new(plan, new(plethId, "AcqPleth125@1", 1, 1, 0, 1), [], 0, PlethRunoff: Pleth),
              (Pressure with { Morphology = new(VascularPressureMorphologyKind.Arterial, 600_000_000, 4000, MaximumPulseOverlap: 2) }).CreateChannel(plan, pressureId, 0)]);
         var whole = Group().AdvanceTo(6_000_000_000, 750, 30, 200);
         var group = Group();
@@ -90,6 +90,7 @@ internal static class AtrialFibrillationPerfusionSpecifications
         bool rejected = false;
         try { group.AdvanceTo(8_000_000_000, 250, 1, 100); } catch (PhysiologyWaveformGroupException) { rejected = true; }
         Check.That(rejected && before == JsonSerializer.Serialize(group.CaptureState()), "late failure is atomic");
+        _ = group.AdvanceTo(6_100_000_000, 13, 1, 100);
         var state = group.CaptureState();
         Reject(() => PhysiologyWaveformGroup.Restore(state with
         {

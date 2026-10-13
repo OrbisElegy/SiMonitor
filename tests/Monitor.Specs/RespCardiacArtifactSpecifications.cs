@@ -93,7 +93,7 @@ internal static class RespCardiacArtifactSpecifications
     {
         var actual = NativeRecoveryChecks.Verify(() => Group(160),
             [240_000_000, 440_000_000, 840_000_000, 1_200_000_000, 2_190_000_000, 3_200_000_000, 3_640_000_000, 4_000_000_000, 8_000_000_000],
-            1000, 40, 100, 30, nameof(ArtifactNativeRecoveryAndAtomicFailure));
+            1000, 40, 100, 40, nameof(ArtifactNativeRecoveryAndAtomicFailure));
         short[] Samples(IReadOnlyList<byte[]> blocks, Guid id) => blocks.Select(bytes => WaveformEnvelopeCodec.Decode(bytes)
             .Planes.Single(plane => plane.ChannelId == id)).SelectMany(plane => plane.Samples).ToArray();
         var without = Group(0).AdvanceTo(8_000_000_000, 1000, 40, 100);

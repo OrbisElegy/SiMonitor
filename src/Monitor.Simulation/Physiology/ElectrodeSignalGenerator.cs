@@ -13,7 +13,7 @@ public sealed class ElectrodeSignalException(string reason, string parameter) : 
     public string ReasonCode { get; } = reason;
 }
 
-// Synchronous projected monitoring source, before acquisition delay and wire publication.
+// Synchronous projected monitoring source, before recording packet assembly.
 // Output microvolt values use EcgLead enum order; exact values retain identity evidence.
 public sealed class ElectrodeSignalGenerator
 {

@@ -50,7 +50,7 @@ internal static class PressureZeroOffsetSpecifications
         }
         // Negative sensor readings are permitted; the physiological reservoir stays positive.
         var negative = Start(-15000).AdvanceTo(400_000_000, 50, 2, 100);
-        Check.That(WaveformEnvelopeCodec.Decode(negative.Single()).Planes[0].Samples.All(x => x < 0), "no clamp to physiological zero");
+        Check.That(negative.All(wire => WaveformEnvelopeCodec.Decode(wire).Planes[0].Samples.All(x => x < 0)), "no clamp to physiological zero");
     }
 
     private static void ZeroOffsetPreservesCvpReferenceAndRecovery()

@@ -21,6 +21,6 @@ public sealed record PulmonaryArteryPulsePlan(long TransitDelayNs, long Duration
         {
             new(PhysiologyCycleEventKind.VentricularMechanical, TransitDelayNs, DurationNs, table),
         });
-        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, BaselineMmHg, 1), bands, 10, qualityFlags);
+        return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, BaselineMmHg, 1), bands, qualityFlags);
     }
 }

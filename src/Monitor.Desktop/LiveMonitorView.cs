@@ -198,7 +198,7 @@ internal sealed class LiveMonitorView : UserControl
                 if (pi is not null)
                 {
                     pi.FontSize = 11;
-                    var pair = new Grid { ColumnDefinitions = new("*,*") };
+                    var pair = new Grid { ColumnDefinitions = new("*,*"), ColumnSpacing = 8 };
                     pair.Children.Add(footer);
                     Grid.SetColumn(pi, 1);
                     pair.Children.Add(pi);

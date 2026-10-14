@@ -62,6 +62,13 @@ internal sealed class SoundSettingsPanel : StackPanel
     private ManualDefibrillator? _therapyDevice;
     private AutomatedExternalDefibrillator? _aed;
     private bool _therapyActive;
+    internal NibpSoundRequest? PublishedNibp { get; private set; }
+    internal void UpdateNibp(NibpMeasurement? measurement, bool running)
+    {
+        PublishedNibp = !_closed && running && measurement is { Measuring: true, PhaseRemainingMilliseconds: > 0 }
+            ? new(measurement.Phase, measurement.PhaseRemainingMilliseconds) : null;
+        _alarms.SetNibp(PublishedNibp);
+    }
     internal TherapySoundRequest? PublishedTherapy { get; private set; }
     internal ulong TherapyRelayCount { get; private set; }
     internal void PlayTherapyRelay()
@@ -355,6 +362,7 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal void ResetPitchState() { _pitch.Reset(); _alarms.SetHeartbeatEnabled(false); Publish(); }
     internal void PauseMonitor()
     {
+        UpdateNibp(null, false);
         _monitorRunning = false;
         _therapyActive = false;
         PublishTherapy();
@@ -479,7 +487,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (OutputNotice == notice) { return; }
         OutputNotice = notice; OutputNoticeChanged?.Invoke();
     }
-    internal void Close() { _closed = true; PublishTherapy(); _pauseTimer.Stop(); _outputTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
+    internal void Close() { _closed = true; UpdateNibp(null, false); PublishTherapy(); _pauseTimer.Stop(); _outputTimer.Stop(); StopPreview(); _alarmCancellation?.Cancel(); }
     private static Button Button() => new()
     {
         MinHeight = 44,

@@ -8,6 +8,7 @@ public sealed class AudioRenderSession
 {
     private readonly SampleToneRenderer _renderer;
     private readonly TherapySoundRenderer _therapy = new();
+    private readonly NibpSoundRenderer _nibp = new();
     private readonly AudioPcmBuffer _buffer;
     private readonly float[] _scratch;
     private int _retired;
@@ -49,6 +50,7 @@ public sealed class AudioRenderSession
         RequiresReplacement ? null : _renderer.Schedule(key, preset, targetFrame, expiryFrame);
 
     public void UpdateTherapy(TherapySoundRequest? request, bool announce = true) => _therapy.Update(request, announce);
+    public void UpdateNibp(NibpSoundRequest? request) => _nibp.Update(request);
     public void UpdateTherapyRelay(bool enabled, bool triggered = false) => _therapy.UpdateRelay(enabled, triggered);
 
     public void Cancel(long key) => _renderer.Cancel(key);
@@ -61,6 +63,7 @@ public sealed class AudioRenderSession
         ArgumentOutOfRangeException.ThrowIfGreaterThan(frames, _scratch.Length);
         if (RequiresReplacement || _buffer.WritableFrames < frames) { return false; }
         _renderer.Render(_scratch.AsSpan(0, frames));
+        _nibp.Mix(_scratch.AsSpan(0, frames));
         _therapy.Mix(_scratch.AsSpan(0, frames));
         if (RequiresReplacement) { return false; }
         bool written = _buffer.TryWrite(_scratch.AsSpan(0, frames));

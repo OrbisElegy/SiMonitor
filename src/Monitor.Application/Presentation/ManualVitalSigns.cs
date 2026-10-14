@@ -38,7 +38,8 @@ public sealed record ManualCustomVital
 }
 
 // Null means disabled/unavailable. Slot identity does not depend on the editable label.
-// These are manually supplied display values, not waveform measurements or alarm inputs.
+// These are manually supplied targets/values, not waveform measurements or alarm inputs.
+// NIBP becomes a visible reading only after a NibpMeasurement cuff cycle completes.
 public sealed record ManualVitalSigns
 {
     public static ManualVitalSigns Empty { get; } = new();

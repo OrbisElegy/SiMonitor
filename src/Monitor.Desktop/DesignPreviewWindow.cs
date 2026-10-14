@@ -194,6 +194,21 @@ internal sealed class DesignPreviewWindow : Window
             _displayPreferences = _displayPreferences with { MonitorEcgLead = lead };
             SaveDisplayPreferences();
         });
+        skin.NibpStartRequested += () =>
+        {
+            if (_closed || !_session.Nibp.Enabled) { return; }
+            if (_session.Nibp.Measuring) { _session.Nibp.Stop(); }
+            else { _session.Nibp.Start(); }
+            RefreshNibp();
+            MonitorView.Refresh();
+        };
+        skin.NibpAutoChanged += (enabled, interval) =>
+        {
+            if (_closed) { return; }
+            _session.Nibp.ConfigureAuto(enabled, interval);
+            RefreshNibp();
+            MonitorView.Refresh();
+        };
         skin.PrintRequested += () =>
         {
             if (_closed) { return; }
@@ -751,6 +766,7 @@ internal sealed class DesignPreviewWindow : Window
             MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
             MonitorView.NoticeColorEnabled = () => Settings.Alerts.NoticeColorEnabled.IsChecked == true;
             MonitorView.Refresh();
+            RefreshNibp();
             Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
             if (Page is 0 or 1 || (Page == 2 && !ReferenceEquals(_workspace.Content, Settings)))
             { SelectPage(Page); }
@@ -909,8 +925,14 @@ internal sealed class DesignPreviewWindow : Window
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Pause(); SetStatus("settings.generationFailed"); }
     }
+    private void RefreshNibp()
+    {
+        (_monitor?.Skin as GenericMonitorSkin)?.RefreshNibp(_session.Nibp);
+        Settings.Sound.UpdateNibp(_session.Nibp, !_closed && _timer is not null);
+    }
     private void UpdateState()
     {
+        RefreshNibp();
         RefreshPacingState();
         RefreshDefibrillator();
         _state.Text = Localization.Format("shell.state", Localization.Get(_timer is null ? "shell.paused" : "shell.running"), _session.SimulationTimeNs / 1_000_000_000);

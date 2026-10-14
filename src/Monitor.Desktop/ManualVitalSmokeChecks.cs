@@ -28,7 +28,7 @@ internal static class ManualVitalSmokeChecks
                 "both custom slots reach session");
             window.MonitorView.Refresh();
             Require(window.MonitorView.ManualNumericTexts.Count == 4 &&
-                window.MonitorView.ManualNumericTexts.Contains("NIBP 120/80 (93) mmHg") &&
+                window.MonitorView.ManualNumericTexts.Any(text => text.StartsWith("NIBP --- / ---", StringComparison.Ordinal)) &&
                 window.MonitorView.ManualNumericTexts.Contains("Lactate 2.34 mmol/L"), "manual values reach visible monitor");
             var prior = window.Session;
             editor.Mean.Value = 121;

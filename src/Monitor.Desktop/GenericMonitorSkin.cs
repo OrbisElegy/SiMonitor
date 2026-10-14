@@ -12,7 +12,7 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-internal sealed class GenericMonitorSkin : IMonitorSkin
+internal sealed partial class GenericMonitorSkin : IMonitorSkin
 {
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
@@ -294,7 +294,8 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         PrintButton = ToolbarButton("skin.print");
         PrintButton.Click += (_, _) => PrintRequested?.Invoke();
         toolbar.Children.Add(PrintButton);
-        foreach (string key in new[] { "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
+        AddNibpControls(toolbar);
+        foreach (string key in new[] { "skin.alarms", "skin.silence" })
         { toolbar.Children.Add(DummyButton(key)); }
         Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);

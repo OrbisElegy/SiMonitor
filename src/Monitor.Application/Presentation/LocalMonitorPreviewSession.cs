@@ -88,6 +88,7 @@ public sealed partial class LocalMonitorPreviewSession
     }
     public PressureTransducerLimits PressureTransducers { get; private set; }
     public ManualVitalSigns ManualVitals { get; private set; }
+    public NibpMeasurement Nibp { get; } = new();
     public long SimulationTimeNs { get; private set; }
     public ulong DataRevision { get; private set; }
     public IReadOnlyList<DetectedPlethPulse> DetectedPulses { get; private set; } = [];
@@ -114,6 +115,13 @@ public sealed partial class LocalMonitorPreviewSession
         PressureTransducers = pressureTransducers ?? new();
         PressureTransducers.Validate();
         ManualVitals = manualVitals ?? ManualVitalSigns.Empty;
+        Nibp.Advance(0, ManualVitals.Nibp);
+        Nibp.Changed += item => _recordEvents.Add(new(item.TimeNs, item.Kind switch
+        {
+            NibpEventKind.Started => PreviewRecordEventKind.NibpStarted,
+            NibpEventKind.Completed => PreviewRecordEventKind.NibpCompleted,
+            _ => PreviewRecordEventKind.NibpCancelled
+        }, item.Reading is { } reading ? $"{reading.SystolicMmHg} / {reading.DiastolicMmHg} ({reading.MeanMmHg}) mmHg" : ""));
         _configuration = configuration;
         _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
@@ -385,6 +393,7 @@ public sealed partial class LocalMonitorPreviewSession
         ElectricalTherapy = definition.ElectricalTherapy;
         PressureTransducers = definition.PressureTransducers;
         ManualVitals = definition.ManualVitals;
+        Nibp.Advance(SimulationTimeNs, ManualVitals.Nibp);
         _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;
         _opticalModulationPermille = definition._opticalModulationPermille;
@@ -522,6 +531,7 @@ public sealed partial class LocalMonitorPreviewSession
             _shockArtifacts.RemoveAll(artifact => artifact.RecoveryEndSimTimeNs <= oldestTimeNs);
             if (samples.Count > 0) { DataRevision++; }
             SimulationTimeNs = next;
+            Nibp.Advance(next, ManualVitals.Nibp);
             Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadDisplaySamples(channel, from, to, usableOnly: true).Select(s => s.Value));
             deltaNs -= chunk;
         }

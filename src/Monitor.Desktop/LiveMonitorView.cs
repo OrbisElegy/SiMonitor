@@ -229,17 +229,24 @@ internal sealed class LiveMonitorView : UserControl
         RefreshNotice();
     }
 
+    private (ManualNibp? Reading, NibpPhase Phase, long? MeasuredAtNs)? _shownNibp;
     private void RefreshManualVitals()
     {
         var values = _trace.Session.ManualVitals;
         string caption = _localization.Get("manual.caption");
-        if (values == _shownManualVitals && caption == _shownManualCaption) { return; }
+        var nibpState = _trace.Session.Nibp;
+        var nibpPresentation = (nibpState.Reading, nibpState.Phase, nibpState.MeasuredAtNs);
+        if (values == _shownManualVitals && caption == _shownManualCaption && _shownNibp == nibpPresentation) { return; }
+        _shownNibp = nibpPresentation;
+        string nibpDetail = nibpState.Measuring ? _localization.Get(nibpState.Phase == NibpPhase.Inflating ? "nibp.inflating" : "nibp.deflating") :
+            nibpState.Reading is { } reading ? $"({reading.MeanMmHg}) mmHg · " + _localization.Format("nibp.measuredAt", nibpState.MeasuredAtNs / 1e9) :
+            _localization.Get(nibpState.MeasuredAtNs.HasValue ? "nibp.expired" : "nibp.unmeasured");
+        string nibpValue = nibpState.Reading is { } pressure ? $"{pressure.SystolicMmHg} / {pressure.DiastolicMmHg}" : "--- / ---";
         _shownManualVitals = values;
         _shownManualCaption = caption;
         if (_skin is not null)
         {
-            _nibp.Update("NIBP", values.Nibp is { } pressure ? $"{pressure.SystolicMmHg}/{pressure.DiastolicMmHg}" : "---/---",
-                values.Nibp is { } mean ? $"({mean.MeanMmHg}) mmHg" : "(---) mmHg");
+            _nibp.Update("NIBP", nibpValue, nibpDetail);
             _temperature.Update(_localization.Get("manual.temperatureLabel"),
                 values.TemperatureDeciCelsius is { } deciCelsius ? (deciCelsius / 10m).ToString("0.0", CultureInfo.InvariantCulture) : "---", "°C");
             if (values.Nibp is null) { _nibp.Clear(); }
@@ -252,7 +259,7 @@ internal sealed class LiveMonitorView : UserControl
         if (values == ManualVitalSigns.Empty) { _manualPanel.IsVisible = false; return; }
         _manualPanel.IsVisible = true;
         Add(caption);
-        if (values.Nibp is { } nibp) { Add($"NIBP {nibp.SystolicMmHg}/{nibp.DiastolicMmHg} ({nibp.MeanMmHg}) mmHg"); }
+        if (values.Nibp is not null) { Add($"NIBP {nibpValue} {nibpDetail}"); }
         if (values.TemperatureDeciCelsius is { } temperature)
         { Add(_localization.Get("manual.temperatureLabel") + " " + (temperature / 10m).ToString("0.0", CultureInfo.InvariantCulture) + " °C"); }
         foreach (var custom in new[] { values.Custom1, values.Custom2 })

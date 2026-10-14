@@ -1488,6 +1488,7 @@ public sealed partial class LocalMonitorPreviewSession
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
     public ManualVitalSigns ManualVitals { get; }
+    public NibpMeasurement Nibp { get; }
     public PressureTransducerLimits PressureTransducers { get; private set; }
     public long SimulationTimeNs { get; private set; }
     public ulong DataRevision { get; private set; }
@@ -1804,7 +1805,10 @@ public enum PreviewRecordEventKind
     PacingChanged,
     ShockDelivered,
     RhythmChanged,
-    MonitoringChanged
+    MonitoringChanged,
+    NibpStarted,
+    NibpCompleted,
+    NibpCancelled
 }
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);
 public sealed record MonitorPrintSample(long TimeNs, double Microvolts);
@@ -1843,6 +1847,37 @@ public sealed record MonitorSoundPreferences(int Volume, int HeartbeatVolume, bo
     public bool Muted { get; init; }
     public static MonitorSoundPreferences Default { get; }
     public void Validate();
+}
+```
+
+## Presentation/NibpMeasurement.cs
+
+源码：[NibpMeasurement.cs](../../../src/Monitor.Application/Presentation/NibpMeasurement.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public enum NibpPhase { Disabled, Idle, Inflating, Deflating }
+public enum NibpEventKind { Started, Completed, Cancelled }
+public sealed record NibpMeasurementEvent(long TimeNs, NibpEventKind Kind, ManualNibp? Reading);
+public sealed class NibpMeasurement
+{
+    public const long InflationDurationNs = 6_000_000_000;
+    public const long MeasurementDurationNs = 15_000_000_000;
+    public const long ReadingLifetimeNs = 900_000_000_000;
+    public static IReadOnlyList<int> AutoIntervalsMinutes { get; }
+    public bool Enabled { get; }
+    public bool Measuring { get; }
+    public bool AutoEnabled { get; private set; }
+    public int AutoIntervalMinutes { get; private set; }
+    public long? NextMeasurementAtNs { get; private set; }
+    public long? MeasuredAtNs { get; private set; }
+    public ManualNibp? Reading { get; }
+    public NibpPhase Phase { get; }
+    public int PhaseRemainingMilliseconds { get; }
+    public event Action<NibpMeasurementEvent>? Changed;
+    public void Advance(long simTimeNs, ManualNibp? target);
+    public bool Start();
+    public void Stop();
+    public void ConfigureAuto(bool enabled, int intervalMinutes);
 }
 ```
 

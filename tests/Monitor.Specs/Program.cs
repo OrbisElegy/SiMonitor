@@ -38,6 +38,7 @@ internal static class Program
         [
             .. LocalizationSpecifications.All,
             .. MonitorPrintSnapshotSpecifications.All,
+            .. NibpSpecifications.All,
             .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. ManualDefibrillatorSpecifications.All,

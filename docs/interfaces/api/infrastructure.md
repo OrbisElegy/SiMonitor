@@ -147,6 +147,7 @@ public sealed class AudioRenderSession
     public int BufferedFrames { get; }
     public long RenderedThroughFrame { get; }
     public ToneScheduleResult? Schedule(long key, TonePreset preset, long targetFrame, long expiryFrame);
+    public void UpdateNibp(NibpSoundRequest? request);
     public void UpdateTherapy(TherapySoundRequest? request, bool announce = true);
     public void UpdateTherapyRelay(bool enabled, bool triggered = false);
     public void Cancel(long key);
@@ -196,6 +197,7 @@ public enum AlarmSoundDispatchStage
 public sealed record AlarmSoundDispatchRecord(ulong NotificationSequence, AlarmSoundDispatchStage Stage, long RenderFrame);
 public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
 {
+    public void SetNibp(NibpSoundRequest? request);
     public bool OutputActive { get; }
     public bool Reconnecting { get; }
     public void SetOutputDevice(string? deviceId);
@@ -279,6 +281,22 @@ public sealed class SampleToneRenderer
     public void Cancel(long cancellationKey);
     public void DiscardForDiscontinuity(long nextFrame);
     public void Render(Span<float> destination);
+}
+```
+
+## Audio/NibpSoundRenderer.cs
+
+源码：[NibpSoundRenderer.cs](../../../src/Monitor.Infrastructure/Audio/NibpSoundRenderer.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public sealed record NibpSoundRequest(NibpPhase Phase, int RemainingMilliseconds)
+{
+    public void Validate();
+}
+public sealed class NibpSoundRenderer
+{
+    public void Update(NibpSoundRequest? request);
+    public void Mix(Span<float> destination);
 }
 ```
 

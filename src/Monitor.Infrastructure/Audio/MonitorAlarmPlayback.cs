@@ -35,6 +35,12 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
     private const int PumpWaitMilliseconds = 10;
     private MonitorAlarmSoundRequest? _request;
     private TherapySoundRequest? _therapyRequest;
+    private NibpSoundRequest? _nibpRequest;
+    public void SetNibp(NibpSoundRequest? request)
+    {
+        request?.Validate();
+        Volatile.Write(ref _nibpRequest, request);
+    }
     private ulong _consumedTherapyRevision;
     private bool _therapyRelayEnabled;
     private RelaySubmission? _relay;
@@ -135,6 +141,7 @@ public sealed class MonitorAlarmPlayback(Func<IPumpedAudioOutput> createOutput)
                         while (!cancellationToken.IsCancellationRequested && deviceId == Volatile.Read(ref _deviceId))
                         {
                             session.Gain = Volatile.Read(ref _gain);
+                            session.UpdateNibp(Volatile.Read(ref _nibpRequest));
                             var therapy = Volatile.Read(ref _therapyRequest);
                             session.UpdateTherapy(therapy, therapy is not null && therapy.Revision > _consumedTherapyRevision);
                             if (therapy is not null) { _consumedTherapyRevision = Math.Max(_consumedTherapyRevision, therapy.Revision); }

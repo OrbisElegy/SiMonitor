@@ -11,7 +11,10 @@ public enum PreviewRecordEventKind
     PacingChanged,
     ShockDelivered,
     RhythmChanged,
-    MonitoringChanged
+    MonitoringChanged,
+    NibpStarted,
+    NibpCompleted,
+    NibpCancelled
 }
 
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);

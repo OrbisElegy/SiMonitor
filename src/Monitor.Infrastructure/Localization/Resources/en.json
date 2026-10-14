@@ -191,7 +191,7 @@
   "sound.pauseDuration": "Alarm sound pause (seconds, 1–3600)",
   "sound.pauseDurationName": "Alarm sound pause, seconds",
   "sound.pause": "Pause alarm sounds",
-  "sound.resume": "Resume alarm sounds now",
+  "sound.resume": "Resume Alarm",
   "sound.pauseIdle": "Alarm sounds are not paused",
   "sound.pauseInvalid": "Enter whole seconds from 1 to 3600; the sound state is unchanged.",
   "sound.pauseRemaining": "Alarm sounds paused · {0}s",

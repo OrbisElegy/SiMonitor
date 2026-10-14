@@ -127,7 +127,16 @@ internal static class GenericSkinSmokeChecks
             skin.NibpStartButton, skin.NibpAutoButton, skin.AlarmsButton, skin.SilenceButton };
         foreach (int width in new[] { 960, 1200, 1440, 1920 })
         {
-            DesktopViewportSmokeChecks.Layout(window, width, 720);
+            int height = width == 1440 ? 940 : 720;
+            skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            DesktopViewportSmokeChecks.Layout(window, width, height);
+            var beforePause = skin.SilenceButton.Bounds.Size;
+            skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            DesktopViewportSmokeChecks.Layout(window, width, height);
+            var resumeCaption = (TextBlock)skin.SilenceButton.Content!;
+            Require(resumeCaption.Text == "Resume Alarm" && resumeCaption.TextLayout.TextLines.Count == 1 &&
+                skin.SilenceButton.Bounds.Size == beforePause,
+                "Silence and Resume Alarm keep the same button size with a single-line caption at " + width);
             foreach (var button in buttons)
             {
                 var caption = (TextBlock)button.Content!;
@@ -138,7 +147,7 @@ internal static class GenericSkinSmokeChecks
             }
             Require(buttons.Select(button => button.Bounds.Y).Distinct().Count() == (width < 1440 ? 2 : 1),
                 "narrow monitor uses two toolbar rows without squeezing labels");
-            using var image = new RenderTargetBitmap(new PixelSize(width, 720), new Vector(96, 96));
+            using var image = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96));
             image.Render((Control)window.Content!);
             image.Save($"artifacts/monitor-toolbar-en-{width}.png", PngBitmapEncoderOptions.Default);
         }

@@ -80,7 +80,7 @@
   {
     "Id": "topic-9",
     "Category": "Sound",
-    "Text": "Select Silence on the monitor toolbar to pause alarm sounds for the duration configured in Sound settings. Select Resume alarm sounds now to resume early. The toolbar and Sound settings stay in sync. Heartbeat tones, therapy prompts and visual alarms continue; master volume and master mute stay unchanged. The pause runs on real elapsed time, so pausing waveform generation does not extend the countdown. When it ends, only alarm sounds that are still active resume; alarms that have already cleared are not replayed.",
+    "Text": "Select Silence on the monitor toolbar to pause alarm sounds for the duration configured in Sound settings. Select Resume Alarm to resume early. The toolbar and Sound settings stay in sync. Heartbeat tones, therapy prompts and visual alarms continue; master volume and master mute stay unchanged. The pause runs on real elapsed time, so pausing waveform generation does not extend the countdown. When it ends, only alarm sounds that are still active resume; alarms that have already cleared are not replayed.",
     "Title": "Pausing alarm sounds for a set time"
   },
   {

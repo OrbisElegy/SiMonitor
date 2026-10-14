@@ -11,7 +11,7 @@ internal static class LocalizationSpecifications
     public static Specification[] All =>
     [
         new(nameof(BuiltInLocalesHaveCompleteMatchingResources), BuiltInLocalesHaveCompleteMatchingResources),
-        new(nameof(LocaleSelectionIsExplicitAndLimitedToEnglishAndSimplifiedChinese), LocaleSelectionIsExplicitAndLimitedToEnglishAndSimplifiedChinese),
+        new(nameof(LocaleSelectionResolvesChineseScriptsAndRegions), LocaleSelectionResolvesChineseScriptsAndRegions),
         new(nameof(MissingTranslationsHaveObservableFallbacks), MissingTranslationsHaveObservableFallbacks),
         new(nameof(TranslationValidationRejectsBrokenCollaborativeEdits), TranslationValidationRejectsBrokenCollaborativeEdits),
         new(nameof(FormatsAllowReorderingAndEscapedBraces), FormatsAllowReorderingAndEscapedBraces),
@@ -32,18 +32,27 @@ internal static class LocalizationSpecifications
             "both catalogs satisfy the same formatting contract");
         Check.That(english.Format("sound.volumePercent", 12.3m) == "Sound volume: 12%" &&
             chinese.Format("sound.volumePercent", 12.3m) == "声音音量：12%", "format specifiers survive translation");
-        // Loading Chinese validates every key and argument signature against English, including unused keys.
-        Check.That(BuiltInLocalizations.Supported.Select(locale => locale.Code).SequenceEqual(["en", "zh-CN"]),
-            "only the requested two languages are advertised");
+        var traditional = BuiltInLocalizations.Create("zh-TW");
+        Check.That(traditional.GetString("common.apply") == "套用" && traditional.GetString("skin.defibrillator") == "去顫器" &&
+            traditional.GetString("ecgGroup.g04") == "心房顫動" && !traditional.Resolve("common.apply").IsFallback &&
+            traditional.Format("validation.integerRange", 1, 3600) == "請輸入 1–3600 的整數。",
+            "Traditional Chinese has independent regional wording and the same formatting contract");
+        // Loading both Chinese catalogs validates every key and argument signature against English.
+        Check.That(BuiltInLocalizations.Supported.Select(locale => locale.Code).SequenceEqual(["en", "zh-CN", "zh-TW"]),
+            "all three independent languages are advertised");
     }
 
-    private static void LocaleSelectionIsExplicitAndLimitedToEnglishAndSimplifiedChinese()
+    private static void LocaleSelectionResolvesChineseScriptsAndRegions()
     {
-        foreach (string? locale in new string?[] { null, "", "  ", "cn", " CN ", "zh", "zh-cn", "zh-Hans", "zh-Hans-CN" })
+        foreach (string? locale in new string?[] { null, "", "  ", "cn", " CN ", "zh", "zh-cn", "zh-Hans", "zh-Hans-CN", "zh-Hans-TW", "zh-SG", "zh-CHS" })
         {
             Check.That(BuiltInLocalizations.Create(locale).Locale == "zh-CN", "Chinese aliases and default resolve canonically");
         }
-        foreach (string locale in new[] { "en", "EN", "en-US", "en-GB", "fr", "zh-TW", "zh-Hant", "invalid" })
+        foreach (string locale in new[] { "zh-TW", " ZH-tw ", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-CN", "zh-CHT" })
+        {
+            Check.That(BuiltInLocalizations.Create(locale).Locale == "zh-TW", "Traditional Chinese scripts and regions resolve to their own catalog");
+        }
+        foreach (string locale in new[] { "en", "EN", "en-US", "en-GB", "fr", "ja-JP", "invalid" })
         {
             Check.That(BuiltInLocalizations.Create(locale).Locale == "en", "unavailable locales fall back to English");
         }

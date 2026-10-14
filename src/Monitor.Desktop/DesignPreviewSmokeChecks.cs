@@ -928,6 +928,7 @@ internal static class DesignPreviewSmokeChecks
     {
         // Each registration runs on its process-owned Avalonia dispatcher.
         NativeSmokePartition.Run(LocalizationSmokeChecks.Verify);
+        NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyTraditionalChinese);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyTemplateCatalog);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyHelpCatalog);
         NativeSmokePartition.Run(LocalizationSmokeChecks.VerifyPausedMonitorLanguage);

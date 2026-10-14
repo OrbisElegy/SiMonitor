@@ -583,6 +583,7 @@ public static class BuiltInLocalizations
 {
     public const string DefaultLocale = "zh-CN";
     public const string FallbackLocale = "en";
+    public const string TraditionalChineseLocale = "zh-TW";
     public static IReadOnlyList<SupportedLocale> Supported { get; }
     public static string ResolveLocale(string? requestedLocale);
     public static ITextLocalizer Create(string? requestedLocale = null);

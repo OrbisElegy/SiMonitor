@@ -263,6 +263,7 @@ internal static class LocalizationSmokeChecks
     {
         var chinese = BuiltInLocalizations.Create("zh-CN");
         var english = BuiltInLocalizations.Create("en");
+        var traditional = BuiltInLocalizations.Create("zh-TW");
         var templates = DesignPreviewSettings.EcgTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EcgTemplateKey(index), Name: name))
             .Concat(DesignPreviewSettings.RespirationTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.RespirationTemplateKey(index), Name: name)))
             .Concat(DesignPreviewSettings.EjectionTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EjectionTemplateKey(index), Name: name)))
@@ -270,8 +271,9 @@ internal static class LocalizationSmokeChecks
             .Concat(DesignPreviewSettings.TemplateGroupIdentities.Select(name => (Key: DesignPreviewSettings.TemplateGroupKey(name), Name: name)));
         foreach (var (key, name) in templates)
         {
-            Require(chinese.GetString(key) == name && !english.Resolve(key).IsMissing && !english.Resolve(key).IsFallback,
-                $"template catalog key {key} matches its identity and has an English name");
+            Require(chinese.GetString(key) == name && !english.Resolve(key).IsMissing && !english.Resolve(key).IsFallback &&
+                !traditional.Resolve(key).IsMissing && !traditional.Resolve(key).IsFallback,
+                $"template catalog key {key} matches its identity and has English and Traditional Chinese names");
         }
     }
 
@@ -314,6 +316,50 @@ internal static class LocalizationSmokeChecks
             Require(Results() == "找到 6 条说明", "Chinese help search finds the same topics: " + Results());
         }
         finally { window.Close(); }
+    }
+
+    internal static void VerifyTraditionalChinese()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "monitor-traditional-ui-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "display.json");
+        try
+        {
+            var window = new DesignPreviewWindow(path);
+            window.Show();
+            try
+            {
+                var session = window.Session;
+                var timer = window.ActiveTimer;
+                window.Settings.HeartRate.Value = 81;
+                window.Settings.Language.SelectedIndex = 2;
+                Require(window.Localization.Locale == "zh-TW" && window.Settings.Apply.Content?.ToString() == "套用" &&
+                    window.Settings.HeartRate.Value == 81 && ReferenceEquals(session, window.Session) && ReferenceEquals(timer, window.ActiveTimer),
+                    "Traditional Chinese switches the running interface without applying drafts or replacing the session");
+                Require(window.Settings.Sound.PublishedTherapy?.Locale == "zh-CN",
+                    "Traditional Chinese uses the existing Mandarin therapy recordings");
+                window.SelectPage(3);
+                Dispatcher.UIThread.RunJobs();
+                var search = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "搜尋說明");
+                search.Text = "即時氧合";
+                Dispatcher.UIThread.RunJobs();
+                Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "找到 6 條說明"),
+                    "Traditional Chinese help searches its independent translated topics");
+                window.SelectPage(2);
+                window.Settings.Tabs.SelectedIndex = 0;
+                Capture(window, "i18n-general-tw.png");
+            }
+            finally { window.Close(); }
+            var reopened = new DesignPreviewWindow(path);
+            reopened.Show();
+            try
+            {
+                Require(reopened.Localization.Locale == "zh-TW" && reopened.Settings.Language.SelectedIndex == 2,
+                    "Traditional Chinese selection survives restart");
+            }
+            finally { reopened.Close(); }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     private static void Capture(Window window, string name)

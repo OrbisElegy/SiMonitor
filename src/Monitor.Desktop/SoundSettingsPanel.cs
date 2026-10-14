@@ -96,7 +96,9 @@ internal sealed class SoundSettingsPanel : StackPanel
     {
         _alarms.SetTherapyRelayEnabled(_therapyActive && !_closed);
         if (_therapyDevice is null || _aed is null) { return; }
-        PublishedTherapy = _therapyDirector.Update(_therapyDevice, _aed, _localization.Locale, _therapyActive && !_closed);
+        // Both Chinese interfaces use the existing Mandarin recordings.
+        string voiceLocale = _localization.Locale == "zh-TW" ? "zh-CN" : _localization.Locale;
+        PublishedTherapy = _therapyDirector.Update(_therapyDevice, _aed, voiceLocale, _therapyActive && !_closed);
         _alarms.SetTherapy(PublishedTherapy);
     }
     private readonly MonitorBeatPitch _pitch = new();

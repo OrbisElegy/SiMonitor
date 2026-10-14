@@ -9,6 +9,7 @@ public static class BuiltInLocalizations
 {
     public const string DefaultLocale = "zh-CN";
     public const string FallbackLocale = "en";
+    public const string TraditionalChineseLocale = "zh-TW";
 
     private static readonly Lazy<TranslationCatalog> English = new(() => Load(FallbackLocale));
     private static readonly Lazy<TranslationCatalog> Chinese = new(() =>
@@ -17,9 +18,15 @@ public static class BuiltInLocalizations
         catalog.ValidateAgainst(English.Value, requireComplete: true);
         return catalog;
     });
+    private static readonly Lazy<TranslationCatalog> TraditionalChinese = new(() =>
+    {
+        var catalog = Load(TraditionalChineseLocale);
+        catalog.ValidateAgainst(English.Value, requireComplete: true);
+        return catalog;
+    });
 
     public static IReadOnlyList<SupportedLocale> Supported { get; } = Array.AsReadOnly<SupportedLocale>(
-        [new(FallbackLocale, "English"), new(DefaultLocale, "简体中文")]);
+        [new(FallbackLocale, "English"), new(DefaultLocale, "简体中文"), new(TraditionalChineseLocale, "繁體中文")]);
 
     public static string ResolveLocale(string? requestedLocale)
     {
@@ -28,16 +35,32 @@ public static class BuiltInLocalizations
         if (locale.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
             locale.Equals("zh", StringComparison.OrdinalIgnoreCase) ||
             locale.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-SG", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-CHS", StringComparison.OrdinalIgnoreCase) ||
             locale.Equals("zh-Hans", StringComparison.OrdinalIgnoreCase) ||
             locale.StartsWith("zh-Hans-", StringComparison.OrdinalIgnoreCase))
         {
             return DefaultLocale;
         }
+        if (locale.Equals("zh-TW", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-HK", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-MO", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-CHT", StringComparison.OrdinalIgnoreCase) ||
+            locale.Equals("zh-Hant", StringComparison.OrdinalIgnoreCase) ||
+            locale.StartsWith("zh-Hant-", StringComparison.OrdinalIgnoreCase))
+        {
+            return TraditionalChineseLocale;
+        }
         return FallbackLocale;
     }
 
     public static ITextLocalizer Create(string? requestedLocale = null) =>
-        new CatalogTextLocalizer(ResolveLocale(requestedLocale) == DefaultLocale ? Chinese.Value : English.Value, English.Value);
+        new CatalogTextLocalizer(ResolveLocale(requestedLocale) switch
+        {
+            DefaultLocale => Chinese.Value,
+            TraditionalChineseLocale => TraditionalChinese.Value,
+            _ => English.Value
+        }, English.Value);
 
     private static TranslationCatalog Load(string locale)
     {

@@ -17,6 +17,7 @@ internal static class DesktopInformationPages
     private static readonly Dictionary<string, string> TopicResources = new(StringComparer.Ordinal)
     {
         ["zh-CN"] = "Monitor.Help.Topics",
+        ["zh-TW"] = "Monitor.Help.Topics.zh-TW",
         ["en"] = "Monitor.Help.Topics.en"
     };
     private static readonly Dictionary<string, Topic[]> LoadedTopics = new(StringComparer.Ordinal);

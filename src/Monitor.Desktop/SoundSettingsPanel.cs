@@ -163,6 +163,7 @@ internal sealed class SoundSettingsPanel : StackPanel
         var volumeLabel = Label("sound.volume", 50); Children.Add(volumeLabel);
         var volumeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         Mute.Width = 44;
+        Mute.Padding = new Thickness(0);
         Mute.Click += (_, _) =>
         {
             if (Volume.Value == 0) { Volume.Value = _lastAudibleVolume; Muted = false; }
@@ -442,7 +443,8 @@ internal sealed class SoundSettingsPanel : StackPanel
         Mute.Content = new Avalonia.Controls.Shapes.Path
         {
             Width = 22,
-            Height = 22,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Stretch = Stretch.Uniform,
             Stroke = DesktopFluentStyle.Text,
             StrokeThickness = 1.6,

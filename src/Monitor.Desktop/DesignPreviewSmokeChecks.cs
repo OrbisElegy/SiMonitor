@@ -705,6 +705,27 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifyVolumeIconCenter(SoundSettingsPanel panel)
+    {
+        var window = new Window { Content = panel, Width = 500, Height = 600 };
+        window.Show();
+        try
+        {
+            DesktopViewportSmokeChecks.Layout(window, 500, 600);
+            var icon = panel.Mute.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().Single();
+            var bounds = icon.RenderedGeometry!.GetRenderBounds(new Avalonia.Media.Pen(icon.Stroke, icon.StrokeThickness));
+            var center = icon.TranslatePoint(bounds.Center, panel.Mute)!.Value;
+            Require(Math.Abs(center.X - panel.Mute.Bounds.Width / 2) <= 1 &&
+                Math.Abs(center.Y - panel.Mute.Bounds.Height / 2) <= 1,
+                $"speaker geometry is centered in its button for muted and audible states: {center}, button {panel.Mute.Bounds.Size}");
+        }
+        finally
+        {
+            window.Content = null;
+            window.Close();
+        }
+    }
+
     private static void VerifySoundSettings()
     {
         VerifyOutputFaultNotice();
@@ -759,6 +780,7 @@ internal static class DesignPreviewSmokeChecks
             new MonitorAlertSettings().CriticalInterval.Value == 1.5m, "monitor sound defaults to unmuted");
         var devices = new List<Monitor.Infrastructure.Audio.AudioOutputDeviceInfo> { new("test-speaker", "Test speakers") };
         var controls = new SoundSettingsPanel(enumerateDevices: () => devices);
+        VerifyVolumeIconCenter(controls);
         var alertSettings = new MonitorAlertSettings();
         Require(controls.OutputDevice.SelectedIndex == 0 && controls.OutputDevice.ItemCount == 2 &&
             controls.Children.OfType<CheckBox>().Single() == controls.HeartbeatEnabled,
@@ -767,6 +789,7 @@ internal static class DesignPreviewSmokeChecks
         controls.Mute.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Require(controls.Muted && controls.Volume.Value == 73 && controls.EffectiveHeartbeatVolume == 0,
             "speaker mute preserves slider volume and silences heartbeat");
+        VerifyVolumeIconCenter(controls);
         controls.OutputDevice.SelectedIndex = 1;
         var soundPreferences = controls.CapturePreferences(alertSettings);
         devices.Clear(); controls.RefreshDevices();
@@ -776,6 +799,7 @@ internal static class DesignPreviewSmokeChecks
         Require(!controls.Muted && controls.Volume.Value == 73 && controls.EffectiveHeartbeatVolume == 73,
             "speaker unmute restores volume");
         controls.Volume.Value = 0;
+        VerifyVolumeIconCenter(controls);
         controls.Mute.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Require(controls.Volume.Value == 73 && !controls.Muted, "speaker restores last nonzero slider volume");
         controls.RestorePreferences(soundPreferences, alertSettings);

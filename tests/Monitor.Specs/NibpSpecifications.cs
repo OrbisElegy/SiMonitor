@@ -13,6 +13,7 @@ internal static class NibpSpecifications
         new(nameof(NibpAutoUsesStartIntervalsAndNeverOverlaps), NibpAutoUsesStartIntervalsAndNeverOverlaps),
         new(nameof(NibpDisableCancelsAndSessionRecordsEvents), NibpDisableCancelsAndSessionRecordsEvents),
         new(nameof(NibpSoundIsFiniteDistinctAndPartitionIndependent), NibpSoundIsFiniteDistinctAndPartitionIndependent),
+        new(nameof(NibpDeflationStartsIntermittentAndFinishesSoftContinuous), NibpDeflationStartsIntermittentAndFinishesSoftContinuous),
         new(nameof(NibpAudioSharesOutputGainAndCancellation), NibpAudioSharesOutputGainAndCancellation)
     ];
     private static readonly ManualNibp Target = new(120, 80, 93);
@@ -118,6 +119,58 @@ internal static class NibpSpecifications
         }
         Check.That(!phases[0].SequenceEqual(phases[1]), "inflation motor and deflation air sounds differ");
         WriteCuffFixture();
+    }
+
+    private static void NibpDeflationStartsIntermittentAndFinishesSoftContinuous()
+    {
+        var renderer = new NibpSoundRenderer();
+        renderer.Update(new(NibpPhase.Deflating, 9000));
+        float[] samples = new float[9 * 48000];
+        renderer.Mix(samples);
+        for (int pulse = 0; pulse < 8; pulse++)
+        {
+            int start = pulse * 36000;
+            Check.That(Rms(samples.AsSpan(start + 4800, 4800)) > .003,
+                "initial valve openings produce gentle audible releases");
+            Check.That(samples.AsSpan(start + 14400, 21600).IndexOfAnyExcept(0f) == -1,
+                "initial valve releases have real silent intervals");
+        }
+        for (int frame = 6 * 48000 + 4800; frame < samples.Length - 4800; frame += 4800)
+        {
+            Check.That(Rms(samples.AsSpan(frame, 4800)) > .003,
+                "the final release stays continuous instead of pulsing");
+        }
+        Check.That(Rms(samples.AsSpan(6 * 48000 + 4800, 4800)) > Rms(samples.AsSpan(8 * 48000, 4800)),
+            "continuous airflow softens as cuff pressure falls");
+        Check.That(samples.Max(Math.Abs) < .04 && Rms(samples) < .009,
+            "deflation stays soft without exaggerated hiss peaks or sustained loudness");
+
+        var updated = new NibpSoundRenderer();
+        float[] actual = new float[samples.Length];
+        for (int offset = 0; offset < actual.Length; offset += 4800)
+        {
+            updated.Update(new(NibpPhase.Deflating, 9000 - offset / 48));
+            updated.Mix(actual.AsSpan(offset, 4800));
+        }
+        Check.That(samples.SequenceEqual(actual), "progress updates preserve the intermittent-to-continuous sequence");
+        updated.Update(null);
+        updated.Mix(new float[960]);
+        updated.Update(new(NibpPhase.Deflating, 8500));
+        float[] resumed = new float[4800];
+        updated.Mix(resumed);
+        Check.That(resumed.All(sample => sample == 0), "resuming during a closed valve interval preserves its silence");
+        updated.Update(null);
+        updated.Mix(new float[960]);
+        updated.Update(new(NibpPhase.Deflating, 2000));
+        updated.Mix(resumed);
+        Check.That(Rms(resumed) > .003, "resuming the final release does not restart intermittent deflation");
+    }
+
+    private static double Rms(ReadOnlySpan<float> samples)
+    {
+        double energy = 0;
+        foreach (float sample in samples) { energy += sample * sample; }
+        return Math.Sqrt(energy / samples.Length);
     }
 
     private static void WriteCuffFixture()

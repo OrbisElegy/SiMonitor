@@ -226,6 +226,7 @@ internal static class Program
             .. AudioRecoverySpecifications.All,
             .. NativeAudioCommandSpecifications.All,
             .. EndpointAudioOutputSpecifications.All,
+            .. AudioOutputDeviceSpecifications.All,
             .. WasapiStreamSpecifications.All,
             .. Ecg12PaperLayoutSpecifications.All,
             .. Ecg12PaperMeasurementSpecifications.All,

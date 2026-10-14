@@ -9,12 +9,18 @@ namespace Monitor.Specs;
 internal static class ManagedAudioCommand
 {
     public static readonly string[] Commands =
-        ["--audio-wasapi-audition", "--audio-wasapi-diagnostics", "--audio-alsa-audition", "--audio-alsa-diagnostics"];
+        ["--audio-wasapi-audition", "--audio-wasapi-diagnostics", "--audio-alsa-audition", "--audio-alsa-diagnostics", "--audio-output-devices"];
 
     public static int Execute(string[] args, TextWriter output, TextWriter error, CancellationToken cancellation)
     {
-        if (args.Length is < 1 or > 2 || !Commands.Contains(args[0]))
-        { error.WriteLine("Usage: --audio-wasapi-audition|--audio-wasapi-diagnostics|--audio-alsa-audition|--audio-alsa-diagnostics [DEVICE_ID]"); return 2; }
+        if (args is ["--audio-output-devices"])
+        {
+            if (cancellation.IsCancellationRequested) { return 130; }
+            output.WriteLine(JsonSerializer.Serialize(AudioOutputDevices.Enumerate()));
+            return 0;
+        }
+        if (args.Length is < 1 or > 2 || !Commands.Contains(args[0]) || args[0] == "--audio-output-devices")
+        { error.WriteLine("Usage: --audio-output-devices | --audio-wasapi-audition|--audio-wasapi-diagnostics|--audio-alsa-audition|--audio-alsa-diagnostics [DEVICE_ID]"); return 2; }
         if (cancellation.IsCancellationRequested) { return 130; }
         string? deviceId = args.Length == 2 ? args[1] : null;
         using var stream = args[0].StartsWith("--audio-wasapi-", StringComparison.Ordinal)

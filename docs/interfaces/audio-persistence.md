@@ -175,10 +175,17 @@ NativeAudioClockSample 包含 Result、HResult、DevicePosition、DeviceFrequenc
 `Nominal48kElapsedFrames` 只有 Result=0、HResult=0、frequency 非零且转换不溢出时才非空，
 按 `position * 48000 / frequency` 向下取整。它只是名义设备累计时间，不能直接当 renderer frontier。
 
-`AudioOutputDevices.Enumerate()` 在 Windows 枚举活动播放端点，返回 `AudioOutputDeviceInfo(Id, Name)`；
-其他平台返回空列表。名称取端点友好名称，ID 原样传给音频后端。桌面展开设备下拉框时刷新列表，
+`AudioOutputDevices.Enumerate()` 返回 `AudioOutputDeviceInfo(Id, Name)`：Windows 通过 MMDevice API
+枚举活动播放端点，名称取端点友好名称，端点 ID 同时适用于原生及托管 WASAPI。
+Linux 通过 alsa-lib 的 PCM name hints 枚举输出及双向设备，名称取设备描述，PCM 名称作为 ID
+原样交给 ALSA 后端；排除仅输入设备、重复 ID、`default` 和丢弃音频的 `null` 端点。
+其他平台或缺少 ALSA 库时返回空列表。桌面展开设备下拉框时刷新列表，
 已选择但不可用的设备保留在列表中；“系统默认”独立于具体设备 ID。
 Windows 枚举与属性读取遵循 [Microsoft Core Audio 设备属性接口](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-properties)。
+Linux 枚举遵循 [ALSA Name Hint 接口](https://www.alsa-project.org/alsa-doc/alsa-lib/group___hint.html)，
+设备范围由系统 ALSA 配置及插件决定，不直接枚举 PulseAudio/PipeWire 的服务端 sink。
+可用 `dotnet run --project tests/Monitor.Specs --no-build --configuration Release -- --audio-output-devices`
+查看当前平台的设备 ID 和名称；该命令只枚举设备，不打开音频流。
 
 ## 本地试听与报警播放入口
 

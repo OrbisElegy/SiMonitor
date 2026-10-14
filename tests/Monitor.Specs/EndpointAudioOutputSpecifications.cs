@@ -254,7 +254,8 @@ internal static class EndpointAudioOutputSpecifications
         using var output = new StringWriter();
         using var error = new StringWriter();
         Check.That(ManagedAudioCommand.Execute(["--audio-wasapi-unknown"], output, error, default) == 2 &&
-            ManagedAudioCommand.Execute(["--audio-alsa-audition", "a", "b"], output, error, default) == 2,
+            ManagedAudioCommand.Execute(["--audio-alsa-audition", "a", "b"], output, error, default) == 2 &&
+            ManagedAudioCommand.Execute(["--audio-output-devices", "unexpected"], output, error, default) == 2,
             "unknown commands and extra arguments are usage errors");
         Check.That(ManagedAudioCommand.Execute(["--audio-wasapi-audition"], output, error, new CancellationToken(true)) == 130 && output.ToString().Length == 0,
             "cancelled audition opens no device");

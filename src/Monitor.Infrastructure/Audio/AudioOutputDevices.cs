@@ -9,8 +9,9 @@ public sealed record AudioOutputDeviceInfo(string Id, string Name);
 
 public static partial class AudioOutputDevices
 {
-    // Endpoint IDs are opaque and work with both native and managed WASAPI.
-    public static IReadOnlyList<AudioOutputDeviceInfo> Enumerate() => OperatingSystem.IsWindows() ? EnumerateWindows() : [];
+    // IDs belong to the platform backend: Windows endpoints or Linux ALSA PCM names.
+    public static IReadOnlyList<AudioOutputDeviceInfo> Enumerate() => OperatingSystem.IsWindows() ? EnumerateWindows() :
+        OperatingSystem.IsLinux() ? EnumerateAlsa() : [];
 
     [SupportedOSPlatform("windows")]
     private static List<AudioOutputDeviceInfo> EnumerateWindows()
@@ -94,7 +95,7 @@ public static partial class AudioOutputDevices
 }
 
 [GeneratedComInterface]
-[Guid("0BD7A1BE-7A1A-44DB-8397-C0A9C3A3CCB2")]
+[Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E")]
 internal partial interface IMMDeviceCollection
 {
     [PreserveSig]

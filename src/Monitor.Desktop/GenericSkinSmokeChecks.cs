@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Preferences;
@@ -142,6 +144,7 @@ internal static class GenericSkinSmokeChecks
                         double traceRight = window.MonitorTrace.TranslatePoint(new Point(window.MonitorTrace.Bounds.Width, 0), view)!.Value.X;
                         Require(Math.Abs(numericLeft - traceRight) <= 1 && window.MonitorTrace.Bounds.Width > 200,
                             "the enlarged numeric column stays aligned with NIBP and leaves room for waveforms");
+                        if (locale == "zh-CN") { VerifySeparators(window); }
                         if (locale == "zh-CN" && size.Width > 960)
                         {
                             using var image = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
@@ -167,6 +170,36 @@ internal static class GenericSkinSmokeChecks
         view.RefreshDisplay();
         Require(ReferenceEquals(session, window.Session) && session.SimulationTimeNs == time && window.ActiveTimer is null,
             "resizing and changing numeric layout preserve the paused acquisition session");
+    }
+
+    private static void VerifySeparators(DesignPreviewWindow window)
+    {
+        var area = window.MonitorTrace.GetVisualAncestors().OfType<GenericMonitorArea>().Single();
+        int width = (int)Math.Floor(area.Bounds.Width);
+        using var image = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(area.Bounds.Width), (int)Math.Ceiling(area.Bounds.Height)), new Vector(96, 96));
+        image.Render(area);
+        using var pixels = new WriteableBitmap(image.PixelSize, image.Dpi, PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using var buffer = pixels.Lock();
+        image.CopyPixels(buffer);
+        bool IsSeparator(int x, int y)
+        {
+            int offset = y * buffer.RowBytes + x * 4;
+            return Marshal.ReadByte(buffer.Address, offset) == 0x80 &&
+                Marshal.ReadByte(buffer.Address, offset + 1) == 0x70 &&
+                Marshal.ReadByte(buffer.Address, offset + 2) == 0x60;
+        }
+        int rows = window.Session.Display.Slots.Count;
+        for (int row = 1; row <= rows; row++)
+        {
+            int y = (int)Math.Floor(window.MonitorTrace.Bounds.Height * row / rows) - 1;
+            Require(Enumerable.Range(0, width).All(x => IsSeparator(x, y)),
+                $"row {row} has one continuous separator across waveforms and scaled numerics");
+            foreach (int x in new[] { 4, (int)window.MonitorTrace.Bounds.Width - 2, (int)window.MonitorTrace.Bounds.Width + 2, width - 4 })
+            {
+                Require(!IsSeparator(x, y - 1) && !IsSeparator(x, y + 1),
+                    $"row {row} separator stays one pixel thick without overlapping manual-tile borders");
+            }
+        }
     }
 
     private static void VerifyLayout(DesignPreviewWindow window)

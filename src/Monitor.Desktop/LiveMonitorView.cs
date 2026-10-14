@@ -212,7 +212,7 @@ internal sealed class LiveMonitorView : UserControl
             {
                 Padding = new Thickness(8, 6),
                 BorderBrush = Brush.Parse("#607080"),
-                BorderThickness = new Thickness(0, 0, 0, 1),
+                BorderThickness = _skin is null ? new Thickness(0, 0, 0, 1) : new Thickness(0),
                 ClipToBounds = true,
                 Child = content
             };

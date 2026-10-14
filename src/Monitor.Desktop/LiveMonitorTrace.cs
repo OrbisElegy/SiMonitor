@@ -120,7 +120,8 @@ internal sealed class LiveMonitorTrace : Control
             var color = ChannelBrush(channel);
             var range = _session.Ranges.Range(row);
             double top = row * rowHeight;
-            context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1));
+            if (Skin is null)
+            { context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1)); }
             Label(context, ChannelName(channel), 12, top + 10, color, 14);
             Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
             string unit = Unit(_localization.Current, channel);

@@ -17,8 +17,6 @@ internal sealed class MonitorManualTile : Border
     internal MonitorManualTile()
     {
         Padding = new Thickness(10, 8);
-        BorderThickness = new Thickness(0, 1, 0, 0);
-        BorderBrush = Brush.Parse("#34414F");
         ClipToBounds = true;
         var panel = new Grid { RowDefinitions = new("Auto,*,Auto") };
         panel.Children.Add(_caption);

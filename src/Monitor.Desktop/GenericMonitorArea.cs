@@ -12,6 +12,7 @@ internal sealed class GenericMonitorArea : Grid
 {
     private readonly LayoutTransformControl[] _numericSurfaces;
     private readonly Func<int> _waveformRowCount;
+    private readonly RowSeparators _separators;
     private double _scale = 1;
 
     internal GenericMonitorArea(MonitorSkinContent content)
@@ -25,6 +26,16 @@ internal sealed class GenericMonitorArea : Grid
         extras.Children.Add(content.Custom1);
         extras.Children.Add(content.Custom2);
         _numericSurfaces = [Wrap(content.Numerics, 0, 1), Wrap(extras, 1, 0), Wrap(content.Nibp, 1, 1)];
+        // Draw once over both columns, outside the numeric scaling transform.
+        _separators = new RowSeparators(content) { IsHitTestVisible = false };
+        SetColumnSpan(_separators, 2);
+        Children.Add(_separators);
+    }
+
+    internal void RefreshLayout()
+    {
+        InvalidateMeasure();
+        _separators.InvalidateVisual();
     }
 
     private LayoutTransformControl Wrap(Control content, int row, int column)
@@ -55,5 +66,22 @@ internal sealed class GenericMonitorArea : Grid
             }
         }
         return base.MeasureOverride(availableSize);
+    }
+
+    private sealed class RowSeparators(MonitorSkinContent content) : Control
+    {
+        private static readonly IBrush Stroke = Brush.Parse("#607080");
+
+        public override void Render(DrawingContext context)
+        {
+            base.Render(context);
+            int rows = content.WaveformRowCount();
+            for (int row = 1; row <= rows; row++)
+            {
+                double left = content.TwelveLeadWaveforms.IsVisible && row < rows ? content.Waveforms.Bounds.Width : 0;
+                double bottom = Math.Floor(Bounds.Height * row / rows);
+                context.FillRectangle(Stroke, new Rect(left, Math.Max(0, bottom - 1), Math.Max(0, Bounds.Width - left), 1));
+            }
+        }
     }
 }

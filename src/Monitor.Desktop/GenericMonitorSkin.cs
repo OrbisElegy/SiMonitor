@@ -19,7 +19,8 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     private readonly Action<MonitorTherapyPreferences, bool>? _pacing;
     private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
     private string? _pacingError;
-    private Grid? _body, _monitorArea;
+    private Grid? _body;
+    private GenericMonitorArea? _monitorArea;
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
     internal Button EcgButton { get; private set; } = null!;
@@ -70,6 +71,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         _waveforms.IsVisible = !visible;
         _twelveLeadWaveforms.IsVisible = visible;
         _twelveLeadWaveforms.InvalidateVisual();
+        RefreshLayout();
         EcgButton.Background = Brush.Parse(visible ? "#145AA3" : "#222C38");
         _localization.Bind(EcgButton, AutomationProperties.NameProperty, visible ? "skin.ecgSelected" : "skin.ecg");
         _localization.Bind(EcgButton, ToolTip.TipProperty, visible ? "skin.returnMonitor" : "skin.ecg");
@@ -236,7 +238,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     public string Id => "generic";
     public IBrush Background => Brushes.Black;
     public IBrush ChannelBrush(int channel) => Brush.Parse(Colors[channel]);
-    public void RefreshLayout() => _monitorArea?.InvalidateMeasure();
+    public void RefreshLayout() => _monitorArea?.RefreshLayout();
 
     public Control Compose(MonitorSkinContent content)
     {

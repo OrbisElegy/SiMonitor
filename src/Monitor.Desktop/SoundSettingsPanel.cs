@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -30,7 +31,14 @@ internal sealed class SoundSettingsPanel : StackPanel
     internal bool Muted { get; private set; }
     internal bool OutputStarted => _alarmCancellation is not null;
     internal Button Mute { get; } = Button();
-    internal ComboBox OutputDevice { get; } = new() { MinWidth = 280, MaxWidth = 480, HorizontalAlignment = HorizontalAlignment.Left };
+    internal ComboBox OutputDevice { get; } = new()
+    {
+        MinWidth = 280,
+        MaxWidth = 480,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        ItemTemplate = new FuncDataTemplate<DeviceChoice>((device, _) => new TextBlock { Text = device?.Name, TextWrapping = TextWrapping.Wrap })
+    };
     private SoundPreviewResult? _outputResult;
     private CancellationTokenSource? _cancellation;
     private bool _closed;

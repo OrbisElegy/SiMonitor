@@ -49,8 +49,42 @@ internal static class LocalizationSmokeChecks
                 Equals(snapshot, session.Measurements) && time == session.SimulationTimeNs && window.ActiveTimer is null &&
                 readings.SequenceEqual(view.NumericTexts) && transitions.SequenceEqual(window.Settings.Alerts.AlarmLifecycles.SelectMany(journal => journal.Transitions)),
                 "translation preserves paused measurements, monitor identity and alarm lifecycle");
+            VerifyTranslatedChoices(window);
         }
         finally { window.Close(); }
+    }
+
+    private static void VerifyTranslatedChoices(DesignPreviewWindow window)
+    {
+        var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+        foreach (int width in new[] { 960, 1440 })
+        {
+            for (int index = 0; index < skin.PacingType.ItemCount; index++)
+            {
+                skin.PacingType.SelectedIndex = index;
+                DesktopViewportSmokeChecks.Layout(window, width, 940);
+                RequireChoiceFits(skin.PacingType);
+            }
+            using var image = new RenderTargetBitmap(new PixelSize(width, 940), new Vector(96, 96));
+            image.Render((Control)window.Content!);
+            image.Save($"artifacts/i18n-pacing-en-{width}.png", PngBitmapEncoderOptions.Default);
+        }
+        window.SelectPage(2);
+        window.Settings.Tabs.SelectedIndex = 3;
+        window.Settings.SectionPages[3].SelectedSection = 1;
+        window.Settings.Sound.BeatSource.SelectedIndex = 2;
+        DesktopViewportSmokeChecks.Layout(window, 960, 720);
+        RequireChoiceFits(window.Settings.Sound.BeatSource);
+        RequireChoiceFits(window.Settings.Sound.PitchSource);
+    }
+
+    private static void RequireChoiceFits(ComboBox combo)
+    {
+        var caption = combo.GetVisualDescendants().OfType<TextBlock>().Single(text => text.IsEffectivelyVisible && !string.IsNullOrEmpty(text.Text));
+        Require(caption.TextLayout.Width <= caption.Bounds.Width + 1 && caption.TextLayout.Height <= caption.Bounds.Height + 1,
+            "translated selector displays its full caption: " + caption.Text);
+        Require(caption.Bounds.Width <= combo.Bounds.Width - combo.Padding.Left - combo.Padding.Right,
+            "selector reserves room for its drop-down arrow");
     }
 
     internal static void VerifyRetiredMonitorCollection()

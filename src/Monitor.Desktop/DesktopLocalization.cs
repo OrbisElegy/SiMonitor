@@ -6,6 +6,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Monitor.Application.Localization;
 using Monitor.Infrastructure.Localization;
 
@@ -31,9 +33,10 @@ internal sealed class DesktopLocalization(string? locale = null)
     internal void SetChoices(ComboBox control, IEnumerable<Func<ITextLocalizer, string>> formats)
     {
         int selected = control.SelectedIndex;
+        control.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         control.ItemTemplate = new FuncDataTemplate<LocalizedValue>((_, _) =>
         {
-            var caption = new TextBlock();
+            var caption = new TextBlock { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
             caption.Bind(TextBlock.TextProperty, new Binding(nameof(LocalizedValue.Value)));
             return caption;
         });

@@ -731,7 +731,8 @@ internal static class DesignPreviewSmokeChecks
         timed.Volume.Value = 40; timed.HeartbeatVolume.Value = 25;
         Require(timed.EffectiveHeartbeatVolume == 10 && timed.BeatPitchPercent == 97, "relative beat volume multiplies master without changing pitch");
         timed.HeartbeatVolume.Value = 100; timed.Volume.Value = 50;
-        timed.StartAudioPause(120);
+        timed.PauseSeconds.Value = 120;
+        Require(timed.PauseConfiguredAlarmAudio() && timed.AlarmAudioPaused, "configured alarm pause starts from the editable duration");
         timed.BeatSource.SelectedIndex = 1;
         Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pulse source selection preserves independent audio pause");
         Require(timed.PublishedAlarm is null && timed.AudioPauseText.Contains("120s", StringComparison.Ordinal), "pause suppresses alarm request and shows countdown");
@@ -740,9 +741,12 @@ internal static class DesignPreviewSmokeChecks
         authority = 60_000_000_000; timed.PauseMonitor(); timed.RefreshAudioPause();
         Require(timed.AudioPauseText.Contains("60s", StringComparison.Ordinal), "simulation pause does not freeze audio deadline");
         authority = 120_000_000_000; timed.RefreshAudioPause();
-        Require(timed.AudioPauseText == "" && timed.PublishedAlarm is null, "expiry does not restart a paused simulation");
+        Require(timed.AudioPauseText == "" && !timed.AlarmAudioPaused && timed.PublishedAlarm is null, "expiry does not restart a paused simulation");
         timed.UpdateAlarm(MonitorNoticeLevel.Critical, new());
         Require(timed.PublishedAlarm?.Level == MonitorNoticeLevel.Critical, "current critical resumes instead of old warning");
+        timed.PauseSeconds.Value = 1.5m;
+        Require(!timed.PauseConfiguredAlarmAudio() && !timed.AlarmAudioPaused && timed.PublishedAlarm?.Level == MonitorNoticeLevel.Critical,
+            "invalid fractional duration preserves current sound without throwing");
         timed.StartAudioPause(10); timed.UpdateAlarm(null, new());
         timed.ResumeAlarmAudio.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Require(timed.PublishedAlarm is null && !timed.ResumeAlarmAudio.IsEnabled, "cleared alarm is not replayed by explicit resume");

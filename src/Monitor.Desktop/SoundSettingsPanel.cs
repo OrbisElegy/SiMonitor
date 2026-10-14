@@ -211,13 +211,8 @@ internal sealed class SoundSettingsPanel : StackPanel
         pauseButtons.Children.Add(PauseAlarmAudio); pauseButtons.Children.Add(ResumeAlarmAudio); Children.Add(pauseButtons);
         ResumeAlarmAudio.IsEnabled = false; Children.Add(PauseStatus);
         Children.Add(DesktopInformationPages.Help("topic-9"));
-        PauseAlarmAudio.Click += (_, _) =>
-        {
-            if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds))
-            { Show(PauseStatus, "sound.pauseInvalid"); return; }
-            StartAudioPause(checked((int)seconds));
-        };
-        ResumeAlarmAudio.Click += (_, _) => { _audioPause.Resume(_authorityNow()); RefreshAudioPause(); };
+        PauseAlarmAudio.Click += (_, _) => PauseConfiguredAlarmAudio();
+        ResumeAlarmAudio.Click += (_, _) => ResumeAudioPause();
         Children.Add(DesktopInformationPages.Help("topic-10"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
         Audition.Click += async (_, _) => await PreviewAsync();
@@ -373,6 +368,20 @@ internal sealed class SoundSettingsPanel : StackPanel
         if (_closed) { return; }
         _audioPause.Start(_authorityNow(), seconds); _pauseTimer.Start(); RefreshAudioPause();
     }
+    internal bool PauseConfiguredAlarmAudio()
+    {
+        if (PauseSeconds.Value is not { } seconds || seconds != decimal.Truncate(seconds) || seconds is < 1 or > 3600)
+        { Show(PauseStatus, "sound.pauseInvalid"); return false; }
+        StartAudioPause((int)seconds);
+        return true;
+    }
+    internal void ResumeAudioPause()
+    {
+        if (_closed) { return; }
+        _audioPause.Resume(_authorityNow());
+        RefreshAudioPause();
+    }
+    internal bool AlarmAudioPaused => _audioPause.RemainingSeconds(_authorityNow()) > 0;
     internal void RefreshAudioPause() => Publish();
     private void Publish()
     {

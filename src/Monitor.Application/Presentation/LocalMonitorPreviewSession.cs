@@ -12,7 +12,7 @@ namespace Monitor.Application.Presentation;
 // Local preview runtime, not a replacement for the product authority gateway.
 // All live consumers share committed source samples and one measurement owner.
 // Fixed-duration waveform packets are a recording projection of the same stream.
-public sealed class LocalMonitorPreviewSession
+public sealed partial class LocalMonitorPreviewSession
 {
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
@@ -41,6 +41,7 @@ public sealed class LocalMonitorPreviewSession
         if (lead != EcgLead.II && _ecgSource is null) { throw new InvalidOperationException("Preview.TwelveLeadSourceRequired"); }
         if (lead == DisplayEcgLead) { return; }
         Ranges.RefreshChannel(0, SimulationTimeNs, (_, from, to) => ReadEcgSamples(lead, from, to, usableOnly: true).Select(sample => sample.Value));
+        RecordEvent(PreviewRecordEventKind.LeadChanged, $"{DisplayEcgLead} → {lead}");
         DisplayEcgLead = lead;
     }
     private readonly List<(long TimeNs, IReadOnlyList<short> Values)> _ecgSamples = [];
@@ -174,6 +175,7 @@ public sealed class LocalMonitorPreviewSession
         source.ContinueWith(_pendingVentilationSource);
         _source = source;
         _pendingVentilationSource = null;
+        RecordEvent(PreviewRecordEventKind.VentilationChanged, "");
     }
 
     public void DiscardStartup()
@@ -213,7 +215,7 @@ public sealed class LocalMonitorPreviewSession
         ecgTrial?.ContinueWith(definition._ecgSource ?? LiveEcgIllustrationSource.Create(definition._configuration));
     }
 
-    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs)
+    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs, string description = "")
     {
         ValidateSourceDefinition(definition);
         if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
@@ -222,6 +224,7 @@ public sealed class LocalMonitorPreviewSession
         _beforePacing = null;
         _postShockSinus = null;
         _pendingSource = definition;
+        _pendingSourceDescription = description;
         PendingSourceTimeNs = effective;
         return effective;
     }
@@ -303,6 +306,7 @@ public sealed class LocalMonitorPreviewSession
         if (_shockArtifacts.Count >= 128) { throw new InvalidOperationException("Defibrillation.TooManyRetainedShocks"); }
         if (result.Outcome != ElectricalConversionOutcome.Eligible)
         {
+            RecordEvent(PreviewRecordEventKind.ShockDelivered, $"{delivery.EnergyJoules} J · {delivery.Mode}");
             _shockArtifacts.Add(artifact);
             WithdrawShockBeatCues();
             _lastElectricalDeliverySequence = delivery.DeliverySequence;
@@ -329,6 +333,7 @@ public sealed class LocalMonitorPreviewSession
             ScheduleSource(quiet, delayNs);
             _postShockSinus = (sinusDefinition, effective);
         }
+        RecordEvent(PreviewRecordEventKind.ShockDelivered, $"{delivery.EnergyJoules} J · {delivery.Mode}");
         _shockArtifacts.Add(artifact);
         WithdrawShockBeatCues();
         _lastElectricalDeliverySequence = delivery.DeliverySequence;
@@ -364,6 +369,17 @@ public sealed class LocalMonitorPreviewSession
         _source = source;
         _ecgSource = ecgSource;
         _realtimeOxygenation = oxygenation;
+        RecordEvent(PreviewRecordEventKind.SourceChanged, string.IsNullOrEmpty(_pendingSourceDescription)
+            ? $"{ElectricalTherapy?.TemplateId ?? _configuration.ConductionPattern.ToString()} / {_configuration.CardiacActivity} → " +
+                $"{definition.ElectricalTherapy?.TemplateId ?? definition._configuration.ConductionPattern.ToString()} / {definition._configuration.CardiacActivity}"
+            : _pendingSourceDescription);
+        if (_configuration.Pacing != definition._configuration.Pacing || _configuration.PacingOutput != definition._configuration.PacingOutput)
+        {
+            RecordEvent(PreviewRecordEventKind.PacingChanged,
+                $"{_configuration.Pacing?.ToString() ?? "—"} → {definition._configuration.Pacing?.ToString() ?? "—"}" +
+                (definition._configuration.PacingOutput is { } output ? $" · {output.RatePerMinute}/min · {output.CurrentMilliamps} mA" : ""));
+        }
+        _pendingSourceDescription = "";
         _configuration = definition._configuration;
         _realtimeConfiguration = definition._realtimeConfiguration;
         ElectricalTherapy = definition.ElectricalTherapy;
@@ -494,6 +510,7 @@ public sealed class LocalMonitorPreviewSession
                 pacingPulseTimesNs.AddRange(pacing.AtrialPulseTimesNs);
             }
             long oldestTimeNs = next - RetainedBlockCount * 200_000_000L;
+            _recordEvents.RemoveAll(item => item.TimeNs < oldestTimeNs);
             _ecgSamples.RemoveAll(sample => sample.TimeNs < oldestTimeNs);
             foreach (var history in _samples.Values)
             {
@@ -508,6 +525,10 @@ public sealed class LocalMonitorPreviewSession
             Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadDisplaySamples(channel, from, to, usableOnly: true).Select(s => s.Value));
             deltaNs -= chunk;
         }
+        foreach (var item in rhythmEvents)
+        { _recordEvents.Add(new(item.ConfirmedAtNs, PreviewRecordEventKind.RhythmChanged, $"{item.Kind} · {item.Transition}")); }
+        foreach (var item in monitoringEvents)
+        { _recordEvents.Add(new(item.ConfirmedAtNs, PreviewRecordEventKind.MonitoringChanged, $"{item.Condition} · {item.Transition}")); }
         DetectedRhythmEvents = rhythmEvents.AsReadOnly();
         DetectedMonitoringEvents = monitoringEvents.AsReadOnly();
         DetectedPulses = pulses.AsReadOnly();

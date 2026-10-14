@@ -23,6 +23,8 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
     internal Button EcgButton { get; private set; } = null!;
+    internal Button PrintButton { get; private set; } = null!;
+    internal event Action? PrintRequested;
     internal Button LeadButton { get; private set; } = null!;
     internal IReadOnlyList<RadioButton> LeadChoices => _leadChoices;
     private readonly List<RadioButton> _leadChoices = [];
@@ -289,7 +291,10 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         RefreshLeadCaption();
         toolbar.Children.Add(LeadButton);
         UpdateTherapyVisibility();
-        foreach (string key in new[] { "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
+        PrintButton = ToolbarButton("skin.print");
+        PrintButton.Click += (_, _) => PrintRequested?.Invoke();
+        toolbar.Children.Add(PrintButton);
+        foreach (string key in new[] { "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
         { toolbar.Children.Add(DummyButton(key)); }
         Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);

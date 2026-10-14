@@ -50,6 +50,7 @@ internal sealed class DesignPreviewWindow : Window
     private WaveformEnvelope[]? _paperMeasurementBlocks;
     private bool _paperMeasuring;
     private Ecg12PrintOptions? _printOptions;
+    internal LiveMonitorPrintWindow? LivePrintWindow { get; private set; }
     internal Ecg12PrintWindow? PrintWindow { get; private set; }
     internal SystemViewCommandAssessmentPolicy MeasurementPolicy { get; private set; } = SystemViewCommandAssessmentPolicy.Enabled;
     internal LiveMonitorTrace MonitorTrace => _monitor;
@@ -193,6 +194,14 @@ internal sealed class DesignPreviewWindow : Window
             _displayPreferences = _displayPreferences with { MonitorEcgLead = lead };
             SaveDisplayPreferences();
         });
+        skin.PrintRequested += () =>
+        {
+            if (_closed) { return; }
+            var dialog = new LiveMonitorPrintWindow(_session.CapturePrintSnapshot(), skin.TwelveLeadVisible, Localization);
+            LivePrintWindow = dialog;
+            dialog.Closed += (_, _) => { if (ReferenceEquals(LivePrintWindow, dialog)) { LivePrintWindow = null; } };
+            dialog.Show(this);
+        };
         skin.EcgViewChanged += () =>
         {
             if (_closed || _applying) { return; }
@@ -717,7 +726,10 @@ internal sealed class DesignPreviewWindow : Window
             }
             else
             {
-                effective = _session.ScheduleSource(next, delayNs);
+                effective = _session.ScheduleSource(next, delayNs,
+                    string.Join(" · ", Localization.Get(DesignPreviewSettings.EcgTemplateKey(selection.EcgSelection)),
+                        Localization.Get(DesignPreviewSettings.RespirationTemplateKey(selection.RespirationSelection)),
+                        Localization.Get(DesignPreviewSettings.EjectionTemplateKey(selection.EjectionSelection))));
                 _pendingPresentation = (ecgConfig, physiology, ecg, effective.Value,
                     selection.EcgSelection, selection.RespirationSelection, selection.EjectionSelection);
                 _session.UpdateDisplay(next.Display);

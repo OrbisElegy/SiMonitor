@@ -1478,7 +1478,7 @@ public sealed class EcgAlarmNotices
 源码：[LocalMonitorPreviewSession.cs](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.cs) · 命名空间：`Monitor.Application.Presentation`
 
 ```csharp
-public sealed class LocalMonitorPreviewSession
+public sealed partial class LocalMonitorPreviewSession
 {
     public const int RetainedBlockCount = 202;
     public const long StartupDiscardNs = 12_000_000_000;
@@ -1507,7 +1507,7 @@ public sealed class LocalMonitorPreviewSession
     public LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration configuration, MonitorDisplayConfiguration display, bool enableMeasurements = false, int? opticalSaturationMilliPercent = null, int opticalModulationPermille = 1000, SeededOpticalSaturation? opticalVariation = null, IArterialOxygenationSource? oxygenation = null, RealtimeOxygenationConfiguration? realtimeOxygenation = null, ManualVitalSigns? manualVitals = null, EcgElectricalTherapyProfile? electricalTherapy = null, PressureTransducerLimits? pressureTransducers = null, bool enableTwelveLead = false);
     public long UpdateOxygenationVentilation(VentilationTransportPlan ventilation, decimal? oxygenDemandMultiplier = null);
     public void DiscardStartup();
-    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs);
+    public long ScheduleSource(LocalMonitorPreviewSession definition, long delayNs, string description = "");
     public PacingIllustration? ActivePacing { get; }
     public bool PacingAllowed { get; }
     public long SchedulePacing(PacingIllustration mode, PacingOutputSettings output);
@@ -1788,6 +1788,31 @@ public sealed class MonitorNoticeRotation
     public MonitorNotice? Current { get; private set; }
     public MonitorNoticeLevel? Highest { get; }
     public void Update(IEnumerable<MonitorNotice> notices, long simulationTimeNs);
+}
+```
+
+## Presentation/MonitorPrintSnapshot.cs
+
+源码：[MonitorPrintSnapshot.cs](../../../src/Monitor.Application/Presentation/MonitorPrintSnapshot.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public enum PreviewRecordEventKind
+{
+    SourceChanged,
+    LeadChanged,
+    VentilationChanged,
+    PacingChanged,
+    ShockDelivered,
+    RhythmChanged,
+    MonitoringChanged
+}
+public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);
+public sealed record MonitorPrintSample(long TimeNs, double Microvolts);
+public sealed record MonitorPrintSnapshot(long CapturedAtNs, long AvailableFromNs, EcgLead DisplayLead,
+    IReadOnlyList<IReadOnlyList<MonitorPrintSample>> Leads, IReadOnlyList<PreviewRecordEvent> Events);
+public sealed partial class LocalMonitorPreviewSession
+{
+    public MonitorPrintSnapshot CapturePrintSnapshot();
 }
 ```
 

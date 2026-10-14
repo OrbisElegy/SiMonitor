@@ -37,6 +37,7 @@ internal static class Program
         Specification[] specifications =
         [
             .. LocalizationSpecifications.All,
+            .. MonitorPrintSnapshotSpecifications.All,
             .. LanguagePreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. ManualDefibrillatorSpecifications.All,

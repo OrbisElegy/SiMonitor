@@ -167,6 +167,8 @@ internal static class GenericSkinSmokeChecks
                         DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
                         var qt = view.NumericBlocks[1];
                         double height = FontHeight(qt);
+                        Require(window.MonitorTrace.Bounds.Height / session.Display.Slots.Count >= 64,
+                            "compact waveform rows retain room for channel, range and unit labels");
                         if (compactHeight == 0) { compactHeight = height; }
                         if (size.Width > 960)
                         {

@@ -51,10 +51,10 @@ internal sealed class GenericMonitorArea : Grid
     protected override Size MeasureOverride(Size availableSize)
     {
         // Compact-monitor baseline in logical pixels; Avalonia applies display DPI separately.
-        // Both dimensions constrain growth so a short or narrow window remains usable.
+        // Both dimensions constrain scaling, including below the baseline in short windows.
         double referenceHeight = 100 * (Math.Max(4, _waveformRowCount()) + 1);
         double scale = Math.Min(availableSize.Width / 500, availableSize.Height / referenceHeight);
-        scale = double.IsFinite(scale) ? Math.Max(1, scale) : 1;
+        scale = double.IsFinite(scale) ? Math.Max(.5, scale) : 1;
         if (Math.Abs(scale - _scale) > .001)
         {
             _scale = scale;

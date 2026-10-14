@@ -295,8 +295,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         PrintButton.Click += (_, _) => PrintRequested?.Invoke();
         toolbar.Children.Add(PrintButton);
         AddNibpControls(toolbar);
-        foreach (string key in new[] { "skin.alarms", "skin.silence" })
-        { toolbar.Children.Add(DummyButton(key)); }
+        AddAlarmControls(toolbar);
         Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);
         return new ThemeVariantScope { RequestedThemeVariant = ThemeVariant.Dark, Child = root };

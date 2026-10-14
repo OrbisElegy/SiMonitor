@@ -186,6 +186,23 @@ internal sealed class DesignPreviewWindow : Window
             energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
         if (_session.Display.Slots.Count >= 4) { _layoutFourthSlot = _session.Display.Slots[3]; }
         skin.ConfigureLayout(_session.Display.Skin, _displayPreferences.TherapyControlsVisible, ChangeMonitorLayout);
+        skin.AlarmsRequested += RefreshAlarmControls;
+        skin.AcknowledgeAlarm = (owner, state) =>
+        {
+            if (_closed || !ReferenceEquals(_monitor.Skin, skin) || state.Episode is null ||
+                !Settings.Alerts.AlarmLifecycles.Any(j => ReferenceEquals(j.Attention, owner))) { return false; }
+            bool accepted = owner.Acknowledge(state.Episode, state.Revision);
+            MonitorView.RefreshAttention();
+            Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
+            return accepted;
+        };
+        skin.SilenceRequested += () =>
+        {
+            if (_closed || !ReferenceEquals(_monitor.Skin, skin)) { return; }
+            if (Settings.Sound.AlarmAudioPaused) { Settings.Sound.ResumeAudioPause(); }
+            else if (!Settings.Sound.PauseConfiguredAlarmAudio()) { skin.ShowFeedback("sound.pauseInvalid"); }
+            RefreshAlarmControls();
+        };
         skin.ConfigureLeadSelection(_session.DisplayEcgLead, lead =>
         {
             if (_closed) { return; }
@@ -427,7 +444,11 @@ internal sealed class DesignPreviewWindow : Window
         MonitorView.AdditionalNotices = CurrentNotices;
         MonitorView.BeatSourceText = () => Settings.Sound.BeatSourceLabel;
         Settings.Sound.BeatSourceChanged += () => MonitorView.Refresh();
-        Settings.Sound.AudioPauseChanged += () => MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
+        Settings.Sound.AudioPauseChanged += () =>
+        {
+            MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;
+            (_monitor.Skin as GenericMonitorSkin)?.RefreshAlarmAudioPause(Settings.Sound.AudioPauseText);
+        };
         Settings.Sound.OutputNoticeChanged += () =>
         {
             if (!_closed && _session.Measurements is { } snapshot) { MonitorView.RefreshReadings(snapshot); }
@@ -453,6 +474,7 @@ internal sealed class DesignPreviewWindow : Window
         Settings.Alerts.SetMonitoredChannels(_monitor.MonitoredChannels);
         var journals = Settings.Alerts.AlarmLifecycles;
         MonitorView.NoticeProjection = Settings.Alerts.ProjectAttention;
+        MonitorView.AttentionRefreshed = RefreshAlarmControls;
         MonitorView.AttentionFor = id =>
         {
             string conditionId = id.StartsWith(MonitorAlertSettings.RetainedNoticePrefix, StringComparison.Ordinal)
@@ -464,6 +486,13 @@ internal sealed class DesignPreviewWindow : Window
             }
             return null;
         };
+    }
+
+    private void RefreshAlarmControls()
+    {
+        if (_closed || _monitor.Skin is not GenericMonitorSkin skin) { return; }
+        skin.AlarmList.Refresh(MonitorView.ActiveNotices, Settings.Alerts.AlarmLifecycles);
+        skin.RefreshAlarmAudioPause(Settings.Sound.AudioPauseText);
     }
 
     internal void UpdateOxygenationVentilation()

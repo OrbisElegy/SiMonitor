@@ -38,6 +38,7 @@ internal sealed class LiveMonitorView : UserControl
     internal Func<IEnumerable<MonitorNotice>, IEnumerable<MonitorNotice>>? NoticeProjection { get; set; }
     private AlarmAttentionSnapshot? _displayedAttention;
     internal Func<string, AlarmAttentionSnapshot?>? AttentionFor { get; set; }
+    internal Action? AttentionRefreshed { get; set; }
     private MonitorNotice[]? _highlightNotices;
     private bool? _highlightOn, _highlightNoticeColor;
     internal Func<LiveMeasurementSnapshot, IEnumerable<MonitorNotice>>? AdditionalNotices { get; set; }
@@ -227,6 +228,7 @@ internal sealed class LiveMonitorView : UserControl
         RefreshManualVitals();
         RefreshClock();
         RefreshNotice();
+        AttentionRefreshed?.Invoke();
     }
 
     private (ManualNibp? Reading, NibpPhase Phase, long? MeasuredAtNs)? _shownNibp;
@@ -348,6 +350,7 @@ internal sealed class LiveMonitorView : UserControl
     {
         _notices = (NoticeProjection?.Invoke(_rawNotices) ?? _rawNotices).ToArray();
         RefreshNotice();
+        AttentionRefreshed?.Invoke();
     }
     internal void RefreshReadings(LiveMeasurementSnapshot snapshot)
     {

@@ -49,17 +49,19 @@ internal static class GenericSkinSmokeChecks
             long time = session.SimulationTimeNs;
             var manual = session.ManualVitals;
             var buttons = view.GetVisualDescendants().OfType<Button>().Where(button => button.Classes.Contains("skin-dummy")).ToArray();
-            Require(buttons.Length == 2 && buttons.All(button => button.MinHeight >= 44), "dummy actions retain keyboard and pointer targets");
-            foreach (var button in buttons) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
-            Require(session.SimulationTimeNs == time && session.ManualVitals == manual && window.ActiveTimer is null &&
-                ReferenceEquals(session, window.Session), "dummy buttons do not mutate the paused session");
+            Require(buttons.Length == 0, "generic toolbar has no remaining placeholder actions");
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
-            Require(skin.Feedback.Text!.Contains("功能尚未接入", StringComparison.Ordinal), "dummy feedback is explicit");
+            Require(skin.AlarmsButton.MinHeight >= 44 && skin.SilenceButton.MinHeight >= 44, "alarm actions retain keyboard and pointer targets");
+            skin.AlarmsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(session.SimulationTimeNs == time && session.ManualVitals == manual && window.ActiveTimer is null &&
+                ReferenceEquals(session, window.Session), "alarm controls do not advance the paused session");
+            Require(window.Settings.Sound.AlarmAudioPaused, "silence pauses alarm audio from the toolbar");
             window.Settings.Language.SelectedIndex = 0;
             Require(skin.ShowTherapy.Content?.ToString() == "Show therapy controls" && skin.ShowTherapy.OnContent?.ToString() == "Visible" &&
                 skin.LayoutRows.Items[0]?.ToString() == window.Localization.Get("skin.threeRows"), "layout choices localize");
             Require(view.ManualNumericTexts.All(string.IsNullOrEmpty) &&
-                skin.Feedback.Text!.Contains("not connected yet", StringComparison.Ordinal), "paused skin placeholders and feedback localize");
+                ((TextBlock)skin.SilenceButton.Content!).Text == window.Localization.Get("sound.resume"), "paused alarm actions localize");
             string path = Path.Combine(Path.GetTempPath(), "generic-display-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {

@@ -45,28 +45,45 @@ internal static class AlarmAttentionPresentationSmokeChecks
                 window.Settings.Sound.RefreshAlarmNotices(window.MonitorView.ActiveNotices);
                 return accepted;
             }
-            void VerifyPlaceholderActions()
+            void VerifyAlarmActions()
             {
+                var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
                 var state = State();
-                var request = window.Settings.Sound.PublishedAlarm;
-                var buttons = window.MonitorView.GetVisualDescendants().OfType<Button>()
-                    .Where(button => button.Classes.Contains("skin-dummy")).ToArray();
-                Require(buttons.Length > 0, "generic exposes placeholder controls");
-                foreach (var button in buttons) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
-                Require(State() == state && window.Settings.Sound.PublishedAlarm == request,
-                    "placeholder actions cannot acknowledge alarms or silence their sound request");
+                skin.AlarmsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(State() == state && skin.AlarmList.AcknowledgeButtons.Count > 0,
+                    "opening the alarm list exposes per-event actions without acknowledging");
+                skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(State() == state && window.Settings.Sound.PublishedAlarm is null && window.Settings.Sound.AlarmAudioPaused &&
+                    !window.Settings.Sound.Muted && window.Settings.Sound.EffectiveHeartbeatVolume > 0,
+                    "toolbar silence pauses only alarm sound without acknowledging or muting heartbeat");
+                skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(State() == state && !window.Settings.Sound.AlarmAudioPaused,
+                    "a second toolbar click resumes sound without changing attention");
             }
             Read(0, 130000);
-            VerifyPlaceholderActions();
+            VerifyAlarmActions();
             Require(window.Settings.Sound.PublishedAlarm is { NotificationSequence: 0 },
                 "default monitor retains the continuous alarm sound request");
             var old = State();
+            var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+            var staleButton = skin.AlarmList.AcknowledgeButtons["hr-high"];
+            Read(50, 131000);
+            Require(ReferenceEquals(staleButton, skin.AlarmList.AcknowledgeButtons["hr-high"]),
+                "numeric updates keep the same event button and keyboard focus target");
+            window.Localization.Select("en");
+            Require(staleButton.Content?.ToString() == "Acknowledge" &&
+                Avalonia.Automation.AutomationProperties.GetName(staleButton)!.StartsWith("Acknowledge alarm:", StringComparison.Ordinal),
+                "alarm rows and accessible actions follow language changes while paused");
+            window.Localization.Select("zh-CN");
             _ = alerts.Notices(Snapshot(100, 180001)).ToArray(); // A future skin command may hold an old snapshot.
             var escalated = State();
             Require(!Confirm(old) && State() == escalated,
                 "stale command cannot acknowledge an escalation or re-observe an obsolete sample");
+            staleButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(State() == escalated && skin.AlarmList.Status.IsVisible, "stale UI click is rejected with feedback");
             Read(100, 180001);
-            Require(Confirm(State()), "current application acknowledgement succeeds");
+            skin.AlarmList.AcknowledgeButtons["hr-high"].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(!skin.AlarmList.AcknowledgeButtons.ContainsKey("hr-high"), "confirmed rows no longer offer acknowledgement");
             Require(State().State == AlarmAttentionState.ActiveAcknowledged && window.Settings.Sound.PublishedAlarm is null &&
                 window.MonitorView.Notice.Text!.Contains("已确认", StringComparison.Ordinal),
                 "acknowledgement immediately stops long sound while retaining marked active text");
@@ -97,7 +114,19 @@ internal static class AlarmAttentionPresentationSmokeChecks
             image.Render(root);
             Directory.CreateDirectory("artifacts/alarm-acknowledgement-validation-2026-10-04");
             image.Save("artifacts/alarm-acknowledgement-validation-2026-10-04/recovered-compact.png", PngBitmapEncoderOptions.Default);
-            VerifyPlaceholderActions();
+            skin.AlarmsButton.Flyout!.ShowAt(skin.AlarmsButton);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Require(skin.AlarmList.Bounds.Width > 0 && skin.AlarmList.Bounds.Height > 0,
+                "alarm list opens in a native popup at a compact viewport");
+            var popup = TopLevel.GetTopLevel(skin.AlarmList)!;
+            using (var popupImage = new RenderTargetBitmap(
+                new PixelSize((int)Math.Ceiling(popup.Bounds.Width), (int)Math.Ceiling(popup.Bounds.Height)), new Vector(96, 96)))
+            {
+                popupImage.Render(popup);
+                popupImage.Save("artifacts/alarm-list.png", PngBitmapEncoderOptions.Default);
+            }
+            skin.AlarmsButton.Flyout.Hide();
+            VerifyAlarmActions();
             var retained = State();
             editor.LatchUntilAcknowledged.IsChecked = false;
             Require(State().State == AlarmAttentionState.None && window.Settings.Sound.PublishedAlarm is null &&
@@ -109,9 +138,12 @@ internal static class AlarmAttentionPresentationSmokeChecks
                 "reenabling latching does not restore an old indication or accept its stale acknowledgement");
             Read(500, 180001);
             Read(600, 100000);
-            Require(Confirm(State()), "current application acknowledgement succeeds");
+            skin.AlarmList.AcknowledgeButtons[MonitorAlertSettings.RetainedNoticePrefix + "hr-high"]
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Require(State().State == AlarmAttentionState.None,
                 "acknowledging a retained indication clears it");
+            Require(!skin.AlarmList.AcknowledgeButtons.ContainsKey(MonitorAlertSettings.RetainedNoticePrefix + "hr-high"),
+                "acknowledged retained rows immediately leave the list");
             Read(700, 180001);
             window.Settings.Sound.PauseMonitor();
             Require(Confirm(State()), "current application acknowledgement succeeds");
@@ -123,6 +155,16 @@ internal static class AlarmAttentionPresentationSmokeChecks
             Require(editor.LatchUntilAcknowledged.IsChecked == true && State().LatchingMode == AlarmLatchingMode.UntilAcknowledged &&
                 State().State == AlarmAttentionState.None && !window.Settings.Sound.Muted,
                 "restoration retains the visual policy without active attention or audio opt-in");
+            skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.RestartSettings();
+            var replacement = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+            Require(window.Settings.Sound.AlarmAudioPaused &&
+                ((TextBlock)replacement.SilenceButton.Content!).Text == window.Localization.Get("sound.resume"),
+                "a replacement skin inherits the current audio pause");
+            skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(window.Settings.Sound.AlarmAudioPaused, "detached toolbar cannot resume the current skin's audio");
+            replacement.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(!window.Settings.Sound.AlarmAudioPaused, "the replacement toolbar can resume audio");
         }
         finally { window.Close(); }
     }

@@ -16,9 +16,9 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 {
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
-    private readonly Func<MonitorTherapyPreferences, bool, string>? _pacing;
+    private readonly Action<MonitorTherapyPreferences, bool>? _pacing;
     private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
-    private bool _pacingFeedback;
+    private string? _pacingError;
     private Grid? _body, _monitorArea;
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
@@ -139,7 +139,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     };
 
     internal GenericMonitorSkin(DesktopLocalization localization, MonitorTherapyPreferences? preferences = null,
-        Action<MonitorTherapyPreferences>? save = null, Func<MonitorTherapyPreferences, bool, string>? pacing = null,
+        Action<MonitorTherapyPreferences>? save = null, Action<MonitorTherapyPreferences, bool>? pacing = null,
         DefibrillatorConfiguration? defibrillator = null, Action<DefibrillatorCommand>? defibrillatorCommand = null, Action<int>? energyChanged = null)
     {
         _localization = localization;
@@ -147,7 +147,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         _pacing = pacing;
         preferences ??= MonitorTherapyPreferences.Default;
         preferences.Validate();
-        Defibrillator = new(localization, defibrillator ?? DefibrillatorConfiguration.Default, preferences.EnergyJoules, defibrillatorCommand, ShowFeedback);
+        Defibrillator = new(localization, defibrillator ?? DefibrillatorConfiguration.Default, preferences.EnergyJoules, defibrillatorCommand);
         Rate.Value = preferences.PacingRatePerMinute;
         Current.Value = preferences.PacingCurrentMilliamps;
         _localization.SetChoices(PacingType, Enum.GetValues<PacingIllustration>().Select(mode =>
@@ -174,14 +174,9 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         ApplyPacing.IsEnabled = _pacing is not null && !pending && allowed && !aedEnabled;
         StopPacing.IsEnabled = _pacing is not null && running && !pending;
         _localization.Bind(PacingStatus, TextBlock.TextProperty,
-            aedEnabled ? "aed.pacingUnavailable" : pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState");
+            _pacingError ?? (aedEnabled ? "aed.pacingUnavailable" : pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState"));
         _localization.Bind(PacingStatus, ToolTip.TipProperty, text => aedEnabled ? text.GetString("aed.pacingUnavailable") : allowed ? "" : text.GetString("skin.pacingDisabled"));
         _localization.Bind(ApplyPacing, ContentControl.ContentProperty, running ? "skin.pacingApply" : "skin.pacingStart");
-        if (_pacingFeedback)
-        {
-            Feedback.IsVisible = false;
-            _pacingFeedback = false;
-        }
     }
 
     private static NumericUpDown Number(decimal value, decimal minimum, decimal maximum, decimal increment) => new()
@@ -206,26 +201,33 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     private void SaveDraft()
     {
-        try { var settings = Read(); _save?.Invoke(settings); }
-        catch (ArgumentException) { ShowFeedback("skin.therapyInvalid"); }
+        try
+        {
+            var settings = Read();
+            _save?.Invoke(settings);
+            _pacingError = null;
+            _shownPacing = null;
+        }
+        catch (ArgumentException) { ShowPacingError("skin.therapyInvalid"); }
     }
 
     private void RunPacing(bool stop)
     {
         try
         {
-            ShowFeedback(_pacing?.Invoke(stop ? MonitorTherapyPreferences.Default : Read(), stop) ?? "skin.pacingUnavailable");
-            _pacingFeedback = true;
+            _pacing?.Invoke(stop ? MonitorTherapyPreferences.Default : Read(), stop);
+            _pacingError = null;
+            _shownPacing = null;
         }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or OverflowException)
-        { ShowFeedback(error is InvalidOperationException ? "skin.pacingPending" : "skin.therapyInvalid"); }
+        { ShowPacingError(error is InvalidOperationException ? "skin.pacingPending" : "skin.therapyInvalid"); }
     }
 
-    internal void ShowFeedback(string key)
+    private void ShowPacingError(string key)
     {
-        _pacingFeedback = false;
-        Feedback.IsVisible = true;
-        _localization.Bind(Feedback, TextBlock.TextProperty, key);
+        _pacingError = key;
+        _shownPacing = null;
+        _localization.Bind(PacingStatus, TextBlock.TextProperty, key);
     }
 
     private static readonly string[] Colors = ["#53F28C", "#FFE16A", "#49BFFF", "#FF7777", "#F4F6FA", "#CAA7EA", "#F2B67D"];
@@ -235,19 +237,10 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     public IBrush Background => Brushes.Black;
     public IBrush ChannelBrush(int channel) => Brush.Parse(Colors[channel]);
     public void RefreshLayout() => _monitorArea?.InvalidateMeasure();
-    internal TextBlock Feedback { get; } = new()
-    {
-        Foreground = Brush.Parse("#BAC5D1"),
-        FontSize = 12,
-        TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(8),
-        MinHeight = 36,
-        IsVisible = false
-    };
 
     public Control Compose(MonitorSkinContent content)
     {
-        var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto"), Background = Background };
+        var root = new Grid { RowDefinitions = new("Auto,*,Auto"), Background = Background };
         root.Children.Add(content.Header);
         var body = _body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
         Grid.SetRow(body, 1);
@@ -261,14 +254,12 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         body.Children.Add(monitor);
         var therapy = new StackPanel { Spacing = 8 };
         therapy.Children.Add(Caption("skin.therapyControls"));
-        therapy.Children.Add(Panel("skin.defibrillator", [Defibrillator], []));
+        therapy.Children.Add(Panel("skin.defibrillator", [Defibrillator]));
         therapy.Children.Add(Panel("skin.pacer", [Field("skin.pacingType", PacingType), Field("skin.pacingRate", Rate),
-            Field("skin.pacingCurrent", Current), PacingStatus, ApplyPacing, StopPacing], []));
+            Field("skin.pacingCurrent", Current), PacingStatus, ApplyPacing, StopPacing]));
         var scroll = new ScrollViewer { Content = therapy, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var therapyArea = TherapyArea = new Grid();
         therapyArea.Children.Add(scroll);
-        Grid.SetRow(Feedback, 2);
-        root.Children.Add(Feedback);
         Grid.SetColumn(therapyArea, 1);
         body.Children.Add(therapyArea);
         var toolbar = new UniformGrid { Columns = 8, Margin = new Thickness(8, 0, 8, 8) };
@@ -296,22 +287,16 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         toolbar.Children.Add(PrintButton);
         AddNibpControls(toolbar);
         AddAlarmControls(toolbar);
-        Grid.SetRow(toolbar, 3);
+        Grid.SetRow(toolbar, 2);
         root.Children.Add(toolbar);
         return new ThemeVariantScope { RequestedThemeVariant = ThemeVariant.Dark, Child = root };
     }
 
-    private Border Panel(string titleKey, Control[] controls, string[] buttons)
+    private Border Panel(string titleKey, Control[] controls)
     {
         var panel = new StackPanel { Spacing = 6 };
         panel.Children.Add(Caption(titleKey));
         foreach (var control in controls) { panel.Children.Add(control); }
-        if (buttons.Length > 0)
-        {
-            var actions = new UniformGrid { Columns = 2 };
-            foreach (string key in buttons) { actions.Children.Add(DummyButton(key)); }
-            panel.Children.Add(actions);
-        }
         return new Border
         {
             Background = Brush.Parse("#121820"),
@@ -355,20 +340,6 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
             Foreground = Brushes.White,
             CornerRadius = new CornerRadius(5),
             FontSize = 14
-        };
-        return button;
-    }
-
-    private Button DummyButton(string key)
-    {
-        var button = ToolbarButton(key);
-        button.Classes.Add("skin-dummy");
-        _localization.Bind(button, AutomationProperties.NameProperty, text => text.GetString(key) + " · " + text.GetString("skin.preview"));
-        button.Click += (_, _) =>
-        {
-            Feedback.IsVisible = true;
-            _localization.Bind(Feedback, TextBlock.TextProperty,
-                text => text.Format("skin.unavailable", text.GetString(key)));
         };
         return button;
     }

@@ -80,13 +80,24 @@ internal static class DefibrillatorSmokeChecks
             Require(window.Defibrillator.State.Energy == EnergyState.Idle && window.Session.ElectricalTherapy!.TemplateId == "ecgTemplate.t021",
                 "short keyboard hold then release cancels without conversion");
             Charge();
+            DesktopViewportSmokeChecks.Layout(window);
+            var waveformBounds = window.MonitorTrace.Bounds;
+            var toolbarPosition = skin.LayoutButton.TranslatePoint(default, window.MonitorView);
             KeyEvent(controls.Shock, keyDown: true);
             Tick(500_000_000);
             KeyEvent(controls.Shock, keyDown: false);
             Require(window.Defibrillator.State.Attempt == DefibrillationAttemptState.Delivered && !controls.ChargeLit &&
                 window.Session.PendingSourceTimeNs is not null, "held asynchronous shock schedules conversion and extinguishes charge");
+            DesktopViewportSmokeChecks.Layout(window);
+            Require(window.MonitorTrace.Bounds == waveformBounds &&
+                skin.LayoutButton.TranslatePoint(default, window.MonitorView) == toolbarPosition,
+                "shock delivery preserves waveform space and toolbar position without a feedback row");
             for (int i = 0; i < 20; i++) { Tick(50_000_000); }
             Require(window.Session.ElectricalTherapy!.TemplateId == "ecgTemplate.t000", "delivery plays the prepared sinus waveform");
+            DesktopViewportSmokeChecks.Layout(window);
+            Require(window.MonitorTrace.Bounds == waveformBounds &&
+                skin.LayoutButton.TranslatePoint(default, window.MonitorView) == toolbarPosition,
+                "completed conversion preserves the monitor layout");
             Click(controls.Sync);
             Require(controls.SyncLit, "sync has its own enabled indicator");
             Charge();

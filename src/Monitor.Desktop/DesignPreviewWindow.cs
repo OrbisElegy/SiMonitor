@@ -127,7 +127,7 @@ internal sealed class DesignPreviewWindow : Window
         _aed = new(_defibrillator);
         _sinusTherapy = CaptureSinusTherapy();
         _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin());
-        if (therapyRejected) { ((GenericMonitorSkin)_monitor.Skin!).ShowFeedback("skin.therapyRejected"); }
+        if (therapyRejected) { SetStatus("skin.therapyRejected"); }
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         if (preferences.Sound is { } sound) { Settings.Sound.RestorePreferences(sound, Settings.Alerts); }
         PreferenceNotice.IsVisible = rejected;
@@ -200,7 +200,7 @@ internal sealed class DesignPreviewWindow : Window
         {
             if (_closed || !ReferenceEquals(_monitor.Skin, skin)) { return; }
             if (Settings.Sound.AlarmAudioPaused) { Settings.Sound.ResumeAudioPause(); }
-            else if (!Settings.Sound.PauseConfiguredAlarmAudio()) { skin.ShowFeedback("sound.pauseInvalid"); }
+            else if (!Settings.Sound.PauseConfiguredAlarmAudio()) { SetStatus("sound.pauseInvalid"); }
             RefreshAlarmControls();
         };
         skin.ConfigureLeadSelection(_session.DisplayEcgLead, lead =>
@@ -315,11 +315,8 @@ internal sealed class DesignPreviewWindow : Window
         }
         else if (command == DefibrillatorCommand.Disarm) { _aed.Suspend(now); }
         else if (command == DefibrillatorCommand.ToggleAed && _aed.Enabled) { _aed.Disable(now); }
-        else if (!DefibrillatorAvailable)
-        { (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.unavailable"); }
-        else
+        else if (DefibrillatorAvailable)
         {
-            if (_monitor.Skin is GenericMonitorSkin skin) { skin.Feedback.IsVisible = false; }
             switch (command)
             {
                 case DefibrillatorCommand.Charge:
@@ -375,7 +372,6 @@ internal sealed class DesignPreviewWindow : Window
             _beforePacingPaper = null;
             _pendingPacingPaper = null;
         }
-        (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.result." + result.Outcome);
     }
 
     private void RefreshPacingState(GenericMonitorSkin? skin = null)
@@ -393,26 +389,26 @@ internal sealed class DesignPreviewWindow : Window
         if (_defibrillator.EnergyJoules != preferences.EnergyJoules)
         { _defibrillator.SelectEnergy(preferences.EnergyJoules, _safetyClock()); RefreshDefibrillator(); }
         _therapy = preferences;
-        if (_therapyPreferences?.Save(preferences) == false && _monitor.Skin is GenericMonitorSkin skin)
-        { skin.ShowFeedback("skin.therapySaveFailed"); }
+        if (_therapyPreferences?.Save(preferences) == false)
+        { SetStatus("skin.therapySaveFailed"); }
     }
 
-    private string SetPacing(MonitorTherapyPreferences preferences, bool stop)
+    private void SetPacing(MonitorTherapyPreferences preferences, bool stop)
     {
-        if (_aed.Enabled && !stop) { return "aed.pacingUnavailable"; }
+        if (_aed.Enabled && !stop) { return; }
         if (_applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null)
-        { return "skin.pacingPending"; }
+        { return; }
         DisarmDefibrillator();
         if (stop)
         {
-            if (_beforePacingPaper is null || _session.ActivePacing is null) { return "skin.pacingNotRunning"; }
+            if (_beforePacingPaper is null || _session.ActivePacing is null) { return; }
             long effective = _session.StopPacing();
             _pendingPacingPaper = (_beforePacingPaper, effective);
             _beforePacingPaper = null;
             RefreshPacingState();
-            return "skin.pacingStopScheduled";
+            return;
         }
-        if (!_session.PacingAllowed) { return "skin.pacingDisabled"; }
+        if (!_session.PacingAllowed) { return; }
         var output = new PacingOutputSettings(preferences.PacingRatePerMinute, preferences.PacingCurrentMilliamps);
         var configuration = ProjectedEcgDemoConfiguration.Default with { Pacing = preferences.PacingType, PacingOutput = output };
         var paper = CapturePaper(configuration);
@@ -420,7 +416,6 @@ internal sealed class DesignPreviewWindow : Window
         _beforePacingPaper ??= _ecg;
         _pendingPacingPaper = (paper, at);
         RefreshPacingState();
-        return "skin.pacingScheduled";
     }
 
     private DesignPreviewSettings CreateSettings() => new(StylePreviewCatalog.Get, StylePreviewCatalog.Respiration,
@@ -566,8 +561,8 @@ internal sealed class DesignPreviewWindow : Window
         Settings = CreateSettings();
         ConnectSettings();
         RestartSettings();
-        if (!therapySaved && _monitor.Skin is GenericMonitorSkin skin) { skin.ShowFeedback("skin.therapySaveFailed"); }
-        if (!PreferenceNotice.IsVisible) { SetStatus("settings.resetDone"); }
+        if (!therapySaved) { SetStatus("skin.therapySaveFailed"); }
+        else if (!PreferenceNotice.IsVisible) { SetStatus("settings.resetDone"); }
     }
     internal void SelectPage(int page)
     {
@@ -930,11 +925,7 @@ internal sealed class DesignPreviewWindow : Window
                 Settings.MarkParametersApplied(applied.Ecg, applied.Physiology, applied.EcgSelection,
                     applied.RespirationSelection, applied.EjectionSelection);
                 _pendingPresentation = null;
-                if (_pendingShockConversion)
-                {
-                    _pendingShockConversion = false;
-                    (_monitor.Skin as GenericMonitorSkin)?.ShowFeedback("defib.result.Converted");
-                }
+                _pendingShockConversion = false;
                 SetStatus("settings.applied", applied.EffectiveNs / 1_000_000_000m);
                 if (Page == 1) { SelectPage(Page); }
             }

@@ -30,7 +30,7 @@ internal static class SkinFeedbackSmokeChecks
             Require(window.Settings.Sound.TherapyRelayCount > 0, "actual pacing stimuli publish relay sounds");
             Require(ReferenceEquals(session, window.Session) && session.ActivePacing == PacingIllustration.DualChamberDdd &&
                 session.Measurements!.HeartRate.MilliBeatsPerMinute is > 89000 and < 91000,
-                $"start applies the selected pacing type and actual rate without restarting: {skin.Feedback.Text}; mode={session.ActivePacing}; HR={session.Measurements!.HeartRate}; time={session.SimulationTimeNs}");
+                $"start applies the selected pacing type and actual rate without restarting: {skin.PacingStatus.Text}; mode={session.ActivePacing}; HR={session.Measurements!.HeartRate}; time={session.SimulationTimeNs}");
             skin.Rate.Value = 80;
             skin.PacingType.SelectedIndex = (int)PacingIllustration.RightVentricularVvi;
             skin.ApplyPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -90,8 +90,8 @@ internal static class SkinFeedbackSmokeChecks
                 if (scenario != 1)
                 {
                     Advance();
-                    Require(skin.StopPacing.IsEnabled && skin.PacingStatus.Text == window.Localization.Get("skin.pacingRunning") &&
-                        !skin.Feedback.IsVisible, "running state replaces the old queued-command feedback");
+                    Require(skin.StopPacing.IsEnabled && skin.PacingStatus.Text == window.Localization.Get("skin.pacingRunning"),
+                        "running state is shown in the pacing controls");
                     window.Settings.ApplyDelaySeconds.Value = null;
                     window.ApplySettings();
                     Require(ReferenceEquals(skin, Skin()) && skin.StopPacing.IsEnabled && window.Session.ActivePacing is not null,

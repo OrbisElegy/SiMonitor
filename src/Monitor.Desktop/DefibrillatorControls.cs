@@ -45,7 +45,7 @@ internal sealed class DefibrillatorControls : StackPanel
     internal bool AedLit { get; private set; }
 
     internal DefibrillatorControls(DesktopLocalization localization, DefibrillatorConfiguration configuration,
-        int selectedEnergyJoules, Action<DefibrillatorCommand>? command, Action<string> feedback)
+        int selectedEnergyJoules, Action<DefibrillatorCommand>? command)
     {
         _localization = localization;
         _command = command;

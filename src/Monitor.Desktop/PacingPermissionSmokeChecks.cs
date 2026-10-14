@@ -29,8 +29,8 @@ internal static class PacingPermissionSmokeChecks
                 Skin().ApplyPacing.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Require(ReferenceEquals(session, window.Session) && session.SimulationTimeNs == time &&
                     session.PendingSourceTimeNs is null && session.ActivePacing is null &&
-                    Skin().Feedback.Text == window.Localization.Get("skin.pacingDisabled"),
-                    "command denial preserves the active template and explains how to enable pacing");
+                    Skin().PacingStatus.Text == window.Localization.Get("skin.pacingDisallowedState"),
+                    "command denial preserves the active template and its disabled pacing state");
             }
             Require(EcgPacingPermissions.TemplateIds.SequenceEqual(Enumerable.Range(0, DesignPreviewSettings.EcgChoiceCount)
                 .Select(DesignPreviewSettings.EcgTemplateKey)), "permission identities cover the complete current catalog");

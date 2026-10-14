@@ -64,6 +64,7 @@ internal static class GenericSkinSmokeChecks
                 skin.LayoutRows.Items[0]?.ToString() == window.Localization.Get("skin.threeRows"), "layout choices localize");
             Require(view.ManualNumericTexts.All(string.IsNullOrEmpty) &&
                 ((TextBlock)skin.SilenceButton.Content!).Text == window.Localization.Get("sound.resume"), "paused alarm actions localize");
+            VerifyEnglishToolbar(window, skin);
             string path = Path.Combine(Path.GetTempPath(), "generic-display-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
@@ -96,6 +97,29 @@ internal static class GenericSkinSmokeChecks
         }
         finally { window.Close(); }
         VerifyLayoutPreferences();
+    }
+
+    private static void VerifyEnglishToolbar(DesignPreviewWindow window, GenericMonitorSkin skin)
+    {
+        var buttons = new[] { skin.LayoutButton, skin.EcgButton, skin.LeadButton, skin.PrintButton,
+            skin.NibpStartButton, skin.NibpAutoButton, skin.AlarmsButton, skin.SilenceButton };
+        foreach (int width in new[] { 960, 1200, 1440, 1920 })
+        {
+            DesktopViewportSmokeChecks.Layout(window, width, 720);
+            foreach (var button in buttons)
+            {
+                var caption = (TextBlock)button.Content!;
+                Require(Math.Abs(button.Bounds.Height - buttons[0].Bounds.Height) < 1 && button.Bounds.Height >= 44,
+                    "all toolbar actions have equal usable heights at " + width);
+                Require(caption.TextLayout.Width <= caption.Bounds.Width + 1 && caption.TextLayout.Height <= caption.Bounds.Height + 1 &&
+                    caption.TextLayout.TextLines.Count <= 2, "English toolbar labels fit within two readable lines at " + width);
+            }
+            Require(buttons.Select(button => button.Bounds.Y).Distinct().Count() == (width < 1440 ? 2 : 1),
+                "narrow monitor uses two toolbar rows without squeezing labels");
+            using var image = new RenderTargetBitmap(new PixelSize(width, 720), new Vector(96, 96));
+            image.Render((Control)window.Content!);
+            image.Save($"artifacts/monitor-toolbar-en-{width}.png", PngBitmapEncoderOptions.Default);
+        }
     }
 
     private static void VerifyNumericScaling(DesignPreviewWindow window)

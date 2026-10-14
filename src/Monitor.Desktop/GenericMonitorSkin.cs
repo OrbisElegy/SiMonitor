@@ -264,7 +264,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         therapyArea.Children.Add(scroll);
         Grid.SetColumn(therapyArea, 1);
         body.Children.Add(therapyArea);
-        var toolbar = new UniformGrid { Columns = 8, Margin = new Thickness(8, 0, 8, 8) };
+        var toolbar = new MonitorToolbar { Margin = new Thickness(8, 0, 8, 8) };
         LayoutButton = ToolbarButton("skin.layout");
         _localization.Bind(LayoutButton, AutomationProperties.NameProperty, "skin.layout");
         var layoutPanel = new StackPanel { Spacing = 12, MinWidth = 240 };
@@ -337,6 +337,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
             Padding = new Thickness(8, 6),
             Margin = new Thickness(2),
             HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Background = Brush.Parse(key == "skin.shock" ? "#683039" : key == "skin.charge" ? "#58451C" : "#222C38"),
             Foreground = Brushes.White,
@@ -344,5 +345,15 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
             FontSize = 14
         };
         return button;
+    }
+
+    private sealed class MonitorToolbar : UniformGrid
+    {
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            // Keep enough room for translated actions before moving to two rows.
+            Columns = availableSize.Width < 8 * 140 ? 4 : 8;
+            return base.MeasureOverride(availableSize);
+        }
     }
 }

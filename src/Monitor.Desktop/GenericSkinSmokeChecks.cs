@@ -65,6 +65,7 @@ internal static class GenericSkinSmokeChecks
             Require(view.ManualNumericTexts.All(string.IsNullOrEmpty) &&
                 ((TextBlock)skin.SilenceButton.Content!).Text == window.Localization.Get("sound.resume"), "paused alarm actions localize");
             VerifyEnglishToolbar(window, skin);
+            VerifyEnglishHeader(window);
             string path = Path.Combine(Path.GetTempPath(), "generic-display-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
@@ -97,6 +98,27 @@ internal static class GenericSkinSmokeChecks
         }
         finally { window.Close(); }
         VerifyLayoutPreferences();
+    }
+
+    private static void VerifyEnglishHeader(DesignPreviewWindow window)
+    {
+        var view = window.MonitorView;
+        string? previous = view.Notice.Text;
+        view.Notice.Text = window.Localization.Get("sound.noticeUnavailable");
+        foreach (var size in new[] { new Size(960, 640), new Size(1200, 720), new Size(1440, 940) })
+        {
+            DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
+            foreach (var label in new[] { view.Clock, view.Notice, view.AudioPauseStatus })
+            {
+                Require(label.TextTrimming == TextTrimming.None && label.TextLayout.Width <= label.Bounds.Width + 1 &&
+                    label.TextLayout.Height <= label.Bounds.Height + 1, "English header retains its complete text at " + size);
+            }
+            Require(window.MonitorTrace.Bounds.Height > 200, "wrapped header leaves usable waveform height");
+            using var image = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
+            image.Render((Control)window.Content!);
+            image.Save($"artifacts/monitor-header-en-{size.Width:0}.png", PngBitmapEncoderOptions.Default);
+        }
+        view.Notice.Text = previous;
     }
 
     private static void VerifyEnglishToolbar(DesignPreviewWindow window, GenericMonitorSkin skin)

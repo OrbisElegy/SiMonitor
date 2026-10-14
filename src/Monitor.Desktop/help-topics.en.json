@@ -292,5 +292,11 @@
     "Category": "Waveforms and display",
     "Title": "Mirror-image dextrocardia and lead positions",
     "Text": "Choose Settings → Waveform generation → ECG → Sinus rhythms → Mirror-image dextrocardia (standard leads). Standard limb and left chest V1–V6 positions show inverted lead I, exchanged II/III and aVR/aVL relative to the sinus reference, decreasing precordial R waves and S-dominant V2–V6. Arm lead reversal also changes limb leads but preserves normal chest progression. Source: Zhu Futang Practical Pediatrics, 9th edition, p.1677, Fig.27-45. Its V3R/V5R/V6R are right chest leads and its “1/2” labels indicate half gain. This template does not display right chest leads; ordinary V3/V5/V6 are not substitutes. Amplitudes and default 75 bpm timing are authored teaching choices, not measurements from the photograph or pediatric normal limits. Non-mirror dextrocardia, dextroposition and associated structural defects are outside this template."
+  },
+  {
+    "Id": "ecg12-print",
+    "Category": "Waveforms and display",
+    "Title": "Print an A4 twelve-lead ECG",
+    "Text": "Use Print in the paper twelve-lead toolbar to set the title, subtitle, candidate information, color or monochrome template, paper speed, gain and start time. Each lead occupies one row on portrait A4 and shares the same time window. At the default 25 mm/s and 10 mm/mV, each row holds 7.16 seconds. Color uses full 1 mm squares; monochrome uses 5 mm squares with 1 mm intersections shown as dots. Enable the manual measurement answer area and select which questions to include: heart rate, PR, QRS, QT, QTc and QRS axis. Selected questions print with units and blank answer lines; no automatic measurements or answers are filled in. The diagnosis area may be left blank for students. Long text is truncated in the preview; review before exporting. Save a PDF or open it in the system reader to print. Select portrait A4 and actual size (100%), with fit-to-page disabled. Each calibration pulse is 1 mV high and 200 ms wide. Settings are retained for the current window and reset when the application restarts."
   }
 ]

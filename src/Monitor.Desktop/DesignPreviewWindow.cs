@@ -49,6 +49,8 @@ internal sealed class DesignPreviewWindow : Window
     private Ecg12PaperMeasurement? _paperMeasurement;
     private WaveformEnvelope[]? _paperMeasurementBlocks;
     private bool _paperMeasuring;
+    private Ecg12PrintOptions? _printOptions;
+    internal Ecg12PrintWindow? PrintWindow { get; private set; }
     internal SystemViewCommandAssessmentPolicy MeasurementPolicy { get; private set; } = SystemViewCommandAssessmentPolicy.Enabled;
     internal LiveMonitorTrace MonitorTrace => _monitor;
     private readonly DisplayPreferenceStore? _preferences;
@@ -546,6 +548,14 @@ internal sealed class DesignPreviewWindow : Window
         }
         var page = new Ecg12PaperPage(paper, _paperMeasurement, Localization, _paperMeasuring, Settings.MeasurementUnits.SelectedIndex == 1);
         page.MeasuringChanged += measuring => _paperMeasuring = measuring;
+        page.PrintRequested += async () =>
+        {
+            if (PrintWindow is not null) { PrintWindow.Activate(); return; }
+            var dialog = new Ecg12PrintWindow(paper.Blocks, Localization, _printOptions);
+            PrintWindow = dialog;
+            try { await dialog.ShowDialog(this); }
+            finally { _printOptions = dialog.ReadOptions(); PrintWindow = null; }
+        };
         return page;
     }
 

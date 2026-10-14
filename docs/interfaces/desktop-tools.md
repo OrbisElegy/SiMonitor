@@ -75,6 +75,35 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 `Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
 会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
 
+## 纸质十二导联打印
+
+纸质十二导联页面工具栏的打印按钮打开 `Ecg12PrintWindow`。它固定捕获当前纸图的样本引用，
+不切换实时监护、不推进仿真、不改变游标或纸图缩放。标题、副标题、可选考生信息、模板、
+纸速、增益、起始时间、测量答题项目及诊断文字仅在当前宿主窗口内保留，不写入监护偏好。
+
+`Ecg12PrintDocument` 以毫米绘制一张 A4 纵向页面，每个导联独占一行，所有行共享时间窗。
+默认 25 mm/s、10 mm/mV；纸速可选 25/50，增益可选 5/10。校准脉冲从横向 13 mm 开始，其后留 1 mm 即进入波形区；
+25 mm/s 时波形从 19 mm 到 198 mm，默认容纳 7.16 秒，不能为容纳更多时间而压缩波形。每行校准脉冲为 200 ms、1 mV。
+导联标识透明叠加在波形起始区上方，不单独占列；纸速、增益、时间窗及教学提示均透明绘制在
+网格内部，不占外部说明行。网格底部固定在 246 mm，上边界随标题、副标题和考生信息调整，
+省去的信息区高度用于扩展 ECG。12 条导联的基线均匀分配在可用高度内，完整页眉下行距约
+16.9 mm；仅保留标题时约 18.4 mm。测量答题区与诊断区保留在网格下方。
+样本使用采集比例和偏移转换为微伏；缺失或无效样本断线，波形裁剪到 ECG 区域。
+彩色模板显示完整 1 mm 方格，黑白模板保留 5 mm 大格线，并在 1 mm 交点画点。
+
+可选的测量区域是学生答题区，可分别选择心率、PR、QRS、QT、QTc 和 QRS 电轴。
+只显示所选题目、单位和空白填写线，不读取检测器，也不自动填入答案。诊断区域可保持空白。
+标题及正文超长时在预览和导出中一致截断，用户应以预览核对最终文本。
+
+预览 PNG 和矢量 PDF 重放同一份 Skia 图形；PDF 按 72/25.4 point/mm 输出，
+不依赖屏幕 DPI、纸图缩放或显示器大小。保存使用系统文件选择器，取消不写出文件；
+“打开 PDF 打印”生成独立临时 PDF，交给系统文件启动器打开阅读器，由用户在阅读器中打印。
+临时文件保留供外部阅读器读取；打开失败提供另存 PDF 的提示。输出前冻结设置，异步文件选择
+期间的编辑不改变该次输出。界面提示使用 A4 纵向、实际大小 100%，关闭适合页面。
+
+源码：[Ecg12PrintDocument.cs](../../src/Monitor.Desktop/Ecg12PrintDocument.cs)、
+[Ecg12PrintWindow.cs](../../src/Monitor.Desktop/Ecg12PrintWindow.cs)。
+
 ## 皮肤装配接口与 Generic
 
 源码：[IMonitorSkin.cs](../../src/Monitor.Desktop/IMonitorSkin.cs)、[GenericMonitorSkin.cs](../../src/Monitor.Desktop/GenericMonitorSkin.cs)。

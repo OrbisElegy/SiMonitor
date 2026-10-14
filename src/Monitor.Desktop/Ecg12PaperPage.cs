@@ -45,9 +45,11 @@ internal sealed class Ecg12PaperPage : Grid
         Icon(Hand, "ecg12.pan", "M5,8 L5,3 Q5,1 7,2 L7,7 L7,2 Q8,0 9,2 L9,7 L9,3 Q11,1 11,3 L11,8 L11,5 Q13,3 13,6 L13,10 Q13,15 9,15 L7,15 Q5,15 4,12 L2,9 Q1,7 3,7 Z");
         Icon(Fit, "ecg12.fit", "M1,6 L1,1 L6,1 M10,1 L15,1 L15,6 M15,10 L15,15 L10,15 M6,15 L1,15 L1,10 M5,5 L11,5 L11,11 L5,11 Z");
         Icon(ActualSize, "ecg12.actualSize", "M1,6 L3,4 L3,12 M7,6 L7,7 M7,10 L7,11 M10,6 L12,4 L12,12");
+        Icon(Print, "print.window", "M4,5 L4,1 L12,1 L12,5 M4,12 L1,12 L1,5 L15,5 L15,12 L12,12 M4,9 L12,9 L12,15 L4,15 Z M12,7 L13,7");
+        Print.Click += (_, _) => PrintRequested?.Invoke();
         Calipers.IsChecked = measuring && measurement.CanMeasure;
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        foreach (var control in new Control[] { _zoom, ActualSize, Fit, Hand, Calipers, ClearCalipers }) { actions.Children.Add(control); }
+        foreach (var control in new Control[] { _zoom, ActualSize, Fit, Hand, Calipers, ClearCalipers, Print }) { actions.Children.Add(control); }
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("1*,1.2*,Auto") };
         header.Children.Add(calibration);
         SetColumn(Readout, 1);
@@ -113,6 +115,8 @@ internal sealed class Ecg12PaperPage : Grid
     internal Button ClearCalipers { get; } = new();
     internal Button Fit { get; } = new();
     internal Button ActualSize { get; } = new();
+    internal Button Print { get; } = new();
+    internal event Action? PrintRequested;
     internal TextBlock Readout { get; } = new() { VerticalAlignment = VerticalAlignment.Center, FontSize = 13, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 12, 0) };
     internal ScrollViewer Scroller { get; } = new()
     {

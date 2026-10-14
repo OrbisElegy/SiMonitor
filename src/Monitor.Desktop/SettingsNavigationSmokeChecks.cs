@@ -184,6 +184,7 @@ internal static class SettingsNavigationSmokeChecks
         }
         Require(settings.Status.Text == "Apply continues the current waveform; Restart clears the sweep history.",
             "idle footer status follows the selected language");
+        VerifyEnglishNavigation(window);
         Capture(window, "ui-preview-alarms-en.png");
         settings.Tabs.SelectedIndex = 4;
         settings.Language.SelectedIndex = 1;
@@ -192,6 +193,27 @@ internal static class SettingsNavigationSmokeChecks
         Require(settings.SectionPages[4].GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "报警 / ECG 心率") &&
             AutomationProperties.GetName(settings.SectionPages[4].Sections) == "报警参数组" &&
             settings.SectionPages[4].DetailFor(0) == "关", "switching back restores Chinese headings without resetting section state");
+    }
+
+    private static void VerifyEnglishNavigation(DesignPreviewWindow window)
+    {
+        var settings = window.Settings;
+        settings.OpenAdvanced(3);
+        foreach (int width in new[] { 1440, 1200, 960 })
+        {
+            DesktopViewportSmokeChecks.Layout(window, width, 720);
+            var sections = settings.SectionPages[6];
+            Control navigation = sections.Compact ? Selector(window, "Advanced parameters parameter groups") : sections.Sections;
+            var texts = navigation.GetVisualDescendants().OfType<TextBlock>().Where(text => text.IsEffectivelyVisible).ToArray();
+            var title = texts.Single(text => text.Text == "Ejection");
+            var detail = texts.Single(text => text.Text == "No parameters");
+            Require(title.TextLayout.TextLines.Count == 1 && detail.TextLayout.TextLines.Count == 1,
+                "English navigation title and state retain complete words at " + width);
+            Require(detail.TranslatePoint(default, navigation)!.Value.Y >= title.TranslatePoint(default, navigation)!.Value.Y + title.Bounds.Height,
+                "navigation state has its own line without squeezing the title");
+            Capture(window, $"ui-preview-navigation-en-{width}.png");
+        }
+        DesktopViewportSmokeChecks.Layout(window);
     }
 
     private static ComboBox Selector(DesignPreviewWindow window, string name) =>

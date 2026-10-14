@@ -70,8 +70,8 @@ internal sealed class SettingsSections : UserControl
                 items.Add(Header(header, localization));
                 sectionOfItem.Add(-1);
             }
-            _details[index] = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = DesktopFluentStyle.SecondaryText, Margin = new Thickness(0, 0, 4, 0) };
-            var item = Item(sections[index].Title, localization: localization, detail: _details[index]);
+            _details[index] = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = DesktopFluentStyle.SecondaryText };
+            var item = Item(sections[index].Title, localization: localization, detail: _details[index], stackDetail: true);
             if (headers.Count > 0)
             {
                 // Grouped lists are long; use compact Fluent row density so every group stays visible.
@@ -102,7 +102,7 @@ internal sealed class SettingsSections : UserControl
         _compact.ItemsSource = _entries;
         localization.Bind(Sections, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
         localization.Bind(_compact, AutomationProperties.NameProperty, text => text.Format("settings.sectionNavigation", DesktopLocalization.Label(text, category)));
-        var heading = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
+        var heading = new TextBlock { FontSize = 20, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         var top = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 0, 12) }; top.Children.Add(heading); top.Children.Add(_compact);
         var root = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(16) };
         root.Children.Add(top); Grid.SetRow(_columns, 1); root.Children.Add(_columns);
@@ -160,6 +160,7 @@ internal sealed class SettingsSections : UserControl
         string title = Resolve(_titles[section]);
         string name = accessibleKey is null ? title : _localization.Format("settings.sectionState", title, Resolve(accessibleKey));
         _details[section].Text = detail;
+        _details[section].IsVisible = !string.IsNullOrEmpty(detail);
         var item = (ListBoxItem)Sections.Items[_itemOfSection[section]]!;
         // The default binding keeps the localized title; a state replaces it until cleared.
         if (accessibleKey is not null) { AutomationProperties.SetName(item, name); }
@@ -176,9 +177,9 @@ internal sealed class SettingsSections : UserControl
         foreach (var entry in _entries.Where(entry => entry.IsHeader)) { entry.Update(null, Resolve(entry.Title)); }
     }
     private string Resolve(string keyOrText) => DesktopLocalization.Label(_localization.Current, keyOrText);
-    private static Grid CompactRow(CompactEntry entry, DesktopLocalization localization)
+    private static StackPanel CompactRow(CompactEntry entry, DesktopLocalization localization)
     {
-        var title = new TextBlock { Text = entry.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var title = new TextBlock { Text = entry.Title, TextWrapping = TextWrapping.Wrap };
         if (entry.IsHeader)
         {
             title.FontSize = 12;
@@ -186,10 +187,11 @@ internal sealed class SettingsSections : UserControl
             title.Foreground = DesktopFluentStyle.SecondaryText;
         }
         localization.BindLabel(title, TextBlock.TextProperty, entry.Title);
-        var detail = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = DesktopFluentStyle.SecondaryText, Margin = new Thickness(12, 0, 0, 0) };
+        var detail = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = DesktopFluentStyle.SecondaryText };
         detail.Bind(TextBlock.TextProperty, new Binding(nameof(CompactEntry.Detail)) { Source = entry });
-        var row = new Grid { ColumnDefinitions = new("*,Auto") };
-        row.Children.Add(title); Grid.SetColumn(detail, 1); row.Children.Add(detail);
+        detail.Bind(IsVisibleProperty, new Binding(nameof(CompactEntry.HasDetail)) { Source = entry });
+        var row = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(title); row.Children.Add(detail);
         return row;
     }
     private sealed class CompactEntry(string title, bool isHeader) : INotifyPropertyChanged
@@ -197,6 +199,7 @@ internal sealed class SettingsSections : UserControl
         public string Title { get; } = title;
         public bool IsHeader { get; } = isHeader;
         public string? Detail { get; private set; }
+        public bool HasDetail => !string.IsNullOrEmpty(Detail);
         public string AccessibleName { get; private set; } = title;
         public event PropertyChangedEventHandler? PropertyChanged;
         internal void Update(string? detail, string accessibleName)
@@ -204,12 +207,13 @@ internal sealed class SettingsSections : UserControl
             Detail = detail;
             AccessibleName = accessibleName;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Detail)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasDetail)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AccessibleName)));
         }
     }
     private static ListBoxItem Header(string title, DesktopLocalization? localization)
     {
-        var text = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = DesktopFluentStyle.SecondaryText };
+        var text = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = DesktopFluentStyle.SecondaryText };
         localization?.BindLabel(text, TextBlock.TextProperty, title);
         return new ListBoxItem
         {
@@ -228,13 +232,19 @@ internal sealed class SettingsSections : UserControl
         list.Padding = new Thickness(4);
         list.VerticalAlignment = VerticalAlignment.Top;
     }
-    internal static ListBoxItem Item(string title, bool showChevron = true, DesktopLocalization? localization = null, TextBlock? detail = null)
+    internal static ListBoxItem Item(string title, bool showChevron = true, DesktopLocalization? localization = null, TextBlock? detail = null, bool stackDetail = false)
     {
-        var text = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) };
+        var text = new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap };
         var indicator = new Border { Width = 3, Height = 18, CornerRadius = new CornerRadius(2), Background = DesktopFluentStyle.Accent, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
         var content = new Grid { ColumnDefinitions = new("3,*,Auto,16") };
-        content.Children.Add(indicator); Grid.SetColumn(text, 1); content.Children.Add(text);
-        if (detail is not null) { Grid.SetColumn(detail, 2); content.Children.Add(detail); }
+        var caption = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 8, 0) };
+        caption.Children.Add(text);
+        if (detail is not null)
+        {
+            if (stackDetail) { caption.Children.Add(detail); }
+            else { Grid.SetColumn(detail, 2); content.Children.Add(detail); }
+        }
+        content.Children.Add(indicator); Grid.SetColumn(caption, 1); content.Children.Add(caption);
         if (showChevron)
         {
             var chevron = new TextBlock { Text = "›", VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };

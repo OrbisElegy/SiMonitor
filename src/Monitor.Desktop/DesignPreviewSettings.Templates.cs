@@ -94,7 +94,7 @@ internal sealed partial class DesignPreviewSettings
         internal bool Browsable { get; }
         internal TextBlock Selection { get; } = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         internal Button Advanced { get; } = new() { MinHeight = 44, Padding = new Thickness(12, 0) };
-        internal TextBox Search { get; } = new() { MinHeight = 44 };
+        internal TextBox Search { get; } = new() { MinHeight = 44, VerticalContentAlignment = VerticalAlignment.Center };
         internal ListBox Groups { get; } = new();
         internal ComboBox CompactGroups { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch, IsVisible = false };
         internal TextBlock Results { get; } = new() { Foreground = DesktopFluentStyle.SecondaryText, TextWrapping = TextWrapping.Wrap, IsVisible = false };

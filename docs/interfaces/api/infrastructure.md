@@ -625,6 +625,7 @@ public sealed class EncryptedSqliteBackupService
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
     public bool TherapyControlsVisible { get; init; } = true;
+    public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
 }
 public sealed class DisplayPreferenceStore(string path)
 {

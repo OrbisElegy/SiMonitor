@@ -13,6 +13,7 @@ internal static class LiveEcg12Specifications
     internal static readonly Specification[] All =
     [
         new(nameof(TwelveLeadsPublishOnTheLiveSampleClock), TwelveLeadsPublishOnTheLiveSampleClock),
+        new(nameof(DisplayLeadSelectionPreservesAcquisitionAndOtherRows), DisplayLeadSelectionPreservesAcquisitionAndOtherRows),
         new(nameof(TwelveLeadsRetainHistoryAcrossSourceChanges), TwelveLeadsRetainHistoryAcrossSourceChanges),
         new(nameof(TwelveLeadsFollowPacingAndShockRecovery), TwelveLeadsFollowPacingAndShockRecovery),
         new(nameof(TwelveLeadProjectionPreservesExactElectrodeValues), TwelveLeadProjectionPreservesExactElectrodeValues)
@@ -56,6 +57,53 @@ internal static class LiveEcg12Specifications
         }
         foreach (var sample in session.EcgSamples(EcgLead.V2, 0, 900_000_000))
         { Check.That(sample.TimeNs < session.SimulationTimeNs, "no future samples are published"); }
+    }
+
+    private static void DisplayLeadSelectionPreservesAcquisitionAndOtherRows()
+    {
+        var display = MonitorDisplayConfiguration.Default();
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, display,
+            enableMeasurements: true, enableTwelveLead: true);
+        var reference = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, display,
+            enableMeasurements: true, enableTwelveLead: true);
+        Advance(session, 12_000_000_000);
+        Advance(reference, 12_000_000_000);
+        var records = session.Blocks;
+        var measurement = session.Measurements;
+        var beats = session.DetectedBeats;
+        var ranges = Enumerable.Range(1, display.Slots.Count - 1)
+            .Select(row => (session.Ranges.Range(row), session.Ranges.PreviousRange(row), session.Ranges.RowCycle(row))).ToArray();
+        foreach (var lead in Enum.GetValues<EcgLead>())
+        {
+            session.SelectDisplayEcgLead(lead);
+            Check.That(session.DisplaySamples(0, 0, long.MaxValue).SequenceEqual(session.EcgSamples(lead, 0, long.MaxValue)),
+                "every selectable lead displays its own retained waveform");
+            Check.That(session.Samples(0, 0, long.MaxValue).SequenceEqual(reference.Samples(0, 0, long.MaxValue)) &&
+                records.SequenceEqual(session.Blocks) && measurement == session.Measurements && ReferenceEquals(beats, session.DetectedBeats),
+                "lead selection does not rewrite acquisition, recordings or detection evidence");
+            Check.That(ranges.SequenceEqual(Enumerable.Range(1, display.Slots.Count - 1)
+                .Select(row => (session.Ranges.Range(row), session.Ranges.PreviousRange(row), session.Ranges.RowCycle(row)))),
+                "other waveforms retain current and previous auto ranges");
+            Check.That(session.EcgSamples(lead, 0, 10_000_000_000).All(sample =>
+                sample.Value >= session.Ranges.Range(0).Minimum && sample.Value <= session.Ranges.Range(0).Maximum),
+                "ECG auto range follows the selected lead's completed sweep");
+        }
+        session.SelectDisplayEcgLead(EcgLead.V1);
+        Advance(session, 13_000_000_000);
+        Advance(reference, 13_000_000_000);
+        Check.That(session.Measurements == reference.Measurements, "continued measurement still uses the same II stream");
+        var manual = display.Slots.Select(slot => slot.Channel == 0 ? slot with { Automatic = false, Range = new(-3000, 3000) } : slot).ToArray();
+        session.UpdateDisplay(new(display.Skin, manual));
+        session.SelectDisplayEcgLead(EcgLead.AVR);
+        Check.That(session.Ranges.Range(0) == new MonitorAmplitudeRange(-3000, 3000), "manual ECG range survives lead switching");
+        try { session.SelectDisplayEcgLead((EcgLead)99); throw new InvalidOperationException("invalid lead accepted"); }
+        catch (ArgumentOutOfRangeException) { }
+        Check.That(session.DisplayEcgLead == EcgLead.AVR, "invalid selection leaves current lead intact");
+        session.ScheduleSource(new(PhysiologyIllustrationConfiguration.Default with { CardiacActivity = CardiacActivity.Absent },
+            session.Display, enableMeasurements: true), 0);
+        Advance(session, 15_000_000_000);
+        Check.That(session.DisplayEcgLead == EcgLead.AVR && session.DisplaySamples(0, 14_000_000_000, 15_000_000_000).All(sample => sample.Value == 0),
+            "source transitions preserve the display lead and publish its new activity");
     }
 
     private static void TwelveLeadsRetainHistoryAcrossSourceChanges()

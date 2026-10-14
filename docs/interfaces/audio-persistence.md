@@ -341,6 +341,8 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 16–18 | 延续 5–15 的规则，并要求非空 Defibrillator |
 
 Save 总是写 Version=18；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+可选 `MonitorEcgLead` 保存普通监护 ECG 行的显示导联（`EcgLead` 枚举，0–11），缺省为 II；
+非法枚举按无效偏好处理。工具栏选择仅保存此显示项，不应用或保存尚未生效的生成器草稿。
 Defibrillator 保存 EnergyStepsJoules、Waveform、ChargeDurationMilliseconds、AutoDisarmSeconds
 和 EcgRecoveryMilliseconds（后者缺省为 1000 ms），
 Load／Save 验证并复制档位；版本 1–15 缺少此项时采用 Generic 默认值。

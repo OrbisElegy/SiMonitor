@@ -1519,6 +1519,9 @@ public sealed class LocalMonitorPreviewSession
     public void Advance(long deltaNs);
     public IEnumerable<(long TimeNs, double Value)> Samples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
     public IEnumerable<(long TimeNs, double Value)> EcgSamples(EcgLead lead, long fromSimTimeNs, long toExclusiveSimTimeNs);
+    public EcgLead DisplayEcgLead { get; private set; }
+    public void SelectDisplayEcgLead(EcgLead lead);
+    public IEnumerable<(long TimeNs, double Value)> DisplaySamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs);
 }
 ```
 

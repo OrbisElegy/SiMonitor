@@ -3,12 +3,14 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Monitor.Application.Presentation;
 using Monitor.Application.Therapy;
+using Monitor.Simulation.Physiology;
 
 namespace Monitor.Infrastructure.Preferences;
 
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
     public bool TherapyControlsVisible { get; init; } = true;
+    public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
 }
 
 // Local preferences and generator inputs; no runtime waveform or playback state.
@@ -26,6 +28,7 @@ public sealed class DisplayPreferenceStore(string path)
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
         public bool TherapyControlsVisible { get; init; } = true;
+        public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
         public bool MeasurementMillimeters { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }
         public MonitorSoundPreferences? Sound { get; init; }
@@ -52,6 +55,7 @@ public sealed class DisplayPreferenceStore(string path)
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
             if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
+            if (!Enum.IsDefined(data.MonitorEcgLead)) { throw new ArgumentException("Preferences.InvalidEcgLead"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
             var alarms = data.Alarms;
             // Retired presentation-only SVT policy may be present in saved
@@ -76,7 +80,7 @@ public sealed class DisplayPreferenceStore(string path)
             var defibrillator = data.Defibrillator?.Snapshot() ?? DefibrillatorConfiguration.Default;
             return new(new(data.Skin, data.Slots.Select(s => new MonitorDisplaySlot(s.Channel, s.Automatic,
                 new(s.Minimum, s.Maximum), s.Speed)).ToArray()), data.PaperLayout, alarms, data.Sound, generator, data.MeasurementMillimeters, defibrillator)
-            { TherapyControlsVisible = data.TherapyControlsVisible };
+            { TherapyControlsVisible = data.TherapyControlsVisible, MonitorEcgLead = data.MonitorEcgLead };
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
@@ -86,6 +90,7 @@ public sealed class DisplayPreferenceStore(string path)
     public bool Save(DisplayPreferences preferences)
     {
         if (preferences.PaperLayout is < 0 or > 1) { throw new ArgumentException("Preferences.InvalidPaperLayout"); }
+        if (!Enum.IsDefined(preferences.MonitorEcgLead)) { throw new ArgumentException("Preferences.InvalidEcgLead"); }
         var alarms = preferences.Alarms ?? MonitorAlarmPreferences.Default;
         alarms.Validate();
         var sound = preferences.Sound ?? MonitorSoundPreferences.Default; sound.Validate();
@@ -94,6 +99,7 @@ public sealed class DisplayPreferenceStore(string path)
         {
             Version = 18,
             TherapyControlsVisible = preferences.TherapyControlsVisible,
+            MonitorEcgLead = preferences.MonitorEcgLead,
             Defibrillator = (preferences.Defibrillator ?? DefibrillatorConfiguration.Default).Snapshot(),
             Generator = preferences.Generator,
             Sound = sound,

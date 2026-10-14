@@ -49,7 +49,7 @@ internal static class GenericSkinSmokeChecks
             long time = session.SimulationTimeNs;
             var manual = session.ManualVitals;
             var buttons = view.GetVisualDescendants().OfType<Button>().Where(button => button.Classes.Contains("skin-dummy")).ToArray();
-            Require(buttons.Length == 6 && buttons.All(button => button.MinHeight >= 44), "dummy actions retain keyboard and pointer targets");
+            Require(buttons.Length == 5 && buttons.All(button => button.MinHeight >= 44), "dummy actions retain keyboard and pointer targets");
             foreach (var button in buttons) { button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
             Require(session.SimulationTimeNs == time && session.ManualVitals == manual && window.ActiveTimer is null &&
                 ReferenceEquals(session, window.Session), "dummy buttons do not mutate the paused session");

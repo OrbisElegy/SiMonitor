@@ -68,6 +68,20 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
     public bool ShowPrevious(int slot) => _cycles[slot] > 0;
     public long RowCycle(int slot) => _cycles[slot];
     public MonitorAmplitudeRange PreviousRange(int slot) => _previous[slot];
+    internal void RefreshChannel(int channel, long frontierNs, Func<int, long, long, IEnumerable<double>> samples)
+    {
+        var prepared = new MonitorSweepRanges(configuration);
+        prepared.Advance(frontierNs, (id, from, to) => id == channel ? samples(id, from, to) : []);
+        for (int slot = 0; slot < configuration.Slots.Count; slot++)
+        {
+            if (configuration.Slots[slot].Channel != channel) { continue; }
+            _ranges[slot] = prepared._ranges[slot];
+            _previous[slot] = prepared._previous[slot];
+            _cycles[slot] = prepared._cycles[slot];
+            _frontiers[slot] = prepared._frontiers[slot];
+        }
+        Cycle++;
+    }
     public void Advance(long frontierNs, Func<int, long, long, IEnumerable<double>> samples) => Advance(_ => frontierNs, samples);
 
     public void Advance(Func<int, long> channelFrontierNs, Func<int, long, long, IEnumerable<double>> samples)

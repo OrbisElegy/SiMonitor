@@ -55,6 +55,13 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 短条各显示 2.5 秒，长 II 显示 10 秒，电压范围统一为 ±2 mV，并绘制 1 mV 标尺；
 窗口缩放不代表物理纸速。视图选择仅保存在当前窗口，普通应用设置和重启会话后保留。
 
+底部“导联”打开十二项单选面板，切换普通 ECG 行显示的 I、II、III、aVR、aVL、aVF 或 V1–V6。
+`SelectDisplayEcgLead` 即时重绘已有采样历史和导联标签，并仅重建 ECG 的自动量程；
+其他通道的当前／上一扫量程、扫屏前沿、仿真和治疗状态保留。显示选择保存到
+`MonitorEcgLead`，重新打开及应用／重启设置后保留，恢复默认设置时回到 II。
+`DisplaySamples(0, ...)` 读取选定导联；`Samples(0, ...)` 仍为 II，供 HR、QT/QTc、报警、
+声音、同步与 AED 检测使用。十二导联总览及其长 II、侧栏纸图的固定排列不随选择改变。
+
 桌面会话启用 `enableTwelveLead`，由 `LiveEcgIllustrationSource` 使用当前生理配置创建
 电极投影；`LiveEcgProjection` 复用监护源的事件尾部接续，在一次采样推进中发布所有导联，
 不经过记录组包或延迟队列。`EcgSamples` 的时间已裁去启动段，历史保留上限与普通监护一致；

@@ -33,6 +33,16 @@ public sealed class LocalMonitorPreviewSession
     public long? PendingSourceTimeNs { get; private set; }
     private PhysiologyWaveformGroup _source;
     private LiveEcgProjection? _ecgSource;
+    public EcgLead DisplayEcgLead { get; private set; } = EcgLead.II;
+
+    public void SelectDisplayEcgLead(EcgLead lead)
+    {
+        if (!Enum.IsDefined(lead)) { throw new ArgumentOutOfRangeException(nameof(lead)); }
+        if (lead != EcgLead.II && _ecgSource is null) { throw new InvalidOperationException("Preview.TwelveLeadSourceRequired"); }
+        if (lead == DisplayEcgLead) { return; }
+        Ranges.RefreshChannel(0, SimulationTimeNs, (_, from, to) => ReadEcgSamples(lead, from, to, usableOnly: true).Select(sample => sample.Value));
+        DisplayEcgLead = lead;
+    }
     private readonly List<(long TimeNs, IReadOnlyList<short> Values)> _ecgSamples = [];
     private WaveformEnvelope[] _blocks = [];
     private readonly Dictionary<Guid, List<(long TimeNs, double Value, uint QualityFlags)>> _samples;
@@ -332,7 +342,7 @@ public sealed class LocalMonitorPreviewSession
         if (Display.Slots.SequenceEqual(display.Slots)) { return; }
         Display = display;
         Ranges = new(display);
-        Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadSamples(channel, from, to, usableOnly: true).Select(s => s.Value));
+        Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadDisplaySamples(channel, from, to, usableOnly: true).Select(s => s.Value));
     }
 
     private void ActivatePendingSource()
@@ -495,7 +505,7 @@ public sealed class LocalMonitorPreviewSession
             _shockArtifacts.RemoveAll(artifact => artifact.RecoveryEndSimTimeNs <= oldestTimeNs);
             if (samples.Count > 0) { DataRevision++; }
             SimulationTimeNs = next;
-            Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadSamples(channel, from, to, usableOnly: true).Select(s => s.Value));
+            Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadDisplaySamples(channel, from, to, usableOnly: true).Select(s => s.Value));
             deltaNs -= chunk;
         }
         DetectedRhythmEvents = rhythmEvents.AsReadOnly();
@@ -587,10 +597,20 @@ public sealed class LocalMonitorPreviewSession
         ReadSamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
 
     public IEnumerable<(long TimeNs, double Value)> EcgSamples(EcgLead lead, long fromSimTimeNs, long toExclusiveSimTimeNs)
+        => ReadEcgSamples(lead, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
+
+    public IEnumerable<(long TimeNs, double Value)> DisplaySamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs) =>
+        ReadDisplaySamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly: false);
+
+    private IEnumerable<(long TimeNs, double Value)> ReadDisplaySamples(int channel, long fromSimTimeNs, long toExclusiveSimTimeNs, bool usableOnly) =>
+        channel == 0 ? ReadEcgSamples(DisplayEcgLead, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly)
+            : ReadSamples(channel, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly);
+
+    private IEnumerable<(long TimeNs, double Value)> ReadEcgSamples(EcgLead lead, long fromSimTimeNs, long toExclusiveSimTimeNs, bool usableOnly)
     {
         if (!Enum.IsDefined(lead)) { throw new ArgumentOutOfRangeException(nameof(lead)); }
         // The rhythm strip and the monitor both consume the canonical II samples.
-        if (lead == EcgLead.II) { return Samples(0, fromSimTimeNs, toExclusiveSimTimeNs); }
+        if (lead == EcgLead.II) { return ReadSamples(0, fromSimTimeNs, toExclusiveSimTimeNs, usableOnly); }
         return ReadProjectedEcg();
 
         IEnumerable<(long TimeNs, double Value)> ReadProjectedEcg()
@@ -599,6 +619,7 @@ public sealed class LocalMonitorPreviewSession
             {
                 if (sample.TimeNs < fromSimTimeNs || sample.TimeNs >= toExclusiveSimTimeNs) { continue; }
                 var artifact = _shockArtifacts.LastOrDefault(item => item.Contains(sample.TimeNs));
+                if (usableOnly && artifact is not null) { continue; }
                 yield return (sample.TimeNs, artifact?.EvaluateMicrovolts(sample.TimeNs) ?? sample.Values[(int)lead]);
             }
         }

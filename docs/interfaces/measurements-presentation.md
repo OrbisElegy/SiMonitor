@@ -215,6 +215,8 @@ internal；公开边界是 `EcgHeartRateMeasurement.ReadRhythm`、`Consume` 的�
 | `UpdateOxygenationVentilation(ventilation, oxygenDemandMultiplier)` | 只用于启用实时氧合的会话；完整验证后同时安排通气与波形变化，返回生效时间 |
 | `UpdateDisplay(display)` | 替换显示槽和量程，按已有显示 frontier 重建量程投影 |
 | `Samples(channel, fromSimTimeNs, toExclusiveSimTimeNs)` | 从统一采样历史按半开区间枚举物理值，包含 ECG 电击伪迹 |
+| `SelectDisplayEcgLead(lead)` | 显示选择，默认 II；验证投影源与枚举，仅更新 ECG 量程，不改变测量或记录 |
+| `DisplaySamples(channel, fromSimTimeNs, toExclusiveSimTimeNs)` | ECG 读取所选导联，其余通道与 `Samples` 一致 |
 
 `ScheduleSource` 不接受自身、已经推进/丢弃启动段/已有待应用修改的 definition。
 连续实时氧合源不能热改 `OxygenationParameters` 基线；需重新开始会话。

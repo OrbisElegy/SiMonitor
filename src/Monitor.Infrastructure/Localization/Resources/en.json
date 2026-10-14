@@ -973,6 +973,8 @@
   "skin.ecg": "12 leads",
   "skin.ecgSelected": "12 leads (selected)",
   "skin.returnMonitor": "Return to monitoring",
+  "skin.leadsSelected": "Leads · {0}",
+  "skin.ecgLeadChoice": "ECG lead {0}",
   "skin.leads": "Leads",
   "skin.print": "Print",
   "skin.nibpStart": "Start NIBP",

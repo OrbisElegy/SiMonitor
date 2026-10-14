@@ -9,7 +9,7 @@ namespace Monitor.Desktop;
 
 internal sealed class LiveMonitorTrace : Control
 {
-    internal static readonly string[] Names = ["ECG · II", "RESP", "PLETH", "ABP", "CO₂", "PA", "CVP"];
+    internal static readonly string[] Names = ["ECG", "RESP", "PLETH", "ABP", "CO₂", "PA", "CVP"];
     private static readonly string[] UnitSymbols = ["μV", "", "", "mmHg", "mmHg", "mmHg", "mmHg"];
     // RESP and PLETH carry relative units; the others are symbols that need no translation.
     internal static string Unit(Monitor.Application.Localization.ITextLocalizer text, int channel) =>
@@ -58,6 +58,8 @@ internal sealed class LiveMonitorTrace : Control
     internal MonitorChannels MonitoredChannels => _session.Display.Slots.Aggregate(Skin?.AdditionalMonitoredChannels ?? MonitorChannels.None,
         (channels, slot) => channels | MonitorChannelMapping.ForChannel(slot.Channel)) & (Skin?.Channels ?? MonitorChannels.All);
     internal IBrush ChannelBrush(int channel) => Skin?.ChannelBrush(channel) ?? Brush.Parse(Colors[channel]);
+    internal string ChannelName(int channel) => channel == 0
+        ? "ECG · " + ProjectedEcgDemoSource.LeadNames[(int)_session.DisplayEcgLead] : Names[channel];
     internal void RefreshDisplay()
     {
         _revision = ulong.MaxValue;
@@ -83,7 +85,7 @@ internal sealed class LiveMonitorTrace : Control
                 {
                     bool started = false;
                     int channel = _session.Display.Slots[row].Channel;
-                    var samples = _session.Samples(channel, from, from + duration).ToArray();
+                    var samples = _session.DisplaySamples(channel, from, from + duration).ToArray();
                     var contour = channel != 0 ? PreviewContour.Interpolate(samples) : samples;
                     foreach (var sample in contour)
                     {
@@ -119,7 +121,7 @@ internal sealed class LiveMonitorTrace : Control
             var range = _session.Ranges.Range(row);
             double top = row * rowHeight;
             context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1));
-            Label(context, Names[channel], 12, top + 10, color, 14);
+            Label(context, ChannelName(channel), 12, top + 10, color, 14);
             Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
             string unit = Unit(_localization.Current, channel);
             if (Skin is null || channel != 0)

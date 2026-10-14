@@ -23,6 +23,39 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
     internal Button EcgButton { get; private set; } = null!;
+    internal Button LeadButton { get; private set; } = null!;
+    internal IReadOnlyList<RadioButton> LeadChoices => _leadChoices;
+    private readonly List<RadioButton> _leadChoices = [];
+    private EcgLead _displayLead = EcgLead.II;
+
+    internal void ConfigureLeadSelection(EcgLead selected, Action<EcgLead> changed)
+    {
+        _displayLead = selected;
+        string group = "monitor-lead-" + Guid.NewGuid().ToString("N");
+        foreach (var lead in Enum.GetValues<EcgLead>())
+        {
+            string name = ProjectedEcgDemoSource.LeadNames[(int)lead];
+            var choice = new RadioButton { Content = name, GroupName = group, MinHeight = 44, MinWidth = 64, IsChecked = lead == selected };
+            _localization.Bind(choice, AutomationProperties.NameProperty, "skin.ecgLeadChoice", name);
+            choice.IsCheckedChanged += (_, _) =>
+            {
+                if (choice.IsChecked != true) { return; }
+                changed(lead);
+                _displayLead = lead;
+                RefreshLeadCaption();
+            };
+            // Keep the radio group attached until its checked-state update has finished.
+            choice.Click += (_, _) => LeadButton.Flyout?.Hide();
+            _leadChoices.Add(choice);
+        }
+    }
+
+    private void RefreshLeadCaption()
+    {
+        string name = ProjectedEcgDemoSource.LeadNames[(int)_displayLead];
+        _localization.Bind((TextBlock)LeadButton.Content!, TextBlock.TextProperty, "skin.leadsSelected", name);
+        _localization.Bind(LeadButton, AutomationProperties.NameProperty, "skin.leadsSelected", name);
+    }
     internal bool TwelveLeadVisible { get; private set; }
     internal event Action? EcgViewChanged;
     private Control? _waveforms, _twelveLeadWaveforms;
@@ -249,8 +282,14 @@ internal sealed class GenericMonitorSkin : IMonitorSkin
         EcgButton.Click += (_, _) => SetTwelveLeadVisible(!TwelveLeadVisible);
         toolbar.Children.Add(EcgButton);
         SetTwelveLeadVisible(TwelveLeadVisible);
+        LeadButton = ToolbarButton("skin.leads");
+        var leads = new UniformGrid { Columns = 4 };
+        foreach (var choice in _leadChoices) { leads.Children.Add(choice); }
+        LeadButton.Flyout = new Flyout { Content = leads, Placement = PlacementMode.Top };
+        RefreshLeadCaption();
+        toolbar.Children.Add(LeadButton);
         UpdateTherapyVisibility();
-        foreach (string key in new[] { "skin.leads", "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
+        foreach (string key in new[] { "skin.print", "skin.nibpStart", "skin.nibpAuto", "skin.alarms", "skin.silence" })
         { toolbar.Children.Add(DummyButton(key)); }
         Grid.SetRow(toolbar, 3);
         root.Children.Add(toolbar);

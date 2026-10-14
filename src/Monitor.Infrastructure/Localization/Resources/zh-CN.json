@@ -973,6 +973,8 @@
   "skin.ecg": "12 导联",
   "skin.ecgSelected": "12 导联（已选中）",
   "skin.returnMonitor": "返回普通监护",
+  "skin.leadsSelected": "导联 · {0}",
+  "skin.ecgLeadChoice": "ECG 导联 {0}",
   "skin.leads": "导联",
   "skin.print": "打印",
   "skin.nibpStart": "测量血压",

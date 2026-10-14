@@ -177,11 +177,20 @@ internal sealed class DesignPreviewWindow : Window
     }
     private GenericMonitorSkin CreateSkin()
     {
+        _session.SelectDisplayEcgLead(_displayPreferences.MonitorEcgLead);
         var skin = new GenericMonitorSkin(Localization, _therapy, SaveTherapy, SetPacing,
             _defibrillator.Configuration, RunDefibrillatorCommand,
             energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
         if (_session.Display.Slots.Count >= 4) { _layoutFourthSlot = _session.Display.Slots[3]; }
         skin.ConfigureLayout(_session.Display.Skin, _displayPreferences.TherapyControlsVisible, ChangeMonitorLayout);
+        skin.ConfigureLeadSelection(_session.DisplayEcgLead, lead =>
+        {
+            if (_closed) { return; }
+            _session.SelectDisplayEcgLead(lead);
+            _monitor.RefreshDisplay();
+            _displayPreferences = _displayPreferences with { MonitorEcgLead = lead };
+            SaveDisplayPreferences();
+        });
         skin.EcgViewChanged += () =>
         {
             if (_closed || _applying) { return; }
@@ -496,7 +505,7 @@ internal sealed class DesignPreviewWindow : Window
         Settings.Sound.Close();
         SelectLanguage(BuiltInLocalizations.DefaultLocale);
         _therapy = MonitorTherapyPreferences.Default;
-        _displayPreferences = _displayPreferences with { TherapyControlsVisible = true };
+        _displayPreferences = _displayPreferences with { TherapyControlsVisible = true, MonitorEcgLead = EcgLead.II };
         _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];
         bool therapySaved = _therapyPreferences?.Save(_therapy) != false;
         Settings = CreateSettings();
@@ -727,7 +736,7 @@ internal sealed class DesignPreviewWindow : Window
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
             _displayPreferences = new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters, defibrillator)
-            { TherapyControlsVisible = _displayPreferences.TherapyControlsVisible };
+            { TherapyControlsVisible = _displayPreferences.TherapyControlsVisible, MonitorEcgLead = _displayPreferences.MonitorEcgLead };
             SaveDisplayPreferences();
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")

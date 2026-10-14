@@ -86,7 +86,7 @@
   {
     "Id": "topic-10",
     "Category": "Sound",
-    "Text": "Monitor sounds are always enabled; adjust volume or mute in Settings → Sound. The main volume affects both heartbeat and alarm sounds; the heartbeat relative volume adjusts only the heartbeat tone. Heartbeat tones follow live ECG/PLETH detections on the currently displayed trace and are not filled in from the set heart rate. Shock delivery withdraws old QRS cues; only newly detected beats sound after recovery; alarm sounds follow the highest active level, and the two can overlap. With the SpO₂ pitch enabled, an unavailable SpO₂ falls back to a fixed pitch with a notice. Pausing the simulation stops monitor sounds. “Play three test tones” only checks the output.",
+    "Text": "Monitor sounds are always enabled; adjust volume or mute in Settings → Sound. The main volume affects both heartbeat and alarm sounds; the heartbeat relative volume adjusts only the heartbeat tone. Heartbeat tones follow live ECG/PLETH detections on the currently displayed trace and are not filled in from the set heart rate. Shock delivery withdraws old QRS cues; only newly detected beats sound after recovery; alarm sounds follow the highest active level, and the two can overlap. With the SpO₂ pitch enabled, an unavailable SpO₂ falls back to a fixed pitch with a notice. Pausing the simulation stops monitor sounds.",
     "Title": "Turning on sound and adjusting volume"
   },
   {
@@ -176,8 +176,8 @@
   {
     "Id": "settings-detail-7",
     "Category": "Sound",
-    "Text": "Sound is always enabled. The master slider controls alarms and beats; the speaker button mutes or restores the volume. System default follows changes to the default output automatically. Selecting a specific device keeps that output and waits for it to return if disconnected. Device and mute settings are saved locally. Audition uses the selected device and current volume.",
-    "Title": "Audio device and test tones"
+    "Text": "Sound is always enabled. The master slider controls alarms and beats; the speaker button mutes or restores the volume. System default follows changes to the default output automatically. Selecting a specific device keeps that output and waits for it to return if disconnected. Device and mute settings are saved locally.",
+    "Title": "Audio output devices"
   },
   {
     "Id": "settings-detail-8",

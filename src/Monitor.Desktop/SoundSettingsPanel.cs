@@ -183,9 +183,15 @@ internal sealed class SoundSettingsPanel : StackPanel
                 Publish();
             }
         };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        buttons.Children.Add(Audition); buttons.Children.Add(Stop); Children.Add(buttons);
-        Stop.IsEnabled = false; Children.Add(Status);
+        Stop.IsEnabled = false;
+        if (ProductIdentity.DevelopmentFeatures)
+        {
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            buttons.Children.Add(Audition); buttons.Children.Add(Stop); Children.Add(buttons);
+            Children.Add(Status);
+            Audition.Click += async (_, _) => await PreviewAsync();
+            Stop.Click += (_, _) => StopPreview();
+        }
         Children.Add(HeartbeatEnabled);
         var beatVolumeLabel = Label("sound.heartbeatVolume", 100); Children.Add(beatVolumeLabel); Children.Add(HeartbeatVolume);
         _localization.Bind(HeartbeatVolume, AutomationProperties.NameProperty, "sound.heartbeatVolumeName");
@@ -216,8 +222,6 @@ internal sealed class SoundSettingsPanel : StackPanel
         ResumeAlarmAudio.Click += (_, _) => ResumeAudioPause();
         Children.Add(DesktopInformationPages.Help("topic-10"));
         HeartbeatEnabled.IsCheckedChanged += (_, _) => Publish();
-        Audition.Click += async (_, _) => await PreviewAsync();
-        Stop.Click += (_, _) => StopPreview();
         UpdateBeatSource();
     }
 
@@ -259,7 +263,7 @@ internal sealed class SoundSettingsPanel : StackPanel
 
     internal async Task PreviewAsync()
     {
-        if (_closed || _cancellation is not null || !Audition.IsEnabled) { return; }
+        if (!ProductIdentity.DevelopmentFeatures || _closed || _cancellation is not null || !Audition.IsEnabled) { return; }
         using var cancellation = new CancellationTokenSource(); _cancellation = cancellation;
         Audition.IsEnabled = false; Stop.IsEnabled = true;
         Show(Status, "sound.previewing");

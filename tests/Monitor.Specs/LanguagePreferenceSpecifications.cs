@@ -19,10 +19,10 @@ internal static class LanguagePreferenceSpecifications
         string display = Path.Combine(directory, "display.json");
         File.WriteAllText(display, "existing display preferences", System.Text.Encoding.UTF8);
         var store = new LanguagePreferenceStore(path);
-        Check.That(store.Load(out bool rejected) == "zh-CN" && !rejected, "missing language file quietly defaults to Chinese");
-        foreach (var locale in BuiltInLocalizations.Supported)
+        Check.That(store.Load(out bool rejected) == BuiltInLocalizations.SystemLocale && !rejected, "missing language file quietly follows the system language");
+        foreach (string locale in BuiltInLocalizations.Supported.Select(item => item.Code).Append(BuiltInLocalizations.SystemLocale))
         {
-            Check.That(store.Save(locale.Code) && store.Load(out rejected) == locale.Code && !rejected,
+            Check.That(store.Save(locale) && store.Load(out rejected) == locale && !rejected,
                 "canonical supported language survives restart");
         }
         string before = File.ReadAllText(path, System.Text.Encoding.UTF8);
@@ -42,7 +42,7 @@ internal static class LanguagePreferenceSpecifications
             "{\"Version\":1,\"Locale\":\"fr\"}", "{\"Version\":1,\"Locale\":\"en\",\"Extra\":1}", new string(' ', 1025) })
         {
             File.WriteAllText(path, json, new System.Text.UTF8Encoding(false));
-            Check.That(store.Load(out bool rejected) == "zh-CN" && rejected &&
+            Check.That(store.Load(out bool rejected) == BuiltInLocalizations.SystemLocale && rejected &&
                 File.ReadAllText(path, System.Text.Encoding.UTF8) == json,
                 "invalid language file uses a visible default and preserves file evidence");
         }

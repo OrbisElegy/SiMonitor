@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Globalization;
+
 namespace Monitor.Desktop;
 
 // Each shard owns a separate process and Avalonia dispatcher. Never run controls
@@ -18,6 +20,16 @@ internal static class NativeSmokePartition
     internal static void Run(Action action)
     {
         int ordinal = _ordinal++;
-        if (ordinal % _count == Index) { action(); Console.WriteLine($"ok: native scenario {ordinal} (shard {Index + 1}/{_count})"); }
+        if (ordinal % _count != Index) { return; }
+        // Existing scenarios assert Chinese captions; keep their fixture independent
+        // of the host language. System-language scenarios override this explicitly.
+        var previousCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
+            action();
+            Console.WriteLine($"ok: native scenario {ordinal} (shard {Index + 1}/{_count})");
+        }
+        finally { CultureInfo.CurrentUICulture = previousCulture; }
     }
 }

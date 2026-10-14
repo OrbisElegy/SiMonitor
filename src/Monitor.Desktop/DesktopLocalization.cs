@@ -14,9 +14,22 @@ using Monitor.Infrastructure.Localization;
 namespace Monitor.Desktop;
 
 // Owned by one window. Bindings retain their value; this registry does not retain old controls.
-internal sealed class DesktopLocalization(string? locale = null)
+internal sealed class DesktopLocalization
 {
-    private ITextLocalizer _text = BuiltInLocalizations.Create(locale);
+    private ITextLocalizer _text;
+
+    internal DesktopLocalization(string? locale = null)
+    {
+        Preference = locale ?? BuiltInLocalizations.SystemLocale;
+        _text = BuiltInLocalizations.Create(Preference);
+        Preference = NormalizePreference(Preference, _text.Locale);
+    }
+
+    internal string Preference { get; private set; }
+    private static string NormalizePreference(string requested, string resolved) =>
+        requested.Trim().Equals(BuiltInLocalizations.SystemLocale, StringComparison.OrdinalIgnoreCase)
+            ? BuiltInLocalizations.SystemLocale : resolved;
+
     private readonly List<WeakReference<LocalizedValue>> _values = [];
     private readonly ConditionalWeakTable<AvaloniaObject, Dictionary<AvaloniaProperty, LocalizedValue>> _sources = new();
     internal string Locale => _text.Locale;
@@ -55,6 +68,7 @@ internal sealed class DesktopLocalization(string? locale = null)
     internal void Select(string locale)
     {
         _text = BuiltInLocalizations.Create(locale);
+        Preference = NormalizePreference(locale, _text.Locale);
         foreach (var reference in _values.ToArray())
         {
             if (reference.TryGetTarget(out var value)) { value.Refresh(); }

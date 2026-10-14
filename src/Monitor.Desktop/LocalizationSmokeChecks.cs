@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Automation;
@@ -234,8 +235,8 @@ internal static class LocalizationSmokeChecks
                 Require(reopened.Localization.Locale == "en" && reopened.Settings.Language.SelectedIndex == 0 &&
                     reopened.Settings.Apply.Content?.ToString() == "Apply", "saved language is used during construction after restart");
                 reopened.ResetAllSettings();
-                Require(reopened.Localization.Locale == "zh-CN" && reopened.Settings.Language.SelectedIndex == 1 &&
-                    new LanguagePreferenceStore(Path.ChangeExtension(path, ".language.json")).Load(out bool rejected) == "zh-CN" && !rejected,
+                Require(reopened.Localization.Locale == "zh-CN" && reopened.Settings.Language.SelectedIndex == 3 &&
+                    new LanguagePreferenceStore(Path.ChangeExtension(path, ".language.json")).Load(out bool rejected) == BuiltInLocalizations.SystemLocale && !rejected,
                     "explicit reset restores and saves the default language");
             }
             finally { reopened.Close(); }
@@ -316,6 +317,93 @@ internal static class LocalizationSmokeChecks
             Require(Results() == "找到 6 条说明", "Chinese help search finds the same topics: " + Results());
         }
         finally { window.Close(); }
+    }
+
+    internal static void VerifySystemLanguage()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "monitor-system-language-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "display.json");
+        var store = new LanguagePreferenceStore(Path.ChangeExtension(path, ".language.json"));
+        var previous = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
+            var first = new DesignPreviewWindow(path);
+            first.Show();
+            try
+            {
+                Require(first.Localization.Preference == BuiltInLocalizations.SystemLocale && first.Localization.Locale == "en" &&
+                    first.Settings.Language.SelectedIndex == 3, "first launch follows unsupported system languages with English");
+                first.SelectPage(2);
+                first.Settings.Tabs.SelectedIndex = 0;
+                DesktopViewportSmokeChecks.Layout(first, 960, 720);
+                RequireCaption(first.Settings.Language, "Follow system language");
+                RequireChoiceFits(first.Settings.Language);
+                first.Settings.Language.SelectedIndex = 0;
+                Require(store.Load(out bool rejected) == "en" && !rejected,
+                    "selecting the already displayed language still persists an explicit preference");
+            }
+            finally { first.Close(); }
+
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("zh-HK");
+            var explicitChoice = new DesignPreviewWindow(path);
+            explicitChoice.Show();
+            try
+            {
+                Require(explicitChoice.Localization.Locale == "en" && explicitChoice.Settings.Language.SelectedIndex == 0,
+                    "existing explicit language survives a different system language");
+                var session = explicitChoice.Session;
+                var timer = explicitChoice.ActiveTimer;
+                explicitChoice.Settings.HeartRate.Value = 81;
+                explicitChoice.Settings.Language.SelectedIndex = 3;
+                Require(explicitChoice.Localization.Locale == "zh-TW" &&
+                    explicitChoice.Localization.Preference == BuiltInLocalizations.SystemLocale &&
+                    store.Load(out bool rejected) == BuiltInLocalizations.SystemLocale && !rejected &&
+                    ReferenceEquals(session, explicitChoice.Session) && ReferenceEquals(timer, explicitChoice.ActiveTimer) &&
+                    explicitChoice.Settings.HeartRate.Value == 81,
+                    "selecting system language resolves Traditional Chinese and preserves drafts and the running session");
+                explicitChoice.SelectPage(2);
+                explicitChoice.Settings.Tabs.SelectedIndex = 0;
+                DesktopViewportSmokeChecks.Layout(explicitChoice, 960, 720);
+                RequireCaption(explicitChoice.Settings.Language, "跟隨目前系統語言");
+                RequireChoiceFits(explicitChoice.Settings.Language);
+                Capture(explicitChoice, "i18n-system-language-tw.png");
+            }
+            finally { explicitChoice.Close(); }
+
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("zh-SG");
+            var following = new DesignPreviewWindow(path);
+            following.Show();
+            try
+            {
+                Require(following.Localization.Locale == "zh-CN" && following.Settings.Language.SelectedIndex == 3,
+                    "persisted system preference resolves the current language again after restart");
+                following.Settings.Language.SelectedIndex = 0;
+                following.ResetAllSettings();
+                Require(following.Localization.Locale == "zh-CN" && following.Settings.Language.SelectedIndex == 3 &&
+                    store.Load(out bool rejected) == BuiltInLocalizations.SystemLocale && !rejected,
+                    "reset restores and saves system following instead of the resolved language");
+            }
+            finally { following.Close(); }
+
+            File.WriteAllText(Path.ChangeExtension(path, ".language.json"), "invalid", System.Text.Encoding.UTF8);
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("ja-JP");
+            var recovery = new DesignPreviewWindow(path);
+            recovery.Show();
+            try
+            {
+                Require(recovery.Localization.Locale == "en" && recovery.Settings.Language.SelectedIndex == 3 &&
+                    recovery.LanguageNotice.IsVisible && recovery.LanguageNotice.Text!.Contains("system language", StringComparison.Ordinal),
+                    "invalid language settings recover to system following with an accurate notice");
+            }
+            finally { recovery.Close(); }
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = previous;
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     internal static void VerifyTraditionalChinese()

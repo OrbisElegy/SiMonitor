@@ -12,6 +12,7 @@ internal static class LocalizationSpecifications
     [
         new(nameof(BuiltInLocalesHaveCompleteMatchingResources), BuiltInLocalesHaveCompleteMatchingResources),
         new(nameof(LocaleSelectionResolvesChineseScriptsAndRegions), LocaleSelectionResolvesChineseScriptsAndRegions),
+        new(nameof(SystemLanguageUsesUiCultureWithoutChangingExplicitSelections), SystemLanguageUsesUiCultureWithoutChangingExplicitSelections),
         new(nameof(MissingTranslationsHaveObservableFallbacks), MissingTranslationsHaveObservableFallbacks),
         new(nameof(TranslationValidationRejectsBrokenCollaborativeEdits), TranslationValidationRejectsBrokenCollaborativeEdits),
         new(nameof(FormatsAllowReorderingAndEscapedBraces), FormatsAllowReorderingAndEscapedBraces),
@@ -55,6 +56,38 @@ internal static class LocalizationSpecifications
         foreach (string locale in new[] { "en", "EN", "en-US", "en-GB", "fr", "ja-JP", "invalid" })
         {
             Check.That(BuiltInLocalizations.Create(locale).Locale == "en", "unavailable locales fall back to English");
+        }
+    }
+
+    private static void SystemLanguageUsesUiCultureWithoutChangingExplicitSelections()
+    {
+        var previous = CultureInfo.CurrentUICulture;
+        var previousNumbers = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            foreach (var (system, expected) in new (string, string)[]
+            {
+                ("zh-CN", "zh-CN"), ("zh-SG", "zh-CN"), ("zh-Hans", "zh-CN"),
+                ("zh-TW", "zh-TW"), ("zh-HK", "zh-TW"), ("zh-MO", "zh-TW"), ("zh-Hant", "zh-TW"),
+                ("en-US", "en"), ("fr-FR", "en"), ("ja-JP", "en"), ("", "en")
+            })
+            {
+                var culture = CultureInfo.GetCultureInfo(system);
+                CultureInfo.CurrentUICulture = culture;
+                Check.That(BuiltInLocalizations.Create(BuiltInLocalizations.SystemLocale).Locale == expected,
+                    "system preference selects a supported UI language, falling back to English");
+                Check.That(BuiltInLocalizations.Create("en").Locale == "en" &&
+                    BuiltInLocalizations.Create("zh-CN").Locale == "zh-CN" && BuiltInLocalizations.Create("zh-TW").Locale == "zh-TW",
+                    "explicit languages ignore the system preference");
+                Check.That(CultureInfo.CurrentUICulture == culture && CultureInfo.CurrentCulture.Name == "fr-FR",
+                    "locale resolution leaves UI and numeric cultures unchanged");
+            }
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = previous;
+            CultureInfo.CurrentCulture = previousNumbers;
         }
     }
 

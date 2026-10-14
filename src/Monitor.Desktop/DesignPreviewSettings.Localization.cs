@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Monitor.Application.Localization;
 using Monitor.Infrastructure.Localization;
 
 namespace Monitor.Desktop;
@@ -11,9 +12,9 @@ namespace Monitor.Desktop;
 internal sealed partial class DesignPreviewSettings
 {
     internal DesktopLocalization Localization { get; }
+    private static readonly string[] LanguageChoices = [.. BuiltInLocalizations.Supported.Select(locale => locale.Code), BuiltInLocalizations.SystemLocale];
     internal ComboBox Language { get; } = new()
     {
-        ItemsSource = BuiltInLocalizations.Supported.Select(locale => locale.NativeName).ToArray(),
         MinHeight = 44,
         MinWidth = 220,
         HorizontalAlignment = HorizontalAlignment.Left
@@ -22,11 +23,14 @@ internal sealed partial class DesignPreviewSettings
 
     private void InitializeLocalization()
     {
-        Language.SelectedIndex = BuiltInLocalizations.Supported.ToList().FindIndex(locale => locale.Code == Localization.Locale);
+        Localization.SetChoices(Language, BuiltInLocalizations.Supported
+            .Select(locale => (Func<ITextLocalizer, string>)(_ => locale.NativeName))
+            .Append(text => text.GetString("settings.languageSystem")));
+        Language.SelectedIndex = Array.IndexOf(LanguageChoices, Localization.Preference);
         Language.SelectionChanged += (_, args) =>
         {
             if (ReferenceEquals(args.Source, Language) && Language.SelectedIndex >= 0)
-            { LanguageChanged?.Invoke(BuiltInLocalizations.Supported[Language.SelectedIndex].Code); }
+            { LanguageChanged?.Invoke(LanguageChoices[Language.SelectedIndex]); }
         };
         Localization.Bind(Language, AutomationProperties.NameProperty, "settings.language");
         Localization.Bind(Status, TextBlock.TextProperty, "settings.statusIdle");

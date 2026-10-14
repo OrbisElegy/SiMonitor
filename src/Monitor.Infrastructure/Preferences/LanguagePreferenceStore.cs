@@ -34,7 +34,7 @@ public sealed class LanguagePreferenceStore(string path)
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         { rejected = true; }
-        return BuiltInLocalizations.DefaultLocale;
+        return BuiltInLocalizations.SystemLocale;
     }
 
     public bool Save(string locale)
@@ -61,5 +61,5 @@ public sealed class LanguagePreferenceStore(string path)
         }
     }
 
-    private static bool IsSupported(string? locale) => BuiltInLocalizations.Supported.Any(item => item.Code == locale);
+    private static bool IsSupported(string? locale) => locale == BuiltInLocalizations.SystemLocale || BuiltInLocalizations.Supported.Any(item => item.Code == locale);
 }

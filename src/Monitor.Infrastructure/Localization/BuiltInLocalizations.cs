@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Globalization;
 using Monitor.Application.Localization;
 
 namespace Monitor.Infrastructure.Localization;
@@ -7,6 +8,7 @@ public sealed record SupportedLocale(string Code, string NativeName);
 
 public static class BuiltInLocalizations
 {
+    public const string SystemLocale = "system";
     public const string DefaultLocale = "zh-CN";
     public const string FallbackLocale = "en";
     public const string TraditionalChineseLocale = "zh-TW";
@@ -32,6 +34,12 @@ public static class BuiltInLocalizations
     {
         if (string.IsNullOrWhiteSpace(requestedLocale)) { return DefaultLocale; }
         string locale = requestedLocale.Trim();
+        // Read the UI language only for the explicit system preference. Numeric input
+        // and deterministic simulation cultures remain untouched.
+        if (locale.Equals(SystemLocale, StringComparison.OrdinalIgnoreCase))
+        {
+            locale = CultureInfo.CurrentUICulture.Name;
+        }
         if (locale.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
             locale.Equals("zh", StringComparison.OrdinalIgnoreCase) ||
             locale.Equals("zh-CN", StringComparison.OrdinalIgnoreCase) ||

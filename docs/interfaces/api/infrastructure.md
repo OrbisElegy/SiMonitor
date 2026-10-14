@@ -581,6 +581,7 @@ public sealed class SqliteIdentityRepository : IBootstrapIdentityRepository, IIn
 public sealed record SupportedLocale(string Code, string NativeName);
 public static class BuiltInLocalizations
 {
+    public const string SystemLocale = "system";
     public const string DefaultLocale = "zh-CN";
     public const string FallbackLocale = "en";
     public const string TraditionalChineseLocale = "zh-TW";

@@ -458,7 +458,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         Localization.Select(locale);
         UpdateState();
-        LanguageNotice.IsVisible = _languagePreferences is not null && !_languagePreferences.Save(Localization.Locale);
+        LanguageNotice.IsVisible = _languagePreferences is not null && !_languagePreferences.Save(Localization.Preference);
         Localization.Bind(LanguageNotice, TextBlock.TextProperty, "settings.languageSaveFailed");
     }
 
@@ -553,7 +553,7 @@ internal sealed class DesignPreviewWindow : Window
     {
         Pause();
         Settings.Sound.Close();
-        SelectLanguage(BuiltInLocalizations.DefaultLocale);
+        SelectLanguage(BuiltInLocalizations.SystemLocale);
         _therapy = MonitorTherapyPreferences.Default;
         _displayPreferences = _displayPreferences with { TherapyControlsVisible = true, MonitorEcgLead = EcgLead.II };
         _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];

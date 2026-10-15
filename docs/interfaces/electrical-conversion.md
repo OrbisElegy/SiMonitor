@@ -96,7 +96,7 @@ var result = session.ApplyElectricalShock(delivery, preparedSinusSession);
 `DefibrillatorConfiguration` 与逐模板 `ElectricalConversionSettings` 分开：前者描述设备档位、
 放电波形、充电时间和充满后的自动取消时间，后者只决定模板是否转复。档位是 1–1000 J 的
 严格递增整数，最多 64 档；充电时间 100–60000 ms，自动取消 1–300 s。Generic 默认
-1、2、5、10、20、30、50、70、100、120、150、200 J，双相截断指数波、3 秒充电、30 秒取消，
+1、2、5、10、20、30、50、70、100、120、150、200、250、300、350 J，双相截断指数波、3 秒充电、30 秒取消，
 仅为教学设备配置。保存能量不在新档位中时选最近档位，等距时取较低值。
 `Snapshot` 验证并复制档位集合，`Resolve(editable, deviceOverride)` 优先设备固定配置。
 

@@ -72,6 +72,17 @@ internal static class ManualDefibrillatorSpecifications
 
     private static void DeviceProfilesValidatePersistAndOverrideDrafts()
     {
+        foreach (int energy in new[] { 250, 300, 350 })
+        {
+            var device = Device();
+            device.SelectEnergy(energy, 0);
+            device.BeginCharge(0);
+            device.Tick(1_000_000_000, 1_000_000_000, []);
+            device.PressShock(Interaction, 1_000_000_000);
+            var delivery = device.Tick(1_500_000_000, 1_500_000_000, []);
+            Check.That(delivery?.EnergyJoules == energy,
+                "added default steps charge and deliver their selected energy");
+        }
         int[] steps = [5, 20, 50, 100, 200, 360];
         var configured = new DefibrillatorConfiguration(steps, DefibrillationWaveformKind.MonophasicDampedSine, 2500, 45) { EcgRecoveryMilliseconds = 700 };
         var resolved = DefibrillatorConfiguration.Resolve(DefibrillatorConfiguration.Default, configured);

@@ -12,7 +12,7 @@ public sealed record DefibrillatorConfiguration(
 {
     public int EcgRecoveryMilliseconds { get; init; } = 1000;
     public static DefibrillatorConfiguration Default { get; } = new(
-        Array.AsReadOnly(new[] { 1, 2, 5, 10, 20, 30, 50, 70, 100, 120, 150, 200 }),
+        Array.AsReadOnly(new[] { 1, 2, 5, 10, 20, 30, 50, 70, 100, 120, 150, 200, 250, 300, 350 }),
         DefibrillationWaveformKind.BiphasicTruncatedExponential, 3000, 30);
 
     public DefibrillatorConfiguration Snapshot()

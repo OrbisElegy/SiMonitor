@@ -11,7 +11,7 @@ namespace Monitor.Desktop;
 internal sealed class ManualVitalSettings : StackPanel
 {
     internal event Action? DraftChanged;
-    internal CheckBox NibpEnabled { get; } = new();
+    internal CheckBox NibpEnabled { get; } = new() { IsChecked = true };
     internal CheckBox TemperatureEnabled { get; } = new();
     internal CheckBox[] CustomEnabled { get; } = [new(), new()];
     internal NumericUpDown Systolic { get; } = Number(0, 300, 120, 1);
@@ -66,7 +66,7 @@ internal sealed class ManualVitalSettings : StackPanel
         {
             localization.Bind(toggle, ContentControl.ContentProperty, key);
             Children.Add(toggle);
-            foreach (var field in fields) { field.IsEnabled = false; }
+            foreach (var field in fields) { field.IsEnabled = toggle.IsChecked == true; }
             toggle.IsCheckedChanged += (_, _) =>
             {
                 foreach (var field in fields) { field.IsEnabled = toggle.IsChecked == true; }

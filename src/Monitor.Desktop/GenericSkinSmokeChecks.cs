@@ -31,7 +31,7 @@ internal static class GenericSkinSmokeChecks
             Require(window.MonitorTrace.ChannelBrush(2).ToString() == Brush.Parse("#49BFFF").ToString() &&
                 window.MonitorTrace.ChannelBrush(1).ToString() == Brush.Parse("#FFE16A").ToString(), "PLETH blue and RESP yellow");
             var view = window.MonitorView;
-            Require(view.ManualNumericTexts.Count == 4 && view.ManualNumericTexts.All(string.IsNullOrEmpty), "unavailable manual parameters retain their slots");
+            Require(view.ManualNumericTexts.Count == 4 && view.ManualNumericTexts.Take(3).All(string.IsNullOrEmpty) && view.ManualNumericTexts[3].Contains("--- / ---", StringComparison.Ordinal), "NIBP starts unmeasured while other manual slots remain empty");
             foreach (var size in new[] { new Size(1440, 940), new Size(960, 640) })
             {
                 DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
@@ -62,7 +62,7 @@ internal static class GenericSkinSmokeChecks
             window.Settings.Language.SelectedIndex = 0;
             Require(skin.ShowTherapy.Content?.ToString() == "Show therapy controls" && skin.ShowTherapy.OnContent?.ToString() == "Visible" &&
                 skin.LayoutRows.Items[0]?.ToString() == window.Localization.Get("skin.threeRows"), "layout choices localize");
-            Require(view.ManualNumericTexts.All(string.IsNullOrEmpty) &&
+            Require(view.ManualNumericTexts.Take(3).All(string.IsNullOrEmpty) && view.ManualNumericTexts[3].Contains("--- / ---", StringComparison.Ordinal) &&
                 ((TextBlock)skin.SilenceButton.Content!).Text == window.Localization.Get("sound.resume"), "paused alarm actions localize");
             VerifyEnglishToolbar(window, skin);
             VerifyEnglishHeader(window);

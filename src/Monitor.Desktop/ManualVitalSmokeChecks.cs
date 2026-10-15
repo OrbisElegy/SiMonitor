@@ -12,7 +12,8 @@ internal static class ManualVitalSmokeChecks
         try
         {
             var editor = window.Settings.ManualVitals;
-            Require(window.Session.ManualVitals == ManualVitalSigns.Empty, "manual readings start disabled");
+            var defaults = new ManualVitalSigns(new(120, 80, 93));
+            Require(window.Session.ManualVitals == defaults, "NIBP targets start enabled and other manual items remain disabled");
             editor.NibpEnabled.IsChecked = true;
             editor.TemperatureEnabled.IsChecked = true;
             editor.CustomEnabled[0].IsChecked = true;
@@ -44,7 +45,7 @@ internal static class ManualVitalSmokeChecks
             Require(window.Session.ManualVitals.Custom1 is null && window.Session.ManualVitals.Custom2 is not null,
                 "disabled invalid draft ignored without disturbing second slot");
             window.ResetAllSettings();
-            Require(window.Session.ManualVitals == ManualVitalSigns.Empty, "reset clears manual values");
+            Require(window.Session.ManualVitals == defaults, "reset restores NIBP targets and clears other manual values");
         }
         finally { window.Close(); }
     }

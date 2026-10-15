@@ -23,13 +23,18 @@ internal static class NibpSmokeChecks
                 for (int time = 0; time < milliseconds; time += 50) { window.Pulse(window.ActiveTimer, 50_000_000); }
             }
             void ClickStart() => Skin().NibpStartButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Require(!Skin().NibpStartButton.IsEnabled && !Skin().NibpAutoButton.IsEnabled, "NIBP actions start disabled");
+            Require(Skin().NibpStartButton.IsEnabled && Skin().NibpAutoButton.IsEnabled &&
+                !window.Session.Nibp.Measuring && !window.Session.Nibp.AutoEnabled,
+                "NIBP actions start enabled without automatically measuring");
             Require(((TextBlock)Skin().NibpAutoButton.Content!).Text == window.Localization.Get("skin.nibpAuto") &&
                 AutomationProperties.GetName(Skin().NibpAutoButton) == window.Localization.Get("skin.nibpAuto"),
                 "inactive automatic mode has a visible and accessible button label");
             var settings = window.Settings.ManualVitals;
+            Require(settings.NibpEnabled.IsChecked == true && settings.Systolic.IsEnabled && settings.Diastolic.IsEnabled && settings.Mean.IsEnabled,
+                "default NIBP targets are editable");
+            settings.NibpEnabled.IsChecked = false;
+            Require(Skin().NibpStartButton.IsEnabled, "an unapplied draft cannot disable NIBP actions");
             settings.NibpEnabled.IsChecked = true;
-            Require(!Skin().NibpStartButton.IsEnabled, "an unapplied draft cannot enable NIBP actions");
             window.RestartSettings();
             Require(Skin().NibpStartButton.IsEnabled && Skin().NibpAutoButton.IsEnabled && Reading().Contains("--- / ---", StringComparison.Ordinal),
                 "applied NIBP enables actions but does not display the target as a reading");

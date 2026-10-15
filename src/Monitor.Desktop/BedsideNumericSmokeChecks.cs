@@ -40,7 +40,15 @@ internal static class BedsideNumericSmokeChecks
                         foreach (var text in primary) { text.Text = sample; }
                         DesktopViewportSmokeChecks.Layout(window, size.Width, size.Height);
                         string context = $"{rows} rows at {size.Width:0}x{size.Height:0}, reading {sample}";
-                        foreach (var text in primary) { VerifyInk(text, context); }
+                        foreach (var text in primary)
+                        {
+                            VerifyInk(text, context);
+                            var row = text.GetVisualAncestors().OfType<Grid>().First(grid => grid.ClipToBounds);
+                            var railTexts = row.GetVisualDescendants().OfType<TextBlock>()
+                                .Where(block => block.Text?.Contains('\n') == true).ToArray();
+                            Require(railTexts.Length == 2, "each numeric row displays a two-line label and limits");
+                            foreach (var railText in railTexts) { VerifyInk(railText, context + ", " + railText.Text, 2); }
+                        }
                         var cuffValues = nibp.GetVisualDescendants().OfType<TextBlock>()
                             .Where(text => text.FontSize >= 40 && text.IsEffectivelyVisible).ToArray();
                         Require(cuffValues.Length == 2 && cuffValues.Any(text => text.Text == "120/80") &&
@@ -54,16 +62,16 @@ internal static class BedsideNumericSmokeChecks
         Console.WriteLine("ok: bedside numeric glyphs and cuff values fit their text bounds and clipping ancestors across all row counts and viewports");
     }
 
-    private static void VerifyInk(TextBlock text, string context)
+    private static void VerifyInk(TextBlock text, string context, int lines = 1)
     {
         var layout = text.TextLayout;
         using var natural = new TextLayout(text.Text ?? "", new Typeface(text.FontFamily, text.FontStyle, text.FontWeight, text.FontStretch),
             text.FontSize, Brushes.White);
         double inkBottom = layout.Height + layout.OverhangAfter;
         double inkTop = inkBottom - layout.Extent;
-        Require(text.Bounds.Width > 0 && text.Bounds.Height > 0 && layout.TextLines.Count == 1 && layout.Extent > 0 &&
+        Require(text.Bounds.Width > 0 && text.Bounds.Height > 0 && layout.TextLines.Count == lines && layout.Extent > 0 &&
             Math.Abs(layout.Extent - natural.Extent) <= 1,
-            $"{context}: the complete single-line glyphs retain their natural ink height");
+            $"{context}: all lines retain their natural ink height");
         Require(inkTop >= -1 && inkBottom <= text.Bounds.Height + 1,
             $"{context}: glyph ink [{inkTop:0.##}, {inkBottom:0.##}] exceeds text height {text.Bounds.Height:0.##}");
         var ink = new Rect(0, inkTop, layout.Width, layout.Extent);

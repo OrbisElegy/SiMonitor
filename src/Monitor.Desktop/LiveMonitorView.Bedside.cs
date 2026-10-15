@@ -68,7 +68,17 @@ internal sealed partial class LiveMonitorView
     private Grid BuildBedsideNumeric(int channel, TextBlock primary, TextBlock secondary, IBrush color)
     {
         var row = new Grid { ColumnDefinitions = new("52,*,14"), Margin = new Thickness(2, 0, 8, 0), ClipToBounds = true };
-        var rail = new Grid { RowDefinitions = new("Auto,*,Auto") };
+        // Preserve natural glyph metrics; dense layouts shrink each complete
+        // two-line block within its half-row instead of clipping the lower line.
+        var rail = new Grid { RowDefinitions = new("*,*") };
+        static Viewbox FitRailText(TextBlock text, VerticalAlignment alignment) => new()
+        {
+            Child = text,
+            Stretch = Stretch.Uniform,
+            StretchDirection = StretchDirection.DownOnly,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = alignment
+        };
         var label = new TextBlock
         {
             Text = channel switch
@@ -82,13 +92,13 @@ internal sealed partial class LiveMonitorView
                 _ => "CVP\nmmHg"
             },
             Foreground = color,
-            FontSize = 13,
-            LineHeight = 15
+            FontSize = 13
         };
-        rail.Children.Add(label);
-        var limits = new TextBlock { Foreground = color, FontSize = 11, LineHeight = 13, Margin = new Thickness(0, 0, 0, 8) };
-        Grid.SetRow(limits, 2);
-        rail.Children.Add(limits);
+        rail.Children.Add(FitRailText(label, VerticalAlignment.Top));
+        var limits = new TextBlock { Foreground = color, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) };
+        var limitHost = FitRailText(limits, VerticalAlignment.Bottom);
+        Grid.SetRow(limitHost, 1);
+        rail.Children.Add(limitHost);
         row.Children.Add(rail);
         _bedsideLimits.Add((NumericForChannel(channel), limits));
         primary.FontFamily = BedsideFont;

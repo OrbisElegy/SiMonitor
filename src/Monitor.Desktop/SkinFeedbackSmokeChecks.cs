@@ -20,6 +20,7 @@ internal static class SkinFeedbackSmokeChecks
         try
         {
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+            skin.ShowTherapy.IsChecked = true;
             skin.Energy.SelectedItem = 200;
             skin.Rate.Value = 90;
             skin.Current.Value = 60;

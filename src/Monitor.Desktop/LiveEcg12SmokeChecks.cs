@@ -23,6 +23,7 @@ internal static class LiveEcg12SmokeChecks
             window.Pause();
             var session = window.Session;
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+            skin.ShowTherapy.IsChecked = true;
             var trace = window.MonitorView.TwelveLeadTrace;
             var slots = session.Display.Slots.ToArray();
             skin.EcgButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

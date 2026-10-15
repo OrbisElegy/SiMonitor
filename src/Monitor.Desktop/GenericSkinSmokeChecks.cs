@@ -28,6 +28,9 @@ internal static class GenericSkinSmokeChecks
             window.Pause();
             Require(window.Session.Display.Slots.Select(slot => slot.Channel).SequenceEqual(DefaultChannels), "generic starts ECG / PLETH / RESP / CO2");
             Require(window.MonitorTrace.Skin is { Id: "generic" }, "host installs the generic skin through the composition port");
+            Require(((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked == false &&
+                ((GenericMonitorSkin)window.MonitorTrace.Skin!).TherapyArea!.IsVisible == false,
+                "fresh monitor hides therapy controls");
             Require(window.MonitorTrace.ChannelBrush(2).ToString() == Brush.Parse("#49BFFF").ToString() &&
                 window.MonitorTrace.ChannelBrush(1).ToString() == Brush.Parse("#FFE16A").ToString(), "PLETH blue and RESP yellow");
             var view = window.MonitorView;
@@ -362,13 +365,26 @@ internal static class GenericSkinSmokeChecks
                     skin.TherapyArea!.IsVisible == false, "saved layout and therapy visibility restore on reopen");
                 reopened.RestartSettings();
                 Require(((GenericMonitorSkin)reopened.MonitorTrace.Skin!).ShowTherapy.IsChecked == false, "settings rebuild retains therapy visibility");
+                ((GenericMonitorSkin)reopened.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
             }
             finally { reopened.Close(); }
+            var visible = new DesignPreviewWindow(path);
+            visible.Show();
+            try
+            {
+                Require(((GenericMonitorSkin)visible.MonitorTrace.Skin!).ShowTherapy.IsChecked == true,
+                    "an explicitly saved visible choice overrides the hidden default");
+                visible.ResetAllSettings();
+                Require(((GenericMonitorSkin)visible.MonitorTrace.Skin!).ShowTherapy.IsChecked == false &&
+                    !new DisplayPreferenceStore(path).Load(out bool resetRejected).TherapyControlsVisible && !resetRejected,
+                    "reset hides therapy controls and saves the default");
+            }
+            finally { visible.Close(); }
             var legacy = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
             legacy.Remove("TherapyControlsVisible");
             File.WriteAllText(path, legacy.ToJsonString());
-            Require(new DisplayPreferenceStore(path).Load(out bool rejectedLegacy).TherapyControlsVisible && !rejectedLegacy,
-                "existing preference files retain visible therapy controls");
+            Require(!new DisplayPreferenceStore(path).Load(out bool rejectedLegacy).TherapyControlsVisible && !rejectedLegacy,
+                "missing therapy visibility uses the hidden default");
         }
         finally { if (Directory.Exists(directory)) { Directory.Delete(directory, recursive: true); } }
     }

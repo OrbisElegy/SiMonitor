@@ -78,7 +78,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         if (changed) { EcgViewChanged?.Invoke(); }
     }
     internal ComboBox LayoutRows { get; } = new() { MinHeight = 44, HorizontalAlignment = HorizontalAlignment.Stretch };
-    internal ToggleSwitch ShowTherapy { get; } = new() { MinHeight = 44, IsChecked = true };
+    internal ToggleSwitch ShowTherapy { get; } = new() { MinHeight = 44, IsChecked = false };
     private Action<MonitorSkin?, bool>? _layoutChanged;
 
     internal void ConfigureLayout(MonitorSkin layout, bool therapyVisible, Action<MonitorSkin?, bool> changed)

@@ -555,7 +555,7 @@ internal sealed class DesignPreviewWindow : Window
         Settings.Sound.Close();
         SelectLanguage(BuiltInLocalizations.SystemLocale);
         _therapy = MonitorTherapyPreferences.Default;
-        _displayPreferences = _displayPreferences with { TherapyControlsVisible = true, MonitorEcgLead = EcgLead.II };
+        _displayPreferences = _displayPreferences with { TherapyControlsVisible = false, MonitorEcgLead = EcgLead.II };
         _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];
         bool therapySaved = _therapyPreferences?.Save(_therapy) != false;
         Settings = CreateSettings();

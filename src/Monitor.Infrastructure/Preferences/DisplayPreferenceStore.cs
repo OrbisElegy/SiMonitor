@@ -9,7 +9,7 @@ namespace Monitor.Infrastructure.Preferences;
 
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
-    public bool TherapyControlsVisible { get; init; } = true;
+    public bool TherapyControlsVisible { get; init; }
     public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
 }
 
@@ -27,7 +27,7 @@ public sealed class DisplayPreferenceStore(string path)
         public required MonitorSkin Skin { get; init; }
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
-        public bool TherapyControlsVisible { get; init; } = true;
+        public bool TherapyControlsVisible { get; init; }
         public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
         public bool MeasurementMillimeters { get; init; }
         public MonitorAlarmPreferences? Alarms { get; init; }

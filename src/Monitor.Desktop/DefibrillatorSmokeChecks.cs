@@ -20,6 +20,7 @@ internal static class DefibrillatorSmokeChecks
         long now = 0;
         var window = new DesignPreviewWindow(safetyClock: () => now);
         window.Show();
+        ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
         {
             window.Settings.EcgSelection = 21;
@@ -134,6 +135,7 @@ internal static class DefibrillatorSmokeChecks
         long safetyNs = 0;
         var window = new DesignPreviewWindow(safetyClock: () => safetyNs);
         window.Show();
+        ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
         {
             window.Settings.EcgSelection = 21;
@@ -219,6 +221,7 @@ internal static class DefibrillatorSmokeChecks
         long safetyNs = 0;
         var window = new DesignPreviewWindow(safetyClock: () => safetyNs);
         window.Show();
+        ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
         {
             window.Settings.EcgSelection = 21;
@@ -316,6 +319,7 @@ internal static class DefibrillatorSmokeChecks
         long safetyNs = 0;
         var window = new DesignPreviewWindow(safetyClock: () => safetyNs);
         window.Show();
+        ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
         {
             window.Settings.EcgSelection = 0;

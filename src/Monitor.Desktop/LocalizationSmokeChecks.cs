@@ -58,6 +58,7 @@ internal static class LocalizationSmokeChecks
     private static void VerifyTranslatedChoices(DesignPreviewWindow window)
     {
         var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
+        skin.ShowTherapy.IsChecked = true;
         foreach (int width in new[] { 960, 1440 })
         {
             for (int index = 0; index < skin.PacingType.ItemCount; index++)

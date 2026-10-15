@@ -20,7 +20,7 @@ using Monitor.Simulation.Physiology;
 namespace Monitor.Desktop;
 
 // Local preview with sample-derived numerics; alarm/audio scheduling remains separate.
-internal sealed class DesignPreviewWindow : Window
+internal sealed partial class DesignPreviewWindow : Window
 {
     internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
     private readonly ContentControl _workspace = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
@@ -97,6 +97,8 @@ internal sealed class DesignPreviewWindow : Window
         bool rejected = false;
         var preferences = _preferences?.Load(out rejected) ?? new DisplayPreferences(MonitorDisplayConfiguration.Default(MonitorSkin.FourRows), 0);
         _displayPreferences = preferences;
+        _skinPath = preferencesPath is null ? null : Path.ChangeExtension(preferencesPath, ".skin.simskin");
+        bool skinRejected = !LoadMonitorSkin();
         Settings = CreateSettings();
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
         var defaults = BuildConfiguredSources();
@@ -126,7 +128,7 @@ internal sealed class DesignPreviewWindow : Window
         _defibrillator = new(Guid.NewGuid(), Settings.Defibrillator.Read(), _therapy.EnergyJoules);
         _aed = new(_defibrillator);
         _sinusTherapy = CaptureSinusTherapy();
-        _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin());
+        _monitor = new(_session, Localization); MonitorView = new(_monitor, Localization, CreateSkin(), _trendHistory);
         if (therapyRejected) { SetStatus("skin.therapyRejected"); }
         if (preferences.Alarms is { } alarms) { Settings.Alerts.RestorePreferences(alarms); }
         if (preferences.Sound is { } sound) { Settings.Sound.RestorePreferences(sound, Settings.Alerts); }
@@ -137,6 +139,7 @@ internal sealed class DesignPreviewWindow : Window
             SetStatus("settings.recoveryStatus");
         }
         ConnectSettings();
+        if (skinRejected) { Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, "skin.loadFailed"); }
         var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
         var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
         var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
@@ -183,7 +186,7 @@ internal sealed class DesignPreviewWindow : Window
         _session.SelectDisplayEcgLead(_displayPreferences.MonitorEcgLead);
         var skin = new GenericMonitorSkin(Localization, _therapy, SaveTherapy, SetPacing,
             _defibrillator.Configuration, RunDefibrillatorCommand,
-            energy => SaveTherapy(_therapy with { EnergyJoules = energy }));
+            energy => SaveTherapy(_therapy with { EnergyJoules = energy }), _skinPackage);
         if (_session.Display.Slots.Count >= 4) { _layoutFourthSlot = _session.Display.Slots[3]; }
         skin.ConfigureLayout(_session.Display.Skin, _displayPreferences.TherapyControlsVisible, ChangeMonitorLayout);
         skin.AlarmsRequested += RefreshAlarmControls;
@@ -226,6 +229,15 @@ internal sealed class DesignPreviewWindow : Window
             RefreshNibp();
             MonitorView.Refresh();
         };
+        skin.NibpStopRequested += () =>
+        {
+            if (_closed) { return; }
+            _session.Nibp.ConfigureAuto(false, _session.Nibp.AutoIntervalMinutes);
+            _session.Nibp.Stop();
+            RefreshNibp();
+            MonitorView.Refresh();
+        };
+        skin.MenuRequested += () => { if (!_closed) { SelectPage(2); } };
         skin.PrintRequested += () =>
         {
             if (_closed) { return; }
@@ -423,6 +435,7 @@ internal sealed class DesignPreviewWindow : Window
             () => new WaveformDemoWindow(projected: true).Show(this), Localization);
     private void ConnectSettings()
     {
+        ConnectSkinSettings();
         if (IsVisible) { Settings.Sound.StartOutput(); }
         Settings.LanguageChanged += SelectLanguage;
         Settings.MeasurementUnits.SelectionChanged += (_, _) => EcgPage?.SetMeasurementUnits(Settings.MeasurementUnits.SelectedIndex == 1);
@@ -466,6 +479,7 @@ internal sealed class DesignPreviewWindow : Window
         Localization.Bind(Settings.Status, TextBlock.TextProperty, key, arguments);
     private void BindAlarmAttention()
     {
+        MonitorView.WarningLimits = Settings.Alerts.DisplayWarningLimits;
         Settings.Alerts.SetMonitoredChannels(_monitor.MonitoredChannels);
         var journals = Settings.Alerts.AlarmLifecycles;
         MonitorView.NoticeProjection = Settings.Alerts.ProjectAttention;
@@ -555,12 +569,15 @@ internal sealed class DesignPreviewWindow : Window
         Settings.Sound.Close();
         SelectLanguage(BuiltInLocalizations.SystemLocale);
         _therapy = MonitorTherapyPreferences.Default;
+        _skinPackage = MonitorSkinPackage.Generic;
+        bool skinSaved = _skinPath is null || _skinPackage.Save(_skinPath);
         _displayPreferences = _displayPreferences with { TherapyControlsVisible = false, MonitorEcgLead = EcgLead.II };
         _layoutFourthSlot = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows).Slots[3];
         bool therapySaved = _therapyPreferences?.Save(_therapy) != false;
         Settings = CreateSettings();
         ConnectSettings();
         RestartSettings();
+        if (!skinSaved) { Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, "skin.saveFailed"); }
         if (!therapySaved) { SetStatus("skin.therapySaveFailed"); }
         else if (!PreferenceNotice.IsVisible) { SetStatus("settings.resetDone"); }
     }
@@ -755,6 +772,7 @@ internal sealed class DesignPreviewWindow : Window
                 if (!background) { next.DiscardStartup(); }
                 Pause();
                 _session = next;
+                _trendHistory.Clear();
                 _pendingPresentation = null;
                 _ecg = ecg;
                 Settings.MarkParametersApplied(ecgConfig, physiology, selection.EcgSelection,
@@ -782,7 +800,7 @@ internal sealed class DesignPreviewWindow : Window
             _sinusTherapy = sinusTherapy;
             bool twelveLeadVisible = (_monitor.Skin as GenericMonitorSkin)?.TwelveLeadVisible == true;
             _monitor = new(_session, Localization);
-            MonitorView = new(_monitor, Localization, CreateSkin());
+            MonitorView = new(_monitor, Localization, CreateSkin(), _trendHistory);
             ((GenericMonitorSkin)_monitor.Skin!).SetTwelveLeadVisible(twelveLeadVisible);
             BindAlarmAttention();
             MonitorView.AudioPauseStatus.Text = Settings.Sound.AudioPauseText;

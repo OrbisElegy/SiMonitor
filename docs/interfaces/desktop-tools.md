@@ -128,11 +128,12 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 源码：[Ecg12PrintDocument.cs](../../src/Monitor.Desktop/Ecg12PrintDocument.cs)、
 [Ecg12PrintWindow.cs](../../src/Monitor.Desktop/Ecg12PrintWindow.cs)。
 
-## 皮肤装配接口与 Generic
+## 皮肤装配接口与单文件皮肤
 
 源码：[IMonitorSkin.cs](../../src/Monitor.Desktop/IMonitorSkin.cs)、[GenericMonitorSkin.cs](../../src/Monitor.Desktop/GenericMonitorSkin.cs)。
 
-`IMonitorSkin` 是进程内桌面装配端口，当前为 `internal`，不提供外部 DLL／JSON 皮肤加载。
+`IMonitorSkin` 是进程内桌面装配端口，当前为 `internal`。外部皮肤使用下述 `.simskin`
+声明式文件，由已有宿主控件装配，不加载外部 DLL、脚本或 XAML。
 宿主创建每个视图时注入皮肤；`Id` 标识样式，`Background` 与 `ChannelBrush(channel)` 同时用于
 波形、数值、脉搏指示及报警高亮恢复后的底色。`Compose(MonitorSkinContent)` 接收宿主持有的
 标题／报警区、波形、数值列、温度、两个自定义参数和 NIBP 控件，每个控件只能挂载一次。
@@ -147,6 +148,62 @@ ECG（绿）、PLETH／SpO₂（蓝）、RESP（黄）、CO₂（白）。温度
 白色 NIBP 位于数值列下方；未启用的手动参数保留空白位置，隐藏名称、数值与单位，不生成虚构读数。
 现有 3／5／7 行枚举值和保存配置不变，显示设置中可选择四行，也可逐行修改通道。
 历史枚举 `MonitorSkin` 仍表示行数配置，与新的桌面皮肤装配端口不同。
+
+“设置 → 显示 → 监护皮肤”即时切换 Generic 与参考 ePM 12C 屏幕的皮肤。
+后者采用连续黑底、绿色 ECG、青色 PLETH、黄色 RESP、右侧大数字、下方血压和测量记录，
+只还原屏幕布局，不模拟机壳，也不声明真实设备的算法或功能等价性。
+两者共用 `GenericMonitorSkin` 的宿主命令控件，分别装配 `GenericMonitorArea` 与
+`BedsideMonitorArea`；配色同时作用于扫线、读数、脉搏条和警告高亮。
+内置床旁皮肤入口为 `MonitorSkinPackage.BedsideMonitor`，由 `layout = bedside` 分派布局；
+`BedsideMonitorArea`、`BedsideToolbar`、`BedsideNibpCountdown` 和 `bedside.*` 本地化键按职责命名。
+内置资源标识 `epm12`、皮肤标识 `epm12-inspired` 及显示名仅表示外观来源，保持原有身份及导入／导出兼容。
+床旁屏幕以 1024×640 逻辑尺寸等比缩放，波形／数值区宽度为 68:32；数值左侧显示
+单位及当前有效的报警上下限，禁用或无效阈值显示 `--`。次要读数保留在数值区提示中。
+每条波形顶部拥有独立报警横幅，按测量来源映射并分别轮换；同一通道的重复行共享
+轮换进度，重排不重置计时。横幅沿用宿主的确认、恢复与模拟时钟闪烁状态，长文字
+省略显示并可查看完整提示。无通道来源的系统通知仍由顶部全局报警区呈现。
+底部十个图标键连接实际宿主操作，“NIBP停止全部”停止当前测量并关闭自动测量，
+“主菜单”进入设置页。未填写的温度／自定义参数不占床旁屏幕空间。
+床旁 NIBP 上方显示自动测量倒计时：以 `NextMeasurementAtNs` 和当前仿真时间计算
+剩余时长，进度条表示所选测量间隔的剩余比例；暂停仿真时冻结，下一次自动测量开始时
+重置。关闭自动测量、停止全部或禁用 NIBP 后隐藏倒计时，不显示固定满进度线。
+`IMonitorSkin.CompactWaveformLabels`、`NumericFontSize`、`WarningBrush` 提供显示参数，
+`MonitorSkinContent.Trends` 提供宿主维护的测量记录控件。
+
+切换皮肤保留采集会话、暂停状态、当前行配置、导联、十二导联视图、报警确认和血压记录；
+和离开监护页一样取消待放电状态。“使用推荐波形布局”是独立操作：Generic 恢复四行
+ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用既有报警接入规则。
+三、四、五、七行均可继续使用。下方记录仅保留本次会话最近四次已完成的袖带测量，
+附带当时有效且已接入的 HR、SpO₂、RR；无有效读数显示 `--`，重新开始会清空记录。
+
+### `.simskin` 文件格式
+
+源码：[MonitorSkinPackage.cs](../../src/Monitor.Desktop/MonitorSkinPackage.cs)。
+内置示例：[generic.simskin](../../src/Monitor.Desktop/Assets/Skins/generic.simskin)、
+[epm12.simskin](../../src/Monitor.Desktop/Assets/Skins/epm12.simskin)。内置包嵌入程序集，
+与导入包使用同一解析器；通过界面“导出皮肤”即可得到完整单文件，无需额外资源目录。
+
+| 字段 | v1 约束 |
+|---|---|
+| `version` | 必须为整数 `1` |
+| `id` | 1–64 个小写 ASCII 字母、数字或连字符，以字母开头 |
+| `name` | 1–64 字符的非空名称，不含控制字符 |
+| `layout` | `generic` 或 `bedside`，选择宿主提供的布局 |
+| `background` | 不透明 `#RRGGBB` 底色 |
+| `channelColors` | 恰好七个 `#RRGGBB`：ECG、RESP、PLETH、ABP、CO₂、PA、CVP |
+| `warningColor` | `#RRGGBB` 警告高亮色，危急报警沿用宿主红色 |
+| `nibpColor` | `#RRGGBB` 血压读数色 |
+
+包为 UTF-8 JSON，最多 16 KiB，所有字段必需。拒绝未知／重复字段、未知版本或布局、
+非法颜色、超限内容及不完整文档；完整验证后才切换。v1 的布局和交互由宿主实现，
+不支持任意控件坐标、外部图像、字体文件或脚本。波形通道、患者参数、报警阈值及
+治疗配置不在皮肤包内。
+
+导入成功后将完整配置保存到显示偏好文件同目录的 `display-preferences.skin.simskin`
+（测试或自定义偏好路径替换其扩展名），后续启动不依赖导入源文件。采用临时文件写入、
+刷新和替换；保存失败时本次显示仍生效，界面提示无法持久保存。导入失败保留当前皮肤；
+启动读取失败回退到 Generic 并提示。恢复默认设置同时恢复 Generic。产品构建保留导入／
+导出入口，不依赖开发命令行参数。
 
 “设置 → 高级参数 → 心电图 → 起搏许可”可为每个模板独立勾选“允许此模板起搏”。
 默认全部关闭，旧配置未设置的模板也关闭；应用后与模板一起在采集边界生效，未应用草稿不影响
@@ -163,7 +220,7 @@ Generic 右侧提供可配置的除颤能量阶梯（档位边界 1–1000 J）�
 起搏状态与按钮由宿主会话同步：未启动时禁用停止，波形切换待生效时禁用启动与停止，
 模板切换完成后恢复未启动状态；输入草稿保留，重新启动后停止会返回新的模板。
 电流缩放教学刺激幅度，0 mA 无刺激与诱发夺获；非零电流的夺获／失败由所选示例决定，
-尚无患者特定的夺获阈值模型。底部工具栏仍为占位按钮。
+尚无患者特定的夺获阈值模型。底部工具栏复用宿主的导联、打印、血压与报警操作。
 
 除颤区的 AED 模式占完整一行，可切换半自动分析／充电／按住确认电击流程。状态灯在分析、
 充电、等待确认、CPR 和取消阶段更新，文字提示包含 CPR 倒计时。AED 内锁定能量、同步

@@ -42,6 +42,6 @@ internal sealed partial class GenericMonitorSkin
         _localization.Bind(SilenceButton, AutomationProperties.NameProperty, key);
         if (paused) { ToolTip.SetTip(SilenceButton, text); }
         else { _localization.Bind(SilenceButton, ToolTip.TipProperty, "sound.pause"); }
-        SilenceButton.Background = Brush.Parse(paused ? "#58451C" : "#222C38");
+        SilenceButton.Background = paused ? Brush.Parse("#58451C") : _package.Bedside ? BedsideToolbar.KeyBackground(false) : Brush.Parse("#222C38");
     }
 }

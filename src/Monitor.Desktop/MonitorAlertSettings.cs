@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Globalization;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -207,6 +208,36 @@ internal sealed class MonitorAlertSettings : StackPanel
         MonitorNumeric.EtCo2 => [AdditionalLimits.Editors[numeric].Enabled, NoExpirationEnabled],
         _ => [AdditionalLimits.Editors[numeric].Enabled]
     };
+    internal (string High, string Low) DisplayWarningLimits(MonitorNumeric numeric)
+    {
+        if (!Monitors(numeric)) { return ("--", "--"); }
+        try
+        {
+            var descriptor = MeasuredLimitNotice.Describe(numeric);
+            var limits = numeric switch
+            {
+                MonitorNumeric.HeartRate => new MeasurementLimits(HeartRateEnabled.IsChecked == true,
+                    MilliUnits(CriticalLowHeartRate), MilliUnits(WarningLowHeartRate), MilliUnits(WarningHeartRate), MilliUnits(CriticalHeartRate)),
+                MonitorNumeric.SpO2 => new MeasurementLimits(SpO2Enabled.IsChecked == true,
+                    MilliUnits(CriticalSpO2), MilliUnits(WarningSpO2), null, null),
+                _ => AdditionalLimits.Editors[numeric].Limits
+            };
+            if (!limits.Enabled) { return ("--", "--"); }
+            _ = ConfirmationFor(numeric).Read();
+            // Match the active evaluator's threshold rules without evaluating or changing alarm state.
+            bool valid = numeric == MonitorNumeric.SpO2
+                ? limits.WarningLow is >= 1000 and <= 100000 && limits.CriticalLow is >= 1000 and <= 99000 &&
+                    limits.CriticalLow < limits.WarningLow
+                : limits.CriticalLow is { } cl && limits.WarningLow is { } wl && limits.WarningHigh is { } wh &&
+                    limits.CriticalHigh is { } ch && cl >= descriptor.Minimum && ch <= descriptor.Maximum && cl < wl && wl < wh && wh < ch;
+            if (!valid) { return ("--", "--"); }
+            string Format(int? value) => value is { } limit
+                ? (limit / (decimal)descriptor.Divisor).ToString("0.##", CultureInfo.InvariantCulture) : "--";
+            return (Format(limits.WarningHigh), Format(limits.WarningLow));
+        }
+        catch (Exception error) when (error is ArgumentException or OverflowException)
+        { return ("--", "--"); }
+    }
     internal void ShowSoundPage(MonitorNumeric numeric) => ConfirmationFor(numeric).Groups.SelectedItem = _soundPages[numeric];
     internal MonitorAlarmPreferences CapturePreferences()
     {
@@ -291,7 +322,7 @@ internal sealed class MonitorAlertSettings : StackPanel
             if (EcgAlarmNotices.Descriptors.SingleOrDefault(d => d.Id == state.ConditionId) is { } ecg)
             {
                 yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, ecg.Text + " · 已恢复，待确认")
-                { Audible = false, Message = new("alarm.recoveredUnacknowledged", ecg.Message) };
+                { Numeric = MonitorNumeric.HeartRate, Audible = false, Message = new("alarm.recoveredUnacknowledged", ecg.Message) };
                 continue;
             }
             bool low = state.ConditionId.EndsWith("-low", StringComparison.Ordinal);
@@ -301,7 +332,11 @@ internal sealed class MonitorAlertSettings : StackPanel
             string label = descriptor is null ? "CO₂ · 未检出呼吸" : descriptor.Label + (low ? " · 低限" : " · 高限");
             var labelMessage = descriptor is null ? new TextMessage("alarm.noExpirationLabel") : AlarmText.ConditionLabel(descriptor, low);
             yield return new(RetainedNoticePrefix + state.ConditionId, state.Level!.Value, label + " · 已恢复，待确认")
-            { Audible = false, Message = new("alarm.recoveredUnacknowledged", labelMessage) };
+            {
+                Numeric = descriptor?.Numeric ?? MonitorNumeric.Co2RespirationRate,
+                Audible = false,
+                Message = new("alarm.recoveredUnacknowledged", labelMessage)
+            };
         }
     }
 

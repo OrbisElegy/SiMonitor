@@ -109,7 +109,8 @@ internal sealed class LiveMonitorTrace : Control
         Build();
         int rows = _session.Display.Slots.Count;
         double rowHeight = Bounds.Height / rows;
-        double left = 132, width = Math.Max(1, Bounds.Width - left - 18);
+        bool compact = Skin?.CompactWaveformLabels == true;
+        double left = compact ? 12 : 132, width = Math.Max(1, Bounds.Width - left - 18);
         for (int row = 0; row < rows; row++)
         {
             long duration = _session.Display.Slots[row].DurationNs;
@@ -122,12 +123,21 @@ internal sealed class LiveMonitorTrace : Control
             double top = row * rowHeight;
             if (Skin is null)
             { context.DrawLine(new Pen(Brush.Parse("#607080"), 1), new(0, top + rowHeight - 1), new(Bounds.Width, top + rowHeight - 1)); }
-            Label(context, ChannelName(channel), 12, top + 10, color, 14);
-            Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11);
+            string label = compact ? channel switch
+            {
+                0 => ProjectedEcgDemoSource.LeadNames[(int)_session.DisplayEcgLead],
+                1 => "Resp",
+                2 => "Pleth",
+                _ => ChannelName(channel)
+            } : ChannelName(channel);
+            Label(context, label, 12, top + 8, color, compact ? 13 : 14);
+            if (compact && channel == 0) { Label(context, _localization.Get("bedside.monitoring"), 160, top + 8, color, 12); }
+            if (!compact)
+            { Label(context, string.Create(CultureInfo.InvariantCulture, $"{range.Minimum:0.##} – {range.Maximum:0.##}"), 12, top + 32, color, 11); }
             string unit = Unit(_localization.Current, channel);
-            if (Skin is null || channel != 0)
+            if (!compact && (Skin is null || channel != 0))
             { Label(context, _localization.Format(_session.Display.Slots[row].Automatic ? "monitor.rangeAutomatic" : "monitor.rangeFixed", unit), 12, top + 49, color, 11); }
-            Rect plot = new(left, top + 9, width, Math.Max(1, rowHeight - 20));
+            Rect plot = new(left, top + (compact ? 34 : 9), width, Math.Max(1, rowHeight - (compact ? 46 : 20)));
             if (channel == 0)
             {
                 if (rowHeight >= (Skin is null ? 100 : 80) && _session.ShockArtifacts.Any(artifact => artifact.Contains(frontierNs)))
@@ -137,7 +147,7 @@ internal sealed class LiveMonitorTrace : Control
                     double x = left + width * 200_000_000 / duration;
                     context.DrawLine(new Pen(color, 1.2), new(x, plot.Bottom - range.Normalize(-500) * plot.Height),
                         new(x, plot.Bottom - range.Normalize(500) * plot.Height));
-                    Label(context, "1 mV", 12, top + (Skin is null ? 66 : 49), color, 11);
+                    Label(context, "1 mV", compact ? x + 4 : 12, compact ? plot.Bottom - 14 : top + (Skin is null ? 66 : 49), color, 11);
                 }
                 else { Label(context, _localization.Get("monitor.calibrationOffScale"), 12, top + (Skin is null ? 66 : 49), color, 11); }
             }

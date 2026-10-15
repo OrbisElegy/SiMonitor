@@ -1,5 +1,9 @@
 # Seele's SiMonitor
 
+Settings → Display offers Generic and an ePM 12C inspired screen skin, plus single-file
+`.simskin` import/export. Appearance and waveform rows are configured independently;
+see the [desktop skin contract](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤).
+
 <img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Temporary SiMonitor icon" width="128" height="128" />
 
 [简体中文](../../README.md) | **English**

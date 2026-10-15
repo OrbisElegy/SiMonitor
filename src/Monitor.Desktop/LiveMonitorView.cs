@@ -13,12 +13,14 @@ namespace Monitor.Desktop;
 
 // One monitor surface: the fixed waveform rows and their sample-derived values
 // share separators and colors. Settings and paper snapshots remain separate.
-internal sealed class LiveMonitorView : UserControl
+internal sealed partial class LiveMonitorView : UserControl
 {
     private readonly LiveMonitorTrace _trace;
     internal LiveEcg12Trace TwelveLeadTrace { get; }
     private readonly Grid _numbers = new();
     private readonly IMonitorSkin? _skin;
+    private readonly MonitorTrendHistory _trendHistory;
+    private readonly MonitorTrendTable? _trends;
     private readonly MonitorManualTile _temperature = new(), _custom1 = new(), _custom2 = new(), _nibp = new();
     internal IReadOnlyList<MonitorManualTile> ManualTiles => [_temperature, _custom1, _custom2, _nibp];
     private readonly WrapPanel _manualPanel = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 4) };
@@ -61,18 +63,22 @@ internal sealed class LiveMonitorView : UserControl
         double scale = Math.Min(availableSize.Width / 1180, availableSize.Height / 800);
         if (!double.IsFinite(scale)) { scale = 1; }
         scale = Math.Max(.5, scale);
+        if (_skin?.CompactWaveformLabels == true) { return base.MeasureOverride(availableSize); }
         _noticeBackground.MinHeight = 44 * scale;
         _noticeBackground.Padding = new Thickness(12 * scale, 8 * scale);
         Notice.FontSize = 20 * scale;
         return base.MeasureOverride(availableSize);
     }
-    internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null, IMonitorSkin? skin = null)
+    internal LiveMonitorView(LiveMonitorTrace trace, DesktopLocalization? localization = null, IMonitorSkin? skin = null,
+        MonitorTrendHistory? trendHistory = null)
     {
         _trace = trace;
         TwelveLeadTrace = new(trace, localization ?? new DesktopLocalization()) { IsVisible = false };
         _skin = skin;
         trace.Skin = skin;
         _localization = localization ?? new DesktopLocalization();
+        _trendHistory = trendHistory ?? new();
+        _trends = skin is null ? null : new(_trendHistory, _localization, skin) { ClipToBounds = true };
         AttachedToVisualTree += (_, _) =>
         {
             _localization.LocaleChanged += RefreshLanguage;
@@ -88,6 +94,11 @@ internal sealed class LiveMonitorView : UserControl
         header.Children.Add(_noticeBackground);
         Grid.SetColumn(AudioPauseStatus, 2);
         header.Children.Add(AudioPauseStatus);
+        if (skin?.CompactWaveformLabels == true)
+        {
+            header.Children.Clear();
+            header = BuildBedsideHeader();
+        }
         if (skin is null) { root.Children.Add(header); }
         var body = new Grid { ColumnDefinitions = new("*,190") };
         Grid.SetRow(body, 1);
@@ -97,8 +108,17 @@ internal sealed class LiveMonitorView : UserControl
         BuildRows();
         Grid.SetRow(_manualPanel, 2);
         if (skin is null) { root.Children.Add(_manualPanel); }
-        Content = skin?.Compose(new(header, trace, TwelveLeadTrace, _numbers, _temperature, _custom1, _custom2, _nibp,
-            () => trace.Session.Display.Slots.Count)) ?? root;
+        Control waveforms = trace;
+        if (skin?.CompactWaveformLabels == true)
+        {
+            _waveformAlarms = new(() => _trace.Session.Display.Slots, skin, _localization);
+            var waveLayer = new Panel();
+            waveLayer.Children.Add(trace);
+            waveLayer.Children.Add(_waveformAlarms);
+            waveforms = waveLayer;
+        }
+        Content = skin?.Compose(new(header, waveforms, TwelveLeadTrace, _numbers, _temperature, _custom1, _custom2, _nibp,
+            () => trace.Session.Display.Slots.Count, _trends)) ?? root;
         Refresh();
     }
     internal void RefreshDisplay()
@@ -107,6 +127,7 @@ internal sealed class LiveMonitorView : UserControl
         _numbers.RowDefinitions.Clear();
         _rows.Clear();
         _opticalRows.Clear();
+        _bedsideLimits.Clear();
         _highlightNotices = null;
         _lastMeasurementBucket = -1;
         BuildRows();
@@ -133,7 +154,15 @@ internal sealed class LiveMonitorView : UserControl
                 5 => "monitor.labelPa",
                 _ => "monitor.labelCvp"
             };
-            var primary = new TextBlock { Text = "---", FontSize = _skin is null ? 52 : 64, FontWeight = FontWeight.SemiBold, Foreground = color };
+            bool bedside = _skin?.CompactWaveformLabels == true;
+            var primary = new TextBlock
+            {
+                Text = "---",
+                FontSize = _skin?.NumericFontSize ?? 52,
+                FontWeight = bedside ? FontWeight.Normal : FontWeight.SemiBold,
+                Foreground = color,
+                FontFamily = FontFamily
+            };
             var secondary = new TextBlock { FontSize = slot.Channel == 0 ? 13 : 17, Foreground = color, IsVisible = slot.Channel is 0 or 2 or 3 or 4 or 5 };
             _localization.Bind(primary, AutomationProperties.NameProperty, label);
             _localization.Bind(secondary, AutomationProperties.NameProperty, slot.Channel switch
@@ -144,6 +173,14 @@ internal sealed class LiveMonitorView : UserControl
                 5 => "monitor.secondaryPa",
                 _ => "monitor.secondaryCo2Rate"
             });
+            if (bedside)
+            {
+                var numeric = BuildBedsideNumeric(slot.Channel, primary, secondary, color);
+                Grid.SetRow(numeric, row);
+                _numbers.Children.Add(numeric);
+                _rows.Add((slot.Channel, primary, secondary));
+                continue;
+            }
             var caption = new TextBlock { Foreground = color, FontSize = 13 };
             _localization.Bind(caption, TextBlock.TextProperty, label);
             Control primaryContent = HighlightHost(primary);
@@ -225,6 +262,7 @@ internal sealed class LiveMonitorView : UserControl
 
     private void RefreshLanguage()
     {
+        _trends?.InvalidateVisual();
         RefreshManualVitals();
         RefreshClock();
         RefreshNotice();
@@ -237,6 +275,8 @@ internal sealed class LiveMonitorView : UserControl
         var values = _trace.Session.ManualVitals;
         string caption = _localization.Get("manual.caption");
         var nibpState = _trace.Session.Nibp;
+        if (_skin?.CompactWaveformLabels == true)
+        { _nibp.UpdateNibpCountdown(nibpState, _trace.Session.SimulationTimeNs, _localization); }
         var nibpPresentation = (nibpState.Reading, nibpState.Phase, nibpState.MeasuredAtNs);
         if (values == _shownManualVitals && caption == _shownManualCaption && _shownNibp == nibpPresentation) { return; }
         _shownNibp = nibpPresentation;
@@ -248,7 +288,15 @@ internal sealed class LiveMonitorView : UserControl
         _shownManualCaption = caption;
         if (_skin is not null)
         {
-            _nibp.Update("NIBP", nibpValue, nibpDetail);
+            string? mean = null;
+            if (_skin.CompactWaveformLabels && nibpState.Reading is { } bedsidePressure)
+            {
+                nibpValue = $"{bedsidePressure.SystolicMmHg}/{bedsidePressure.DiastolicMmHg}";
+                mean = $"({bedsidePressure.MeanMmHg})";
+                long seconds = nibpState.MeasuredAtNs.GetValueOrDefault() / 1_000_000_000;
+                nibpDetail = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
+            }
+            _nibp.Update("NIBP", nibpValue, nibpDetail, mean);
             _temperature.Update(_localization.Get("manual.temperatureLabel"),
                 values.TemperatureDeciCelsius is { } deciCelsius ? (deciCelsius / 10m).ToString("0.0", CultureInfo.InvariantCulture) : "---", "°C");
             if (values.Nibp is null) { _nibp.Clear(); }
@@ -293,6 +341,11 @@ internal sealed class LiveMonitorView : UserControl
     internal void Refresh()
     {
         if (TwelveLeadTrace.IsVisible) { TwelveLeadTrace.InvalidateVisual(); }
+        int historyCount = _trendHistory.Entries.Count;
+        long? latest = _trendHistory.LatestTimeNs;
+        _trendHistory.Observe(_trace.Session, _trace.MonitoredChannels);
+        if (historyCount != _trendHistory.Entries.Count || latest != _trendHistory.LatestTimeNs)
+        { _trends?.InvalidateVisual(); }
         RefreshManualVitals();
         RefreshClock();
         RefreshPulseIndicator();
@@ -311,7 +364,9 @@ internal sealed class LiveMonitorView : UserControl
     {
         long seconds = _trace.Session.SimulationTimeNs / 1_000_000_000;
         string clock = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
-        Clock.Text = _localization.Format("monitor.clock", clock) + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
+        Clock.Text = _skin?.CompactWaveformLabels == true ? clock :
+            _localization.Format("monitor.clock", clock) + (BeatSourceText is null ? "" : "\n" + BeatSourceText());
+        ToolTip.SetTip(Clock, _localization.Format("monitor.clock", clock));
     }
 
     private static bool SameStatuses(LiveMeasurementSnapshot left, LiveMeasurementSnapshot right) =>
@@ -355,6 +410,7 @@ internal sealed class LiveMonitorView : UserControl
     internal void RefreshReadings(LiveMeasurementSnapshot snapshot)
     {
         List<MonitorNotice> notices = [];
+        _measurementNoticeSources.Clear();
         string Value(MeasurementSource source, WaveformMeasurementStatus status, int? value, int divisor, string label)
         {
             string? number = value is { } v ? ((decimal)v / divisor).ToString("0", CultureInfo.InvariantCulture) : null;
@@ -363,7 +419,19 @@ internal sealed class LiveMonitorView : UserControl
             {
                 // Prefix the row label unless the source label already names it (SpO₂).
                 bool named = notice.StartsWith(label, StringComparison.Ordinal);
-                notices.Add(new MonitorNotice("measurement:" + label + ":" + status, MonitorNoticeLevel.Info, named ? notice : label + "：" + notice)
+                string id = "measurement:" + label + ":" + status;
+                // Technical indications are routed locally; they remain distinct from
+                // physiological numeric alarms in the shared notice stream.
+                _measurementNoticeSources[id] = source switch
+                {
+                    MeasurementSource.Ecg => MonitorNumeric.HeartRate,
+                    MeasurementSource.Pleth => MonitorNumeric.PulseRate,
+                    MeasurementSource.SpO2 => MonitorNumeric.SpO2,
+                    MeasurementSource.ImpedanceRespiration => MonitorNumeric.RespirationRate,
+                    MeasurementSource.Co2 => label == "RR-CO₂" ? MonitorNumeric.Co2RespirationRate : MonitorNumeric.EtCo2,
+                    _ => label == "ABP" ? MonitorNumeric.AbpMean : label == "PA" ? MonitorNumeric.PaMean : MonitorNumeric.CvpMean
+                };
+                notices.Add(new MonitorNotice(id, MonitorNoticeLevel.Info, named ? notice : label + "：" + notice)
                 { Message = named ? message : new TextMessage("measurement.labelled", label, message) });
             }
             return display.NumericText;
@@ -433,6 +501,8 @@ internal sealed class LiveMonitorView : UserControl
             Notice.Text = _localization.Format("monitor.criticalElapsed", Notice.Text, string.Create(CultureInfo.InvariantCulture, $"{seconds / 60:00}:{seconds % 60:00}"));
         }
         ToolTip.SetTip(Notice, Notice.Text); AutomationProperties.SetName(Notice, Notice.Text);
+        RefreshBedsideLimits();
+        _waveformAlarms?.Refresh(_notices.Select(WaveformNotice), _trace.Session.SimulationTimeNs, AttentionFor, NoticeColorEnabled?.Invoke() != false);
         RefreshNumericHighlights(_trace.Session.SimulationTimeNs);
     }
     internal void RefreshNumericHighlights(long timeNs)
@@ -446,7 +516,7 @@ internal sealed class LiveMonitorView : UserControl
         _noticeBackground.Background = !bannerOn ? Brushes.Transparent : level switch
         {
             MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
-            MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
+            MonitorNoticeLevel.Warning => _skin?.WarningBrush ?? Brush.Parse("#F2C94C"),
             _ => Brush.Parse("#145AA3")
         };
         Notice.Foreground = bannerOn && level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;
@@ -455,13 +525,13 @@ internal sealed class LiveMonitorView : UserControl
         void Paint(TextBlock text, MonitorNumeric? numeric, IBrush normal)
         {
             var level = _notices.Where(n => n.Numeric == numeric && numeric is not null && n.Level != MonitorNoticeLevel.Info &&
-                AttentionFor?.Invoke(n.Id)?.State != AlarmAttentionState.ActiveAcknowledged)
+                AttentionFor?.Invoke(n.Id)?.State is not (AlarmAttentionState.ActiveAcknowledged or AlarmAttentionState.RecoveredUnacknowledged))
                 .Select(n => (MonitorNoticeLevel?)n.Level).Max();
             bool highlight = on && level is not null && (level != MonitorNoticeLevel.Notice || noticeColor);
             ((Border)text.Parent!).Background = !highlight ? Brushes.Transparent : level switch
             {
                 MonitorNoticeLevel.Critical => Brush.Parse("#B51F2C"),
-                MonitorNoticeLevel.Warning => Brush.Parse("#F2C94C"),
+                MonitorNoticeLevel.Warning => _skin?.WarningBrush ?? Brush.Parse("#F2C94C"),
                 _ => Brush.Parse("#145AA3")
             };
             text.Foreground = !highlight ? normal : level == MonitorNoticeLevel.Warning ? Brushes.Black : Brushes.White;

@@ -14,6 +14,9 @@ internal interface IMonitorSkin
     public MonitorChannels AdditionalMonitoredChannels => MonitorChannels.None;
     public string Id { get; }
     public IBrush Background { get; }
+    public bool CompactWaveformLabels => false;
+    public double NumericFontSize => 64;
+    public IBrush WarningBrush => Brush.Parse("#F2C94C");
     public IBrush ChannelBrush(int channel);
     public Control Compose(MonitorSkinContent content);
     public void RefreshLayout() { }
@@ -28,4 +31,5 @@ internal sealed record MonitorSkinContent(
     Control Custom1,
     Control Custom2,
     Control Nibp,
-    Func<int> WaveformRowCount);
+    Func<int> WaveformRowCount,
+    Control? Trends = null);

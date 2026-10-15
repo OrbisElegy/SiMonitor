@@ -296,6 +296,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Localization.Bind(more, ContentControl.ContentProperty, "advanced.developerEcg");
         more.Click += (_, _) => advanced();
         var display = new StackPanel { Spacing = 16, Margin = new Thickness(20) };
+        display.Children.Add(BuildSkinSelection());
         display.Children.Add(DesktopInformationPages.Help("settings-detail-2"));
         display.Children.Add(Skin);
         display.Children.Add(LocalizedText("display.paperLayout")); display.Children.Add(PaperLayout);

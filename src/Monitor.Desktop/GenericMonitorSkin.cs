@@ -20,12 +20,16 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
     private string? _pacingError;
     private Grid? _body;
-    private GenericMonitorArea? _monitorArea;
+    private Control? _monitorArea;
+    private readonly MonitorSkinPackage _package;
+    internal Control? Screen { get; private set; }
     internal Grid? TherapyArea { get; private set; }
     internal Button LayoutButton { get; private set; } = null!;
     internal Button EcgButton { get; private set; } = null!;
     internal Button PrintButton { get; private set; } = null!;
     internal event Action? PrintRequested;
+    internal Button MenuButton { get; private set; } = null!;
+    internal event Action? MenuRequested;
     internal Button LeadButton { get; private set; } = null!;
     internal IReadOnlyList<RadioButton> LeadChoices => _leadChoices;
     private readonly List<RadioButton> _leadChoices = [];
@@ -72,7 +76,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         _twelveLeadWaveforms.IsVisible = visible;
         _twelveLeadWaveforms.InvalidateVisual();
         RefreshLayout();
-        EcgButton.Background = Brush.Parse(visible ? "#145AA3" : "#222C38");
+        EcgButton.Background = _package.Bedside ? BedsideToolbar.KeyBackground(visible) : Brush.Parse(visible ? "#145AA3" : "#222C38");
         _localization.Bind(EcgButton, AutomationProperties.NameProperty, visible ? "skin.ecgSelected" : "skin.ecg");
         _localization.Bind(EcgButton, ToolTip.TipProperty, visible ? "skin.returnMonitor" : "skin.ecg");
         if (changed) { EcgViewChanged?.Invoke(); }
@@ -142,8 +146,10 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     internal GenericMonitorSkin(DesktopLocalization localization, MonitorTherapyPreferences? preferences = null,
         Action<MonitorTherapyPreferences>? save = null, Action<MonitorTherapyPreferences, bool>? pacing = null,
-        DefibrillatorConfiguration? defibrillator = null, Action<DefibrillatorCommand>? defibrillatorCommand = null, Action<int>? energyChanged = null)
+        DefibrillatorConfiguration? defibrillator = null, Action<DefibrillatorCommand>? defibrillatorCommand = null,
+        Action<int>? energyChanged = null, MonitorSkinPackage? package = null)
     {
+        _package = package ?? MonitorSkinPackage.Generic;
         _localization = localization;
         _save = save;
         _pacing = pacing;
@@ -232,19 +238,39 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         _localization.Bind(PacingStatus, TextBlock.TextProperty, key);
     }
 
-    private static readonly string[] Colors = ["#53F28C", "#FFE16A", "#49BFFF", "#FF7777", "#F4F6FA", "#CAA7EA", "#F2B67D"];
     public MonitorChannels Channels => MonitorChannels.All;
     public MonitorChannels AdditionalMonitoredChannels => TwelveLeadVisible ? MonitorChannels.Ecg : MonitorChannels.None;
-    public string Id => "generic";
-    public IBrush Background => Brushes.Black;
-    public IBrush ChannelBrush(int channel) => Brush.Parse(Colors[channel]);
-    public void RefreshLayout() => _monitorArea?.RefreshLayout();
+    public string Id => _package.Id;
+    public IBrush Background => _package.Background;
+    public IBrush ChannelBrush(int channel) => _package.ChannelBrush(channel);
+    public bool CompactWaveformLabels => _package.Bedside;
+    public double NumericFontSize => _package.Bedside ? 112 : 64;
+    public IBrush WarningBrush => _package.WarningBrush;
+    public void RefreshLayout()
+    {
+        if (_monitorArea is GenericMonitorArea generic) { generic.RefreshLayout(); }
+        else { _monitorArea?.InvalidateMeasure(); }
+    }
 
     public Control Compose(MonitorSkinContent content)
     {
-        var root = new Grid { RowDefinitions = new("Auto,*,Auto"), Background = Background };
-        root.Children.Add(content.Header);
-        var body = _body = new Grid { ColumnDefinitions = new("*,190"), Margin = new Thickness(8, 0, 8, 8) };
+        var root = new Grid { RowDefinitions = new(_package.Bedside ? "50,*,58" : "Auto,*,Auto"), Background = Background };
+        if (_package.Bedside)
+        {
+            root.Width = 1024;
+            root.Height = 640;
+        }
+        Screen = root;
+        root.Children.Add(new Border
+        {
+            Background = _package.Bedside ? Brush.Parse("#272C35") : Background,
+            Child = content.Header
+        });
+        var body = _body = new Grid
+        {
+            ColumnDefinitions = new("*,190"),
+            Margin = _package.Bedside ? new Thickness(0) : new Thickness(8, 0, 8, 8)
+        };
         Grid.SetRow(body, 1);
         root.Children.Add(body);
         _waveforms = content.Waveforms;
@@ -252,7 +278,10 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         var waves = new Panel();
         waves.Children.Add(_waveforms);
         waves.Children.Add(_twelveLeadWaveforms);
-        var monitor = _monitorArea = new GenericMonitorArea(content with { Waveforms = waves }) { Margin = new Thickness(0, 0, 8, 0) };
+        var areaContent = content with { Waveforms = waves };
+        var monitor = _monitorArea = _package.Bedside ? new BedsideMonitorArea(areaContent) : new GenericMonitorArea(areaContent);
+        monitor.Margin = new Thickness(0, 0, 8, 0);
+        if (content.Nibp is MonitorManualTile nibp) { nibp.SetAppearance(_package.NibpBrush, _package.Bedside ? 88 : 30, _package.Bedside); }
         body.Children.Add(monitor);
         var therapy = new StackPanel { Spacing = 8 };
         therapy.Children.Add(Caption("skin.therapyControls"));
@@ -264,9 +293,10 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         therapyArea.Children.Add(scroll);
         Grid.SetColumn(therapyArea, 1);
         body.Children.Add(therapyArea);
-        var toolbar = new MonitorToolbar { Margin = new Thickness(8, 0, 8, 8) };
-        LayoutButton = ToolbarButton("skin.layout");
-        _localization.Bind(LayoutButton, AutomationProperties.NameProperty, "skin.layout");
+        var toolbar = new MonitorToolbar { Margin = new Thickness(8, 0, 8, 8), MinimumColumnWidth = 140 };
+        string layoutKey = _package.Bedside ? "bedside.layout" : "skin.layout";
+        LayoutButton = ToolbarButton(layoutKey);
+        _localization.Bind(LayoutButton, AutomationProperties.NameProperty, layoutKey);
         var layoutPanel = new StackPanel { Spacing = 12, MinWidth = 240 };
         layoutPanel.Children.Add(ShowTherapy);
         layoutPanel.Children.Add(Caption("skin.waveformRows"));
@@ -276,7 +306,6 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         EcgButton = ToolbarButton("skin.ecg");
         EcgButton.Click += (_, _) => SetTwelveLeadVisible(!TwelveLeadVisible);
         toolbar.Children.Add(EcgButton);
-        SetTwelveLeadVisible(TwelveLeadVisible);
         LeadButton = ToolbarButton("skin.leads");
         var leads = new UniformGrid { Columns = 4 };
         foreach (var choice in _leadChoices) { leads.Children.Add(choice); }
@@ -289,9 +318,34 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         toolbar.Children.Add(PrintButton);
         AddNibpControls(toolbar);
         AddAlarmControls(toolbar);
-        Grid.SetRow(toolbar, 2);
-        root.Children.Add(toolbar);
-        return new ThemeVariantScope { RequestedThemeVariant = ThemeVariant.Dark, Child = root };
+        Control displayedToolbar = toolbar;
+        if (_package.Bedside)
+        {
+            toolbar.Children.Clear();
+            MenuButton = ToolbarButton("bedside.menu");
+            _localization.Bind(MenuButton, AutomationProperties.NameProperty, "bedside.menu");
+            MenuButton.Click += (_, _) => MenuRequested?.Invoke();
+            displayedToolbar = new BedsideToolbar(
+            [
+                (LeadButton, BedsideToolbarIcon.Lead),
+                (NibpStartButton, BedsideToolbarIcon.Nibp),
+                (NibpStopButton, BedsideToolbarIcon.NibpStop),
+                (NibpAutoButton, BedsideToolbarIcon.NibpAuto),
+                (PrintButton, BedsideToolbarIcon.Print),
+                (LayoutButton, BedsideToolbarIcon.Layout),
+                (AlarmsButton, BedsideToolbarIcon.Alarm),
+                (EcgButton, BedsideToolbarIcon.Ecg),
+                (SilenceButton, BedsideToolbarIcon.Silence),
+                (MenuButton, BedsideToolbarIcon.Menu)
+            ]);
+        }
+        Grid.SetRow(displayedToolbar, 2);
+        root.Children.Add(displayedToolbar);
+        SetTwelveLeadVisible(TwelveLeadVisible);
+        Control display = _package.Bedside
+            ? new Border { Background = Background, Child = new Viewbox { Stretch = Stretch.Uniform, Child = root } }
+            : root;
+        return new ThemeVariantScope { RequestedThemeVariant = ThemeVariant.Dark, Child = display };
     }
 
     private Border Panel(string titleKey, Control[] controls)
@@ -349,10 +403,11 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     private sealed class MonitorToolbar : UniformGrid
     {
+        internal double MinimumColumnWidth { get; init; }
         protected override Size MeasureOverride(Size availableSize)
         {
             // Keep enough room for translated actions before moving to two rows.
-            Columns = availableSize.Width < 8 * 140 ? 4 : 8;
+            Columns = availableSize.Width < 8 * MinimumColumnWidth ? 4 : 8;
             return base.MeasureOverride(availableSize);
         }
     }

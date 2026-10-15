@@ -162,7 +162,7 @@ internal static class LocalizationSmokeChecks
                 GC.WaitForPendingFinalizers();
                 settings.Language.SelectedIndex = 0;
                 Dispatcher.UIThread.RunJobs();
-                RequireCaption(settings.Skin, "Generic · 4 fixed rows");
+                RequireCaption(settings.Skin, "4 fixed rows");
                 RequireCaption(settings.Slots[1].Channel, "PLETH / relative");
                 Require(window.Localization.Locale == "en" && settings.Apply.Content?.ToString() == "Apply" &&
                     settings.Run.Content?.ToString() == "Resume sweep" && slot.Auto.Content?.ToString() == "Auto",
@@ -194,7 +194,7 @@ internal static class LocalizationSmokeChecks
                 Require(settings.Status.Text!.StartsWith("Not applied", StringComparison.Ordinal), "validation is translated without applying drafts");
                 settings.Language.SelectedIndex = 1;
                 Dispatcher.UIThread.RunJobs();
-                RequireCaption(settings.Skin, "Generic · 固定 4 行");
+                RequireCaption(settings.Skin, "固定 4 行");
                 RequireCaption(settings.Slots[1].Channel, "PLETH / 相对量");
                 RequireCaption(category, "显示");
                 RequireCaption(window.GetVisualDescendants().OfType<ComboBox>().Single(combo =>
@@ -218,7 +218,7 @@ internal static class LocalizationSmokeChecks
                 settings.Tabs.SelectedIndex = 2;
                 settings.SectionPages[2].Sections.SelectedIndex = 0;
                 Capture(window, "i18n-display-cn-returned.png");
-                RequireCaption(settings.Skin, "Generic · 固定 4 行");
+                RequireCaption(settings.Skin, "固定 4 行");
                 RequireCaption(settings.Slots[1].Channel, "PLETH / 相对量");
                 window.Start();
                 var timer = window.ActiveTimer;

@@ -61,7 +61,7 @@ internal static class NotificationSettingsSpecifications
             var settings = MonitorAlarmPreferences.NotificationConditionIds.Select((id, index) =>
                 (Id: id, Value: new AlarmNotificationSettings(index * 123, index % 2 == 0, index + 1) { SoundMode = (AlarmSoundMode)(index % 3), LatchingMode = (AlarmLatchingMode)(index % 2) }))
                 .ToDictionary(e => e.Id, e => e.Value);
-            var alarms = MonitorAlarmPreferences.Default with { PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings, EcgMonitoringEnabled = false };
+            var alarms = MonitorAlarmPreferences.Default with { HeartRate = MonitorAlarmPreferences.Default.HeartRate with { Enabled = false }, PlaybackMode = AlarmPlaybackMode.Notifications, Notifications = settings, EcgMonitoringEnabled = false };
             var sound = MonitorSoundPreferences.Default with { Volume = 37, Muted = true, OutputDeviceId = "speaker-endpoint" };
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms, sound)), "save notification configuration");
             string valid = File.ReadAllText(path);

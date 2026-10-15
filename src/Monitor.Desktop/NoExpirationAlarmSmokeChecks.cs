@@ -17,6 +17,7 @@ internal static class NoExpirationAlarmSmokeChecks
         try
         {
             var alerts = window.Settings.Alerts;
+            alerts.HeartRateEnabled.IsChecked = false;
             alerts.NoExpirationEnabled.IsChecked = true;
             alerts.NoExpirationSeconds.Value = 5;
             alerts.NoExpirationTriggerSeconds.Value = .4m;

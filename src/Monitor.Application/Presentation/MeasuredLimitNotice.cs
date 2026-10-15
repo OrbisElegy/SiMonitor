@@ -20,20 +20,20 @@ public sealed record MeasurementLimitDescriptor(MonitorNumeric Numeric, string I
 public static class MeasuredLimitNotice
 {
     public static MeasurementLimitDescriptor HeartRateDescriptor { get; } =
-        new(MonitorNumeric.HeartRate, "hr", "ECG HR", "bpm", 1000, 0, int.MaxValue, new(false, 40000, 50000, 120000, 180000));
+        new(MonitorNumeric.HeartRate, "hr", "ECG HR", "bpm", 1000, 0, int.MaxValue, new(true, 40000, 50000, 120000, 180000));
     public static MeasurementLimitDescriptor SpO2Descriptor { get; } =
-        new(MonitorNumeric.SpO2, "spo2", "SpO₂", "%", 1000, 0, 100000, new(false, 85000, 92000, null, null));
+        new(MonitorNumeric.SpO2, "spo2", "SpO₂", "%", 1000, 0, 100000, new(true, 85000, 92000, null, null));
 
     // Additional editors keep their existing channel set; HR and SpO2 have dedicated editors.
     public static IReadOnlyList<MeasurementLimitDescriptor> Descriptors { get; } = Array.AsReadOnly(new MeasurementLimitDescriptor[]
     {
-        new(MonitorNumeric.RespirationRate, "resp-rate", "RR · RESP", "次/分", 1000, 0, 200000, new(false, 4000, 8000, 30000, 40000)),
-        new(MonitorNumeric.PulseRate, "pleth-rate", "PR · PLETH", "bpm", 1000, 0, 350000, new(false, 40000, 50000, 120000, 180000)),
-        new(MonitorNumeric.EtCo2, "etco2", "EtCO₂", "mmHg", 100, 0, 20000, new(false, 1500, 2500, 5000, 6000)),
-        new(MonitorNumeric.Co2RespirationRate, "co2-rate", "RR · CO₂", "次/分", 1000, 0, 200000, new(false, 4000, 8000, 30000, 40000)),
-        new(MonitorNumeric.AbpMean, "abp-mean", "ABP 平均压", "mmHg", 100, -10000, 40000, new(false, 4000, 6000, 11000, 14000)),
-        new(MonitorNumeric.PaMean, "pa-mean", "PA 平均压", "mmHg", 100, -10000, 40000, new(false, 0, 500, 3000, 4500)),
-        new(MonitorNumeric.CvpMean, "cvp-mean", "CVP 平均压", "mmHg", 100, -10000, 40000, new(false, -500, 0, 1500, 2500))
+        new(MonitorNumeric.RespirationRate, "resp-rate", "RR · RESP", "次/分", 1000, 0, 200000, new(true, 4000, 8000, 30000, 40000)),
+        new(MonitorNumeric.PulseRate, "pleth-rate", "PR · PLETH", "bpm", 1000, 0, 350000, new(true, 40000, 50000, 120000, 180000)),
+        new(MonitorNumeric.EtCo2, "etco2", "EtCO₂", "mmHg", 100, 0, 20000, new(true, 1500, 2500, 5000, 6000)),
+        new(MonitorNumeric.Co2RespirationRate, "co2-rate", "RR · CO₂", "次/分", 1000, 0, 200000, new(true, 4000, 8000, 30000, 40000)),
+        new(MonitorNumeric.AbpMean, "abp-mean", "ABP 平均压", "mmHg", 100, -10000, 40000, new(true, 4000, 6000, 11000, 14000)),
+        new(MonitorNumeric.PaMean, "pa-mean", "PA 平均压", "mmHg", 100, -10000, 40000, new(true, 0, 500, 3000, 4500)),
+        new(MonitorNumeric.CvpMean, "cvp-mean", "CVP 平均压", "mmHg", 100, -10000, 40000, new(true, -500, 0, 1500, 2500))
     });
 
     public static MeasurementLimitDescriptor Describe(MonitorNumeric numeric) => numeric switch

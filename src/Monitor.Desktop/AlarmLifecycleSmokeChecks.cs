@@ -16,14 +16,14 @@ internal static class AlarmLifecycleSmokeChecks
         try
         {
             var alerts = window.Settings.Alerts;
-            alerts.HeartRateEnabled.IsChecked = true;
-            alerts.SpO2Enabled.IsChecked = true;
-            alerts.NoExpirationEnabled.IsChecked = true;
+            Require(alerts.HeartRateEnabled.IsChecked == true && alerts.SpO2Enabled.IsChecked == true &&
+                alerts.NoExpirationEnabled.IsChecked == true && alerts.EcgMonitoringEnabled.IsChecked == true &&
+                alerts.AdditionalLimits.Editors.Values.All(editor => editor.Enabled.IsChecked == true) && alerts.InfoTone.IsChecked != true,
+                "fresh monitor enables every alarm while keeping Info silent");
             alerts.NoExpirationSeconds.Value = 5;
             var immediate = new MeasurementConfirmationTiming(new(0, 0), new(0, 0), new(0, 0), new(0, 0));
             foreach (var editor in alerts.AdditionalLimits.Editors.Values)
             {
-                editor.Enabled.IsChecked = true;
                 editor.Confirmation.Restore(immediate);
             }
             var snapshot = LiveWaveformMeasurements.CreateIllustration().Read(0) with

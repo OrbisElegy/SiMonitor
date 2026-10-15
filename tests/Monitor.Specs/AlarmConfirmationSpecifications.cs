@@ -248,7 +248,7 @@ internal static class AlarmConfirmationSpecifications
                 d => new MeasurementConfirmationTiming(new(1, 2), new(3, 4), new(5, 6), new(7, 600000)));
             timings[MonitorNumeric.HeartRate] = new(new(101, 202), new(303, 404), new(505, 606), new(707, 808));
             timings[MonitorNumeric.SpO2] = new(new(909, 1010), new(1111, 1212), new(0, 0), new(0, 0));
-            var alarms = MonitorAlarmPreferences.Default with { ConfirmationTimings = timings };
+            var alarms = MonitorAlarmPreferences.Default with { ConfirmationTimings = timings, Additional = MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => d.TeachingDefaults with { Enabled = false }) };
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0, alarms)), "save timing overrides");
             string valid = File.ReadAllText(path);
             var loaded = store.Load(out bool rejected);

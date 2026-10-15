@@ -2,6 +2,9 @@
 
 `ConfirmedLimitNotice` 为 ECG HR、SpO₂、RR · RESP、PR · PLETH、EtCO₂、RR · CO₂、ABP/PA/CVP 平均压提供连续越界及恢复确认。每个通道、每个实时会话持有一个实例；输入仅为实测快照、阈值与确认配置，不读取模拟预设或生成器目标值。`PressureLimitNotice` 保留原压力接口并委托给此实现。
 
+默认启用所有数值阈值、ECG 监测和 CO₂ 未检出呼吸警报；Info 仍默认静音。
+未监测通道仍不产生对应警报，已保存的显式开关设置保持不变。
+
 ## 配置与单位
 
 `MeasurementConfirmationTiming` 包含 `CriticalLow`、`WarningLow`、`WarningHigh`、`CriticalHigh` 四个独立的 `BoundaryConfirmationTiming`。每个边界的 `TriggerMilliseconds`、`RecoveryMilliseconds` 均为整数毫秒，范围为 0–600000。0 在首个有效证据时刻确认，不代表禁用；范围上限是项目自行定义的工程约束。

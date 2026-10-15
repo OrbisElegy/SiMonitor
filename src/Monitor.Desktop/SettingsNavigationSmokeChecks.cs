@@ -56,6 +56,7 @@ internal static class SettingsNavigationSmokeChecks
             "compact alarm selector mirrors list rows, including group headers");
         RequireCaption(compact, "ECG 心率", "开");
         settings.Alerts.EcgMonitoringEnabled.IsChecked = false;
+        settings.Alerts.HeartRateEnabled.IsChecked = false;
         RequireCaption(compact, "ECG 心率", "关");
         compact.SelectedIndex = 0;
         Require(alarms.SelectedSection == 0 && compact.SelectedIndex == 1, "compact header rows cannot be selected");

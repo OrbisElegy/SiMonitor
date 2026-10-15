@@ -32,8 +32,8 @@ public sealed record MonitorAlarmPreferences(MeasurementLimits HeartRate, bool S
     public MeasurementConfirmationTiming ConfirmationFor(MonitorNumeric numeric) =>
         ConfirmationTimings.TryGetValue(numeric, out var timing) ? timing : MeasurementConfirmationTiming.DefaultFor(numeric);
 
-    public static MonitorAlarmPreferences Default => new(new(false, 40000, 50000, 120000, 180000),
-        false, 92000, 85000, false, 20,
+    public static MonitorAlarmPreferences Default => new(new(true, 40000, 50000, 120000, 180000),
+        true, 92000, 85000, true, 20,
         MeasuredLimitNotice.Descriptors.ToDictionary(d => d.Numeric, d => d.TeachingDefaults), true);
 
     public void Validate()

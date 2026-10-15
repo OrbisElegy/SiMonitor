@@ -68,7 +68,7 @@ internal sealed class AdditionalMeasurementLimits
     internal sealed class LimitEditor : StackPanel
     {
         private readonly int _divisor;
-        internal CheckBox Enabled { get; } = new() { IsChecked = false };
+        internal CheckBox Enabled { get; } = new() { IsChecked = true };
         internal NumericUpDown CriticalLow { get; }
         internal NumericUpDown WarningLow { get; }
         internal NumericUpDown WarningHigh { get; }

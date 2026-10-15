@@ -40,15 +40,15 @@ internal sealed class MonitorAlertSettings : StackPanel
     private readonly TextBlock _noExpirationError = new() { Foreground = Avalonia.Media.Brushes.OrangeRed, TextWrapping = Avalonia.Media.TextWrapping.Wrap, IsVisible = false };
     internal AlarmConfirmationEditor HeartRateConfirmation { get; }
     internal AlarmConfirmationEditor SpO2Confirmation { get; }
-    internal CheckBox HeartRateEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox HeartRateEnabled { get; } = new() { IsChecked = true };
     internal NumericUpDown WarningLowHeartRate { get; } = Number(50, 1, 299);
     internal NumericUpDown CriticalLowHeartRate { get; } = Number(40, 1, 298);
     internal NumericUpDown WarningHeartRate { get; } = Number(120, 20, 300);
     internal NumericUpDown CriticalHeartRate { get; } = Number(180, 21, 350);
-    internal CheckBox SpO2Enabled { get; } = new() { IsChecked = false };
+    internal CheckBox SpO2Enabled { get; } = new() { IsChecked = true };
     internal NumericUpDown WarningSpO2 { get; } = Number(92, 1, 100);
     internal NumericUpDown CriticalSpO2 { get; } = Number(85, 1, 99);
-    internal CheckBox NoExpirationEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox NoExpirationEnabled { get; } = new() { IsChecked = true };
     internal NumericUpDown NoExpirationSeconds { get; } = new() { Minimum = 5, Maximum = 120, Value = 20, Increment = 1, Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown NoExpirationTriggerSeconds { get; } = AlarmConfirmationEditor.CreateTimingField();
     internal NumericUpDown NoExpirationRecoverySeconds { get; } = AlarmConfirmationEditor.CreateTimingField();

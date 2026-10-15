@@ -39,7 +39,7 @@ internal static class MeasuredLimitSpecifications
                 var snapshot = Set(Empty(), d.Numeric, value);
                 var notice = MeasuredLimitNotice.Evaluate(d.Numeric, limits, snapshot);
                 Check.That(notice?.Level == level && (notice is null || notice.Numeric == d.Numeric), "strict native-unit boundary and target for " + d.Label);
-                Check.That(MeasuredLimitNotice.Evaluate(d.Numeric, d.TeachingDefaults, snapshot) is null, "every default is disabled");
+                Check.That(MeasuredLimitNotice.Evaluate(d.Numeric, d.TeachingDefaults with { Enabled = false }, snapshot) is null, "explicitly disabling a default alarm suppresses its notice");
                 foreach (var other in MeasuredLimitNotice.Descriptors.Where(x => x.Numeric != d.Numeric))
                 { Check.That(MeasuredLimitNotice.Evaluate(other.Numeric, other.TeachingDefaults with { Enabled = true }, snapshot) is null, "a valid source never supplies another source's rate or pressure"); }
             }

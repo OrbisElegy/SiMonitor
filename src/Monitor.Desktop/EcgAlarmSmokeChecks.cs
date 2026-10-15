@@ -18,6 +18,7 @@ internal static class EcgAlarmSmokeChecks
             var alerts = window.Settings.Alerts;
             alerts.EcgMonitoringEnabled.IsChecked = false;
             alerts.HeartRateEnabled.IsChecked = true;
+            foreach (var editor in alerts.AdditionalLimits.Editors.Values) { editor.Enabled.IsChecked = false; }
             alerts.WarningLowHeartRate.Value = 50;
             alerts.CriticalLowHeartRate.Value = 40;
             foreach (var (expectedLevel, confirmationMilliseconds) in new[]

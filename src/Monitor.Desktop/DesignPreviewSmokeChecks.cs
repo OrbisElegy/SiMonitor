@@ -873,7 +873,7 @@ internal static class DesignPreviewSmokeChecks
         var settings = new MonitorAlertSettings();
         MonitorNotice[] At(int rate, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) =>
             settings.Notices(snapshot with { HeartRate = new(status, rate, null) }).ToArray();
-        Require(At(30000).Length == 0, "HR thresholds remain opt-in");
+        Require(At(30000).Any(n => n.Numeric == MonitorNumeric.HeartRate), "HR thresholds are enabled by default");
         settings.HeartRateEnabled.IsChecked = true;
         foreach (var (rate, level, text) in new[]
         {
@@ -902,7 +902,7 @@ internal static class DesignPreviewSmokeChecks
         var settings = new MonitorAlertSettings();
         LiveMeasurementSnapshot At(int? value, WaveformMeasurementStatus status = WaveformMeasurementStatus.Valid) =>
             snapshot with { SpO2 = new(status, value, null, snapshot.SampleTimeNs) };
-        Require(!settings.Notices(At(80000)).Any(), "SpO2 alarm remains opt-in");
+        Require(settings.Notices(At(80000)).Any(n => n.Numeric == MonitorNumeric.SpO2), "SpO2 alarm is enabled by default");
         settings.SpO2Enabled.IsChecked = true;
         Require(settings.Notices(At(80000)).Single().Level == MonitorNoticeLevel.Critical &&
             settings.Notices(At(90000)).Single().Numeric == MonitorNumeric.SpO2, "SpO2 controls feed real severity and numeric binding");
@@ -1046,7 +1046,7 @@ internal static class DesignPreviewSmokeChecks
             };
             Require(window.Settings.Alerts.Notices(absent).Any(n => n.Id == "co2-no-expiration" && n.Level == MonitorNoticeLevel.Critical), "CO2 absence control projects real condition into alarm path");
             window.Settings.Alerts.NoExpirationEnabled.IsChecked = false;
-            Require(window.Settings.Alerts.Notices(absent).All(n => n.Id != "co2-no-expiration"), "CO2 absence remains opt-in");
+            Require(window.Settings.Alerts.Notices(absent).All(n => n.Id != "co2-no-expiration"), "CO2 absence can be explicitly disabled");
             VerifyAdditionalLimits(liveReading);
             var seven = new LiveMonitorView(new LiveMonitorTrace(new LocalMonitorPreviewSession(
                 PhysiologyDemoConfiguration.Default, MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows))));
@@ -1223,7 +1223,7 @@ internal static class DesignPreviewSmokeChecks
             var settingsSession = window.Session;
             var alarmGroups = window.Settings.SectionPages[4];
             string?[] alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-            Require(alarmLabels.Contains("EtCO₂，已关闭") && alarmLabels.Contains("PR · PLETH，已关闭") && alarmLabels.Contains("ABP 平均压，已关闭") &&
+            Require(alarmLabels.Contains("EtCO₂，已启用") && alarmLabels.Contains("PR · PLETH，已启用") && alarmLabels.Contains("ABP 平均压，已启用") &&
                 !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries with their state");
             var alarmHeaders = alarmGroups.Sections.Items.Cast<ListBoxItem>().Where(item => !item.IsEnabled).ToArray();
             Require(alarmHeaders.Select(item => ((TextBlock)item.Content!).Text).SequenceEqual(["测量参数", "提示与声音"]) &&
@@ -2804,7 +2804,7 @@ internal static class DesignPreviewSmokeChecks
     {
         var settings = new MonitorAlertSettings();
         var extra = settings.AdditionalLimits;
-        Require(!settings.Notices(snapshot).Any(), "all real limits remain opt-in");
+        Require(extra.Editors.Values.All(editor => editor.Enabled.IsChecked == true), "all additional measured limits are enabled by default");
         for (int i = 0; i < MeasuredLimitNotice.Descriptors.Count; i++)
         {
             var d = MeasuredLimitNotice.Descriptors[i];

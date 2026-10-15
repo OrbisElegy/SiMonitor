@@ -13,7 +13,7 @@ namespace Monitor.Desktop;
 // realtime-only tabs stay disabled until the source and realtime model are enabled.
 internal sealed class OxygenationSettingsPanel : TabControl
 {
-    internal CheckBox Realtime { get; } = new();
+    internal CheckBox Realtime { get; } = new() { IsChecked = true };
     internal OxygenationPatientPanel Patient { get; }
     internal NumericUpDown DemandMultiplier { get; } = Field(1, 4, 1, .1m);
     internal NumericUpDown TidalVolume { get; } = Field(0, 1500, 450, 10);

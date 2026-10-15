@@ -128,7 +128,7 @@ internal static class DisplayPreferenceSmokeChecks
                     reopened.Settings.ReadDisplay().Slots.SequenceEqual(display.Slots) && reopened.Settings.PaperLayout.SelectedIndex == 1 && reopened.Settings.MeasurementUnits.SelectedIndex == 1,
                     "restart restores applied configuration in source display and editors, ignoring uncommitted draft");
                 Require(reopened.Settings.EcgSelection == 0 && !reopened.Settings.Sound.Muted &&
-                    reopened.Settings.OpticalEnabled.IsChecked == false, "display recovery does not restore physiology or audio opt-in");
+                    reopened.Settings.OpticalEnabled.IsChecked == true && reopened.Session.Oxygenation is not null, "display-only recovery uses the current default physiology and sound");
                 reopened.SelectPage(1); Require(reopened.CurrentPaper?.SixRows == true, "saved paper layout is available");
             }
             finally { reopened.Close(); }

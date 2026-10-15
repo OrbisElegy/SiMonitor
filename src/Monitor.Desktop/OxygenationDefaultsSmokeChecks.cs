@@ -21,8 +21,9 @@ internal static class OxygenationDefaultsSmokeChecks
             var patient = settings.Patient;
             Require(patient.UseDefaults.IsChecked == true && settings.DemandMultiplier.Value == 1,
                 "a new editor selects central baselines and no extra demand");
-            window.Settings.OpticalEnabled.IsChecked = true;
-            settings.Realtime.IsChecked = true;
+            Require(window.Settings.OpticalEnabled.IsChecked == true && settings.Realtime.IsChecked == true &&
+                window.Session.Oxygenation is not null && settings.PatientPage.IsEnabled && settings.VentilationPage.IsEnabled,
+                "fresh monitor starts the realtime oxygenation source with editable baseline and ventilation");
             patient.Sex.SelectedIndex = 1;
             patient.Age.Value = 60;
             patient.PatientHeight.Value = 165;

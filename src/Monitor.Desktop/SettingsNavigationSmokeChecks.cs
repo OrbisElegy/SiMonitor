@@ -83,7 +83,7 @@ internal static class SettingsNavigationSmokeChecks
         settings.Tabs.SelectedIndex = 5;
         var vitals = settings.SectionPages[5];
         string?[] names = vitals.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已关闭", "压力", "随机种子", "手动体征"]),
+        Require(names.SequenceEqual(["心率，已关闭", "呼吸与 CO₂", "指脉氧，已启用", "压力", "随机种子", "手动体征"]),
             "vital sections include manual values after the shared seed, with switch state: " + string.Join(" / ", names));
         settings.CardiacRateEnabled.IsChecked = true;
         Require(vitals.DetailFor(0) == "开", "heart-rate state follows its switch");
@@ -103,6 +103,8 @@ internal static class SettingsNavigationSmokeChecks
         Require(vitals.DetailFor(1) is null && vitals.DetailFor(3) is null, "restored inputs clear their flags");
 
         var oxygenation = settings.Oxygenation;
+        settings.OpticalEnabled.IsChecked = false;
+        oxygenation.Realtime.IsChecked = false;
         vitals.SelectedSection = 2;
         Require(oxygenation.ItemCount == 3 && !oxygenation.Realtime.IsEnabled && !oxygenation.PatientPage.IsEnabled &&
             !oxygenation.VentilationPage.IsEnabled, "disabled optical source keeps realtime-only tabs disabled");

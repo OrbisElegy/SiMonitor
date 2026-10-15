@@ -32,7 +32,7 @@
   {
     "Id": "topic-6",
     "Category": "Vital signs",
-    "Text": "In the Signal source group of Settings → Vital signs → Pulse oximetry, enable the dual-wavelength teaching source and the realtime oxygenation model, then click Restart the first time. The Patient baseline and Ventilation and demand groups become editable only after this. SpO₂ is measured from red and infrared samples and needs a few seconds to warm up; a valid value below 70% is still shown, and “---” appears when there is no valid pulsation. The low saturation alert is enabled by default and can be disabled in alarm settings. Without the realtime model you can still use the fixed target and variation teaching source. For patient baselines, live adjustments and teaching examples, search for “realtime oxygenation”.",
+    "Text": "The dual-wavelength teaching source and realtime oxygenation model are enabled by default. Change them in Settings → Vital signs → Pulse oximetry → Signal source; click Restart when re-enabling them. The Patient baseline and Ventilation and demand groups become editable only after this. SpO₂ is measured from red and infrared samples and needs a few seconds to warm up; a valid value below 70% is still shown, and “---” appears when there is no valid pulsation. The low saturation alert is enabled by default and can be disabled in alarm settings. Without the realtime model you can still use the fixed target and variation teaching source. For patient baselines, live adjustments and teaching examples, search for “realtime oxygenation”.",
     "Title": "Enabling pulse oximetry"
   },
   {

@@ -18,6 +18,8 @@ internal static class DesignPreviewSmokeChecks
     private static DesignPreviewWindow CreateTemplateWindow()
     {
         var window = new DesignPreviewWindow();
+        window.Settings.OpticalEnabled.IsChecked = false;
+        window.Settings.Oxygenation.Realtime.IsChecked = false;
         window.Settings.AbpTargetEnabled.IsChecked = false;
         window.Settings.PaTargetEnabled.IsChecked = false;
         window.RestartSettings();
@@ -1023,7 +1025,7 @@ internal static class DesignPreviewSmokeChecks
             var timer = window.ActiveTimer;
             for (int i = 0; i < 150; i++) { window.Pulse(timer, 50_000_000); }
             Require(window.Page == 0 && window.Session.SimulationTimeNs > 0 && window.Settings.Parent is null, "live monitor without settings controls");
-            Require(window.MonitorView.NumericTexts[0] == "75" && window.MonitorView.NumericTexts[1] == "---", "sample-derived HR visible, absent optical source not invented");
+            Require(window.MonitorView.NumericTexts[0] == "75" && int.TryParse(window.MonitorView.NumericTexts[1], out int saturation) && saturation is >= 95 and <= 100, "default HR and realtime optical source produce measured on-screen readings");
             VerifyGapAndCalibration(window.MonitorTrace);
             Capture(window, "ui-preview-monitor.png");
             double wideMonitor = window.MonitorTrace.Bounds.Width;
@@ -1311,6 +1313,7 @@ internal static class DesignPreviewSmokeChecks
             Require(ReferenceEquals(window.Session, source) && ReferenceEquals(window.ActiveTimer, timer), "invalid settings preserve live session and timer");
             window.Settings.Skin.SelectedIndex = 0;
             window.Settings.OpticalEnabled.IsChecked = true;
+            window.Settings.Oxygenation.Realtime.IsChecked = false;
             window.Settings.OpticalTarget.Value = 98;
             window.Settings.Slots[0].Auto.IsChecked = false;
             window.Settings.Slots[0].Minimum.Text = "-0.01";

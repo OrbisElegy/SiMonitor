@@ -17,6 +17,7 @@ internal static class DeepOxygenationSmokeChecks
         try
         {
             window.Settings.OpticalEnabled.IsChecked = true;
+            window.Settings.Oxygenation.Realtime.IsChecked = false;
             window.Settings.OpticalTarget.Value = 0;
             window.Settings.OpticalVariation.Value = 0;
             window.Settings.Alerts.SpO2Enabled.IsChecked = true;

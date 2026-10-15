@@ -206,7 +206,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal bool CompactNavigation => _compactCategory.IsVisible;
     internal SoundSettingsPanel Sound { get; }
     internal MonitorAlertSettings Alerts { get; }
-    internal CheckBox OpticalEnabled { get; } = new() { IsChecked = false };
+    internal CheckBox OpticalEnabled { get; } = new() { IsChecked = true };
     internal OxygenationSettingsPanel Oxygenation { get; }
     internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
     internal ManualVitalSettings ManualVitals { get; private set; } = null!;

@@ -98,6 +98,7 @@ internal static class GeneratorPreferenceSmokeChecks
     {
         settings.EcgSelection = selection; settings.RespirationSelection = selection == 2 ? 1 : 0;
         settings.EjectionSelection = selection == 2 ? 1 : 0;
+        settings.Oxygenation.Realtime.IsChecked = false;
         settings.OpticalEnabled.IsChecked = true; settings.OpticalTarget.Value = 96.5m;
         settings.OpticalVariation.Value = 2; settings.OpticalModulation.Value = .8m;
         settings.RateSeed.Text = new string('a', 64);

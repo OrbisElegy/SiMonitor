@@ -28,7 +28,7 @@ internal static class ElectricalConversionSmokeChecks
                 int index = int.Parse(descriptor.TemplateId.AsSpan("ecgTemplate.t".Length), System.Globalization.CultureInfo.InvariantCulture);
                 settings.EcgSelection = index;
                 var editor = settings.ElectricalConversion;
-                Require(editor.IsVisible && editor.Enabled.IsChecked != true, "eligible template exposes disabled teaching response by default");
+                Require(editor.IsVisible && editor.Enabled.IsChecked == true, "eligible template permits teaching conversion by default");
                 editor.Enabled.IsChecked = true;
                 editor.Monophasic.Value = 250 + index;
                 editor.Biphasic.Value = 100 + index;
@@ -39,13 +39,13 @@ internal static class ElectricalConversionSmokeChecks
             }
             Require(settings.ElectricalConversion.Capture().Count == 24, "all template values retained independently");
             settings.EcgSelection = 21;
-            Require(settings.AedConversion.IsVisible && settings.AedConversion.Enabled.IsChecked != true,
-                "VF exposes a separate disabled AED response by default");
+            Require(settings.AedConversion.IsVisible && settings.AedConversion.Enabled.IsChecked == true,
+                "VF exposes an independently enabled AED response by default");
             settings.AedConversion.Enabled.IsChecked = true;
             settings.AedConversion.Biphasic.Value = 180;
             settings.AedConversion.PostShockPause.Value = 1.5m;
             settings.EcgSelection = 22;
-            Require(settings.AedConversion.Enabled.IsChecked != true, "another VF template does not inherit AED permission");
+            Require(settings.AedConversion.Enabled.IsChecked == true && settings.AedConversion.Biphasic.Value == 150, "another VF template keeps its independent default permission and threshold");
             settings.EcgSelection = 21;
             Require(settings.AedConversion.Biphasic.Value == 180 && settings.AedConversion.PostShockPause.Value == 1.5m,
                 "switching templates retains the AED draft independently of manual settings");

@@ -21,7 +21,7 @@ internal static class AedConversionSpecifications
     private static void AedConversionHasIndependentThresholdsAndPause()
     {
         var configuration = PhysiologyIllustrationConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationCoarseIllustration);
-        var profile = new EcgElectricalTherapyProfile("ecgTemplate.t021", ElectricalConversionSettings.Default)
+        var profile = new EcgElectricalTherapyProfile("ecgTemplate.t021", ElectricalConversionSettings.Default with { Enabled = false })
         { AedSettings = new(true, 250, 100) { PostShockPauseMilliseconds = 1500 } };
         ElectricalConversionOutcome Evaluate(int energy, DefibrillationWaveformKind waveform, bool automated) =>
             EcgElectricalTherapy.Evaluate(profile, configuration, waveform, DefibrillationMode.ManualAsynchronous, energy, automated).Outcome;
@@ -44,7 +44,7 @@ internal static class AedConversionSpecifications
         Check.That(session.Configuration.CardiacActivity == CardiacActivity.Absent, "AED pause enters actual cardiac silence");
         for (int i = 0; i < 40; i++) { session.Advance(50_000_000); }
         Check.That(session.ElectricalTherapy!.TemplateId == EcgElectricalTherapy.SinusTemplateId, "AED completes the shared sinus conversion path");
-        profile = profile with { Settings = new(true, 0, 0), AedSettings = ElectricalConversionSettings.Default };
+        profile = profile with { Settings = new(true, 0, 0), AedSettings = ElectricalConversionSettings.Default with { Enabled = false } };
         Check.That(Evaluate(200, DefibrillationWaveformKind.BiphasicTruncatedExponential, true) == ElectricalConversionOutcome.Disabled &&
             Evaluate(200, DefibrillationWaveformKind.BiphasicTruncatedExponential, false) == ElectricalConversionOutcome.Eligible,
             "manual enable cannot bypass a disabled AED response");

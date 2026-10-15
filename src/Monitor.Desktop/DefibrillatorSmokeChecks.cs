@@ -222,6 +222,7 @@ internal static class DefibrillatorSmokeChecks
         try
         {
             window.Settings.EcgSelection = 21;
+            window.Settings.ElectricalConversion.Enabled.IsChecked = false;
             window.Settings.AedConversion.Enabled.IsChecked = true;
             window.Settings.AedConversion.Biphasic.Value = 150;
             window.Settings.AedConversion.PostShockPause.Value = 2;

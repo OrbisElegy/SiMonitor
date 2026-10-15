@@ -25,7 +25,7 @@ public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicTh
 {
     public int PostShockPauseMilliseconds { get; init; }
     public const int MaximumEnergyJoules = 1000;
-    public static ElectricalConversionSettings Default { get; } = new(false, 200, 150);
+    public static ElectricalConversionSettings Default { get; } = new(true, 200, 150);
     public void Validate()
     {
         if (MonophasicThresholdJoules is < 0 or > MaximumEnergyJoules || BiphasicThresholdJoules is < 0 or > MaximumEnergyJoules || PostShockPauseMilliseconds is < 0 or > 10000)

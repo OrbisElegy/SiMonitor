@@ -27,7 +27,7 @@
 这不是自动诊断器，也不判断血流动力学稳定性或决定临床指征。
 
 每个 `ElectricalConversionSettings` 包含 `Enabled`、`MonophasicThresholdJoules`、
-`BiphasicThresholdJoules`。默认关闭，200／150 J 为作者设定的可编辑教学初值。
+`BiphasicThresholdJoules`。支持的模板默认开启，200／150 J 为作者设定的可编辑教学初值。
 阈值为 0–1000 J 整数，实际能量输入为 1–1000 J 整数；全部验证后才发布。
 **实际单次能量必须严格大于对应阈值**；等于阈值不会转复，不累加前次能量，不使用概率。
 单相阻尼正弦与单相截断指数使用单相阈值，双相截断指数与直线双相使用双相阈值。
@@ -47,7 +47,7 @@
 AED 独立映射为 `MonitorGeneratorPreferences.AedElectricalConversions`，记录相同的开关、单／双相阈值与停顿。
 当前 profile 的 `AedSettings` 与手动 `Settings` 分开；`DeliveredElectricalShock.Automated` 标记实际 AED
 交付，`Evaluate(..., automated)` 与 `ApplyElectricalShock` 据此选择整份响应配置，包括停顿。
-新配置默认关闭；1–17 版的共用响应复制为两份独立映射，保留旧行为。设置界面仅在室扑、
+新配置默认开启支持模板的手动与 AED 转复许可；显式保存的关闭状态仍保留。1–17 版的共用响应复制为两份独立映射，保留旧行为。设置界面仅在室扑、
 室颤与室速模板显示 AED 编辑器；室速的非同步响应也必须通过独立 AED 许可与能量检查。
 
 皮肤保存自动转复后的编辑器快照时，必须保留此前的完整手动与 AED 映射，不能只保存

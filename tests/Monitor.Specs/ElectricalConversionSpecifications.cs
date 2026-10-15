@@ -65,7 +65,7 @@ internal static class ElectricalConversionSpecifications
         {
             var configuration = PhysiologyIllustrationConfiguration.VtPreset with
             { VtFusion = index == 27, VtCapture = index == 28, VtBidirectional = index == 29 };
-            var profile = Profile($"ecgTemplate.t{index:D3}");
+            var profile = Profile($"ecgTemplate.t{index:D3}") with { AedSettings = ElectricalConversionSettings.Default with { Enabled = false } };
             foreach (var waveform in Enum.GetValues<DefibrillationWaveformKind>())
             {
                 int threshold = waveform is DefibrillationWaveformKind.MonophasicDampedSine or DefibrillationWaveformKind.MonophasicTruncatedExponential ? 300 : 150;
@@ -138,7 +138,7 @@ internal static class ElectricalConversionSpecifications
             document["Version"] = 13;
             document["Generator"]!.AsObject().Remove("ElectricalConversions");
             File.WriteAllText(path, document.ToJsonString());
-            Check.That(store.Load(out rejected).Generator!.ElectricalConversions.Count == 0 && !rejected, "legacy files load with disabled defaults");
+            Check.That(store.Load(out rejected).Generator!.ElectricalConversions.Count == 0 && !rejected, "legacy files without response maps use template defaults");
             document["Version"] = 14;
             document["Generator"]!["ElectricalConversions"] = JsonNode.Parse("{\"ecgTemplate.t072\":{\"Enabled\":true,\"MonophasicThresholdJoules\":0,\"BiphasicThresholdJoules\":0}}");
             File.WriteAllText(path, document.ToJsonString());

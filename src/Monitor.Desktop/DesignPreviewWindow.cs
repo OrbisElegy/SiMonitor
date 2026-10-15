@@ -24,8 +24,6 @@ internal sealed partial class DesignPreviewWindow : Window
 {
     internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
     private readonly ContentControl _workspace = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
-    private readonly TextBlock _title = Text("", 27, true);
-    private readonly TextBlock _subtitle = Text("", 13);
     private readonly TextBlock _state = Text("", 12);
     private readonly ListBox _navigation = new();
     private WaveformEnvelope[] _ecg;
@@ -163,10 +161,8 @@ internal sealed partial class DesignPreviewWindow : Window
         };
         sidebar.Children.Add(_navigation);
         root.Children.Add(new Border { Background = DesktopFluentStyle.Canvas, Child = sidebar });
-        var main = new Grid { RowDefinitions = new("Auto,*"), Margin = new Thickness(24, 20) };
+        var main = new Grid { Margin = new Thickness(24, 20) };
         Grid.SetColumn(main, 1); root.Children.Add(main);
-        var heading = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 14) };
-        heading.Children.Add(_title); heading.Children.Add(_subtitle); main.Children.Add(heading);
         var card = new Border
         {
             Background = DesktopFluentStyle.Surface,
@@ -176,7 +172,7 @@ internal sealed partial class DesignPreviewWindow : Window
             ClipToBounds = true,
             Child = _workspace
         };
-        Grid.SetRow(card, 1); main.Children.Add(card); Content = root;
+        main.Children.Add(card); Content = root;
         Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         Deactivated += (_, _) => DisarmDefibrillator();
         SelectPage(0); UpdateState();
@@ -276,7 +272,6 @@ internal sealed partial class DesignPreviewWindow : Window
             MonitorView.RefreshDisplay();
             Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
             RefreshDefibrillator();
-            Localization.Bind(_subtitle, TextBlock.TextProperty, "shell.monitorSubtitle", display.Slots.Count);
         }
         _displayPreferences = _displayPreferences with { Display = _session.Display, TherapyControlsVisible = therapyVisible };
         SaveDisplayPreferences();
@@ -587,13 +582,6 @@ internal sealed partial class DesignPreviewWindow : Window
         if (page != 0) { DisarmDefibrillator(); }
         Page = page;
         _navigation.SelectedIndex = page;
-        Localization.Bind(_title, TextBlock.TextProperty, PageKeys[page]);
-        if (page == 0) { Localization.Bind(_subtitle, TextBlock.TextProperty, "shell.monitorSubtitle", _session.Display.Slots.Count); }
-        else
-        {
-            string key = page switch { 1 => "shell.ecgSubtitle", 2 => "shell.settingsSubtitle", 3 => "shell.helpSubtitle", _ => "shell.aboutSubtitle" };
-            Localization.Bind(_subtitle, TextBlock.TextProperty, key);
-        }
         _workspace.Content = page switch
         {
             0 => MonitorView,

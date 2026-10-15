@@ -434,7 +434,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             navigation.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 160);
         };
         Tabs.SelectedIndex = 1;
-        var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto") };
+        var root = new Grid { RowDefinitions = new("Auto,*,Auto,Auto"), Margin = new Thickness(0, 16, 0, 0) };
         _compactCategory.Margin = new Thickness(28, 12); root.Children.Add(_compactCategory);
         Grid.SetRow(navigation, 1); root.Children.Add(navigation); Grid.SetRow(controls, 2); root.Children.Add(controls);
         Status.Margin = new Thickness(20, 0, 20, 16); Status.Foreground = Brush.Parse("#616161"); Grid.SetRow(Status, 3); root.Children.Add(Status); Content = root;

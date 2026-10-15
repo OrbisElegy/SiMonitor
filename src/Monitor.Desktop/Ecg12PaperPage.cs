@@ -48,6 +48,7 @@ internal sealed class Ecg12PaperPage : Grid
         Icon(Print, "print.window", "M4,5 L4,1 L12,1 L12,5 M4,12 L1,12 L1,5 L15,5 L15,12 L12,12 M4,9 L12,9 L12,15 L4,15 Z M12,7 L13,7");
         Print.Click += (_, _) => PrintRequested?.Invoke();
         Calipers.IsChecked = measuring && measurement.CanMeasure;
+        Hand.IsChecked = Calipers.IsChecked != true;
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         foreach (var control in new Control[] { _zoom, ActualSize, Fit, Hand, Calipers, ClearCalipers, Print }) { actions.Children.Add(control); }
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("1*,1.2*,Auto") };

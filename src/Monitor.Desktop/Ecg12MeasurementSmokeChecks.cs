@@ -23,6 +23,7 @@ internal static class Ecg12MeasurementSmokeChecks
             var page = window.EcgPage!;
             Require(page.Calipers.IsChecked != true && !page.Overlay.IsHitTestVisible && page.Readout.Text == "" && !page.ClearCalipers.IsEnabled,
                 "calipers start off so the paper reads as a clean record");
+            Require(page.Hand.IsChecked == true && page.PanSurface.IsHitTestVisible, "paper opens with the hand tool ready to pan");
             page.Calipers.IsChecked = true;
             Require(page.Overlay.IsHitTestVisible && page.Readout.Text == "在同一导联上点击两点，拖动端点调整。", "enabling measurement shows the hint");
 

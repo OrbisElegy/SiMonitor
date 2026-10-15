@@ -1225,11 +1225,11 @@ internal static class DesignPreviewSmokeChecks
             var settingsSession = window.Session;
             var alarmGroups = window.Settings.SectionPages[4];
             string?[] alarmLabels = alarmGroups.Sections.Items.Cast<ListBoxItem>().Select(AutomationProperties.GetName).ToArray();
-            Require(alarmLabels.Contains("EtCO₂，已启用") && alarmLabels.Contains("PR · PLETH，已启用") && alarmLabels.Contains("ABP 平均压，已启用") &&
+            Require(alarmLabels.Contains("EtCO₂，部分启用") && alarmLabels.Contains("PR · PLETH，已启用") && alarmLabels.Contains("ABP 平均压，已启用") &&
                 !alarmLabels.Contains("其他测量参数") && !alarmLabels.Contains("CO₂ 呼吸检测"), "measurement alarms are peer navigation entries with their state");
             var alarmHeaders = alarmGroups.Sections.Items.Cast<ListBoxItem>().Where(item => !item.IsEnabled).ToArray();
             Require(alarmHeaders.Select(item => ((TextBlock)item.Content!).Text).SequenceEqual(["测量参数", "提示与声音"]) &&
-                alarmHeaders.All(item => !item.Focusable) && alarmGroups.DetailFor(0) == "开",
+                alarmHeaders.All(item => !item.Focusable) && alarmGroups.DetailFor(0) == "部分",
                 "alarm navigation separates measurements from shared prompt and sound settings");
             window.Settings.Alerts.NoExpirationEnabled.IsChecked = true;
             Require(alarmGroups.DetailFor(window.Settings.Alerts.Parameters.Select(p => p.Numeric).ToList().IndexOf(MonitorNumeric.EtCo2)) == "开",

@@ -221,6 +221,8 @@
   "settings.sectionState": "{0}，{1}",
   "settings.stateOn": "開",
   "settings.stateOff": "關",
+  "settings.statePartial": "部分",
+  "settings.statePartiallyEnabled": "部分啟用",
   "settings.stateEnabled": "已啟用",
   "settings.stateDisabled": "已關閉",
   "settings.stateNeedsFix": "待修正",

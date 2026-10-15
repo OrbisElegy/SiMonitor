@@ -56,6 +56,7 @@ internal static class SettingsNavigationSmokeChecks
             "compact alarm selector mirrors list rows, including group headers");
         RequireCaption(compact, "ECG 心率", "开");
         settings.Alerts.EcgMonitoringEnabled.IsChecked = false;
+        RequireCaption(compact, "ECG 心率", "部分");
         settings.Alerts.HeartRateEnabled.IsChecked = false;
         RequireCaption(compact, "ECG 心率", "关");
         compact.SelectedIndex = 0;
@@ -64,15 +65,41 @@ internal static class SettingsNavigationSmokeChecks
         Require(alarms.SelectedSection == measurements, "compact selector navigates to shared settings");
         compact.SelectedIndex = 1;
         settings.Alerts.HeartRateEnabled.IsChecked = true;
-        RequireCaption(compact, "ECG 心率", "开");
+        RequireCaption(compact, "ECG 心率", "部分");
         compact.IsDropDownOpen = true;
         Dispatcher.UIThread.RunJobs();
         var containers = Enumerable.Range(0, compact.ItemCount).Select(compact.ContainerFromIndex).OfType<ComboBoxItem>().ToArray();
         Require(containers.Length > measurements + 1 && !containers[0].IsEnabled && !containers[0].Focusable &&
             !containers[measurements + 1].IsEnabled && containers[1].IsEnabled &&
-            AutomationProperties.GetName(containers[1]) == "ECG 心率，已启用",
+            AutomationProperties.GetName(containers[1]) == "ECG 心率，部分启用",
             "compact drop-down shows inert group headers and accessible section state");
         compact.IsDropDownOpen = false;
+        settings.Alerts.EcgMonitoringEnabled.IsChecked = true;
+        RequireCaption(compact, "ECG 心率", "开");
+        foreach (var parameter in settings.Alerts.Parameters)
+        {
+            var switches = settings.Alerts.SwitchesFor(parameter.Numeric);
+            int section = settings.Alerts.Parameters.ToList().IndexOf(parameter);
+            bool?[] original = switches.Select(toggle => toggle.IsChecked).ToArray();
+            foreach (var toggle in switches) { toggle.IsChecked = false; }
+            Require(alarms.DetailFor(section) == "关", "all disabled alarms show Off for " + parameter.Numeric);
+            foreach (var toggle in switches)
+            {
+                toggle.IsChecked = true;
+                Require(alarms.DetailFor(section) == (switches.Count == 1 ? "开" : "部分"),
+                    "each independently enabled alarm contributes to the section state for " + parameter.Numeric);
+                toggle.IsChecked = false;
+            }
+            foreach (var toggle in switches) { toggle.IsChecked = true; }
+            Require(alarms.DetailFor(section) == "开", "all enabled alarms show On for " + parameter.Numeric);
+            for (int index = 0; index < switches.Count; index++) { switches[index].IsChecked = original[index]; }
+        }
+        settings.Alerts.EcgMonitoringEnabled.IsChecked = false;
+        settings.Language.SelectedIndex = 0;
+        RequireCaption(compact, "ECG heart rate", "Partial");
+        settings.Language.SelectedIndex = 2;
+        RequireCaption(compact, "ECG 心率", "部分");
+        settings.Language.SelectedIndex = 1;
         settings.Alerts.HeartRateEnabled.IsChecked = false;
         DesktopViewportSmokeChecks.Layout(window);
     }

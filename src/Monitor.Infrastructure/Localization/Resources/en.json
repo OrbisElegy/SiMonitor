@@ -221,6 +221,8 @@
   "settings.sectionState": "{0}, {1}",
   "settings.stateOn": "On",
   "settings.stateOff": "Off",
+  "settings.statePartial": "Partial",
+  "settings.statePartiallyEnabled": "Partially enabled",
   "settings.stateEnabled": "Enabled",
   "settings.stateDisabled": "Disabled",
   "settings.stateNeedsFix": "Needs correction",

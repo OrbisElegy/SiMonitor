@@ -341,8 +341,19 @@ internal sealed partial class DesignPreviewSettings : UserControl
             var switches = Alerts.SwitchesFor(Alerts.Parameters[index].Numeric);
             void RefreshState()
             {
-                bool enabled = switches.Any(s => s.IsChecked == true);
-                alarmSections.SetDetail(index, enabled ? "settings.stateOn" : "settings.stateOff", enabled ? "settings.stateEnabled" : "settings.stateDisabled");
+                int enabled = switches.Count(s => s.IsChecked == true);
+                if (enabled == switches.Count)
+                {
+                    alarmSections.SetDetail(index, "settings.stateOn", "settings.stateEnabled");
+                }
+                else if (enabled == 0)
+                {
+                    alarmSections.SetDetail(index, "settings.stateOff", "settings.stateDisabled");
+                }
+                else
+                {
+                    alarmSections.SetDetail(index, "settings.statePartial", "settings.statePartiallyEnabled");
+                }
             }
             foreach (var toggle in switches) { toggle.IsCheckedChanged += (_, _) => RefreshState(); }
             RefreshState();

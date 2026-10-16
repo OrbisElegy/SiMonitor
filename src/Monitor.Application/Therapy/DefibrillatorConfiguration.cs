@@ -28,7 +28,7 @@ public sealed record DefibrillatorConfiguration(
 
     public int NearestEnergy(int energyJoules) => EnergyStepsJoules.MinBy(value => Math.Abs((long)value - energyJoules));
 
-    // A device skin's fixed profile takes precedence over editable local preferences.
+    // Resolve an optional full configuration override; skin energy-table precedence belongs to the host.
     public static DefibrillatorConfiguration Resolve(DefibrillatorConfiguration editable,
         DefibrillatorConfiguration? deviceOverride) => (deviceOverride ?? editable).Snapshot();
 }

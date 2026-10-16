@@ -14,7 +14,8 @@ public enum PreviewRecordEventKind
     MonitoringChanged,
     NibpStarted,
     NibpCompleted,
-    NibpCancelled
+    NibpCancelled,
+    OperatorMarked
 }
 
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);
@@ -31,6 +32,8 @@ public sealed partial class LocalMonitorPreviewSession
 
     private void RecordEvent(PreviewRecordEventKind kind, string detail) =>
         _recordEvents.Add(new(SimulationTimeNs, kind, detail));
+
+    public void MarkOperatorEvent() => RecordEvent(PreviewRecordEventKind.OperatorMarked, "");
 
     public MonitorPrintSnapshot CapturePrintSnapshot()
     {

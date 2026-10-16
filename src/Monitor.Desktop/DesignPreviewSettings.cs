@@ -796,7 +796,20 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private static void RestoreFocus(Control control) => Dispatcher.UIThread.Post(() => { control.Focus(); control.BringIntoView(); }, DispatcherPriority.Loaded);
     private void BuildRows()
     {
-        if (Skin.SelectedIndex < 0) { return; }
+        if (Skin.SelectedIndex < 0 || _restoringFixedRows) { return; }
+        if (_fixedWaveformRows is { } fixedRows && MonitorDisplayConfiguration.RowCount((MonitorSkin)Skin.SelectedIndex) != fixedRows)
+        {
+            _restoringFixedRows = true;
+            Skin.SelectedIndex = (int)(fixedRows switch
+            {
+                3 => MonitorSkin.ThreeRows,
+                4 => MonitorSkin.FourRows,
+                5 => MonitorSkin.FiveRows,
+                _ => MonitorSkin.SevenRows
+            });
+            _restoringFixedRows = false;
+            return;
+        }
         var defaults = MonitorDisplayConfiguration.Default((MonitorSkin)Skin.SelectedIndex);
         Slots.Clear(); _slotRows.Children.Clear();
         for (int i = 0; i < defaults.Slots.Count; i++)

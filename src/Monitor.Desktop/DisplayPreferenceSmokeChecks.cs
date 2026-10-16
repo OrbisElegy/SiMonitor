@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text.Json.Nodes;
 using Monitor.Application.Presentation;
+using Monitor.Application.Therapy;
 using Monitor.Infrastructure.Preferences;
 
 namespace Monitor.Desktop;
@@ -16,6 +17,8 @@ internal static class DisplayPreferenceSmokeChecks
         {
             var store = new DisplayPreferenceStore(path);
             Require(store.Load(out bool rejected).Display.Skin == MonitorSkin.FourRows && !rejected, "missing file uses defaults quietly");
+            VerifyUnlockedLayout(store, path);
+            VerifyCustomEnergySteps(store, path);
             Require(store.Save(new(MonitorDisplayConfiguration.Default(), 0, MeasurementMillimeters: true)) &&
                 store.Load(out rejected).MeasurementMillimeters && !rejected, "millimeter units persist");
             var legacyUnits = JsonNode.Parse(File.ReadAllText(path, System.Text.Encoding.UTF8))!.AsObject();
@@ -236,6 +239,106 @@ internal static class DisplayPreferenceSmokeChecks
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    private static void VerifyUnlockedLayout(DisplayPreferenceStore store, string path)
+    {
+        var originalSlots = MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows).Slots.ToArray();
+        originalSlots[6] = new(0, false, new(-2500, 3000), 500);
+        var unlocked = new MonitorDisplayConfiguration(MonitorSkin.SevenRows, originalSlots);
+        var locked = new MonitorDisplayConfiguration(MonitorSkin.ThreeRows, originalSlots.Take(3).ToArray());
+        Require(store.Save(new(locked, 1) { UnlockedSkinDisplay = unlocked }), "locked skin saves its complete unlocked display");
+        originalSlots[6] = new(2, true, new(0, 2000), 125);
+        var restored = store.Load(out bool rejected);
+        Require(!rejected && restored.Display.Skin == MonitorSkin.ThreeRows && restored.Display.Slots.SequenceEqual(locked.Slots) &&
+            restored.UnlockedSkinDisplay is { Skin: MonitorSkin.SevenRows } saved && saved.Slots.SequenceEqual(unlocked.Slots) &&
+            saved.Slots[6] == new MonitorDisplaySlot(0, false, new(-2500, 3000), 500),
+            "locked layout and owned unlocked rows retain independent channel, gain and speed settings");
+        string valid = File.ReadAllText(path, System.Text.Encoding.UTF8);
+        var legacy = JsonNode.Parse(valid)!.AsObject();
+        legacy.Remove("UnlockedSkinDisplay");
+        File.WriteAllText(path, legacy.ToJsonString(), new System.Text.UTF8Encoding(false));
+        restored = store.Load(out rejected);
+        Require(!rejected && restored.UnlockedSkinDisplay is null && restored.Display.Skin == MonitorSkin.ThreeRows,
+            "existing preferences without an unlocked layout retain their current display");
+        foreach (var change in new Action<JsonObject>[]
+        {
+            layout => layout.Remove("Skin"),
+            layout => layout["Skin"] = 999,
+            layout => layout.Remove("Slots"),
+            layout => layout["Slots"] = null,
+            layout => layout["Slots"]!.AsArray().RemoveAt(6),
+            layout => layout["Slots"]![6] = null,
+            layout => layout["Slots"]![6]!["Channel"] = 7,
+            layout => layout["Slots"]![6]!["Minimum"] = 4000,
+            layout => layout["Slots"]![6]!["Speed"] = 0,
+            layout => layout["Slots"]![6]!.AsObject().Remove("Automatic")
+        })
+        {
+            var invalid = JsonNode.Parse(valid)!.AsObject();
+            change(invalid["UnlockedSkinDisplay"]!.AsObject());
+            string damaged = invalid.ToJsonString();
+            File.WriteAllText(path, damaged, new System.Text.UTF8Encoding(false));
+            restored = store.Load(out rejected);
+            Require(rejected && restored.Display.Skin == MonitorSkin.FourRows && restored.UnlockedSkinDisplay is null &&
+                File.ReadAllText(path, System.Text.Encoding.UTF8) == damaged,
+                "invalid unlocked layout rejects the complete document before publishing either layout or overwriting its source");
+        }
+    }
+
+    private static void VerifyCustomEnergySteps(DisplayPreferenceStore store, string path)
+    {
+        int[] steps = [1, 40, 250, 900];
+        var configuration = (DefibrillatorConfiguration.Default with { EnergyStepsJoules = steps }).Snapshot();
+        var preferences = new DisplayPreferences(MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows), 1, Defibrillator: configuration)
+        { CustomDefibrillatorEnergySteps = true };
+        Require(store.Save(preferences), "explicit manual energy-step selection saves");
+        steps[1] = 30;
+        var restored = store.Load(out bool rejected);
+        Require(!rejected && restored.CustomDefibrillatorEnergySteps &&
+            restored.Defibrillator!.EnergyStepsJoules.SequenceEqual(configuration.EnergyStepsJoules),
+            "manual energy-step selection and its owned configuration survive reopening");
+        string custom = File.ReadAllText(path, System.Text.Encoding.UTF8);
+        Require(store.Save(preferences with { CustomDefibrillatorEnergySteps = false }), "skin-default energy selection saves");
+        restored = store.Load(out rejected);
+        Require(!rejected && !restored.CustomDefibrillatorEnergySteps &&
+            restored.Defibrillator!.EnergyStepsJoules.SequenceEqual(configuration.EnergyStepsJoules),
+            "explicit skin-default selection remains false while retaining the user's editable custom table");
+        var legacy = JsonNode.Parse(custom)!.AsObject();
+        legacy.Remove("CustomDefibrillatorEnergySteps");
+        File.WriteAllText(path, legacy.ToJsonString(), new System.Text.UTF8Encoding(false));
+        restored = store.Load(out rejected);
+        Require(!rejected && restored.CustomDefibrillatorEnergySteps,
+            "older configurations with a non-default table retain their manual energy selection");
+        legacy["Defibrillator"]!["EnergyStepsJoules"] = System.Text.Json.JsonSerializer.SerializeToNode(DefibrillatorConfiguration.Default.EnergyStepsJoules);
+        File.WriteAllText(path, legacy.ToJsonString(), new System.Text.UTF8Encoding(false));
+        Require(!store.Load(out rejected).CustomDefibrillatorEnergySteps && !rejected,
+            "older configurations using the generic default table inherit their selected skin's defaults");
+        foreach (var change in new Action<JsonObject>[]
+        {
+            json => json["CustomDefibrillatorEnergySteps"] = null,
+            json => json["CustomDefibrillatorEnergySteps"] = "true",
+            json => json["CustomDefibrillatorEnergySteps"] = 1,
+            json => { json["Version"] = 15; json.Remove("Defibrillator"); },
+            json => json["Defibrillator"]!["EnergyStepsJoules"] = new JsonArray(10, 5)
+        })
+        {
+            var invalid = JsonNode.Parse(custom)!.AsObject();
+            change(invalid);
+            string damaged = invalid.ToJsonString();
+            File.WriteAllText(path, damaged, new System.Text.UTF8Encoding(false));
+            restored = store.Load(out rejected);
+            Require(rejected && !restored.CustomDefibrillatorEnergySteps && restored.Display.Skin == MonitorSkin.FourRows &&
+                File.ReadAllText(path, System.Text.Encoding.UTF8) == damaged,
+                "invalid manual-step selection rejects the complete preference document without publishing or overwriting it");
+        }
+        string before = File.ReadAllText(path, System.Text.Encoding.UTF8);
+        bool missingRejected = false;
+        try { store.Save(preferences with { Defibrillator = null }); }
+        catch (ArgumentException) { missingRejected = true; }
+        Require(missingRejected && File.ReadAllText(path, System.Text.Encoding.UTF8) == before,
+            "saving an explicit manual override without a configuration fails before touching the stored file");
+    }
+
     private static void Require(bool condition, string message)
     { if (!condition) { throw new InvalidOperationException(message); } }
 }

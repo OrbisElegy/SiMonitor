@@ -10,8 +10,9 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 
 ECG 检测能力与皮肤集成边界见 [ECG 增强监测接口](docs/interfaces/alarms/ecg-monitoring.md)。
 
-在“设置 → 显示”切换 Generic 或 ePM 12C 参考皮肤，也可导入／导出单个 `.simskin` 文件；
-外观与波形行数独立配置，详见[桌面皮肤接口](docs/interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤)。
+在“设置 → 显示”切换 Generic、ePM 12C 或 D3 整机参考皮肤，也可导入／导出含材质资源的 `.simskin` 包；
+D3 参考皮肤固定三行，其他皮肤可独立配置波形行数。通用机壳布局与可信设备参数档案分别配置，
+操作接口不以型号命名，详见[桌面皮肤接口](docs/interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤)。
 
 技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 

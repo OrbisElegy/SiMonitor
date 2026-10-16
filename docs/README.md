@@ -31,6 +31,8 @@
 
 ## 技术调研
 
+- [D3 整机面板与操作依据](research/devices/beneheart-d3.md)
+
 - [起搏与除颤波形依据](research/physiology/pacing-defibrillation.md)
 
 - [ECG 监护检测依据与能力边界](research/physiology/ecg-monitoring.md)

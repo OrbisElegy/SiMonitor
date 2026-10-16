@@ -12,7 +12,17 @@ using Monitor.Domain.Therapy;
 
 namespace Monitor.Desktop;
 
-internal enum DefibrillatorCommand { Charge, PressShock, ReleaseShock, Disarm, ToggleSync, ToggleAed }
+internal enum DefibrillatorCommand
+{
+    Charge,
+    PressShock,
+    ReleaseShock,
+    Disarm,
+    ToggleSync,
+    ToggleAed,
+    PauseAedForCpr,
+    ResumeAedAnalysis
+}
 
 internal sealed class DefibrillatorControls : StackPanel
 {
@@ -22,8 +32,10 @@ internal sealed class DefibrillatorControls : StackPanel
     private bool? _shownSync;
     private bool? _shownAed;
     private string? _shownChargeKey;
+    private bool _fixedHardwareLabels;
     private bool _holding;
     private bool _pointerHolding;
+    private IPointer? _capturedPointer;
     private Key? _heldKey;
     private readonly Border _aedLamp = Lamp();
     private readonly Border _syncLamp = Lamp();
@@ -43,6 +55,40 @@ internal sealed class DefibrillatorControls : StackPanel
     internal bool ChargeLit { get; private set; }
     internal bool SyncLit { get; private set; }
     internal bool AedLit { get; private set; }
+    internal AedPhase? CurrentAedPhase { get; private set; }
+    internal bool AedSoftAvailable { get; private set; }
+    internal event Action? StateRefreshed;
+    internal void ReleaseHeldInput() => Release();
+
+    internal void RunAedSoftCommand()
+    {
+        if (!AedSoftAvailable) { return; }
+        _command?.Invoke(CurrentAedPhase is AedPhase.Cpr or AedPhase.Suspended
+            ? DefibrillatorCommand.ResumeAedAnalysis : DefibrillatorCommand.PauseAedForCpr);
+    }
+
+    // A device skin reuses the actual controls, including the held-shock handlers.
+    // Removing the generic groups first avoids assigning one control to two parents.
+    internal void DetachPanelControls()
+    {
+        Release();
+        foreach (var panel in Children.OfType<Panel>().ToArray()) { panel.Children.Clear(); }
+        Children.Clear();
+    }
+
+    internal void UseFixedHardwareLabels()
+    {
+        if (_fixedHardwareLabels) { return; }
+        _fixedHardwareLabels = true;
+        _shownChargeKey = "skin.charge";
+        _localization.Bind(Charge, ContentControl.ContentProperty, "skin.charge");
+        _localization.Bind(Charge, AutomationProperties.NameProperty, "skin.charge");
+        Charge.Padding = new Thickness(6, 4);
+        Charge.HorizontalContentAlignment = HorizontalAlignment.Center;
+        Charge.VerticalContentAlignment = VerticalAlignment.Center;
+        _chargeFill.Background = null;
+        if (CurrentAedPhase is not null) { Charge.IsEnabled = false; }
+    }
 
     internal DefibrillatorControls(DesktopLocalization localization, DefibrillatorConfiguration configuration,
         int selectedEnergyJoules, Action<DefibrillatorCommand>? command)
@@ -87,7 +133,11 @@ internal sealed class DefibrillatorControls : StackPanel
         Sync.Content = IndicatorCaption(_syncLamp, "skin.sync");
         localization.Bind(Sync, AutomationProperties.NameProperty, "skin.sync");
         localization.Bind(Shock, ToolTip.TipProperty, "defib.holdHint");
-        Charge.Click += (_, _) => command?.Invoke(DefibrillatorCommand.Charge);
+        Charge.Click += (_, _) =>
+        {
+            if (_fixedHardwareLabels && (!Charge.IsEnabled || CurrentAedPhase is not null)) { return; }
+            command?.Invoke(DefibrillatorCommand.Charge);
+        };
         Disarm.Click += (_, _) => command?.Invoke(DefibrillatorCommand.Disarm);
         Sync.Click += (_, _) => command?.Invoke(DefibrillatorCommand.ToggleSync);
         // Click never authorizes a shock. Both keyboard and pointer must remain held.
@@ -96,6 +146,7 @@ internal sealed class DefibrillatorControls : StackPanel
             if (!Shock.IsEnabled || !args.GetCurrentPoint(Shock).Properties.IsLeftButtonPressed || _holding) { return; }
             args.Handled = true;
             args.Pointer.Capture(Shock);
+            _capturedPointer = args.Pointer;
             _pointerHolding = true;
             Hold();
         }, RoutingStrategies.Tunnel);
@@ -121,6 +172,7 @@ internal sealed class DefibrillatorControls : StackPanel
             Release();
         }, RoutingStrategies.Tunnel);
         Shock.LostFocus += (_, _) => Release();
+        Shock.DetachedFromVisualTree += (_, _) => Release();
         DetachedFromVisualTree += (_, _) => Release();
         Children.Add(Charge);
         Children.Add(Shock);
@@ -135,9 +187,12 @@ internal sealed class DefibrillatorControls : StackPanel
     private void Release()
     {
         bool wasHolding = _holding;
+        var pointer = _capturedPointer;
+        _capturedPointer = null;
         _holding = false;
         _heldKey = null;
         _pointerHolding = false;
+        pointer?.Capture(null);
         if (wasHolding) { _command?.Invoke(DefibrillatorCommand.ReleaseShock); }
     }
 
@@ -151,12 +206,14 @@ internal sealed class DefibrillatorControls : StackPanel
         AutomatedExternalDefibrillator? aed = null, bool aedAvailable = true)
     {
         bool automated = aed?.Enabled == true;
+        CurrentAedPhase = automated ? aed!.Phase : null;
+        AedSoftAvailable = automated && available;
         var state = device.State;
         bool ready = state.Energy == EnergyState.Ready;
         bool charging = state.Energy == EnergyState.Charging;
         bool holding = state.Attempt is DefibrillationAttemptState.DischargeRequested or DefibrillationAttemptState.AwaitingSync;
         Aed.IsEnabled = automated || available && aedAvailable;
-        Charge.IsEnabled = available && (!automated || aed!.Phase == AedPhase.Suspended);
+        Charge.IsEnabled = available && (!automated || !_fixedHardwareLabels && aed!.Phase == AedPhase.Suspended);
         Shock.IsEnabled = available && ready && (!automated || aed!.Phase == AedPhase.ShockAdvised);
         Disarm.IsEnabled = charging || ready || automated && aed!.Phase != AedPhase.Suspended;
         Sync.IsEnabled = available && !automated;
@@ -170,16 +227,19 @@ internal sealed class DefibrillatorControls : StackPanel
         if (ChargeProgressPermille != progress)
         {
             ChargeProgressPermille = progress;
-            double fraction = progress / 1000d;
-            var filled = Color.Parse("#9C6510");
-            var empty = Color.Parse("#30291B");
-            _chargeFill.Background = new LinearGradientBrush
+            if (!_fixedHardwareLabels)
             {
-                StartPoint = RelativePoint.TopLeft,
-                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                { new(filled, 0), new(filled, fraction), new(empty, fraction), new(empty, 1) }
-            };
+                double fraction = progress / 1000d;
+                var filled = Color.Parse("#9C6510");
+                var empty = Color.Parse("#30291B");
+                _chargeFill.Background = new LinearGradientBrush
+                {
+                    StartPoint = RelativePoint.TopLeft,
+                    EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                    GradientStops = new GradientStops
+                    { new(filled, 0), new(filled, fraction), new(empty, fraction), new(empty, 1) }
+                };
+            }
         }
         Shock.Background = Brush.Parse(ShockLit ? "#D83B45" : "#562831");
         _syncLamp.Background = Brush.Parse(SyncLit ? "#53F28C" : "#39434B");
@@ -201,7 +261,7 @@ internal sealed class DefibrillatorControls : StackPanel
             _shownAed = automated;
             _localization.Bind(Aed, AutomationProperties.NameProperty, automated ? "aed.on" : "aed.off");
         }
-        string chargeKey = automated && aed!.Phase == AedPhase.Suspended ? "aed.analyze" : "skin.charge";
+        string chargeKey = !_fixedHardwareLabels && automated && aed!.Phase == AedPhase.Suspended ? "aed.analyze" : "skin.charge";
         if (_shownChargeKey != chargeKey)
         {
             _shownChargeKey = chargeKey;
@@ -213,6 +273,7 @@ internal sealed class DefibrillatorControls : StackPanel
             _shownSync = SyncLit;
             _localization.Bind(Sync, AutomationProperties.NameProperty, SyncLit ? "defib.syncOn" : "defib.syncOff");
         }
+        StateRefreshed?.Invoke();
     }
 
     private Grid IndicatorCaption(Border lamp, string key)

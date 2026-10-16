@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -17,6 +18,8 @@ internal static class DefibrillatorSmokeChecks
 {
     internal static void Verify()
     {
+        VerifyEnergyDefaults();
+        VerifyFixedHardwareLabels();
         long now = 0;
         var window = new DesignPreviewWindow(safetyClock: () => now);
         window.Show();
@@ -26,6 +29,7 @@ internal static class DefibrillatorSmokeChecks
             window.Settings.EcgSelection = 21;
             window.Settings.ElectricalConversion.Enabled.IsChecked = true;
             window.Settings.ElectricalConversion.Biphasic.Value = 150;
+            window.Settings.Defibrillator.UseSkinEnergySteps.IsChecked = false;
             window.Settings.Defibrillator.Steps.Text = "5, 20, 50, 100, 200, 360";
             window.Settings.Defibrillator.ChargeSeconds.Value = 1;
             window.RestartSettings();
@@ -112,6 +116,7 @@ internal static class DefibrillatorSmokeChecks
             window.Settings.SectionPages[6].SelectedSection = 4;
             Capture(window, "defibrillator-configuration.png");
             var editor = window.Settings.Defibrillator;
+            editor.UseSkinEnergySteps.IsChecked = false;
             editor.Steps.Text = "200, 50, 50";
             Require(editor.Error.IsVisible, "invalid energy sequence has an immediate inline error");
             var previous = window.Defibrillator;
@@ -119,15 +124,139 @@ internal static class DefibrillatorSmokeChecks
             Require(ReferenceEquals(previous, window.Defibrillator), "invalid configuration cannot replace the command owner");
             var locked = DefibrillatorConfiguration.Default with { Waveform = DefibrillationWaveformKind.MonophasicTruncatedExponential };
             editor.SetDeviceOverride(locked);
+            editor.UseSkinEnergySteps.IsChecked = true;
             editor.Steps.Text = "not a valid editable draft";
             Require(!editor.Steps.IsEffectivelyEnabled && editor.Read().Waveform == locked.Waveform &&
-                editor.Read().EnergyStepsJoules.SequenceEqual(locked.EnergyStepsJoules), "device lock holds even if a disabled draft is changed programmatically");
+                editor.Read().EnergyStepsJoules.SequenceEqual(locked.EnergyStepsJoules), "selected skin defaults ignore a programmatically changed disabled draft");
             editor.SetDeviceOverride(null);
             editor.Restore(DefibrillatorConfiguration.Default);
             window.Localization.Select("en");
             Require(editor.Error.IsVisible == false, "restored valid profile clears validation");
         }
         finally { window.Close(); }
+    }
+
+    private static void VerifyFixedHardwareLabels()
+    {
+        var localization = new DesktopLocalization("zh-CN");
+        var configuration = DefibrillatorConfiguration.Default with { ChargeDurationMilliseconds = 1000 };
+        List<DefibrillatorCommand> commands = [];
+        var controls = new DefibrillatorControls(localization, configuration, 200, commands.Add);
+        controls.UseFixedHardwareLabels();
+        controls.UseFixedHardwareLabels();
+        var device = new ManualDefibrillator(Guid.NewGuid(), configuration, 200);
+        device.BeginCharge(0);
+        _ = device.Tick(500_000_000, 500_000_000, []);
+        int screenProgress = -1;
+        controls.StateRefreshed += () => screenProgress = controls.ChargeProgressPermille;
+        controls.Refresh(device, 500_000_000, available: true);
+        Require(controls.Charge.Content is string caption && caption == localization.Get("skin.charge") &&
+            controls.ChargeFill.Background is null && controls.ChargeProgressPermille == 500 && screenProgress == 500,
+            "hardware charge uses the button caption and exposes progress to the screen after state refresh");
+        var aed = new AutomatedExternalDefibrillator(device);
+        aed.Enable(500_000_000, 500_000_000);
+        controls.Refresh(device, 500_000_000, available: true, aed);
+        Require(!controls.Charge.IsEnabled, "hardware charge is unavailable during AED analysis");
+        aed.Suspend(500_000_000);
+        controls.Refresh(device, 500_000_000, available: true, aed);
+        Click(controls.Charge);
+        Require(!controls.Charge.IsEnabled && commands.Count == 0 &&
+            Equals(controls.Charge.Content, localization.Get("skin.charge")) &&
+            AutomationProperties.GetName(controls.Charge) == localization.Get("skin.charge"),
+            "suspended AED cannot relabel or repurpose the hardware charge key");
+        controls.RunAedSoftCommand();
+        Require(commands.Count == 1 && commands[0] == DefibrillatorCommand.ResumeAedAnalysis,
+            "the AED screen soft key retains explicit reanalysis");
+        var generic = new DefibrillatorControls(localization, configuration, 200, null);
+        generic.Refresh(device, 500_000_000, available: true, aed);
+        Require(generic.Charge.IsEnabled && ReferenceEquals(generic.Charge.Content, generic.ChargeFill) &&
+            ((TextBlock)generic.ChargeFill.Child!).Text == localization.Get("aed.analyze"),
+            "generic controls retain their contextual reanalysis caption and button progress");
+        localization.Select("en");
+        Require(Equals(controls.Charge.Content, localization.Get("skin.charge")) &&
+            AutomationProperties.GetName(controls.Charge) == localization.Get("skin.charge"),
+            "hardware charge lettering and accessibility follow language changes without changing function");
+        aed.Disable(500_000_000);
+        controls.Refresh(device, 500_000_000, available: true, aed);
+        Click(controls.Charge);
+        Require(controls.Charge.IsEnabled && commands[^1] == DefibrillatorCommand.Charge,
+            "leaving AED restores manual charging on the same fixed hardware key");
+    }
+
+    private static void VerifyEnergyDefaults()
+    {
+        var editor = new DefibrillatorSettingsEditor(new DesktopLocalization("en"));
+        int[] skinSteps = [5, 30, 100, 200, 360];
+        int[] expectedSkinSteps = [5, 30, 100, 200, 360];
+        int[] manualSteps = [3, 9, 90, 270];
+        int[] expectedManualSteps = [3, 9, 90, 270];
+        int[] expectedDraftSteps = [7, 13, 44, 220];
+        var editable = new DefibrillatorConfiguration(manualSteps,
+            DefibrillationWaveformKind.BiphasicTruncatedExponential, 1500, 45)
+        { EcgRecoveryMilliseconds = 600 };
+        var profile = DefibrillatorConfiguration.Default with
+        {
+            Waveform = DefibrillationWaveformKind.MonophasicTruncatedExponential,
+            ChargeDurationMilliseconds = 7000,
+            AutoDisarmSeconds = 60,
+            EcgRecoveryMilliseconds = 2500
+        };
+        Require(editor.UseSkinEnergySteps.IsChecked == true && !editor.CustomEnergySteps,
+            "a fresh editor follows skin energy defaults");
+        editor.SetSkinDefaults(profile, skinSteps, customEnergySteps: false, editable);
+        skinSteps[0] = 1;
+        manualSteps[0] = 1;
+        Require(!editor.Steps.IsEffectivelyEnabled && editor.UseSkinEnergySteps.IsEffectivelyEnabled &&
+            editor.Read().EnergyStepsJoules.SequenceEqual(expectedSkinSteps),
+            "skin defaults are snapshotted independently of the behavior profile and source array");
+        editor.Steps.Text = "invalid disabled text";
+        Require(!editor.Error.IsVisible && editor.Read().EnergyStepsJoules.SequenceEqual(expectedSkinSteps),
+            "programmatic writes to the disabled energy field cannot replace selected skin defaults");
+
+        editor.UseSkinEnergySteps.IsChecked = false;
+        var custom = editor.Read();
+        Require(editor.CustomEnergySteps && editor.Steps.IsEffectivelyEnabled &&
+            !editor.Waveform.IsEffectivelyEnabled && !editor.ChargeSeconds.IsEffectivelyEnabled &&
+            !editor.AutoDisarmSeconds.IsEffectivelyEnabled && !editor.EcgRecoverySeconds.IsEffectivelyEnabled &&
+            custom.EnergyStepsJoules.SequenceEqual(expectedManualSteps),
+            "manual energy stays editable and overrides the profile while only behavior fields are locked");
+        Require(custom.Waveform == profile.Waveform && custom.ChargeDurationMilliseconds == 7000 &&
+            custom.AutoDisarmSeconds == 60 && custom.EcgRecoveryMilliseconds == 2500,
+            "manual energy selection preserves the device's waveform and timing constraints");
+        editor.ChargeSeconds.Value = 2;
+        Require(editor.Read().ChargeDurationMilliseconds == 7000,
+            "programmatic changes cannot bypass a disabled behavior field");
+
+        const string draft = "7; 13, 44，220";
+        editor.Steps.Text = draft;
+        Require(editor.Read().EnergyStepsJoules.SequenceEqual(expectedDraftSteps),
+            "the manual table drives the effective profile");
+        editor.UseSkinEnergySteps.IsChecked = true;
+        Require(editor.Read().EnergyStepsJoules.SequenceEqual(expectedSkinSteps) && !editor.Error.IsVisible,
+            "reselecting defaults restores the skin table immediately");
+        editor.UseSkinEnergySteps.IsChecked = false;
+        Require(editor.Steps.Text == draft && editor.Read().EnergyStepsJoules.SequenceEqual(expectedDraftSteps),
+            "switching back restores the exact manual draft rather than replacing it with skin defaults");
+
+        const string invalidDraft = "220, 44, 44";
+        editor.Steps.Text = invalidDraft;
+        bool rejected = false;
+        try { _ = editor.Read(); }
+        catch (ArgumentException) { rejected = true; }
+        Require(editor.Error.IsVisible && rejected, "an invalid manual table is rejected before it reaches a command owner");
+        editor.UseSkinEnergySteps.IsChecked = true;
+        Require(!editor.Error.IsVisible && editor.Read().EnergyStepsJoules.SequenceEqual(expectedSkinSteps),
+            "an unused invalid draft does not block valid skin defaults");
+        editor.UseSkinEnergySteps.IsChecked = false;
+        Require(editor.Error.IsVisible && editor.Steps.Text == invalidDraft,
+            "returning to an invalid manual draft preserves the input and restores its inline error");
+
+        editor.SetSkinDefaults(null, expectedSkinSteps, customEnergySteps: true, editable);
+        Require(editor.Steps.IsEffectivelyEnabled && editor.Waveform.IsEffectivelyEnabled &&
+            editor.ChargeSeconds.IsEffectivelyEnabled && editor.AutoDisarmSeconds.IsEffectivelyEnabled &&
+            editor.EcgRecoverySeconds.IsEffectivelyEnabled && editor.Read().ChargeDurationMilliseconds == 1500 &&
+            editor.Read().Waveform == editable.Waveform && !editor.Error.IsVisible,
+            "removing the device profile restores editable behavior fields and a valid saved manual configuration");
     }
 
     internal static void VerifyPostShock()
@@ -231,6 +360,9 @@ internal static class DefibrillatorSmokeChecks
             window.Settings.AedConversion.PostShockPause.Value = 2;
             window.Settings.Defibrillator.ChargeSeconds.Value = .1m;
             window.RestartSettings();
+            // This fixture advances both clocks explicitly; rendering must not
+            // let a wall-clock dispatcher tick advance only simulation time.
+            window.ActiveTimer!.Stop();
             void Advance(int frames)
             {
                 for (int frame = 0; frame < frames; frame++)
@@ -258,7 +390,11 @@ internal static class DefibrillatorSmokeChecks
             Require(window.Settings.Sound.PublishedTherapy is { Phase: TherapySoundPhase.Ready, Locale: "en", Announce: false },
                 "language change withdraws the old voice without replaying ready history");
             window.Localization.Select("zh-CN");
+            long capturedSimulationTimeNs = window.Session.SimulationTimeNs;
+            var capturedPhase = window.Aed.Phase;
             Capture(window, "generic-aed-shock-advised.png");
+            Require(window.Session.SimulationTimeNs == capturedSimulationTimeNs && window.Aed.Phase == capturedPhase,
+                "rendering an AED snapshot preserves the manually advanced time and advice");
             Click(controls.Shock);
             Require(window.Session.ShockArtifacts.Count == 0, "an ordinary click cannot discharge AED");
             Require(window.Settings.Sound.TherapyRelayCount == 0, "ready and button clicks do not emit a discharge relay");
@@ -293,12 +429,14 @@ internal static class DefibrillatorSmokeChecks
             Require(window.Aed.Phase == AedPhase.Suspended && !controls.Charge.IsEnabled, "pause suspends the complete AED workflow");
             Require(window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Silent, "pause removes all therapy sound intent");
             window.Start();
+            window.ActiveTimer!.Stop();
             Click(controls.Charge);
             Require(window.Aed.Phase == AedPhase.Analyzing, "resume requires explicit reanalysis");
             window.SelectPage(2);
             Require(window.Aed.Phase == AedPhase.Suspended, "leaving the monitor invalidates AED analysis");
             window.Settings.EcgSelection = 72;
             window.RestartSettings();
+            window.ActiveTimer!.Stop();
             window.SelectPage(0);
             Require(!window.Aed.Enabled && window.Defibrillator.State.Energy == EnergyState.Idle,
                 "template/configuration replacement resets the AED owner");

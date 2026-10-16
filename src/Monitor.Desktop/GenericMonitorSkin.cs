@@ -12,7 +12,7 @@ using Monitor.Simulation.Physiology;
 
 namespace Monitor.Desktop;
 
-internal sealed partial class GenericMonitorSkin : IMonitorSkin
+internal sealed partial class GenericMonitorSkin : IMonitorSkin, IMonitorDevicePanel
 {
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
@@ -69,6 +69,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     internal void SetTwelveLeadVisible(bool visible)
     {
+        if (_package.Defibrillator) { ClearWaveformFreeze(); UpdateSoftKeys(); }
         bool changed = TwelveLeadVisible != visible;
         TwelveLeadVisible = visible;
         if (_waveforms is null || _twelveLeadWaveforms is null) { return; }
@@ -95,6 +96,12 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
         _localization.Bind(ShowTherapy, ToggleSwitch.OnContentProperty, "skin.visible");
         _localization.Bind(ShowTherapy, ToggleSwitch.OffContentProperty, "skin.hidden");
         LayoutRows.SelectedIndex = layout == MonitorSkin.ThreeRows ? 0 : layout == MonitorSkin.FourRows ? 1 : -1;
+        if (_package.FixedWaveformRows is { } fixedRows)
+        {
+            LayoutRows.SelectedIndex = fixedRows == 3 ? 0 : 1;
+            LayoutRows.IsEnabled = false;
+        }
+        ShowTherapy.IsEnabled = !_package.Defibrillator;
         ShowTherapy.IsChecked = therapyVisible;
         _layoutChanged = changed;
         LayoutRows.SelectionChanged += (_, _) => ChangeLayout();
@@ -114,6 +121,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     private void UpdateTherapyVisibility()
     {
+        if (_package.Defibrillator) { return; }
         if (_body is null || _monitorArea is null || TherapyArea is null) { return; }
         bool visible = ShowTherapy.IsChecked == true;
         TherapyArea.IsVisible = visible;
@@ -123,8 +131,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     internal TextBlock PacingStatus { get; } = new() { Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap };
     internal DefibrillatorControls Defibrillator { get; }
     internal ComboBox Energy => Defibrillator.Energy;
-    public DefibrillatorConfiguration? DefibrillatorOverride => null;
-    internal NumericUpDown Rate { get; } = Number(70, 30, 180, 5);
+    internal NumericUpDown Rate { get; } = Number(70, 30, 210, 5);
     internal NumericUpDown Current { get; } = Number(0, 0, 200, 5);
     internal ComboBox PacingType { get; } = new() { MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Stretch };
     internal Button ApplyPacing { get; } = new()
@@ -243,8 +250,8 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
     public string Id => _package.Id;
     public IBrush Background => _package.Background;
     public IBrush ChannelBrush(int channel) => _package.ChannelBrush(channel);
-    public bool CompactWaveformLabels => _package.Bedside;
-    public double NumericFontSize => _package.Bedside ? 112 : 64;
+    public bool CompactWaveformLabels => _package.Bedside || _package.Defibrillator;
+    public double NumericFontSize => _package.Defibrillator ? 76 : _package.Bedside ? 112 : 64;
     public IBrush WarningBrush => _package.WarningBrush;
     public void RefreshLayout()
     {
@@ -254,6 +261,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin
 
     public Control Compose(MonitorSkinContent content)
     {
+        if (_package.Defibrillator) { return ComposeEnclosure(content); }
         var root = new Grid { RowDefinitions = new(_package.Bedside ? "50,*,58" : "Auto,*,Auto"), Background = Background };
         if (_package.Bedside)
         {

@@ -14,7 +14,9 @@ internal sealed partial class DesignPreviewSettings
     internal Button RecommendedSkinLayout { get; } = new() { MinHeight = 44 };
     internal TextBlock SkinStatus { get; } = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     internal event Action<MonitorSkinPackage>? MonitorAppearanceChanged;
-    private MonitorSkinPackage[] _skinPackages = [MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor];
+    private MonitorSkinPackage[] _skinPackages = [MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor, MonitorSkinPackage.DefibrillatorEnclosure];
+    private int? _fixedWaveformRows;
+    private bool _restoringFixedRows;
     private bool _restoringSkin;
 
     private StackPanel BuildSkinSelection()
@@ -48,11 +50,15 @@ internal sealed partial class DesignPreviewSettings
         _restoringSkin = true;
         try
         {
-            _skinPackages = [MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor];
+            _skinPackages = [MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor, MonitorSkinPackage.DefibrillatorEnclosure];
             int selected = Array.FindIndex(_skinPackages, item => item.Matches(package));
-            if (selected < 0) { _skinPackages = [.. _skinPackages, package]; selected = 2; }
+            if (selected < 0) { selected = _skinPackages.Length; _skinPackages = [.. _skinPackages, package]; }
             MonitorAppearance.ItemsSource = _skinPackages.Select(item => item.Name).ToArray();
             MonitorAppearance.SelectedIndex = selected;
+            _fixedWaveformRows = package.FixedWaveformRows;
+            Skin.IsEnabled = _fixedWaveformRows is null;
+            RecommendedSkinLayout.IsEnabled = _fixedWaveformRows is null;
+            Localization.Bind(Skin, ToolTip.TipProperty, _fixedWaveformRows is null ? "skin.waveformRows" : "skin.fixedRows");
         }
         finally { _restoringSkin = false; }
     }

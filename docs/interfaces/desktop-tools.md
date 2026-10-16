@@ -149,10 +149,10 @@ ECG（绿）、PLETH／SpO₂（蓝）、RESP（黄）、CO₂（白）。温度
 现有 3／5／7 行枚举值和保存配置不变，显示设置中可选择四行，也可逐行修改通道。
 历史枚举 `MonitorSkin` 仍表示行数配置，与新的桌面皮肤装配端口不同。
 
-“设置 → 显示 → 监护皮肤”即时切换 Generic 与参考 ePM 12C 屏幕的皮肤。
-后者采用连续黑底、绿色 ECG、青色 PLETH、黄色 RESP、右侧大数字、下方血压和测量记录，
+“设置 → 显示 → 监护皮肤”即时切换 Generic、参考 ePM 12C 屏幕的皮肤与 D3 整机皮肤。
+ePM 皮肤采用连续黑底、绿色 ECG、青色 PLETH、黄色 RESP、右侧大数字、下方血压和测量记录，
 只还原屏幕布局，不模拟机壳，也不声明真实设备的算法或功能等价性。
-两者共用 `GenericMonitorSkin` 的宿主命令控件，分别装配 `GenericMonitorArea` 与
+Generic 与 ePM 共用 `GenericMonitorSkin` 的宿主命令控件，分别装配 `GenericMonitorArea` 与
 `BedsideMonitorArea`；配色同时作用于扫线、读数、脉搏条和警告高亮。
 内置床旁皮肤入口为 `MonitorSkinPackage.BedsideMonitor`，由 `layout = bedside` 分派布局；
 `BedsideMonitorArea`、`BedsideToolbar`、`BedsideNibpCountdown` 和 `bedside.*` 本地化键按职责命名。
@@ -170,8 +170,11 @@ ECG（绿）、PLETH／SpO₂（蓝）、RESP（黄）、CO₂（白）。温度
 `IMonitorSkin.CompactWaveformLabels`、`NumericFontSize`、`WarningBrush` 提供显示参数，
 `MonitorSkinContent.Trends` 提供宿主维护的测量记录控件。
 
-切换皮肤保留采集会话、暂停状态、当前行配置、导联、十二导联视图、报警确认和血压记录；
-和离开监护页一样取消待放电状态。“使用推荐波形布局”是独立操作：Generic 恢复四行
+切换皮肤保留采集会话、暂停状态、导联、十二导联视图、报警确认和血压记录，
+取消待放电状态并退出 AED；活动起搏先安排停止。待生效的源或起搏切换完成后才能换皮肤。
+普通皮肤保留行配置；有 `fixedWaveformRows` 的机壳皮肤强制相应行数，并禁用两个行数入口。
+保留前面的行及其通道、量程、速度；完整原布局保存到 `UnlockedSkinDisplay`，离开机壳时恢复额外行，
+期间对保留行的修改继续生效。该备份与显示偏好一起持久化，重开后仍可恢复。“使用推荐波形布局”是独立操作：Generic 恢复四行
 ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用既有报警接入规则。
 三、四、五、七行均可继续使用。下方记录仅保留本次会话最近四次已完成的袖带测量，
 附带当时有效且已接入的 HR、SpO₂、RR；无有效读数显示 `--`，重新开始会清空记录。
@@ -179,25 +182,79 @@ ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用�
 ### `.simskin` 文件格式
 
 源码：[MonitorSkinPackage.cs](../../src/Monitor.Desktop/MonitorSkinPackage.cs)。
-内置示例：[generic.simskin](../../src/Monitor.Desktop/Assets/Skins/generic.simskin)、
-[epm12.simskin](../../src/Monitor.Desktop/Assets/Skins/epm12.simskin)。内置包嵌入程序集，
-与导入包使用同一解析器；通过界面“导出皮肤”即可得到完整单文件，无需额外资源目录。
+内置源码目录：[Generic](../../src/Monitor.Desktop/Assets/Skins/generic/manifest.json)、
+[ePM 12C](../../src/Monitor.Desktop/Assets/Skins/epm12/manifest.json)、
+[D3](../../src/Monitor.Desktop/Assets/Skins/d3/manifest.json)。每个目录含 `manifest.json` 和可选的
+`assets/*.material.json`，嵌入程序集后通过相同校验路径装配。
+导出为一个 ZIP 格式 `.simskin`，其中包括全部引用资源；不依赖导入时的源目录。
 
-| 字段 | v1 约束 |
+| 清单字段 | v2 约束 |
 |---|---|
-| `version` | 必须为整数 `1` |
-| `id` | 1–64 个小写 ASCII 字母、数字或连字符，以字母开头 |
-| `name` | 1–64 字符的非空名称，不含控制字符 |
-| `layout` | `generic` 或 `bedside`，选择宿主提供的布局 |
-| `background` | 不透明 `#RRGGBB` 底色 |
-| `channelColors` | 恰好七个 `#RRGGBB`：ECG、RESP、PLETH、ABP、CO₂、PA、CVP |
-| `warningColor` | `#RRGGBB` 警告高亮色，危急报警沿用宿主红色 |
-| `nibpColor` | `#RRGGBB` 血压读数色 |
+| `version` | 整数 `2`；不兼容未发布的 v1 裸 JSON |
+| `id` / `name` | 小写 ASCII 标识符 1–64 字符／不含控制字符的名称 1–64 字符 |
+| `layout` | `generic`、`bedside` 或 `defibrillator` |
+| `fixedWaveformRows` | null 或 3、4、5、7；机壳布局必须声明，D3 内置值为 3 |
+| `background` / `warningColor` / `nibpColor` | 不透明 `#RRGGBB` |
+| `channelColors` | 七种颜色：ECG、RESP、PLETH、ABP、CO₂、PA、CVP |
+| `deviceProfile` | 可选的可信设备参数档案标识；机壳布局必须声明，当前内置档案为 `biphasic-360` |
+| `defaultEnergyStepsJoules` | 所有包必填；1–64 个 1–1000 J 整数，严格升序且不重复 |
+| `materials` | 语义名到包内资源路径的映射；无资源时为空对象 |
 
-包为 UTF-8 JSON，最多 16 KiB，所有字段必需。拒绝未知／重复字段、未知版本或布局、
-非法颜色、超限内容及不完整文档；完整验证后才切换。v1 的布局和交互由宿主实现，
-不支持任意控件坐标、外部图像、字体文件或脚本。波形通道、患者参数、报警阈值及
-治疗配置不在皮肤包内。
+`layout` 选择通用绘制与操作布局，`deviceProfile` 仅从可信注册表绑定参数实例，两者分别解析。
+此前未发布的 `beneheart-d3` 参数标识不再接受；旧实验包需改用 `biphasic-360` 重新打包，或从新版重新导出。
+内置机壳通过 `MonitorSkinPackage.DefibrillatorEnclosure` 取得；资源目录 `d3`、清单标识
+`d3-inspired` 和显示名 `D3 · Inspired` 保留外观身份与参考出处，不参与行为接口命名或分派。
+
+`MonitorSkinPackage.DefaultEnergyStepsJoules` 返回清单能量表的只读快照；其内容不受
+`deviceProfile` 内的能量表限制。Generic 与 ePM 内置包各携带原 15 档，D3 内置包携带
+21 档。导入／导出和包相等性比较都保留这份默认表；缺少该字段的未发布 v2 包也会被拒绝。
+用户的手动覆盖属于显示偏好，不会替换导出包里的默认表。
+
+`defibrillator` 布局要求 `shell`、`key`、`softkey`、`charge`、`shock`、`selector` 六种材质。
+每份材质使用 `version: 1`，含 `fill`、`pressedFill`、`border`、`foreground` 四种颜色，
+以及 `cornerRadius`（0–80）、`borderThickness`（0–8）。这些文件控制外壳及按键的实际绘制，
+不包含可执行代码、外部引用或厂家图片；目前不接受 PNG/SVG、字体或任意控件坐标。
+
+包上限 256 KiB，总展开上限 128 KiB，最多 33 个条目；清单最多 16 KiB，单材质最多 4 KiB。
+超过 1 KiB 的条目压缩比不得超过 100。拒绝路径穿越、绝对路径、符号链接、重复路径／JSON字段、
+未知字段、缺失／未引用资源和不合法数值。校验完成后才发布包；材质原始字节在往返保存时保留，
+比较包时同时比较清单语义、资源映射及字节内容。旧 v1 文件导入失败，旧本地皮肤会回退 Generic 并显示提示。
+
+### 通用整机面板
+
+宿主通过 `IMonitorDevicePanel` 订阅通用模式、增益、事件、报警复位和按住四分频命令。
+`MonitorDeviceProfile` 提供手动／AED 的波形与时序、手动默认能量目标、AED 协议能量序列和放电后同步行为，
+通用机壳绘制位于 `GenericMonitorSkin.Enclosure.cs`，旋钮与软键使用 `ModeSelector`、
+`NavigationDial`、`SoftKeys` 和 `SoftKeyLabels` 等通用名称，本地化键采用 `devicePanel.*`。
+宿主操作不按型号分支；`MonitorDeviceProfiles` 将档案标识解析为内部可信参数实例，
+皮肤包不能携带可执行行为。
+有效能量表按“已应用的手动表优先，否则使用皮肤清单默认表”解析，与这些设备行为参数分别处理。
+
+内置参考外观依据见 [D3 面板调研](../research/devices/beneheart-d3.md)。外壳按固定逻辑尺寸等比缩放，
+该皮肤的 4:3 屏幕固定三行；提手、电极板收纳区、报警灯、交流／电池／就绪指示、扬声器与全部操作区在同一面板内。
+模式旋钮提供关机、监护、手动、AED、起搏，可点击目标角度或印刷档位，也可拖动、滚轮或用方向键选档。
+两端停止、不环绕；档位文字固定印刷，仅指针表示当前档位，且只在宿主接受切换并回传状态后转动。
+导航旋钮通过拖动、滚轮或方向键选择，中心短按或 Enter／Space 确认，拖动不触发确认。
+能量使用独立 ± 键；黄色充电键的外壳文字固定，充电进度显示在屏幕内。
+充电键在 AED 模式下不执行重新分析，恢复分析使用对应屏幕软键。
+橙色放电键仍须按住，失焦、移出、松开或换模式取消授权。
+内置参数档案在同步交付后退出同步；关机立即停仿真并清除治疗授权，开机先完成必要的起搏停止，再允许治疗。
+
+三个屏下软键正对各自屏幕标签，功能与可用状态随模式对应更新。
+监护提供冻结、趋势和报警复位；冻结只保存波形图像，数值和采样继续更新。
+趋势显示当前会话的实际袖带记录；报警复位确认可确认的现有报警，不修改阈值。
+手动模式提供同步和解除电荷；AED 提供暂停进入 CPR／恢复分析。起搏提供启停、参数与按住 4:1。
+4:1 通过临时 `PulseDivision` 改变实际刺激周期，松开后在采样边界恢复，不写入治疗偏好。
+导联、增益、事件、NIBP、报警暂停和菜单硬键均接入宿主；事件使用当前仿真时间写入打印记录。
+增益仅修改 ECG 显示范围，当前值显示在屏幕内；打印与十二导联位于面板菜单中。
+
+D3 内置清单默认提供 21 档能量（1–360 J）；成人教学配置的手动默认目标为 200 J，
+AED 协议目标为 200→300→360 J，只在实际放电后升级。手动默认目标及 AED 每个协议目标均映射到
+当前有效能量表中最近的合法档位，等距时取较低档；映射后的 AED 序列允许相邻档相同。
+手动／AED 自动解除电荷分别为 60／30 秒。充电统一模拟为 7 秒，
+ECG 恢复为 2.5 秒；不声称复现原机随能量、电池和阻抗变化的时序。
+起搏支持 30–210 ppm、0–200 mA，仍使用本项目的教学波形模板；不实现原机基于本征节律的
+Demand 抑制算法或真实患者夺获阈值。交流灯代表固定的模拟交流供电，电池没有虚构剩余容量。
 
 导入成功后将完整配置保存到显示偏好文件同目录的 `display-preferences.skin.simskin`
 （测试或自定义偏好路径替换其扩展名），后续启动不依赖导入源文件。采用临时文件写入、
@@ -213,7 +270,7 @@ ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用�
 首次启动、缺失显隐配置及恢复默认时隐藏治疗控制，可通过“布局 → 显示治疗控制”开启。
 明确保存的显示选择继续生效；隐藏仅改变布局，不终止已开始的治疗。
 
-Generic 右侧提供可配置的除颤能量阶梯（档位边界 1–1000 J）、起搏频率（30–180 ppm）、电流（0–200 mA）及
+Generic 右侧提供可配置的除颤能量阶梯（档位边界 1–1000 J）、起搏频率（30–210 ppm）、电流（0–200 mA）及
 现有 15 种起搏波形选择。编辑保存草稿；“启动／应用起搏”在下一采集边界切换实际播放，
 运行中再次应用可改变类型与输出，“停止起搏”恢复启动前节律，保留会话时间和已有波形。
 暂停时等待继续运行才生效；普通波形设置应用会取消这次起搏覆盖。十二导联纸面同步切换。
@@ -228,11 +285,15 @@ Generic 右侧提供可配置的除颤能量阶梯（档位边界 1–1000 J）�
 充满后持续亮起，放电键闪烁；同步键有独立指示灯。放电要求持续按住鼠标主键或空格／Enter
 至少 0.5 秒；同步时继续按住等待新检测的 QRS。松手、失焦、离开监护页、暂停、
 应用设置、起搏命令、改变档位或同步模式均取消待放电状态，充满后还有自动取消计时。
-“高级参数 → 除颤器”独立配置递增档位、四种单向／双向波、充电时间、自动取消时间
-及电击后 ECG 恢复时间。ECG 电复律页另有逐模板心脏停顿时间，默认 0；监护恢复不等同于
+“高级参数 → 除颤器”默认开启“使用皮肤默认能量档位”，采用当前包的 `defaultEnergyStepsJoules`。
+关闭该开关、输入合法递增档位并应用后，手动表在所有皮肤上优先，切换皮肤及重新启动均保留；
+重新开启并应用后恢复使用当前皮肤的默认表，保留手动表以供再次启用。
+`DisplayPreferences.CustomDefibrillatorEnergySteps` 明确保存这一选择；旧文件缺少该标志时，
+已保存的非 Generic 默认能量表视为手动表，原默认表采用皮肤默认。
+四种单向／双向波、充电时间、自动取消时间及电击后 ECG 恢复时间在无设备参数配置时可编辑，
+有 `MonitorSkinPackage.DeviceProfile` 时仍由设备预设固定；能量表的手动覆盖不解除这些限制。
+ECG 电复律页另有逐模板心脏停顿时间，默认 0；监护恢复不等同于
 真实停顿。每次实际放电均在采样 ECG 中留下饱和／恢复伪迹，转复失败仍会显示，参见接口时序。
-`IMonitorSkin.DefibrillatorOverride` 非空时由设备皮肤固定整份配置，编辑器禁用输入，
-宿主通过 `DefibrillatorConfiguration.Resolve` 再次解析有效配置。Generic 不提供覆盖。
 完整时钟、放电和转复契约见[电复律接口](electrical-conversion.md#手动除颤与设备配置)。
 原侧栏设置、十二导联与帮助入口继续有效。小窗口的治疗面板可纵向滚动。
 

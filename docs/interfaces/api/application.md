@@ -1808,7 +1808,8 @@ public enum PreviewRecordEventKind
     MonitoringChanged,
     NibpStarted,
     NibpCompleted,
-    NibpCancelled
+    NibpCancelled,
+    OperatorMarked
 }
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);
 public sealed record MonitorPrintSample(long TimeNs, double Microvolts);
@@ -1816,6 +1817,7 @@ public sealed record MonitorPrintSnapshot(long CapturedAtNs, long AvailableFromN
     IReadOnlyList<IReadOnlyList<MonitorPrintSample>> Leads, IReadOnlyList<PreviewRecordEvent> Events);
 public sealed partial class LocalMonitorPreviewSession
 {
+    public void MarkOperatorEvent();
     public MonitorPrintSnapshot CapturePrintSnapshot();
 }
 ```

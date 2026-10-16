@@ -52,6 +52,11 @@ internal static class MonitorPrintSnapshotSpecifications
         session.SelectDisplayEcgLead(EcgLead.V6);
         Check.That(snapshot.CapturedAtNs == effective + 50_000_000 && snapshot.Events.Count == 2 &&
             saved.SequenceEqual(snapshot.Leads[(int)EcgLead.II]), "later source advancement and edits leave the snapshot unchanged");
+        long markedAt = session.SimulationTimeNs;
+        session.MarkOperatorEvent();
+        Check.That(session.SimulationTimeNs == markedAt && snapshot.Events.Count == 2 &&
+            session.CapturePrintSnapshot().Events[^1] == new PreviewRecordEvent(markedAt, PreviewRecordEventKind.OperatorMarked, ""),
+            "the panel event key marks the current session clock without advancing or changing captured snapshots");
     }
 
     private static void PrintSnapshotHandlesEmptyAndExpiredHistory()

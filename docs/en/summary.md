@@ -64,4 +64,6 @@ Pacing includes fifteen fixed examples covering chamber/site choices, implant ro
 
 Per-template shock response, independent monophasic/biphasic thresholds and skin integration are documented in the [electrical conversion contract](../interfaces/electrical-conversion.md).
 
-The default Generic skin uses four waveform rows (ECG, PLETH, RESP, CO₂), a white NIBP tile and two custom parameter slots. Therapy and toolbar buttons currently provide placeholder feedback only. The in-process desktop composition port is described in [desktop interfaces](../interfaces/desktop-tools.md#皮肤装配接口与-generic).
+The default Generic skin uses four waveform rows (ECG, PLETH, RESP, CO₂), a white NIBP tile and two custom parameter slots. Therapy and toolbar buttons use live host commands. The D3 inspired enclosure includes a mode selector, three context softkeys and hardware controls, with a fixed three-row screen and bundled button materials. The in-process desktop composition port is described in [desktop interfaces](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤).
+
+D3 source references and model limits are recorded in the [device research](../research/devices/beneheart-d3.md).

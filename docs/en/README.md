@@ -1,7 +1,7 @@
 # Seele's SiMonitor
 
-Settings → Display offers Generic and an ePM 12C inspired screen skin, plus single-file
-`.simskin` import/export. Appearance and waveform rows are configured independently;
+Settings → Display offers Generic, an ePM 12C inspired screen, and a D3 inspired full enclosure.
+Single-file `.simskin` v2 archives include button materials. D3 fixes three waveform rows;
 see the [desktop skin contract](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤).
 
 <img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Temporary SiMonitor icon" width="128" height="128" />

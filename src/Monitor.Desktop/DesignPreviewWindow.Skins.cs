@@ -11,6 +11,7 @@ internal sealed partial class DesignPreviewWindow
     private readonly string? _skinPath;
     private MonitorSkinPackage _skinPackage = MonitorSkinPackage.Generic;
     private readonly MonitorTrendHistory _trendHistory = new();
+    private MonitorDisplayConfiguration? _unlockedSkinDisplay;
     internal MonitorSkinPackage CurrentSkinPackage => _skinPackage;
     private static readonly FilePickerFileType SkinFileType = new("SiMonitor skin") { Patterns = ["*.simskin"] };
 
@@ -39,9 +40,35 @@ internal sealed partial class DesignPreviewWindow
     internal void ChangeMonitorSkin(MonitorSkinPackage package)
     {
         if (_closed || _applying) { Settings.RestoreMonitorAppearance(_skinPackage); return; }
+        if (_pendingPacingPaper is not null || _pendingPresentation is not null || _session.PendingSourceTimeNs is not null)
+        {
+            Settings.RestoreMonitorAppearance(_skinPackage);
+            Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, "skin.pacingWaiting");
+            return;
+        }
         DisarmDefibrillator();
+        _aed.Disable(_safetyClock());
+        if (_session.ActivePacing is not null) { SetPacing(_therapy, stop: true); }
         bool twelveLead = (_monitor.Skin as GenericMonitorSkin)?.TwelveLeadVisible == true;
+        var display = _session.Display;
+        if (_skinPackage.FixedWaveformRows is null && package.FixedWaveformRows is not null)
+        { _unlockedSkinDisplay = display; }
+        else if (_skinPackage.FixedWaveformRows is not null && package.FixedWaveformRows is null && _unlockedSkinDisplay is { } unlocked)
+        {
+            display = RestoreUnlockedDisplay(display, unlocked);
+            _unlockedSkinDisplay = null;
+        }
         _skinPackage = package;
+        _deviceOperatingMode = DeviceOperatingMode.Monitor;
+        _deviceAedStartPending = false;
+        _pacingQuarterRequested = false;
+        _pacingQuarterApplied = false;
+        ConfigureSkinTherapyDevice();
+        display = ConstrainSkinDisplay(display);
+        _session.UpdateDisplay(display);
+        Settings.RestoreMonitorAppearance(package);
+        Settings.RestoreDisplay(display, Settings.PaperLayout.SelectedIndex, Settings.MeasurementUnits.SelectedIndex == 1);
+        _displayPreferences = _displayPreferences with { Display = display };
         _monitor = new(_session, Localization);
         MonitorView = new(_monitor, Localization, CreateSkin(), _trendHistory);
         ((GenericMonitorSkin)_monitor.Skin!).SetTwelveLeadVisible(twelveLead);
@@ -54,6 +81,7 @@ internal sealed partial class DesignPreviewWindow
         RefreshNibp();
         Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
         Settings.RestoreMonitorAppearance(package);
+        SaveDisplayPreferences();
         if (Page == 0) { SelectPage(0); }
         bool saved = _skinPath is null || package.Save(_skinPath);
         Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, saved ? "skin.changed" : "skin.saveFailed");
@@ -64,12 +92,12 @@ internal sealed partial class DesignPreviewWindow
         if (_closed || _applying) { return; }
         // This explicit action may change monitored channels; selecting a skin alone never does.
         var defaults = MonitorDisplayConfiguration.Default(MonitorSkin.FourRows);
-        var display = _skinPackage.Bedside ? new MonitorDisplayConfiguration(MonitorSkin.ThreeRows, defaults.Slots.Take(3).ToArray()) : defaults;
+        var display = ConstrainSkinDisplay(_skinPackage.Bedside ? new MonitorDisplayConfiguration(MonitorSkin.ThreeRows, defaults.Slots.Take(3).ToArray()) : defaults);
         _session.UpdateDisplay(display);
         Settings.RestoreDisplay(display, Settings.PaperLayout.SelectedIndex, Settings.MeasurementUnits.SelectedIndex == 1);
         _displayPreferences = _displayPreferences with { Display = display };
         var skin = (GenericMonitorSkin)_monitor.Skin!;
-        skin.LayoutRows.SelectedIndex = _skinPackage.Bedside ? 0 : 1;
+        skin.LayoutRows.SelectedIndex = display.Skin == MonitorSkin.ThreeRows ? 0 : 1;
         BindAlarmAttention();
         MonitorView.RefreshDisplay();
         Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
@@ -77,6 +105,25 @@ internal sealed partial class DesignPreviewWindow
         if (Page == 0) { SelectPage(0); }
         SaveDisplayPreferences();
         Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, "skin.layoutApplied");
+    }
+
+    private static MonitorDisplayConfiguration RestoreUnlockedDisplay(MonitorDisplayConfiguration display, MonitorDisplayConfiguration unlocked) =>
+        new(unlocked.Skin, display.Slots.Concat(unlocked.Slots.Skip(display.Slots.Count)).Take(unlocked.Slots.Count).ToArray());
+
+    private MonitorDisplayConfiguration ConstrainSkinDisplay(MonitorDisplayConfiguration display)
+    {
+        if (_skinPackage.FixedWaveformRows is not { } rows) { return display; }
+        var layout = rows switch
+        {
+            3 => MonitorSkin.ThreeRows,
+            4 => MonitorSkin.FourRows,
+            5 => MonitorSkin.FiveRows,
+            7 => MonitorSkin.SevenRows,
+            _ => throw new ArgumentException("Skin.InvalidRowCount")
+        };
+        if (display.Skin == layout) { return display; }
+        var defaults = MonitorDisplayConfiguration.Default(layout);
+        return new(layout, display.Slots.Concat(defaults.Slots.Skip(display.Slots.Count)).Take(rows).ToArray());
     }
 
     private async Task ImportMonitorSkin()

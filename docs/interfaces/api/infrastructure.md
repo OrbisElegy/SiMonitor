@@ -646,6 +646,8 @@ public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int
 {
     public bool TherapyControlsVisible { get; init; } = true;
     public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
+    public MonitorDisplayConfiguration? UnlockedSkinDisplay { get; init; }
+    public bool CustomDefibrillatorEnergySteps { get; init; }
 }
 public sealed class DisplayPreferenceStore(string path)
 {

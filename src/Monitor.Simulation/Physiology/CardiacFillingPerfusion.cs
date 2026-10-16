@@ -67,8 +67,8 @@ public static class CardiacFillingPerfusion
     private static int CalculateGainPermille(RegularPhysiologyPlan plan, ulong cycleIndex)
     {
         if (!Supports(plan)) { throw new ArgumentException("CardiacFilling.UnsupportedPlan", nameof(plan)); }
-        long nonFillingNs = plan.SeededRate is not null || plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration
-            ? FillingLimitedEjection.NonFillingDurationNs : NonFillingDurationNs;
+        plan = PacingReference.WithoutPulseDivision(plan);
+        long nonFillingNs = ResolveNonFillingDuration(plan);
         if (plan.RateAdjustment is not null || plan.Pacing is not null)
         {
             Int128 adjustedCurrentNs = MechanicalTimeNs(plan, cycleIndex);
@@ -111,6 +111,29 @@ public static class CardiacFillingPerfusion
             }
         }
         return StrokeVolumePermille(periodNs, Math.Min(atrialDurationNs, AtrialContractionDurationNs), nonFillingNs);
+    }
+
+    internal static int MaximumGainPermille(RegularPhysiologyPlan plan)
+    {
+        plan = PacingReference.WithoutPulseDivision(plan);
+        if (plan.PacingOutput is not { } output || plan.Pacing is
+            PacingIllustration.VentricularOversensing or PacingIllustration.IntermittentVentricularNoncapture)
+        { return 1000; }
+        // Regular output cannot acquire more filling than a full atrial
+        // contribution at its declared interval. Paused patterns retain the
+        // general bound because their longer gaps can restore full filling.
+        return StrokeVolumePermille(output.PeriodNs, AtrialContractionDurationNs, ResolveNonFillingDuration(plan));
+    }
+
+    private static long ResolveNonFillingDuration(RegularPhysiologyPlan plan)
+    {
+        // Above the original 180 ppm range, the fixed 300 ms teaching systole
+        // would consume the entire cycle and erase every captured ejection.
+        // Shorten it with RR while preserving a bounded 10% filling window;
+        // this remains an authored illustration, not a patient prediction.
+        if (plan.PacingOutput is { RatePerMinute: > 180 } output) { return output.PeriodNs * 9 / 10; }
+        return plan.SeededRate is not null || plan.ConductionPattern == AvConductionPattern.NarrowComplexSvtIllustration
+            ? FillingLimitedEjection.NonFillingDurationNs : NonFillingDurationNs;
     }
 
     internal static long PrecedingIntervalNs(RegularPhysiologyPlan plan, ulong cycleIndex)

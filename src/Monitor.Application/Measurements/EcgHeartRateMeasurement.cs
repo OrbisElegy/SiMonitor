@@ -55,7 +55,7 @@ public sealed class EcgHeartRateMeasurement
             (t - block.StartSimTimeNs) % StepNs != 0) || pulses.Zip(pulses.Skip(1), (a, b) => a >= b).Any(v => v);
         if (pacingEvidence is not null && (Invalid(pacingPulses) || Invalid(atrialPulses) || !Enum.IsDefined(pacingEvidence.Origin) ||
             pacingEvidence.ExpectedVentricularIntervalNs is { } expected &&
-            (pacingEvidence.Origin != EcgPacingEvidenceOrigin.Simulation || !pacingEvidence.VentricularPacingExpected || expected is < 200_000_000 or > 3_000_000_000)))
+            (pacingEvidence.Origin != EcgPacingEvidenceOrigin.Simulation || !pacingEvidence.VentricularPacingExpected || expected is < 200_000_000 or > 8_000_000_000)))
         { throw new ArgumentException("EcgMeasurement.InvalidPacingEvidence", nameof(pacingEvidence)); }
         int pulseIndex = 0, atrialIndex = 0;
         ulong nextIndex = checked(plane.FirstSampleIndex + (ulong)plane.Samples.Count);

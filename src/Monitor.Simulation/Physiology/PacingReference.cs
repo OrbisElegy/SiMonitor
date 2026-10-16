@@ -61,6 +61,23 @@ public static class PacingReference
         { Pacing = mode, PacingOutput = output };
     }
 
+    // A temporary output divider omits beats; it does not retune each beat's
+    // authored perfusion reference. Preserve the caller's noncardiac settings.
+    internal static RegularPhysiologyPlan WithoutPulseDivision(RegularPhysiologyPlan plan)
+    {
+        if (plan.PacingOutput is not { PulseDivision: 4 } output || plan.Pacing is not { } mode) { return plan; }
+        var reference = CreatePlan(mode, new(output.RatePerMinute, output.CurrentMilliamps));
+        return plan with
+        {
+            HeartPeriodNs = reference.HeartPeriodNs,
+            IndependentVentricularPeriodNs = reference.IndependentVentricularPeriodNs,
+            VentricularElectricalOffsetNs = reference.VentricularElectricalOffsetNs,
+            AtrialMechanicalOffsetNs = reference.AtrialMechanicalOffsetNs,
+            VentricularMechanicalOffsetNs = reference.VentricularMechanicalOffsetNs,
+            PacingOutput = reference.PacingOutput
+        };
+    }
+
     internal static void Validate(RegularPhysiologyPlan plan)
     {
         if (plan.Pacing is not { } mode)

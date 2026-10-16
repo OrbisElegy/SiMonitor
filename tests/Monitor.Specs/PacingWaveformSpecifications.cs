@@ -13,6 +13,8 @@ internal static class PacingWaveformSpecifications
     public static Specification[] All =>
     [
         new(nameof(AdjustablePacingPreservesTimingAndStopsOutputAtZero), AdjustablePacingPreservesTimingAndStopsOutputAtZero),
+        new(nameof(PacingQuarterRateDividesActualOutputAndRestoresAtBoundary), PacingQuarterRateDividesActualOutputAndRestoresAtBoundary),
+        new(nameof(PacingPressureKeepsSparseEjectionsBounded), PacingPressureKeepsSparseEjectionsBounded),
         new(nameof(PacingPlaybackPreservesTheLiveSession), PacingPlaybackPreservesTheLiveSession),
         new(nameof(PacingSeparatesOutputCaptureAndMechanics), PacingSeparatesOutputCaptureAndMechanics),
         new(nameof(PacingProjectionAndRecoveryAreDeterministic), PacingProjectionAndRecoveryAreDeterministic),
@@ -60,7 +62,7 @@ internal static class PacingWaveformSpecifications
     private static void AdjustablePacingPreservesTimingAndStopsOutputAtZero()
     {
         foreach (var mode in Enum.GetValues<PacingIllustration>())
-            foreach (int rate in new[] { 30, 90, 180 })
+            foreach (int rate in new[] { 30, 90, 180, 210 })
             {
                 var output = new PacingOutputSettings(rate, 60);
                 var plan = PacingReference.CreatePlan(mode, output);
@@ -85,6 +87,99 @@ internal static class PacingWaveformSpecifications
         var high = PacingReference.CreateLeadIIBands(PacingIllustration.DualChamberDdd, new(70, 60));
         Check.That(high.Single(b => b.Trigger == PhysiologyCycleEventKind.VentricularPacingPulse).TableQ32.Max() ==
             2 * low.Single(b => b.Trigger == PhysiologyCycleEventKind.VentricularPacingPulse).TableQ32.Max(), "current controls displayed stimulus amplitude");
+    }
+
+    private static void PacingQuarterRateDividesActualOutputAndRestoresAtBoundary()
+    {
+        foreach (int rate in new[] { 30, 70, 210 })
+        {
+            var normal = new PacingOutputSettings(rate, 60);
+            var quarter = new PacingOutputSettings(rate, 60, pulseDivision: 4);
+            Check.That(quarter.RatePerMinute == rate && quarter.PeriodNs == 4 * normal.PeriodNs,
+                "4:1 preserves the selected rate and current while extending the actual output period");
+            var timeline = RegularPhysiologyTimeline.Start(PacingReference.CreatePlan(PacingIllustration.RightVentricularVvi, quarter));
+            var events = timeline.AdvanceBefore(24_000_000_000, 1000);
+            var pulses = events.Where(e => e.Kind == PhysiologyCycleEventKind.VentricularPacingPulse).ToArray();
+            Check.That(pulses.Length >= 3 && pulses.Zip(pulses.Skip(1)).All(pair => pair.Second.SimTimeNs - pair.First.SimTimeNs == quarter.PeriodNs),
+                "the real stimulus event stream is divided by four, including the minimum configured rate");
+            var restored = RegularPhysiologyTimeline.Restore(timeline.CaptureState());
+            Check.That(timeline.AdvanceBefore(32_000_000_000, 1000).SequenceEqual(restored.AdvanceBefore(32_000_000_000, 1000)),
+                "a checkpoint preserves quarter-rate timing exactly");
+        }
+        foreach (var mode in Enum.GetValues<PacingIllustration>())
+        {
+            var configuration = PacingIllustrationConfiguration.Apply(PhysiologyIllustrationConfiguration.Default, mode, new(210, 200, 4));
+            var source = PhysiologyIllustrationSource.Create(configuration);
+            for (int step = 1; step <= 20; step++) { _ = source.AdvanceTo(step * 200_000_000L, 50, 1, 100); }
+        }
+        foreach (int invalid in new[] { 0, 2, 3, 5 })
+        {
+            try { _ = new PacingOutputSettings(70, 60, invalid); }
+            catch (ArgumentOutOfRangeException error) when (error.ParamName == "pulseDivision") { continue; }
+            throw new InvalidOperationException("Invalid pacing pulse division accepted");
+        }
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default, MonitorDisplayConfiguration.Default(), true,
+            electricalTherapy: new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default) { PacingAllowed = true });
+        List<long> CollectPulses()
+        {
+            List<long> result = [];
+            for (int i = 0; i < 240; i++)
+            {
+                session.Advance(50_000_000);
+                result.AddRange(session.EmittedPacingPulseTimesNs);
+            }
+            return result;
+        }
+        var normalOutput = new PacingOutputSettings(70, 60);
+        var quarterOutput = new PacingOutputSettings(70, 60, 4);
+        session.SchedulePacing(PacingIllustration.RightVentricularVvi, normalOutput);
+        _ = CollectPulses();
+        long beforeQuarter = session.SimulationTimeNs;
+        session.SchedulePacing(PacingIllustration.RightVentricularVvi, quarterOutput);
+        var dividedPulses = CollectPulses();
+        Check.That(dividedPulses.Count >= 3 && dividedPulses.All(time => time >= beforeQuarter) &&
+            dividedPulses.Zip(dividedPulses.Skip(1)).All(pair => Math.Abs(pair.Second - pair.First - quarterOutput.PeriodNs) < 4_000_000),
+            "live quarter-rate application preserves pulse spacing on the 4 ms acquisition grid without replaying old output");
+        long beforeRelease = session.SimulationTimeNs;
+        session.SchedulePacing(PacingIllustration.RightVentricularVvi, normalOutput);
+        var resumedPulses = CollectPulses();
+        Check.That(resumedPulses.Count > dividedPulses.Count && resumedPulses.All(time => time >= beforeRelease) &&
+            resumedPulses.Zip(resumedPulses.Skip(1)).All(pair => Math.Abs(pair.Second - pair.First - normalOutput.PeriodNs) < 4_000_000),
+            "release restores the selected output at the next source boundary and keeps the session clock");
+    }
+
+    private static void PacingPressureKeepsSparseEjectionsBounded()
+    {
+        foreach (var mode in Enum.GetValues<PacingIllustration>())
+            foreach (var output in new[] { new PacingOutputSettings(210, 200), new(30, 200, 4), new(70, 200, 4), new(210, 200, 4), new(210, 0), new(30, 0, 4) })
+            {
+                var configuration = PacingIllustrationConfiguration.Apply(
+                    PhysiologyIllustrationConfiguration.Default with
+                    { UseVascularReservoir = true, AbpTarget = new(12000, 8000), PaTarget = new(2500, 1000) }, mode, output);
+                var source = PhysiologyIllustrationSource.Create(configuration);
+                for (int step = 1; step <= 40; step++) { _ = source.AdvanceTo(step * 200_000_000L, 50, 1, 100); }
+                var restored = PhysiologyWaveformGroup.Restore(source.CaptureState());
+                _ = source.AdvanceTo(8_200_000_000, 50, 1, 100, out var actual);
+                _ = restored.AdvanceTo(8_200_000_000, 50, 1, 100, out var replayed);
+                Check.That(actual.SequenceEqual(replayed), $"{mode} at {output.RatePerMinute}/{output.PulseDivision}: pressure and ECG replay exactly");
+            }
+        var highRate = PacingReference.CreatePlan(PacingIllustration.RightVentricularVvi, new(210, 30));
+        Check.That(CardiacFillingPerfusion.GainPermille(highRate, 1) > 0,
+            "a 285.7 ms paced cycle does not lose all filling to the old fixed 300 ms non-filling duration");
+        var normalOutput = new PacingOutputSettings(70, 60);
+        var quarterOutput = new PacingOutputSettings(70, 60, 4);
+        var normalPlan = PacingReference.CreatePlan(PacingIllustration.RightVentricularVvi, normalOutput);
+        var quarterPlan = PacingReference.CreatePlan(PacingIllustration.RightVentricularVvi, quarterOutput);
+        var pressure = new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
+            Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, 640_000_000, 1500));
+        var normal = VascularPressureSource.Create(normalPlan, pressure);
+        var quarter = VascularPressureSource.Create(quarterPlan, pressure);
+        long beforeEjection = 8 * quarterOutput.PeriodNs + quarterPlan.VentricularMechanicalOffsetNs + pressure.TransitDelayNs - 1;
+        Check.That(quarter.EvaluateAt(beforeEjection) < normal.EvaluateAt(beforeEjection),
+            "sparse captured output leaves lower residual pressure instead of inflating each reference ejection");
+        long decayStart = beforeEjection - normalOutput.PeriodNs;
+        Check.That(quarter.EvaluateAt(decayStart) > quarter.EvaluateAt(beforeEjection),
+            "pressure continues to decay between the actual quarter-rate ejections");
     }
 
     private static void PacingPlaybackPreservesTheLiveSession()

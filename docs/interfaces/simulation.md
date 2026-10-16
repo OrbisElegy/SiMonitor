@@ -501,7 +501,7 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 已有状态缺省为 `Pacing = null`；新增枚举值追加，不改旧值。
 
 上述工厂可选传入同一 `PacingOutputSettings`，同时写入配置／计划的 `PacingOutput`。
-省略时保留原模板时序；指定时支持 30–180 ppm 和 0–200 mA。频率改变实际刺激间隔，
+省略时保留原模板时序；指定时支持 30–210 ppm 和 0–200 mA。频率改变实际刺激间隔，
 高频时缩短形态支撑；电流线性缩放教学尖峰，零电流停止刺激及诱发事件。
 非零电流的夺获／失败仍由示例决定，不提供患者特定夺获阈值。
 `PacingIllustrationConfiguration.Apply` 替换心脏示例并保留呼吸、压力输入。

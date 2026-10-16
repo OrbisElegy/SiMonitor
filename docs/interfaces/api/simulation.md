@@ -2668,8 +2668,9 @@ public sealed record PacingOutputSettings
 {
     public int RatePerMinute { get; }
     public int CurrentMilliamps { get; }
+    public int PulseDivision { get; }
     public long PeriodNs { get; }
-    public PacingOutputSettings(int ratePerMinute, int currentMilliamps);
+    public PacingOutputSettings(int ratePerMinute, int currentMilliamps, int pulseDivision = 1);
 }
 ```
 

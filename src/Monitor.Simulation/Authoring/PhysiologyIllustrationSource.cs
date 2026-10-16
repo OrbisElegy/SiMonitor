@@ -65,7 +65,7 @@ public static class PhysiologyIllustrationSource
         bool variablePerfusion = beatPerfusion || fibrillation;
         bool shortCoupled = plan.ConductionPattern == AvConductionPattern.ShortCoupledRonTPvcIllustration;
         bool blockedAtrial = plan.ConductionPattern == AvConductionPattern.BlockedPrematureAtrialIllustration;
-        long PulseDuration(long normal) => plan.RateAdjustment is not null || plan.PacingOutput is not null ? Math.Min(normal, (long)plan.VentricularPeriodNs - 80_000_000) : configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
+        long PulseDuration(long normal) => plan.PacingOutput is { } output ? Math.Min(normal, output.PeriodNs / output.PulseDivision - 80_000_000) : plan.RateAdjustment is not null ? Math.Min(normal, (long)plan.VentricularPeriodNs - 80_000_000) : configuration.SeededRate is { } rate ? Math.Min(normal, rate.MinimumPeriodNs - 80_000_000) : shortCoupled ? normal : prematureBeat && !blockedAtrial ? Math.Min(normal, PrematureAtrialReference.Timing.RrIntervalNs - 80_000_000) : fibrillation ? Math.Min(normal, AtrialFibrillationReference.MinimumRrNs - 80_000_000) : flutter ? Math.Min(normal, plan.HeartPeriodNs * plan.VentricularConductionRatio - 80_000_000) : normal;
         // Preserve independent pressure morphology while the RC source retains
         // pressure across missing and resumed ejections. Teaching parameters only.
         PhysiologyWaveformChannelPlan[] channels =
@@ -119,10 +119,10 @@ public static class PhysiologyIllustrationSource
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling).CreateChannel(plan, ChannelId(5), 0)
                 : new PulmonaryArteryPulsePlan(40_000_000, PulseDuration(640_000_000), 10, 15).CreateChannel(plan, ChannelId(5), 0)),
-             ((fixedPerfusion?.Venous ?? new CentralVenousPressurePlan(600,
+             (AdaptPacedVenousOverlap(fixedPerfusion?.Venous ?? new CentralVenousPressurePlan(600,
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
-                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null || plan.RateAdjustment is not null ? 2 : 1)) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+                 new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null || plan.RateAdjustment is not null ? 2 : 1), plan) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
         if (fibrillation)
         { channels[0] = channels[0] with { Bands = Array.AsReadOnly(channels[0].Bands.Select(b => b.AfBeatSelection is null ? b : b with { AfTiming = plan }).ToArray()) }; }
         if (plan.RateAdjustment is { } adjustment)
@@ -163,8 +163,7 @@ public static class PhysiologyIllustrationSource
         string seedHex, string streamName, RegularPhysiologyPlan plan, Guid channelId)
     {
         if (amplitudeCentiMmHg == 0) { return channel; }
-        if (plan.CardiacActivity is CardiacActivity.Absent or CardiacActivity.AtrialOnly ||
-            !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null) { return channel; }
+        if (!HasVentricularEjections(plan)) { return channel; }
         var pressure = channel.VascularPressure ?? throw new ArgumentException("Physiology.PressureVariationRequiresReservoir");
         int permille = VascularPressureSource.SolveVariationAmplitude(plan, pressure, amplitudeCentiMmHg)
             ?? throw new ArgumentException("Physiology.PressureVariationTooLarge");
@@ -179,13 +178,12 @@ public static class PhysiologyIllustrationSource
         // Targets describe effective beats. With no ventricular mechanical activity,
         // retain the selected source's runoff instead of rejecting the scenario or
         // synthesizing ejections to satisfy the stored target.
-        if (plan.CardiacActivity is CardiacActivity.Absent or CardiacActivity.AtrialOnly ||
-            !plan.VentricularMechanicalEnabled && plan.MechanicalAfterCycles is null)
-        { return channel; }
+        if (!HasVentricularEjections(plan)) { return channel; }
         var pressure = channel.VascularPressure;
         if (pressure?.Morphology is not { } morphology)
         { throw new ArgumentException("Physiology.PressureTargetRequiresReservoirMorphology"); }
-        var solved = VascularPressureSource.SolveTarget(plan, pressure, target.SystolicCentiMmHg, target.DiastolicCentiMmHg) ??
+        var calibrationPlan = PacingReference.WithoutPulseDivision(plan);
+        var solved = VascularPressureSource.SolveTarget(calibrationPlan, pressure, target.SystolicCentiMmHg, target.DiastolicCentiMmHg) ??
             throw new ArgumentException("Physiology.PressureTargetUnreachable");
         // Start at the diastolic target so the startup transient does not mask it.
         var adjusted = pressure with
@@ -197,6 +195,30 @@ public static class PhysiologyIllustrationSource
         try { return adjusted.CreateChannel(plan, channelId, channel.QualityFlags); }
         catch (EventWaveformException) { throw new ArgumentException("Physiology.PressureTargetUnreachable"); }
     }
+    private static bool HasVentricularEjections(RegularPhysiologyPlan plan) =>
+        plan.CardiacActivity is not (CardiacActivity.Absent or CardiacActivity.AtrialOnly) &&
+        (plan.VentricularMechanicalEnabled || plan.MechanicalAfterCycles is not null) &&
+        plan.Pacing is not (PacingIllustration.VentricularNoncapture or PacingIllustration.VentricularOutputFailure) &&
+        !(plan.Pacing is not null && plan.Pacing != PacingIllustration.VentricularUndersensing && plan.PacingOutput?.CurrentMilliamps == 0);
+
+    private static CentralVenousPressurePlan AdaptPacedVenousOverlap(CentralVenousPressurePlan pressure,
+        RegularPhysiologyPlan plan)
+    {
+        if (plan.PacingOutput is null) { return pressure; }
+        // The authored 320 ms v-wave can span two beats at 210 ppm. Compute
+        // the required support from each real trigger period; CreateChannel
+        // still checks the complete overlapping-amplitude budget.
+        CvpWaveComponent[] components = [pressure.A, pressure.C, pressure.X, pressure.V, pressure.Y];
+        int maximum = pressure.MaximumComponentOverlap;
+        for (int index = 0; index < components.Length; index++)
+        {
+            Int128 period = index == 0 ? plan.AtrialPeriodNs : plan.VentricularPeriodNs;
+            int overlap = (int)(((Int128)components[index].DurationNs + period - 1) / period);
+            maximum = Math.Max(maximum, overlap);
+        }
+        return pressure with { MaximumComponentOverlap = maximum };
+    }
+
     // Select the bundle once so Pleth/ABP/PA/CVP cannot drift into separate
     // per-channel rhythm mappings. Existing configuration validation runs first.
     private static FixedPerfusionPreset? ResolveFixedPerfusion(

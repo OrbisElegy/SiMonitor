@@ -66,13 +66,14 @@ public sealed class VascularPressureSource
         _variationProbeGainPermille = variationProbeGainPermille;
         // Leave unit-gain reference schedules on their established startup
         // contour. Schedules with altered stroke strength need linear shaping.
-        long atrialLeadNs = physiology.VentricularMechanicalOffsetNs - physiology.AtrialMechanicalOffsetNs;
+        var referencePhysiology = PacingReference.WithoutPulseDivision(physiology);
+        long atrialLeadNs = referencePhysiology.VentricularMechanicalOffsetNs - referencePhysiology.AtrialMechanicalOffsetNs;
         _useLinearStrokeMorphology = plan.UseAtrialFibrillationPerfusion || plan.UseConductedFlutterPerfusion ||
-            plan.UseCardiacFillingPerfusion && (physiology.RateAdjustment is not null || physiology.SeededRate is not null ||
-                physiology.VentricularPeriodNs < CardiacFillingPerfusion.ReferencePeriodNs ||
-                physiology.IndependentVentricularPeriodNs is { } independent && independent != (Int128)physiology.HeartPeriodNs * physiology.VentricularConductionRatio ||
-                physiology.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
-                WenckebachIllustration.GroupSize(physiology.ConductionPattern) > 0 ||
+            plan.UseCardiacFillingPerfusion && (referencePhysiology.RateAdjustment is not null || referencePhysiology.SeededRate is not null ||
+                referencePhysiology.VentricularPeriodNs < CardiacFillingPerfusion.ReferencePeriodNs ||
+                referencePhysiology.IndependentVentricularPeriodNs is { } independent && independent != (Int128)referencePhysiology.HeartPeriodNs * referencePhysiology.VentricularConductionRatio ||
+                referencePhysiology.CardiacActivity != CardiacActivity.AtrialAndVentricular ||
+                WenckebachIllustration.GroupSize(referencePhysiology.ConductionPattern) > 0 ||
                 atrialLeadNs < CardiacFillingPerfusion.AtrialContractionDurationNs ||
                 atrialLeadNs > CardiacFillingPerfusion.ReferencePeriodNs - CardiacFillingPerfusion.NonFillingDurationNs);
         _decayHorizonNs = 64 * plan.TimeConstantNs;
@@ -95,9 +96,12 @@ public sealed class VascularPressureSource
                 morphology.PulseHeightCentiMmHg is < 0 or > short.MaxValue ||
                 plan.EjectionEquilibriumCentiMmHg == 0)
             { throw Invalid(); }
-            // Nominal ventricular RR deliberately excludes the mechanical stride:
-            // dropping inputs must not increase the reference volume per beat.
-            _morphologyPeriodNs = (long)ventricularPeriod;
+            // Nominal ventricular RR deliberately excludes the mechanical stride
+            // and temporary pacing division: dropping inputs must not increase
+            // the reference volume per beat. Actual RC inputs still come only
+            // from the sparse mechanical event stream.
+            _morphologyPeriodNs = physiology.PacingOutput is { PulseDivision: 4 } output
+                ? output.PeriodNs / output.PulseDivision : (long)ventricularPeriod;
             long endDecay = Decay(_morphologyPeriodNs);
             long endInput = EjectionCoefficient(_morphologyPeriodNs);
             _referenceOnsetQ32 = (long)FixedPointMath.RoundDivideTiesToEven(
@@ -109,17 +113,48 @@ public sealed class VascularPressureSource
             Int128 firstOnsetNumerator = (Int128)(plan.InitialPressureCentiMmHg - plan.AsymptoticPressureCentiMmHg) *
                 FixedPointMath.Q32One * Decay(physiology.VentricularMechanicalOffsetNs);
             Int128 firstOnsetAbove = (firstOnsetNumerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
-            var maximumAbove = Int128.Max(_referenceOnsetQ32, firstOnsetAbove);
+            int maximumGain = plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.MaximumGainPermille(physiology) : 1000;
+            Int128 maximumReference = ((Int128)_referenceOnsetQ32 * maximumGain + 999) / 1000;
+            var maximumAbove = Int128.Max(maximumReference, firstOnsetAbove);
             Int128 maximumShape = _referenceOnsetQ32 +
                 (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One *
                 (((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod);
             // A subset of periodic inputs cannot exceed the complete reference
-            // multiplied by max(1, first-onset excess/reference onset). The
+            // scaled by the larger of its bounded filling gain (full atrial
+            // contribution for regular pacing) and first-onset excess/reference onset. The
             // explicit initial pressure decays until the first possible event.
             // Reserve one
             // centi-mmHg for all fixed-point kernel/ratio rounding differences.
             // A seeded drift scales every input by at most 1 + amplitude.
             Int128 above = (maximumAbove * maximumShape + _referenceOnsetQ32 - 1) / _referenceOnsetQ32;
+            if (_useLinearStrokeMorphology && physiology.Pacing is
+                PacingIllustration.VentricularOversensing or PacingIllustration.IntermittentVentricularNoncapture)
+            {
+                // These authored patterns admit at most two ejections in each
+                // four-cycle group. Bound their reservoir by that full-strength
+                // schedule, not by four hypothetical ejections. Temporary 4:1
+                // output is a sparser subset of the same reference schedule.
+                long period = _morphologyPeriodNs;
+                Int128 groupInput = (Int128)EjectionCoefficient(4 * period) + EjectionCoefficient(3 * period);
+                Int128 groupDenominator = FixedPointMath.Q62One - Decay(4 * period);
+                Int128 groupOnset = ((Int128)plan.EjectionEquilibriumCentiMmHg * groupInput * FixedPointMath.Q32One +
+                    groupDenominator - 1) / groupDenominator;
+                Int128 Peak(long age, bool second)
+                {
+                    Int128 input = EjectionCoefficient(age);
+                    if (second) { input += EjectionCoefficient(age - period); }
+                    Int128 numerator = groupOnset * Decay(age) +
+                        (Int128)plan.EjectionEquilibriumCentiMmHg * input * FixedPointMath.Q32One;
+                    return (numerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
+                }
+                Int128 reservoir = Int128.Max(Peak(plan.EjectionDurationNs, false), Peak(period + plan.EjectionDurationNs, true)) +
+                    Int128.Max(0, firstOnsetAbove - groupOnset);
+                // Linear shaping subtracts a nonnegative ejection input. Keep
+                // its positive replacement and contour as separate upper bounds.
+                Int128 replacement = ((Int128)_referenceOnsetQ32 * (FixedPointMath.Q62One - Decay(period)) +
+                    FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
+                above = Int128.Min(above, reservoir + replacement + maximumShape - _referenceOnsetQ32);
+            }
             if (plan.Variation is { } variation) { above = (above * (1000 + variation.AmplitudePermille) + 999) / 1000; }
             Int128 maximumOutput = (Int128)plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One + above + FixedPointMath.Q32One;
             if (maximumOutput > short.MaxValue * FixedPointMath.Q32One) { throw Invalid(); }

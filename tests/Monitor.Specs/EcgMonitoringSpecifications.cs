@@ -587,6 +587,11 @@ internal static class EcgMonitoringSpecifications
             "loss of hardware pulse sideband cannot reset an ECG-confirmed critical alarm");
         var invalid = new EcgHeartRateMeasurement(Channel);
         var valid = Evidence(0, 50);
+        var quarterRate = new EcgHeartRateMeasurement(Channel);
+        quarterRate.Consume(Wire(samples.Take(50).ToArray(), 0, 0), out _, out _,
+            valid with { ExpectedVentricularIntervalNs = 8_000_000_000 });
+        Check.That(quarterRate.ReadMonitoring(49 * StepNs).PacingEvidenceAvailable,
+            "the 30 ppm 4:1 output interval remains explicit simulation pulse evidence");
         foreach (var evidence in new[]
         {
             valid with { AtrialPulseTimesNs = [0, 0] },
@@ -595,6 +600,7 @@ internal static class EcgMonitoringSpecifications
             valid with { Origin = (EcgPacingEvidenceOrigin)99 },
             valid with { Origin = EcgPacingEvidenceOrigin.Acquisition },
             valid with { ExpectedVentricularIntervalNs = long.MaxValue },
+            valid with { ExpectedVentricularIntervalNs = 8_000_000_001 },
             valid with { VentricularPacingExpected = false }
         })
         {

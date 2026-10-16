@@ -174,7 +174,7 @@ QRS 分段将候选最初 100 ms 的最大斜率作为固定前置波参考，�
 
 本地预览提供 `Origin = Simulation`，从所选源的脉冲事件构造旁路，不传入夺获或故障标签。
 `VentricularPacingExpected` 仅在仿真来源下控制心室起搏分析；AAI 为 false。
-仿真可提供 `ExpectedVentricularIntervalNs`（200 ms～3 s，只允许预期心室起搏时设置），
+仿真可提供 `ExpectedVentricularIntervalNs`（200 ms～8 s，包含 30 ppm 的 4:1 临时分频；只允许预期心室起搏时设置），
 在启动时尚无 QRS 或间歇性失搏拉长平均 RR 时提供保守时限参考。实际判定间期取此参考与
 可用平均 RR 的较小值；无 QRS 超过 1.75 倍且旁路连续覆盖相同时间后区分有／无心室脉冲。
 该参考不产生 HR、RR 或心搏。起搏失败提示不依赖完成 15 搏形态学习；新脉冲出现后最多

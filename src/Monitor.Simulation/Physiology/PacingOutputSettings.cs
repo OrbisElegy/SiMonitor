@@ -7,12 +7,15 @@ public sealed record PacingOutputSettings
 {
     public int RatePerMinute { get; }
     public int CurrentMilliamps { get; }
-    public long PeriodNs => 60_000_000_000L / RatePerMinute;
-    public PacingOutputSettings(int ratePerMinute, int currentMilliamps)
+    public int PulseDivision { get; }
+    public long PeriodNs => 60_000_000_000L / RatePerMinute * PulseDivision;
+    public PacingOutputSettings(int ratePerMinute, int currentMilliamps, int pulseDivision = 1)
     {
-        if (ratePerMinute is < 30 or > 180) { throw new ArgumentOutOfRangeException(nameof(ratePerMinute)); }
+        if (ratePerMinute is < 30 or > 210) { throw new ArgumentOutOfRangeException(nameof(ratePerMinute)); }
         if (currentMilliamps is < 0 or > 200) { throw new ArgumentOutOfRangeException(nameof(currentMilliamps)); }
+        if (pulseDivision is not (1 or 4)) { throw new ArgumentOutOfRangeException(nameof(pulseDivision)); }
         RatePerMinute = ratePerMinute;
         CurrentMilliamps = currentMilliamps;
+        PulseDivision = pulseDivision;
     }
 }

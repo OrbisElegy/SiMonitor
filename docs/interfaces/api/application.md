@@ -2342,7 +2342,7 @@ public sealed class ManualDefibrillator
 public enum AedPhase { Off, Analyzing, WaitingForSignal, Charging, ShockAdvised, Cpr, Suspended }
 public enum AedAdvice { Undetermined, Shock, NoShock }
 public sealed record AedEcgEvidence(long SampleTimeNs, EcgHeartRateReading HeartRate, EcgMonitoringReading Monitoring);
-public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
+public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device, IReadOnlyList<int>? energySequenceJoules = null)
 {
     public const long AnalysisDurationNs = 8_000_000_000;
     public const long CprDurationNs = 120_000_000_000;
@@ -2354,6 +2354,8 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
     public void Enable(long safetyTimeNs, long simulationTimeNs);
     public void Disable(long safetyTimeNs);
     public void Suspend(long safetyTimeNs);
+    public void PauseForCpr(long safetyTimeNs, long simulationTimeNs);
+    public void ResumeAnalyzing(long safetyTimeNs, long simulationTimeNs);
     public void ReleaseShock(long safetyTimeNs);
     public bool PressShock(Guid interactionId, long safetyTimeNs, long simulationTimeNs, AedEcgEvidence? evidence);
     public DeliveredElectricalShock? Tick(long safetyTimeNs, long simulationTimeNs, AedEcgEvidence? evidence);

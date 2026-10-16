@@ -19,10 +19,14 @@ internal static class AedSpecifications
         new(nameof(AedUsesLiveWaveformsWithoutConversionMetadata), AedUsesLiveWaveformsWithoutConversionMetadata),
         new(nameof(AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm), AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm),
         new(nameof(AedCaptureHistoryCannotSurviveInvalidEvidence), AedCaptureHistoryCannotSurviveInvalidEvidence),
-        new(nameof(AedCompletesLiveVtCaptureWorkflow), AedCompletesLiveVtCaptureWorkflow)
+        new(nameof(AedCompletesLiveVtCaptureWorkflow), AedCompletesLiveVtCaptureWorkflow),
+        new(nameof(AedEnergySequenceAdvancesOnlyAfterDelivery), AedEnergySequenceAdvancesOnlyAfterDelivery),
+        new(nameof(AedEnergySequenceValidatesBeforeChangingDevice), AedEnergySequenceValidatesBeforeChangingDevice),
+        new(nameof(AedCprControlsRemoveChargeAndRequireNewAnalysis), AedCprControlsRemoveChargeAndRequireNewAnalysis)
     ];
 
     private static readonly Guid Interaction = Guid.Parse("1424f029-6cd5-4ce8-b563-565020ba2001");
+    private static readonly IReadOnlyList<int> ProtocolEnergySteps = Array.AsReadOnly(new[] { 100, 200, 300, 360 });
     private const long StepNs = 50_000_000;
     private static ManualDefibrillator Device() => new(Interaction,
         DefibrillatorConfiguration.Default with { ChargeDurationMilliseconds = 100, AutoDisarmSeconds = 1 }, 200);
@@ -47,6 +51,97 @@ internal static class AedSpecifications
         }
         Check.That(aed.Phase == AedPhase.ShockAdvised, "fresh sustained VF evidence leads to charged advice");
         return now;
+    }
+
+    private static void AedEnergySequenceAdvancesOnlyAfterDelivery()
+    {
+        var device = new ManualDefibrillator(Interaction, DefibrillatorConfiguration.Default with
+        {
+            EnergyStepsJoules = ProtocolEnergySteps,
+            ChargeDurationMilliseconds = 100,
+            AutoDisarmSeconds = 1
+        }, 100);
+        int[] sequence = [200, 300, 360];
+        var aed = new AutomatedExternalDefibrillator(device, sequence);
+        sequence[0] = 100;
+        long now = Charge(aed);
+        Check.That(device.EnergyJoules == 200, "AED owns an immutable protocol snapshot and selects its first step");
+        aed.PressShock(Interaction, now, now, Evidence(now));
+        aed.ReleaseShock(now);
+        now = Charge(aed, now);
+        Check.That(device.EnergyJoules == 200, "canceling a shock and restarting analysis cannot escalate energy");
+        foreach (int expected in new[] { 200, 300, 360, 360 })
+        {
+            Check.That(aed.PressShock(Interaction, now, now, Evidence(now)), "protocol step accepts held confirmation");
+            DeliveredElectricalShock? delivered = null;
+            for (int i = 0; i < 10; i++)
+            {
+                now += StepNs;
+                delivered = aed.Tick(now, now, Evidence(now));
+            }
+            Check.That(delivered is { Automated: true } && delivered.EnergyJoules == expected && device.EnergyJoules == expected,
+                "each delivered shock retains its actual energy, including repeated final protocol steps");
+            aed.ReleaseShock(now);
+            aed.ResumeAnalyzing(now, now);
+            for (int i = 0; i < 162; i++)
+            {
+                now += StepNs;
+                Check.That(aed.Tick(now, now, Evidence(now)) is null, "protocol never delivers automatically");
+            }
+            Check.That(aed.Phase == AedPhase.ShockAdvised && device.EnergyJoules == (expected == 200 ? 300 : 360),
+                "only the next analyzed charge uses the next protocol energy");
+        }
+        aed.Disable(now);
+        aed.Enable(now, now);
+        Check.That(device.EnergyJoules == 200 && device.State.Energy == EnergyState.Idle,
+            "a new AED session resets the energy protocol and discards charged authorization");
+    }
+
+    private static void AedEnergySequenceValidatesBeforeChangingDevice()
+    {
+        var device = Device();
+        device.BeginCharge(0);
+        foreach (int[] sequence in new int[][] { [], [200, 360], [300, 200], [0], [1001], new int[65] })
+        {
+            try { _ = new AutomatedExternalDefibrillator(device, sequence); }
+            catch (ArgumentException error) when (error.ParamName == "energySequenceJoules")
+            {
+                Check.That(device.EnergyJoules == 200 && device.State.Energy == EnergyState.Charging,
+                    "invalid protocols do not modify the device");
+                continue;
+            }
+            throw new InvalidOperationException("Invalid AED energy sequence accepted");
+        }
+        device.Disarm(0);
+        device.SelectEnergy(150, 0);
+        var generic = new AutomatedExternalDefibrillator(device);
+        generic.Enable(0, 0);
+        Check.That(device.EnergyJoules == 150, "omitting a protocol preserves generic selected-energy behavior");
+    }
+
+    private static void AedCprControlsRemoveChargeAndRequireNewAnalysis()
+    {
+        var device = Device();
+        var aed = new AutomatedExternalDefibrillator(device);
+        aed.PauseForCpr(0, 0);
+        aed.ResumeAnalyzing(0, 0);
+        Check.That(!aed.Enabled, "CPR soft keys cannot enable an off AED");
+        long now = Charge(aed);
+        aed.PressShock(Interaction, now, now, Evidence(now));
+        aed.PauseForCpr(now, now);
+        Check.That(aed.Phase == AedPhase.Cpr && aed.RemainingSeconds == 120 && device.State.Energy == EnergyState.Idle,
+            "CPR pause removes charge and cancels a held shock");
+        now += StepNs;
+        Check.That(aed.Tick(now, now, Evidence(now)) is null, "CPR pause cannot leak a pending delivery");
+        aed.ResumeAnalyzing(now, now);
+        Check.That(aed.Phase == AedPhase.Analyzing && aed.RemainingSeconds == 8 &&
+            !aed.PressShock(Interaction, now, now, Evidence(now)), "resume requires complete analysis and new charging");
+        for (int i = 0; i < 162; i++) { now += StepNs; aed.Tick(now, now, Evidence(now)); }
+        Check.That(aed.Phase == AedPhase.ShockAdvised, "fresh complete analysis restores advice after CPR pause");
+        aed.Tick(now + 2_000_000_000, now, Evidence(now));
+        aed.ResumeAnalyzing(now + 2_000_000_000, now);
+        Check.That(aed.Phase == AedPhase.Analyzing && device.State.Energy == EnergyState.Idle,
+            "resume after automatic disarm never restores previous charged authorization");
     }
 
     private static void AedRequiresAnalysisAndHeldConfirmation()

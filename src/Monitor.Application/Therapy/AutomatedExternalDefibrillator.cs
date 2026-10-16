@@ -21,7 +21,7 @@ public sealed record AedEcgEvidence(long SampleTimeNs, EcgHeartRateReading Heart
 
 // Semi-automatic teaching workflow. All time and physical delivery authority belong
 // to the host/shared defibrillator; this controller never manufactures a shock.
-public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
+public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device, IReadOnlyList<int>? energySequenceJoules = null)
 {
     public const long AnalysisDurationNs = 8_000_000_000;
     public const long CprDurationNs = 120_000_000_000;
@@ -34,6 +34,8 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
     private AedAdvice _candidate;
     private readonly Queue<(long PeakTimeNs, bool Wide)> _recentBeats = new();
     private bool _wideRunEstablished;
+    private readonly int[]? _energySequenceJoules = SnapshotEnergySequence(device, energySequenceJoules);
+    private int _energySequenceIndex;
     public AedPhase Phase { get; private set; }
     public AedAdvice Advice { get; private set; }
     public bool Enabled => Phase != AedPhase.Off;
@@ -45,6 +47,8 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         ValidateTime(safetyTimeNs, simulationTimeNs);
         device.Disarm(safetyTimeNs);
         device.SetSynchronized(false, safetyTimeNs);
+        if (Phase == AedPhase.Off) { _energySequenceIndex = 0; }
+        SelectSequenceEnergy(safetyTimeNs);
         StartAnalysis(simulationTimeNs);
     }
 
@@ -63,6 +67,24 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         RemainingSeconds = 0;
         _lastEvidenceNs = null;
         ClearBeatHistory();
+    }
+
+    public void PauseForCpr(long safetyTimeNs, long simulationTimeNs)
+    {
+        ValidateTime(safetyTimeNs, simulationTimeNs);
+        if (!Enabled) { return; }
+        device.Disarm(safetyTimeNs);
+        _lastEvidenceNs = null;
+        ClearBeatHistory();
+        StartCpr(simulationTimeNs, AedAdvice.Undetermined);
+    }
+
+    public void ResumeAnalyzing(long safetyTimeNs, long simulationTimeNs)
+    {
+        ValidateTime(safetyTimeNs, simulationTimeNs);
+        if (!Enabled) { return; }
+        device.Disarm(safetyTimeNs);
+        StartAnalysis(simulationTimeNs);
     }
 
     public void ReleaseShock(long safetyTimeNs)
@@ -110,7 +132,13 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
             if (advice != AedAdvice.Shock)
             { device.Disarm(safetyTimeNs); StartAnalysis(simulationTimeNs); return null; }
             var delivered = device.Tick(safetyTimeNs, simulationTimeNs, []);
-            if (delivered is not null) { StartCpr(simulationTimeNs, AedAdvice.Shock); return delivered with { Automated = true }; }
+            if (delivered is not null)
+            {
+                if (_energySequenceJoules is not null)
+                { _energySequenceIndex = Math.Min(_energySequenceIndex + 1, _energySequenceJoules.Length - 1); }
+                StartCpr(simulationTimeNs, AedAdvice.Shock);
+                return delivered with { Automated = true };
+            }
             if (device.State.Energy == EnergyState.Ready) { Phase = AedPhase.ShockAdvised; }
             else if (device.State.Energy != EnergyState.Charging) { Suspend(safetyTimeNs); }
             return null;
@@ -120,9 +148,32 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device)
         if (RemainingSeconds != 0 || simulationTimeNs - _stableSinceNs < StableAdviceDurationNs) { return null; }
         Advice = advice;
         if (advice == AedAdvice.NoShock) { StartCpr(simulationTimeNs, advice); }
-        else if (device.BeginCharge(safetyTimeNs)) { Phase = AedPhase.Charging; }
-        else { Suspend(safetyTimeNs); }
+        else
+        {
+            SelectSequenceEnergy(safetyTimeNs);
+            if (device.BeginCharge(safetyTimeNs)) { Phase = AedPhase.Charging; }
+            else { Suspend(safetyTimeNs); }
+        }
         return null;
+    }
+
+    private static int[]? SnapshotEnergySequence(ManualDefibrillator device, IReadOnlyList<int>? energySequenceJoules)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        if (energySequenceJoules is null) { return null; }
+        if (energySequenceJoules.Count is < 1 or > 64)
+        { throw new ArgumentException("Aed.InvalidEnergySequence", nameof(energySequenceJoules)); }
+        int[] sequence = energySequenceJoules.ToArray();
+        if (sequence.Any(energy => !device.Configuration.EnergyStepsJoules.Contains(energy)) ||
+            !sequence.SequenceEqual(sequence.Order()))
+        { throw new ArgumentException("Aed.InvalidEnergySequence", nameof(energySequenceJoules)); }
+        return sequence;
+    }
+
+    private void SelectSequenceEnergy(long safetyTimeNs)
+    {
+        if (_energySequenceJoules is not null)
+        { device.SelectEnergy(_energySequenceJoules[_energySequenceIndex], safetyTimeNs); }
     }
 
     public static AedAdvice Classify(AedEcgEvidence? evidence, long simulationTimeNs)

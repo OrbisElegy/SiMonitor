@@ -43,7 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/app-icon.ico" />
-    <EmbeddedResource Include="Assets/Skins/*.simskin" LogicalName="Monitor.Skins.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets/Skins/**/*" LogicalName="Monitor.Skins/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="help-topics.json" LogicalName="Monitor.Help.Topics" />
     <EmbeddedResource Include="help-topics.en.json" LogicalName="Monitor.Help.Topics.en" WithCulture="false" />
     <EmbeddedResource Include="help-topics.zh-TW.json" LogicalName="Monitor.Help.Topics.zh-TW" WithCulture="false" />

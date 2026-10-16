@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "id": "generic",
+  "name": "Generic",
+  "layout": "generic",
+  "background": "#000000",
+  "channelColors": [
+    "#53F28C",
+    "#FFE16A",
+    "#49BFFF",
+    "#FF7777",
+    "#F4F6FA",
+    "#CAA7EA",
+    "#F2B67D"
+  ],
+  "warningColor": "#F2C94C",
+  "nibpColor": "#FFFFFF",
+  "fixedWaveformRows": null,
+  "deviceProfile": null,
+  "materials": {},
+  "defaultEnergyStepsJoules": [
+    1,
+    2,
+    5,
+    10,
+    20,
+    30,
+    50,
+    70,
+    100,
+    120,
+    150,
+    200,
+    250,
+    300,
+    350
+  ]
+}

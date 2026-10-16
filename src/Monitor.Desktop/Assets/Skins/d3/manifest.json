@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "id": "d3-inspired",
+  "name": "D3 · Inspired",
+  "layout": "defibrillator",
+  "fixedWaveformRows": 3,
+  "deviceProfile": "biphasic-360",
+  "background": "#080E0C",
+  "channelColors": [
+    "#32F063",
+    "#F1E763",
+    "#4ADAE8",
+    "#F99A79",
+    "#F4F6FA",
+    "#CAA7EA",
+    "#F2B67D"
+  ],
+  "warningColor": "#EEDB47",
+  "nibpColor": "#F1E763",
+  "materials": {
+    "shell": "assets/shell.material.json",
+    "key": "assets/key.material.json",
+    "softkey": "assets/softkey.material.json",
+    "charge": "assets/charge.material.json",
+    "shock": "assets/shock.material.json",
+    "selector": "assets/selector.material.json"
+  },
+  "defaultEnergyStepsJoules": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    15,
+    20,
+    30,
+    50,
+    70,
+    100,
+    150,
+    170,
+    200,
+    300,
+    360
+  ]
+}

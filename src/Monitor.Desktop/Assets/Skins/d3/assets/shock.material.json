@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "fill": "#E7793F",
+  "pressedFill": "#BF5125",
+  "border": "#A64724",
+  "foreground": "#FFFFFF",
+  "cornerRadius": 10,
+  "borderThickness": 2
+}

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text;
-using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -22,7 +21,7 @@ internal static class SkinPackageSmokeChecks
     private static readonly MonitorNumeric[] BedsideNumerics = [MonitorNumeric.HeartRate, MonitorNumeric.SpO2, MonitorNumeric.RespirationRate];
     internal static void Verify()
     {
-        VerifyPackages();
+        SkinPackageCodecSmokeChecks.Verify();
         string directory = Path.Combine(Path.GetTempPath(), "monitor-skins-" + Guid.NewGuid().ToString("N"));
         string preferences = Path.Combine(directory, "display.json");
         var window = new DesignPreviewWindow(preferences);
@@ -241,39 +240,6 @@ internal static class SkinPackageSmokeChecks
         using var bitmap = new RenderTargetBitmap(new PixelSize(1024, 640), new Vector(96, 96));
         bitmap.Render(screen!);
         bitmap.Save(path, PngBitmapEncoderOptions.Default);
-    }
-
-    private static void VerifyPackages()
-    {
-        foreach (var package in new[] { MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor })
-        {
-            using var buffer = new MemoryStream();
-            package.Write(buffer);
-            buffer.Position = 0;
-            var restored = MonitorSkinPackage.Read(buffer);
-            Require(restored.Id == package.Id && restored.Bedside == package.Bedside &&
-                Enumerable.Range(0, 7).All(channel => restored.ChannelBrush(channel).ToString() == package.ChannelBrush(channel).ToString()),
-                "single-file package roundtrip retains all channels");
-        }
-        using var source = new MemoryStream();
-        MonitorSkinPackage.BedsideMonitor.Write(source);
-        string valid = Encoding.UTF8.GetString(source.ToArray());
-        foreach (string invalid in new[]
-        {
-            "null", "{}", "[]", valid.Replace("\"version\": 1", "\"version\": 2", StringComparison.Ordinal),
-            valid.Replace("\"version\": 1", "\"version\": 1, \"version\": 1", StringComparison.Ordinal),
-            valid.Replace("\"bedside\"", "\"external-code\"", StringComparison.Ordinal),
-            valid.Replace("\"background\": \"#080A0B\"", "\"background\": null", StringComparison.Ordinal),
-            valid.Replace("#00DFEF", "file:///tmp/skin", StringComparison.Ordinal),
-            valid.Replace("{", "{\"script\":\"anything\",", StringComparison.Ordinal),
-            new string(' ', MonitorSkinPackage.MaximumBytes + 1)
-        })
-        {
-            bool rejected = false;
-            try { using var input = new MemoryStream(Encoding.UTF8.GetBytes(invalid)); _ = MonitorSkinPackage.Read(input); }
-            catch (Exception error) when (error is ArgumentException or JsonException) { rejected = true; }
-            Require(rejected, "malformed or unsupported package rejected before use");
-        }
     }
 
     private static void Require(bool condition, string message)

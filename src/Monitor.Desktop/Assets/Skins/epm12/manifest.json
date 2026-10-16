@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "id": "epm12-inspired",
+  "name": "ePM 12C · Inspired",
+  "layout": "bedside",
+  "background": "#080A0B",
+  "channelColors": [
+    "#20F44A",
+    "#E4ED45",
+    "#00DFEF",
+    "#FF6262",
+    "#F4F6FA",
+    "#CAA7EA",
+    "#F2B67D"
+  ],
+  "warningColor": "#DDF12E",
+  "nibpColor": "#B9E7F5",
+  "fixedWaveformRows": null,
+  "deviceProfile": null,
+  "materials": {},
+  "defaultEnergyStepsJoules": [
+    1,
+    2,
+    5,
+    10,
+    20,
+    30,
+    50,
+    70,
+    100,
+    120,
+    150,
+    200,
+    250,
+    300,
+    350
+  ]
+}

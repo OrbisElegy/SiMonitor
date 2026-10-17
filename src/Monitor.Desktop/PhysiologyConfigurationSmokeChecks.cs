@@ -203,17 +203,29 @@ internal static class PhysiologyConfigurationSmokeChecks
                 .Planes.Single(plane => plane.ChannelId == PhysiologyDemoSource.ChannelId(row));
             int sample = (int)(time % 200_000_000 * plane.SampleRateNumerator / 1_000_000_000);
             int raw = plane.Samples[sample];
+            // The first native sample after C can be up to 9 ms later, and
+            // dispersion advances the earlier paths by up to two steps. A
+            // smooth plateau rises immediately; it no longer has the imported
+            // seed's flat stair at C. Bound that rise by the monotone cubic's
+            // maximum slope of three times the C-to-D secant.
+            int plateauStart = config.Co2PlateauStartCentiMmHg!.Value;
+            long plateauMilliseconds = config.BreathPeriodMilliseconds - config.InspirationMilliseconds -
+                config.Co2DeadSpaceMilliseconds - config.Co2RiseMilliseconds;
+            long plateauAdvanceMilliseconds = 2 * config.Co2DispersionStepMilliseconds + 9;
+            long maximumPlateauRise = (3L * (config.Co2EndExpiratoryMmHg * 100 - plateauStart) *
+                plateauAdvanceMilliseconds + plateauMilliseconds - 1) / plateauMilliseconds;
+            int absoluteCo2 = raw + config.Co2BaselineMmHg * 100;
             bool invalidCo2 = row == 4 && (time == tailTime && config.Co2DispersionStepMilliseconds > 0
                 ? raw <= 0 || raw >= (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100
                 : time == (config.BreathPeriodMilliseconds + config.Co2TransportDelayMilliseconds) * 1_000_000L
                     ? raw != (config.Co2EndExpiratoryMmHg - config.Co2BaselineMmHg) * 100
-                    : Math.Abs(raw + config.Co2BaselineMmHg * 100 - config.Co2PlateauStartCentiMmHg!.Value) > 10);
+                    : absoluteCo2 < plateauStart - 1 || absoluteCo2 > plateauStart + maximumPlateauRise + 1);
             int expectedResp = config.RespCardiacArtifactCounts != 0
                 ? ((time - timing.VentricularMechanicalOffsetNs) % timing.HeartPeriodNs < timing.HeartPeriodNs / 2
                     ? config.RespCardiacArtifactCounts : -config.RespCardiacArtifactCounts)
                 : time >= expirationEnd ? 0 : config.RespAmplitudeCounts;
             if ((row == 1 && raw != expectedResp) || invalidCo2)
-            { throw new InvalidOperationException("Configured Resp turn or CO2 plateau/peak/response tail is absent from native data."); }
+            { throw new InvalidOperationException($"Configured Resp turn or CO2 plateau/peak/response tail is absent from native data: row {row}, time {time} ns, raw {raw}."); }
             int x = (int)Math.Round(time / 8_000_000.0);
             int y = (int)Math.Round(row == 1 ? 180 - raw * 0.05 : row == 4 ? 590 - (raw / 100.0 + config.Co2BaselineMmHg) * 1.25 : 775 - (raw - config.CvpBaselineCentiMmHg) * 0.05);
             if (!Enumerable.Range(y - 2, 5).Any(line => Enumerable.Range(x - 1, 3).Any(column =>

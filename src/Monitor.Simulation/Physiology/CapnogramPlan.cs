@@ -9,18 +9,22 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
     int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0, long DispersionStepNs = 0)
 {
     public SeededExpirationPressure? SeededPressure { get; init; }
-    public const string EvidenceId = "InfirmaryCapnogramDraft@1";
+    public CapnogramIllustration Illustration { get; init; }
+    public const string EvidenceId = "AuthoredCapnogram@1";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
+        if (PlateauStartCentiMmHg is not null && Illustration is not (CapnogramIllustration.Reference or
+            CapnogramIllustration.Rebreathing or CapnogramIllustration.ExhaustedAbsorber or CapnogramIllustration.CardiogenicOscillations))
+        { throw new EventWaveformException("Capnogram.CustomPlateauUnsupported", "plan"); }
         if (SeededPressure is { } seeded && (seeded.TargetMmHg != EndExpiratoryMmHg || BaselineMmHg != 0 ||
             physiology.RespiratoryPattern != RespiratoryPattern.Regular || physiology.RespiratoryActivity != RespiratoryActivity.Breathing ||
             physiology.ActivityAfterBreaths is not null))
         { throw new EventWaveformException("Capnogram.SeededPressureRequiresRegularBreathing", "plan"); }
         long expiration = physiology.BreathPeriodNs - physiology.InspirationDurationNs;
-        if (DeadSpaceNs <= 0 || RiseNs <= 0 || DeadSpaceNs >= expiration || RiseNs >= expiration - DeadSpaceNs ||
+        if (!Enum.IsDefined(Illustration) || DeadSpaceNs <= 0 || RiseNs <= 0 || DeadSpaceNs >= expiration || RiseNs >= expiration - DeadSpaceNs ||
             InspiratoryFallNs <= 0 || InspiratoryFallNs > physiology.InspirationDurationNs ||
             BaselineMmHg < 0 || EndExpiratoryMmHg < BaselineMmHg || EndExpiratoryMmHg > 327 ||
             (PlateauStartCentiMmHg is { } plateau && (plateau < BaselineMmHg * 100 || plateau > EndExpiratoryMmHg * 100)))
@@ -32,24 +36,9 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
         EventWaveformPhasePoint[] phases = [new(0, 0), new(DeadSpaceNs, 32), new(DeadSpaceNs + RiseNs, 96),
             new(expiration, 480), new(duration, 512)];
         long peakCounts = (EndExpiratoryMmHg - BaselineMmHg) * 100L;
-        long[] values = CapnogramTables.Cycle.Select(value => checked(value * peakCounts)).ToArray();
-        if (PlateauStartCentiMmHg is { } plateauStart)
-        {
-            // Remap amplitudes around the existing C landmark without moving
-            // phase times or changing the next-inspiration fall. Null retains
-            // the original seed scaling bit-for-bit.
-            long startCounts = plateauStart - BaselineMmHg * 100L;
-            long seedC = CapnogramTables.Cycle[96];
-            for (int index = 0; index <= 480; index++)
-            {
-                long seed = CapnogramTables.Cycle[index];
-                values[index] = index <= 96
-                    ? (long)FixedPointMath.RoundDivideTiesToEven((Int128)seed * startCounts * FixedPointMath.Q32One, seedC)
-                    : checked(startCounts * FixedPointMath.Q32One + (long)FixedPointMath.RoundDivideTiesToEven(
-                        (Int128)(seed - seedC) * (peakCounts - startCounts) * FixedPointMath.Q32One,
-                        FixedPointMath.Q32One - seedC));
-            }
-        }
+        long[] values = CapnogramMorphology.Create(Illustration, peakCounts, phases,
+            PlateauStartCentiMmHg is { } plateauStart ? plateauStart - BaselineMmHg * 100L : null);
+        long morphologyPeakQ32 = values.Max();
         // Chest-effort events do not imply expired gas. Keep the affine baseline
         // and validated response settings, but generate no gas excursion.
         if (physiology.RespiratoryActivity != RespiratoryActivity.Breathing && physiology.ActivityAfterBreaths is null)
@@ -94,6 +83,22 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
         {
             ulong? resume = physiology.ActivityDurationBreaths is { } durationBreaths ? limit + durationBreaths : null;
             bands = Array.AsReadOnly(bands.Select(band => band with { TriggerCycleLimit = limit, TriggerCycleResume = resume }).ToArray());
+        }
+        bands = CapnogramMorphology.ApplyBands(bands, Illustration);
+        if (Illustration != CapnogramIllustration.Reference)
+        {
+            int maximumGain = bands.Max(band => band.ExpirationCycleGainsPermille?.Max() ?? 1000);
+            if ((Int128)BaselineMmHg * 100 * FixedPointMath.Q32One * 1000 +
+                (Int128)morphologyPeakQ32 * maximumGain > (Int128)32_700 * FixedPointMath.Q32One * 1000)
+            { throw new EventWaveformException("Capnogram.Co2ResponseOutOfRange", "EndExpiratoryMmHg"); }
+            foreach (var band in bands)
+            {
+                int gain = band.ExpirationCycleGainsPermille?.Max() ?? 1000;
+                if (band.TableQ32.Any(value => (Int128)BaselineMmHg * 100 * FixedPointMath.Q32One * 1000 +
+                    (Int128)value * gain > (Int128)32_700 * FixedPointMath.Q32One * 1000))
+                { throw new EventWaveformException("Capnogram.Co2ResponseOutOfRange", "EndExpiratoryMmHg"); }
+            }
+            _ = EventWaveformComposition.Restore(new(bands, []));
         }
         return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, qualityFlags);
     }

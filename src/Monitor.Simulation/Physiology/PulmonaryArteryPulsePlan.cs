@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Simulation.Physiology;
 
-// Independent PA seed, not an ABP scale or a qualified RV/PA hemodynamic model.
+// Independent authored PA contour, not an ABP scale or a qualified RV/PA hemodynamic model.
 public sealed record PulmonaryArteryPulsePlan(long TransitDelayNs, long DurationNs,
     int BaselineMmHg, int PulseHeightMmHg)
 {
-    public const string EvidenceId = "InfirmaryPulmonaryArteryDraft@1";
+    public const string EvidenceId = "AuthoredPulmonaryArteryPulse@1";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
@@ -15,7 +15,7 @@ public sealed record PulmonaryArteryPulsePlan(long TransitDelayNs, long Duration
             TransitDelayNs > long.MaxValue - DurationNs || BaselineMmHg is < 0 or > short.MaxValue ||
             PulseHeightMmHg is < 0 or > 327)
         { throw new EventWaveformException("PulmonaryArtery.InvalidPlan", "plan"); }
-        var table = Array.AsReadOnly(PulmonaryArteryTables.Pulse.Select(value =>
+        var table = Array.AsReadOnly(AuthoredHemodynamicContours.PulmonaryArtery.Select(value =>
             checked(value * PulseHeightMmHg * 100)).ToArray());
         var bands = Array.AsReadOnly(new EventWaveformBand[]
         {

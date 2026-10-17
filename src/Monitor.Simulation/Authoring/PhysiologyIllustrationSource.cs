@@ -107,7 +107,7 @@ public static class PhysiologyIllustrationSource
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :
                 plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(configuration.SeededRate?.Timing), 0),
-             new RespirationPlan(configuration.RespAmplitudeCounts, configuration.RespCardiacArtifactCounts).CreateChannel(plan, ChannelId(1), 0),
+             configuration.ResolveRespiration().CreateChannel(plan, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 Array.Empty<EventWaveformBand>(), 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling)),
              fixedPerfusion?.Arterial.CreateChannel(plan, ChannelId(3), 0) ?? (configuration.UseVascularReservoir
@@ -130,7 +130,7 @@ public static class PhysiologyIllustrationSource
         if (ventilation is not null)
         {
             channels[1] = VentilationWaveformCoupling.Respiration(channels[1], ventilation);
-            channels[4] = VentilationWaveformCoupling.Capnogram(channels[4], ventilation);
+            channels[4] = VentilationWaveformCoupling.Capnogram(channels[4], ventilation, configuration.ResolveCapnogram());
         }
         foreach (var (row, gain) in new[] { (3, configuration.AbpPulsePermille), (5, configuration.PaPulsePermille) })
         {
@@ -157,6 +157,8 @@ public static class PhysiologyIllustrationSource
         }
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
+        channels[3] = channels[3] with { PressureMeasurement = configuration.PressureMeasurement };
+        channels[2] = channels[2] with { PlethShape = configuration.PlethShape };
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
     }
     private static PhysiologyWaveformChannelPlan ApplyVariation(PhysiologyWaveformChannelPlan channel, int amplitudeCentiMmHg,

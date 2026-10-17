@@ -20,6 +20,15 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
     // seeded variation. DurationNs remains the conservative lookback bound.
     public RegularPhysiologyPlan? AfTiming { get; init; }
     public SeededCardiacRate? CycleDurationRate { get; init; }
+    public IReadOnlyList<int>? InspirationCycleGainsPermille { get; init; }
+    // Global breath gains retain their original ordinal. Only this finite
+    // activation envelope restarts when the source definition changes.
+    public ulong ExpirationCycleOrigin { get; init; }
+    public IReadOnlyList<int>? ExpirationActivationGainsPermille { get; init; }
+    // Small gas-motion attenuation follows actual ventricular mechanical events.
+    // It never creates expired gas when the respiratory contribution is zero.
+    public long CardiogenicRippleDurationNs { get; init; }
+    public int CardiogenicRipplePermille { get; init; }
 }
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
@@ -67,6 +76,8 @@ public sealed class EventWaveformComposition
             if (table[0] != 0 || table.Any(value => value < short.MinValue * FixedPointMath.Q32One ||
                 value > short.MaxValue * FixedPointMath.Q32One)) { throw Invalid(); }
             int[]? gains = null;
+            if (band.ExpirationActivationGainsPermille is null && band.ExpirationCycleOrigin != 0)
+            { throw Invalid(); }
             if (band.ExpirationCycleGainsPermille is { } cycleGains)
             {
                 if (band.Trigger != PhysiologyCycleEventKind.ExpirationStart || band.DepthPattern != RespiratoryPattern.Regular ||
@@ -76,6 +87,30 @@ public sealed class EventWaveformComposition
                     (Int128)value * gains.Max() < (Int128)short.MinValue * FixedPointMath.Q32One * 1000 ||
                     (Int128)value * gains.Max() > (Int128)short.MaxValue * FixedPointMath.Q32One * 1000)) { throw Invalid(); }
             }
+            int[]? inspirationGains = null;
+            if (band.InspirationCycleGainsPermille is { } inspirationCycleGains)
+            {
+                if (band.Trigger != PhysiologyCycleEventKind.InspirationStart || inspirationCycleGains.Count is < 1 or > 64)
+                { throw Invalid(); }
+                inspirationGains = inspirationCycleGains.ToArray();
+                if (inspirationGains.Any(g => g is < 0 or > 10_000) || table.Any(value =>
+                    (Int128)value * inspirationGains.Max() < (Int128)short.MinValue * FixedPointMath.Q32One * 1000 ||
+                    (Int128)value * inspirationGains.Max() > (Int128)short.MaxValue * FixedPointMath.Q32One * 1000))
+                { throw Invalid(); }
+            }
+            int[]? activationGains = null;
+            if (band.ExpirationActivationGainsPermille is { } finiteGains)
+            {
+                if (band.Trigger != PhysiologyCycleEventKind.ExpirationStart || finiteGains.Count is < 1 or > 64 ||
+                    finiteGains.Any(gain => gain is < 0 or > 1000))
+                { throw Invalid(); }
+                activationGains = finiteGains.ToArray();
+            }
+            if (band.CardiogenicRippleDurationNs < 0 || band.CardiogenicRipplePermille is < 0 or > 1000 ||
+                (band.CardiogenicRippleDurationNs == 0) != (band.CardiogenicRipplePermille == 0) ||
+                band.CardiogenicRippleDurationNs > 0 && (band.Trigger != PhysiologyCycleEventKind.ExpirationStart ||
+                    band.CardiogenicRippleDurationNs > band.DurationNs || table.Any(value => value < 0)))
+            { throw Invalid(); }
             EventWaveformPhasePoint[]? points = null;
             if (band.PhasePoints is { } map)
             {
@@ -95,7 +130,9 @@ public sealed class EventWaveformComposition
             {
                 TableQ32 = Array.AsReadOnly(table),
                 PhasePoints = points is null ? null : Array.AsReadOnly(points),
-                ExpirationCycleGainsPermille = gains is null ? null : Array.AsReadOnly(gains)
+                ExpirationCycleGainsPermille = gains is null ? null : Array.AsReadOnly(gains),
+                InspirationCycleGainsPermille = inspirationGains is null ? null : Array.AsReadOnly(inspirationGains),
+                ExpirationActivationGainsPermille = activationGains is null ? null : Array.AsReadOnly(activationGains)
             };
             _tables[index] = table;
         }
@@ -141,6 +178,16 @@ public sealed class EventWaveformComposition
                 int gain = band.EjectionIllustration is { } perfusion ? PrematureBeatPerfusion.GainPermille(perfusion, item.CycleIndex) : band.ExpirationCycleGainsPermille is { } cycleGains
                     ? cycleGains[(int)(item.CycleIndex % (ulong)cycleGains.Count)]
                     : RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex);
+                if (band.InspirationCycleGainsPermille is { } inspirationGains)
+                { value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * inspirationGains[(int)(item.CycleIndex % (ulong)inspirationGains.Count)], 1000); }
+                if (band.ExpirationActivationGainsPermille is { } activationGains)
+                { value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * activationGains[(int)(item.CycleIndex - band.ExpirationCycleOrigin)], 1000); }
+                if (band.CardiogenicRippleDurationNs > 0 && value > 0 &&
+                    (band.PhasePoints is not { Count: > 2 } points || elapsed >= points[2].OffsetNs))
+                {
+                    int attenuation = CardiogenicAttenuation(band, simTimeNs - band.DelayNs);
+                    value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * (1000 - attenuation), 1000);
+                }
                 sum += gain == 1000 ? value : FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
             }
         }
@@ -151,10 +198,29 @@ public sealed class EventWaveformComposition
     }
 
     private static bool Accepts(EventWaveformBand band, PhysiologyCycleEvent item) => band.Trigger == item.Kind &&
+        (band.ExpirationActivationGainsPermille is not { } activationGains || item.CycleIndex >= band.ExpirationCycleOrigin &&
+            item.CycleIndex - band.ExpirationCycleOrigin < (ulong)activationGains.Count) &&
         (band.AfBeatSelection is not { } af || (band.AfTiming is { } timing ? AtrialFibrillationReference.IsLongShortBeat(timing, item.CycleIndex) : AtrialFibrillationReference.IsLongShortBeat(item.CycleIndex)) == (af == AtrialFibrillationBeatSelection.LongShort)) &&
         (band.VentricularCycles is not { } cycles || (cycles.IncludedSlots & (1UL << (int)(item.CycleIndex % (ulong)cycles.Length))) != 0) &&
         (band.TriggerCycleLimit is null || item.CycleIndex < band.TriggerCycleLimit.Value ||
          (band.TriggerCycleResume is { } resume && item.CycleIndex >= resume));
+
+    private int CardiogenicAttenuation(EventWaveformBand band, long sourceTimeNs)
+    {
+        int maximum = 0;
+        foreach (var heartbeat in _events)
+        {
+            if (heartbeat.SimTimeNs > sourceTimeNs) { break; }
+            long age = sourceTimeNs - heartbeat.SimTimeNs;
+            if (heartbeat.Kind != PhysiologyCycleEventKind.VentricularMechanical || age >= band.CardiogenicRippleDurationNs)
+            { continue; }
+            long distance = Math.Min(age, band.CardiogenicRippleDurationNs - age);
+            int attenuation = (int)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)distance * 2 * band.CardiogenicRipplePermille, band.CardiogenicRippleDurationNs);
+            maximum = Math.Max(maximum, attenuation);
+        }
+        return maximum;
+    }
 
     private static EventWaveformException Invalid() => new("EventWaveform.InvalidState", "state");
 

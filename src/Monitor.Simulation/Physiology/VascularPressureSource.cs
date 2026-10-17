@@ -89,7 +89,7 @@ public sealed class VascularPressureSource
         if (WholeStepDecay(_decayHorizonNs / MeshStepNs) != 0) { throw Invalid(); }
         if (plan.Morphology is { } morphology)
         {
-            if (morphology.ModelId != VascularPressureMorphologyPlan.EvidenceId ||
+            if (morphology.ModelId is not (VascularPressureMorphologyPlan.EvidenceId or VascularPressureMorphologyPlan.LegacyEvidenceId) ||
                 !Enum.IsDefined(morphology.Kind) || morphology.DurationNs <= 0 ||
                 morphology.MaximumPulseOverlap is < 1 or > 8 || morphology.DurationNs > support ||
                 ((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod > morphology.MaximumPulseOverlap ||
@@ -158,8 +158,7 @@ public sealed class VascularPressureSource
             if (plan.Variation is { } variation) { above = (above * (1000 + variation.AmplitudePermille) + 999) / 1000; }
             Int128 maximumOutput = (Int128)plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One + above + FixedPointMath.Q32One;
             if (maximumOutput > short.MaxValue * FixedPointMath.Q32One) { throw Invalid(); }
-            IReadOnlyList<long> seed = morphology.Kind == VascularPressureMorphologyKind.Arterial
-                ? ArterialPulseTables.Pulse : PulmonaryArteryTables.Pulse;
+            IReadOnlyList<long> seed = Contour(morphology);
             _morphologyTable = seed.Select(value => checked(value * morphology.PulseHeightCentiMmHg)).ToArray();
         }
     }
@@ -272,8 +271,7 @@ public sealed class VascularPressureSource
     {
         var morphology = _plan.Morphology!;
         // The probe without a pulse has an all-zero table; locate the peak on the seed contour.
-        IReadOnlyList<long> contour = morphology.Kind == VascularPressureMorphologyKind.Arterial
-            ? ArterialPulseTables.Pulse : PulmonaryArteryTables.Pulse;
+        IReadOnlyList<long> contour = Contour(morphology);
         int peakIndex = 0;
         for (int index = 1; index < contour.Count; index++)
         {
@@ -311,6 +309,17 @@ public sealed class VascularPressureSource
         }
         return (onsets, peaks, beats.Count);
     }
+
+    // Checkpoints identify the contour through the model version. Retain the
+    // frozen legacy tables so restoring an old pending sample stays exact.
+    private static IReadOnlyList<long> Contour(VascularPressureMorphologyPlan morphology) =>
+        (morphology.ModelId, morphology.Kind) switch
+        {
+            (VascularPressureMorphologyPlan.LegacyEvidenceId, VascularPressureMorphologyKind.Arterial) => ArterialPulseTables.Pulse,
+            (VascularPressureMorphologyPlan.LegacyEvidenceId, VascularPressureMorphologyKind.PulmonaryArtery) => PulmonaryArteryTables.Pulse,
+            (_, VascularPressureMorphologyKind.Arterial) => AuthoredHemodynamicContours.Arterial,
+            _ => AuthoredHemodynamicContours.PulmonaryArtery,
+        };
 
     // Inverts the reference onset S0 = E * input(T) / (1 - decay(T)) with the same kernel.
     private static long EjectionEquilibriumForOnset(RegularPhysiologyPlan physiology, VascularPressurePlan plan,

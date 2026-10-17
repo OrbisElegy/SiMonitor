@@ -22,7 +22,8 @@ internal static class VascularPressureMorphologySpecifications
 
     public static Specification[] All =>
     [
-        new(nameof(VascularMorphologyMatchesIndependentLegacySeedsAtSteadyState), VascularMorphologyMatchesIndependentLegacySeedsAtSteadyState),
+        new(nameof(VascularMorphologyMatchesAuthoredContoursAtSteadyState), VascularMorphologyMatchesAuthoredContoursAtSteadyState),
+        new(nameof(VascularLegacyMorphologyRetainsFrozenValuesAndPendingSamples), VascularLegacyMorphologyRetainsFrozenValuesAndPendingSamples),
         new(nameof(VascularMorphologyPreservesFirstAndResumedNotches), VascularMorphologyPreservesFirstAndResumedNotches),
         new(nameof(VascularMorphologyCompletesDelayedTailAndJoinsPassiveRunoff), VascularMorphologyCompletesDelayedTailAndJoinsPassiveRunoff),
         new(nameof(VascularMorphologyKeepsConductionStrideAndSubsampleTransit), VascularMorphologyKeepsConductionStrideAndSubsampleTransit),
@@ -31,15 +32,15 @@ internal static class VascularPressureMorphologySpecifications
         new(nameof(VascularMorphologyDefaultsKeepOriginalSourcesUnchanged), VascularMorphologyDefaultsKeepOriginalSourcesUnchanged),
     ];
 
-    private static void VascularMorphologyMatchesIndependentLegacySeedsAtSteadyState()
+    private static void VascularMorphologyMatchesAuthoredContoursAtSteadyState()
     {
         foreach (var pressure in new[] { Arterial, Pulmonary })
         {
             var source = VascularPressureSource.Create(Physiology, pressure);
             long eventTime = Physiology.VentricularMechanicalOffsetNs + 100 * Physiology.HeartPeriodNs;
-            var legacy = Legacy(Physiology, pressure, eventTime, 100);
-            // Independent continuous-time periodic RC solution; the legacy
-            // channel supplies its own table scaling and frozen interpolation.
+            var contour = Contour(Physiology, pressure, eventTime, 100);
+            // Independent continuous-time periodic RC solution; the pulse
+            // channel supplies its own table scaling and interpolation.
             double period = Physiology.HeartPeriodNs;
             double baseline = pressure.EjectionEquilibriumCentiMmHg *
                 (Math.Exp(-(period - pressure.EjectionDurationNs) / pressure.TimeConstantNs) -
@@ -47,11 +48,53 @@ internal static class VascularPressureMorphologySpecifications
             for (long age = 0; age <= Physiology.HeartPeriodNs; age += 2_000_000)
             {
                 long time = eventTime + pressure.TransitDelayNs + age;
-                double expected = pressure.AsymptoticPressureCentiMmHg + baseline + (double)legacy.EvaluateAt(time) / Q;
+                double expected = pressure.AsymptoticPressureCentiMmHg + baseline + (double)contour.EvaluateAt(time) / Q;
                 Check.That(Math.Abs((double)source.EvaluateAt(time) / Q - expected) < 0.02,
-                    "periodic steady pressure preserves each independent original pressure LUT within 0.0002 mmHg");
+                    "periodic steady pressure preserves each independent authored pressure contour within 0.0002 mmHg");
             }
         }
+    }
+
+    private static void VascularLegacyMorphologyRetainsFrozenValuesAndPendingSamples()
+    {
+        int[] indices = [0, 44, 100, 124, 132, 200];
+        long[][] frozenQ32 =
+        [
+            [0, 4294967296, 2851287859, 1788451226, 2111412634, 375809638],
+            [0, 4234800728, 1254241527, 1464824514, 1217215947, 242980370],
+        ];
+        var legacy = new[] { Arterial, Pulmonary }.Select(pressure => pressure with
+        {
+            Morphology = pressure.Morphology! with { ModelId = VascularPressureMorphologyPlan.LegacyEvidenceId },
+        }).ToArray();
+        for (int channel = 0; channel < legacy.Length; channel++)
+        {
+            var pressure = legacy[channel];
+            var source = VascularPressureSource.Create(Physiology, pressure);
+            double period = Physiology.HeartPeriodNs;
+            double baseline = pressure.EjectionEquilibriumCentiMmHg *
+                (Math.Exp(-(period - pressure.EjectionDurationNs) / pressure.TimeConstantNs) -
+                 Math.Exp(-period / pressure.TimeConstantNs)) / (1 - Math.Exp(-period / pressure.TimeConstantNs));
+            for (int point = 0; point < indices.Length; point++)
+            {
+                long time = Physiology.VentricularMechanicalOffsetNs + 100 * Physiology.HeartPeriodNs +
+                    pressure.TransitDelayNs + pressure.Morphology!.DurationNs * indices[point] / 256;
+                double expected = pressure.AsymptoticPressureCentiMmHg + baseline +
+                    (double)frozenQ32[channel][point] / Q * pressure.Morphology.PulseHeightCentiMmHg;
+                Check.That(Math.Abs((double)source.EvaluateAt(time) / Q - expected) < 0.02,
+                    "version 2 retains frozen upstream contour samples after the authored default migration");
+            }
+        }
+        var group = PhysiologyWaveformGroup.Start(Abp, Pa, 1, 1, 1, 0, 32,
+            [legacy[0].CreateChannel(Physiology, Abp, 0), legacy[1].CreateChannel(Physiology, Pa, 0)]);
+        _ = group.AdvanceTo(4_100_000_000, 600, 32, 100);
+        string serialized = JsonSerializer.Serialize(group.CaptureState());
+        var restored = PhysiologyWaveformGroup.Restore(JsonSerializer.Deserialize<PhysiologyWaveformGroupState>(serialized)!);
+        var expectedBlocks = group.AdvanceTo(4_800_000_000, 100, 8, 100);
+        var restoredBlocks = restored.AdvanceTo(4_800_000_000, 100, 8, 100);
+        Check.That(expectedBlocks.Count == restoredBlocks.Count && expectedBlocks.Zip(restoredBlocks)
+            .All(pair => pair.First.SequenceEqual(pair.Second)),
+            "legacy version 2 checkpoints preserve pending pressure samples and subsequent exact wire bytes");
     }
 
     private static void VascularMorphologyPreservesFirstAndResumedNotches()
@@ -229,7 +272,7 @@ internal static class VascularPressureMorphologySpecifications
         }
     }
 
-    private static EventWaveformComposition Legacy(RegularPhysiologyPlan physiology,
+    private static EventWaveformComposition Contour(RegularPhysiologyPlan physiology,
         VascularPressurePlan pressure, long eventTime, ulong cycle)
     {
         PhysiologyWaveformChannelPlan channel = pressure.Morphology!.Kind == VascularPressureMorphologyKind.Arterial

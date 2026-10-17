@@ -119,23 +119,39 @@ public sealed class PhysiologySignalGenerator
         bool sameRhythm = previousPlan.RhythmSchedule is { } rhythm && nextPlan.RhythmSchedule is { } nextRhythm
             ? rhythm.SeedHex == nextRhythm.SeedHex && rhythm.PauseDurationNs == nextRhythm.PauseDurationNs && rhythm.ConductionPercent == nextRhythm.ConductionPercent
             : previousPlan.RhythmSchedule is null && nextPlan.RhythmSchedule is null;
-        // Reprepared schedules are value-equivalent even when their derived
-        // tables/caches have different identities. Unchanged channels need no tails.
-        if (_pressureBaselineCentiMmHg == definition.PressureBaselineCentiMmHg && sameRate && sameAdjustment && sameRhythm &&
-            previousPlan with { SeededRate = nextPlan.SeededRate, RateAdjustment = nextPlan.RateAdjustment, RhythmSchedule = nextPlan.RhythmSchedule } == nextPlan && _vascularPressurePlan == definition.VascularPressure &&
-            _plethRunoffPlan == definition.PlethRunoff && _bands.Count == definition.Bands.Count &&
+        bool sameBands = _bands.Count == definition.Bands.Count &&
             _bands.Zip(definition.Bands).All(pair =>
                 pair.First with
                 {
                     TableQ32 = pair.Second.TableQ32,
                     PhasePoints = pair.Second.PhasePoints,
-                    ExpirationCycleGainsPermille = pair.Second.ExpirationCycleGainsPermille
+                    ExpirationCycleGainsPermille = pair.Second.ExpirationCycleGainsPermille,
+                    InspirationCycleGainsPermille = pair.Second.InspirationCycleGainsPermille,
+                    ExpirationActivationGainsPermille = pair.Second.ExpirationActivationGainsPermille,
+                    ExpirationCycleOrigin = pair.Second.ExpirationCycleOrigin
                 } == pair.Second &&
                 pair.First.TableQ32.SequenceEqual(pair.Second.TableQ32) &&
                 (pair.First.PhasePoints ?? []).SequenceEqual(pair.Second.PhasePoints ?? []) &&
-                (pair.First.ExpirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationCycleGainsPermille ?? [])))
+                (pair.First.ExpirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationCycleGainsPermille ?? []) &&
+                (pair.First.InspirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.InspirationCycleGainsPermille ?? []) &&
+                (pair.First.ExpirationActivationGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationActivationGainsPermille ?? []));
+        // Reprepared schedules are value-equivalent even when their derived
+        // tables/caches have different identities. Unchanged channels need no tails.
+        if (_pressureBaselineCentiMmHg == definition.PressureBaselineCentiMmHg && sameRate && sameAdjustment && sameRhythm &&
+            previousPlan with { SeededRate = nextPlan.SeededRate, RateAdjustment = nextPlan.RateAdjustment, RhythmSchedule = nextPlan.RhythmSchedule } == nextPlan && _vascularPressurePlan == definition.VascularPressure &&
+            _plethRunoffPlan == definition.PlethRunoff && sameBands)
         { return Fork(); }
         long boundary = current.Clock.CursorSimTimeNs;
+        if (definition.Bands.Any(band => band.ExpirationActivationGainsPermille is not null))
+        {
+            Int128 sinceFirstExpiration = (Int128)boundary - current.Clock.EpochAnchorSimTimeNs - nextPlan.InspirationDurationNs;
+            ulong origin = sinceFirstExpiration <= 0 ? 0 : checked((ulong)((sinceFirstExpiration + nextPlan.BreathPeriodNs - 1) / nextPlan.BreathPeriodNs));
+            definition = definition with
+            {
+                Bands = Array.AsReadOnly(definition.Bands.Select((band, index) => band.ExpirationActivationGainsPermille is null
+                    ? band : band with { ExpirationCycleOrigin = sameBands ? _bands[index].ExpirationCycleOrigin : origin }).ToArray())
+            };
+        }
         long from = _active?.Segment.FromEventTimeNs ?? current.Clock.EpochAnchorSimTimeNs;
         var history = _history.Where(s => boundary - s.Segment.ToExclusiveEventTimeNs <= s.SupportNs + 2_200_000_000)
             .Select(s => s.Segment).ToList();

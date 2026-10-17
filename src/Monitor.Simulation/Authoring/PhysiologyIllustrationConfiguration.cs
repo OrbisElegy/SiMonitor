@@ -57,6 +57,8 @@ public sealed record PhysiologyIllustrationConfiguration(
     bool AivrCapture = false,
     bool AtrialEscape = false)
 {
+    public CapnogramIllustration CapnogramIllustration { get; init; }
+    public RespirationIllustration RespirationIllustration { get; init; }
     public bool Dextrocardia { get; init; }
     public PacingIllustration? Pacing { get; init; }
     public PacingOutputSettings? PacingOutput { get; init; }
@@ -80,6 +82,8 @@ public sealed record PhysiologyIllustrationConfiguration(
     public bool HyperkalemiaFusion { get; init; }
     public int AbpPulsePermille { get; init; } = 1000;
     public int PaPulsePermille { get; init; } = 1000;
+    public PressureMeasurementIllustration PressureMeasurement { get; init; }
+    public PlethIllustration PlethShape { get; init; }
     public int CvpBaselineCentiMmHg { get; init; } = 600;
     // Optional pressure targets replace the pulse factor of the same channel.
     public VascularPressureTarget? AbpTarget { get; init; }
@@ -154,11 +158,27 @@ public sealed record PhysiologyIllustrationConfiguration(
         { throw new ArgumentException("PhysiologyDemo.InvalidCo2Dispersion"); }
         return new(Co2DeadSpaceMilliseconds * 1_000_000L, Co2RiseMilliseconds * 1_000_000L,
             Co2FallMilliseconds * 1_000_000L, Co2BaselineMmHg, Co2EndExpiratoryMmHg, Co2PlateauStartCentiMmHg, Co2TransportDelayMilliseconds * 1_000_000L, Co2DispersionStepMilliseconds * 1_000_000L)
-        { SeededPressure = SeededCo2 };
+        { SeededPressure = SeededCo2, Illustration = CapnogramIllustration };
+    }
+
+    public RespirationPlan ResolveRespiration()
+    {
+        long expirationNs = (BreathPeriodMilliseconds - (long)InspirationMilliseconds) * 1_000_000;
+        long plateauStartNs = (Co2DeadSpaceMilliseconds + (long)Co2RiseMilliseconds) * 1_000_000;
+        long plateauDurationNs = expirationNs - plateauStartNs;
+        long halfWidthNs = Math.Max(2, plateauDurationNs * 38 / 384);
+        return new(RespAmplitudeCounts, RespCardiacArtifactCounts)
+        {
+            Illustration = RespirationIllustration,
+            InspiratoryEffortDelayNs = InspirationMilliseconds * 1_000_000L + plateauStartNs + plateauDurationNs / 2 - halfWidthNs,
+            InspiratoryEffortDurationNs = 2 * halfWidthNs
+        };
     }
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (!Enum.IsDefined(PressureMeasurement) || !Enum.IsDefined(PlethShape))
+        { throw new ArgumentException("PhysiologyDemo.InvalidSensorIllustration"); }
         if (Dextrocardia && (Pacing is not null || PacingOutput is not null || ConductionPattern != AvConductionPattern.FixedPr || CardiacActivity != CardiacActivity.AtrialAndVentricular ||
             VentricularConductionRatio != 1 || ConductedBeatsPerGroup != 1 || IndependentVentricularPeriodMilliseconds is not null ||
             IndependentVentricularOffsetMilliseconds is not null || MechanicalEveryCycles != 1 || MechanicalAfterCycles is not null ||

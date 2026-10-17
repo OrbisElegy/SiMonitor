@@ -13,6 +13,7 @@ internal static class VentilationWaveformSpecifications
     [
         new(nameof(PhysicalVentilationControlsSampledRespirationAndGas), PhysicalVentilationControlsSampledRespirationAndGas),
         new(nameof(DeadSpaceUsesEachBreathsDepthAndPreservesTransport), DeadSpaceUsesEachBreathsDepthAndPreservesTransport),
+        new(nameof(RetimedGasRetainsSmoothJunctionsAndCompleteMorphology), RetimedGasRetainsSmoothJunctionsAndCompleteMorphology),
         new(nameof(LiveVentilationStopsAndRestoresMeasuredBreathing), LiveVentilationStopsAndRestoresMeasuredBreathing),
         new(nameof(VentilationEditsPreserveTimingAndCurrentSource), VentilationEditsPreserveTimingAndCurrentSource),
         new(nameof(VentilationEditImmediatelyAfterContinuationKeepsNewRhythm), VentilationEditImmediatelyAfterContinuationKeepsNewRhythm),
@@ -95,6 +96,54 @@ internal static class VentilationWaveformSpecifications
             session.Samples(4, 65_000_000_000, 70_000_000_000).Any(sample => sample.Value > 0) &&
             session.Measurements!.ImpedanceRespiration.Status == WaveformMeasurementStatus.Valid &&
             session.Measurements.Capnography.EndTidalCentiMmHg.Status == WaveformMeasurementStatus.Valid, "restoring ventilation restores both waveforms and measured values");
+    }
+
+    private static void RetimedGasRetainsSmoothJunctionsAndCompleteMorphology()
+    {
+        var spontaneous = PhysiologyIllustrationConfiguration.Default with
+        {
+            CapnogramIllustration = CapnogramIllustration.SpontaneousVentilation,
+            Co2DeadSpaceMilliseconds = 500
+        };
+        var ventilation = Normal with { DeadSpaceMicrolitersBtps = 300000 };
+        var source = GasState(spontaneous, ventilation);
+        var curve = EventWaveformComposition.Restore(new(source.Bands, [new(0, PhysiologyCycleEventKind.ExpirationStart, 0)]));
+        const long junctionNs = 1_250_000_000;
+        long at = curve.EvaluateAt(junctionNs);
+        long incoming = at - curve.EvaluateAt(junctionNs - 1_000_000);
+        long outgoing = curve.EvaluateAt(junctionNs + 1_000_000) - at;
+        Check.That(incoming > 0 && outgoing > 0 && Math.Abs(incoming - outgoing) * 100 < Math.Max(incoming, outgoing) * 8,
+            "changed dead space rebuilds physical-time slopes across the rise/plateau junction");
+
+        foreach (var illustration in new[] { CapnogramIllustration.Reference, CapnogramIllustration.SpontaneousVentilation,
+            CapnogramIllustration.IntermittentMandatoryVentilation })
+        {
+            var configuration = spontaneous with
+            {
+                CapnogramIllustration = illustration,
+                Co2PlateauStartCentiMmHg = illustration == CapnogramIllustration.Reference ? 3200 : null,
+                Co2TransportDelayMilliseconds = 300,
+                Co2DispersionStepMilliseconds = 100
+            };
+            var actual = GasState(configuration, ventilation);
+            var expectedPlan = configuration.ResolveCapnogram() with { DeadSpaceNs = 1_000_000_000 };
+            var expected = expectedPlan.CreateChannel(configuration.ResolvePlan(), PhysiologyIllustrationSource.ChannelId(4), 0).Bands;
+            Check.That(SameBands(actual.Bands, expected),
+                "retiming preserves every transport path, IMV branch and explicit plateau while rebuilding its contour");
+            Check.That(SameBands(GasState(configuration, Normal).Bands, GasState(configuration, null).Bands),
+                "reference ventilation remains bit-identical for shaped and dispersed capnograms");
+        }
+
+        static PhysiologySignalState GasState(PhysiologyIllustrationConfiguration configuration, VentilationTransportPlan? ventilation) =>
+            PhysiologyIllustrationSource.Create(configuration, ventilation: ventilation).CaptureState().Channels
+                .Single(channel => channel.ChannelId == PhysiologyIllustrationSource.ChannelId(4)).Generator;
+
+        static bool SameBands(IReadOnlyList<EventWaveformBand> left, IReadOnlyList<EventWaveformBand> right) =>
+            left.Count == right.Count && left.Zip(right).All(pair =>
+                pair.First.DelayNs == pair.Second.DelayNs && pair.First.DurationNs == pair.Second.DurationNs &&
+                pair.First.TableQ32.SequenceEqual(pair.Second.TableQ32) &&
+                (pair.First.PhasePoints ?? []).SequenceEqual(pair.Second.PhasePoints ?? []) &&
+                (pair.First.ExpirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationCycleGainsPermille ?? []));
     }
 
     private static void VentilationEditsPreserveTimingAndCurrentSource()

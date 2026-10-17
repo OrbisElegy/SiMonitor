@@ -3,11 +3,11 @@ using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Simulation.Physiology;
 
-// Adapted ABP illustration, not a qualified arterial site or measured SYS/DIA/MAP.
+// Authored ABP illustration, not a qualified arterial site or measured SYS/DIA/MAP.
 public sealed record ArterialPulsePlan(long TransitDelayNs, long DurationNs,
     int BaselineMmHg, int PulseHeightMmHg)
 {
-    public const string EvidenceId = "InfirmaryArterialPulseDraft@1";
+    public const string EvidenceId = "AuthoredArterialPulse@1";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
@@ -22,7 +22,7 @@ public sealed record ArterialPulsePlan(long TransitDelayNs, long DurationNs,
         IReadOnlyList<EventWaveformBand> bands = Array.AsReadOnly(new EventWaveformBand[]
         {
             new(PhysiologyCycleEventKind.VentricularMechanical, TransitDelayNs, DurationNs,
-                Array.AsReadOnly(ArterialPulseTables.Pulse.Select(value => checked(value * PulseHeightMmHg * 100)).ToArray())),
+                Array.AsReadOnly(AuthoredHemodynamicContours.Arterial.Select(value => checked(value * PulseHeightMmHg * 100)).ToArray())),
         });
         return new(physiology, new WaveformBlockPlaneConfiguration(channelId, "AcqPressure125@1",
             1, 100, BaselineMmHg, 1), bands, qualityFlags);

@@ -13,8 +13,8 @@ internal static class PhysiologyIllustrationSpecifications
     // Captured from632acca before the refactor: concatenate returned raw wire
     // envelopes for the first six seconds of source time (30 complete blocks).
     // These same source windows are now available without the former acquisition wait.
-    // SVT/VT/1:1 flutter and AAR/AJR/AIVR goldens reflect their documented
-    // filling corrections; other fixtures retain the pre-refactor outputs.
+    // Goldens include the documented filling corrections and authored smooth
+    // ABP/PA/CVP/CO2 contours. ECG, RESP and PLETH retain their previous samples.
     // CVP now encodes absolute pressure; normalize only that representation back
     // to the recorded baseline/increment pair before hashing. Frozen hashes still
     // guard every physical sample, other channel and acquisition metadata.
@@ -48,20 +48,20 @@ internal static class PhysiologyIllustrationSpecifications
     {
         (string Name, PhysiologyDemoConfiguration Configuration, int Envelopes, string Sha256)[] cases =
         [
-            ("Default", PhysiologyDemoConfiguration.Default, 30, "aa5d72387421f94e426c51bb2bc9c19058277228bd1b5ef30302e008e59664d7"),
-            ("SinusArrhythmiaPreset", PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 30, "513f090ab577d9b42e2a703bb74596f214f8aef01dff493d590959cc10d1944e"),
-            ("SinusArrestPreset", PhysiologyDemoConfiguration.SinusArrestPreset, 30, "6b2489946e42d3d13cb9740e33d86df8eecec9264c3f6303f35b1d8b42f0e5fe"),
-            ("AtrialEscapePreset", PhysiologyDemoConfiguration.AtrialEscapePreset, 30, "578b151583a092154a554a29c08411bf499d1e2210e3ffd8442ac7d51e49641c"),
-            ("AarPreset", PhysiologyDemoConfiguration.AarPreset, 30, "014dca22030d55235b0a34b906298eee3b55a06a189df049e6c1f8419755b03d"),
-            ("AjrPreset", PhysiologyDemoConfiguration.AjrPreset, 30, "b78ec0c75e0ea0bf332c5e634dd403dacbc5b0fa3f8fbbd89c80f17d36be3785"),
-            ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "d9e445e4a5464129d6048363ebef410da4dbbfe43f09b0e17cda65b07634a38f"),
-            ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "7b14508fe4b765fe58317e202338c363f0aedb60ac3a5401a84385de52161494"),
-            ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "51de3ce35de895e973e3016704cb02f92d6e89645e17b7587d76fbc1c7372783"),
-            ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "c4ae9df61ddf8ec848e74e7b19e096566d620dbf6e4acdbad29a6dbfcd721565"),
-            ("PrematureAtrial", PhysiologyDemoConfiguration.PrematureAtrial, 30, "345d15d40686708b415f206ca172a39f567952a98625e073a6be6cedec5f1d03"),
-            ("PrematureJunctional", PhysiologyDemoConfiguration.PrematureJunctional, 30, "6bf12ba27510575cdda201b40e5ad6c79b77b714e5cca430b550ce245db7109a"),
-            ("FlutterOneToOne", PhysiologyDemoConfiguration.Flutter(1), 30, "eab239912876382af1666f95bab3ccc946a9d2d6aef1cc28313554184e8efba6"),
-            ("Fibrillation", PhysiologyDemoConfiguration.Fibrillation(), 30, "95d504ea87beab28b6ea9b0744cb95c7f14c9c2dd7e9a02d71cb05ab3a0b5471"),
+            ("Default", PhysiologyDemoConfiguration.Default, 30, "f00461d9eb7c70fcf0e2b409403033491af48096f5f41869df633ef063c27f5a"),
+            ("SinusArrhythmiaPreset", PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 30, "9b05867893a1fc835d6fa30a04f032f98e935ca62780727dc4af8a165e11b137"),
+            ("SinusArrestPreset", PhysiologyDemoConfiguration.SinusArrestPreset, 30, "0947bc0f9f42783334e5b60f43a762ab67377a2e65b6d385735c5dcaccd77f77"),
+            ("AtrialEscapePreset", PhysiologyDemoConfiguration.AtrialEscapePreset, 30, "5504d44aea5b9e97665e840409abc56e91834f37e7d4ead5e6dc2c569393f280"),
+            ("AarPreset", PhysiologyDemoConfiguration.AarPreset, 30, "b014ab6eab4fa9df98c4ca8d2ea4a207335eda249f93c0dd3025c3dd482436da"),
+            ("AjrPreset", PhysiologyDemoConfiguration.AjrPreset, 30, "10aa268f63b2de4337aa7b5340b53700767756b93d93559465b64003137db5d3"),
+            ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "e15fdc9222310271f5ebd74f18946b6d78130f4d0625e56167875cd6fd616fbb"),
+            ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "c2c478f9a04f045565a0434ca1dd7c8ff5f5896a9c155b3d66f25ca4a4051cfc"),
+            ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "ff02e9a949a3903ae71640e7fa505a3b4f67a55248e4ae2151f6a472f1e02e1d"),
+            ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "805a1b3a3a48a2d3f200568bec468e06b729669b098f84ad03d1b7da8fac35a0"),
+            ("PrematureAtrial", PhysiologyDemoConfiguration.PrematureAtrial, 30, "946edcd401f9264677ab6e2eb9f5f7a884fa738bbe47951f12ad0e1dd968e1f9"),
+            ("PrematureJunctional", PhysiologyDemoConfiguration.PrematureJunctional, 30, "a44db801a84f2433020371325b9c975cf54209c4679e2328f1695be528e64da9"),
+            ("FlutterOneToOne", PhysiologyDemoConfiguration.Flutter(1), 30, "afc158a0f68bfcca11c3b10faf254ebaf140e1aa48c659d4243ea0423a8fdfa2"),
+            ("Fibrillation", PhysiologyDemoConfiguration.Fibrillation(), 30, "126b7e03c139295b058ec9b7faf90b2982e62fa7fa58d4b8e609311ea5460e7d"),
         ];
         foreach (var item in cases)
         {

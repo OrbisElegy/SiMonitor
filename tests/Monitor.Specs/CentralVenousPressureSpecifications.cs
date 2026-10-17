@@ -20,6 +20,7 @@ internal static class CentralVenousPressureSpecifications
         new(nameof(CvpShortCouplingPreservesOverlappingComponents), CvpShortCouplingPreservesOverlappingComponents),
         new(nameof(CvpOverlapBudgetRejectsBeforePublication), CvpOverlapBudgetRejectsBeforePublication),
         new(nameof(CvpComponentsFollowAtrialAndVentricularEvents), CvpComponentsFollowAtrialAndVentricularEvents),
+        new(nameof(CvpAuthoredWavesHaveSmoothBoundedJoins), CvpAuthoredWavesHaveSmoothBoundedJoins),
         new(nameof(CvpAtrialSuppressionLeavesOtherWavesIntact), CvpAtrialSuppressionLeavesOtherWavesIntact),
         new(nameof(CvpRespiratoryPressureHasExplicitSignAndTiming), CvpRespiratoryPressureHasExplicitSignAndTiming),
         new(nameof(CvpPressureSurvivesNativeSamplingAndRecovery), CvpPressureSurvivesNativeSamplingAndRecovery),
@@ -112,6 +113,25 @@ internal static class CentralVenousPressureSpecifications
             { Check.That(original.EvaluateAt(time) == absent.EvaluateAt(time), "a suppression preserves c/x/v/y morphology"); }
         }
         Check.That(absent.EvaluateAt(140_000_000) == 0, "a wave is not synthesized from ventricular events");
+    }
+
+    private static void CvpAuthoredWavesHaveSmoothBoundedJoins()
+    {
+        var bands = Plan.CreateChannel(Timeline, Cvp, 0).Bands;
+        foreach (int component in new[] { 0, 3 })
+        {
+            var table = bands[component].TableQ32;
+            long peak = (component == 0 ? Plan.A : Plan.V).MagnitudeCentiMmHg * Q;
+            Check.That(table[0] == 0 && table.Max() == peak && table.All(value => value >= 0 && value <= peak),
+                "authored a/v waves retain exact configured maxima without negative interpolation lobes");
+            for (int index = 0; index < table.Count; index++)
+            {
+                long before = index == 0 ? 0 : table[index - 1];
+                long after = index + 1 == table.Count ? 0 : table[index + 1];
+                Check.That(Math.Abs(after - 2 * table[index] + before) < peak / 200,
+                    "a/v wave slopes change gradually across the authored joins and baseline boundaries");
+            }
+        }
     }
 
     private static void CvpRespiratoryPressureHasExplicitSignAndTiming()

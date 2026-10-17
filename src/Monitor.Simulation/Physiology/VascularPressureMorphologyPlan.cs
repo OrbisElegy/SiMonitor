@@ -3,11 +3,12 @@ namespace Monitor.Simulation.Physiology;
 
 public enum VascularPressureMorphologyKind { Arterial, PulmonaryArtery }
 
-// Empirical pressure-shape modulation using the existing independent ABP/PA
-// seeds. This is not a second flow input or a qualified full vascular model.
+// Empirical pressure-shape modulation using independent authored ABP/PA
+// contours. This is not a second flow input or a qualified full vascular model.
 // Pulse height is in centi-mmHg at the nominal periodic reservoir state.
 public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKind Kind,
-    long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@2", int MaximumPulseOverlap = 1)
+    long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@3", int MaximumPulseOverlap = 1)
 {
-    public const string EvidenceId = "VascularPressureMorphologyRatio@2";
+    public const string EvidenceId = "VascularPressureMorphologyRatio@3";
+    public const string LegacyEvidenceId = "VascularPressureMorphologyRatio@2";
 }

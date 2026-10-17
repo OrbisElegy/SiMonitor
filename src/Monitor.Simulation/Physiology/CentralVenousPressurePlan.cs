@@ -8,7 +8,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
     CvpWaveComponent A, CvpWaveComponent C, CvpWaveComponent X,
     CvpWaveComponent V, CvpWaveComponent Y, int RespiratoryDeltaCentiMmHg, int MaximumComponentOverlap = 1)
 {
-    public const string EvidenceId = "InfirmaryCvpComponentsDraft@2";
+    public const string EvidenceId = "AuthoredCvpComponents@1";
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
@@ -31,8 +31,8 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         // Half-open support permits at most ceil(duration/minimum interval)
         // simultaneous copies. Reserve their absolute sum before publication.
         if (budget > short.MaxValue) { throw Invalid(); }
-        var tables = new[] { CvpComponentTables.A, CvpComponentTables.C, CvpComponentTables.Descent,
-            CvpComponentTables.V, CvpComponentTables.Descent };
+        var tables = new[] { AuthoredHemodynamicContours.Atrial, CvpComponentTables.C,
+            CvpComponentTables.Descent, AuthoredHemodynamicContours.Ventricular, CvpComponentTables.Descent };
         List<EventWaveformBand> bands = [];
         for (int index = 0; index < components.Length; index++)
         {
@@ -51,7 +51,7 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
                 (Int128)A.MagnitudeCentiMmHg * AtrialFlutterMechanics.TransportPermille, 1000);
             bands.Add(new(PhysiologyCycleEventKind.AtrialElectrical, physiology.AtrialMechanicalOffsetNs,
                 AtrialFlutterMechanics.ContractionDurationNs,
-                Array.AsReadOnly(CvpComponentTables.A.Select(value => checked(value * amplitude)).ToArray())));
+                Array.AsReadOnly(AuthoredHemodynamicContours.Atrial.Select(value => checked(value * amplitude)).ToArray())));
         }
         bands.Add(new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs,
             Array.AsReadOnly(CvpComponentTables.Respiratory.Select(value => checked(value * RespiratoryDeltaCentiMmHg)).ToArray()),

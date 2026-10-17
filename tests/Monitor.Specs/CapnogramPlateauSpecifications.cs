@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using System.Buffers.Binary;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
@@ -18,7 +16,8 @@ internal static class CapnogramPlateauSpecifications
     public static Specification[] All =>
     [
         new(nameof(ExplicitPlateauPreservesEndpointsAndFall), ExplicitPlateauPreservesEndpointsAndFall),
-        new(nameof(ReferencePlateauRetainsSeedAndFractionalPressure), ReferencePlateauRetainsSeedAndFractionalPressure),
+        new(nameof(AuthoredPlateauPreservesLandmarksAndFractionalPressure), AuthoredPlateauPreservesLandmarksAndFractionalPressure),
+        new(nameof(ImportedCapnogramCheckpointRetainsItsSamples), ImportedCapnogramCheckpointRetainsItsSamples),
         new(nameof(ExplicitPlateauSurvivesNativeRecovery), ExplicitPlateauSurvivesNativeRecovery),
         new(nameof(InvalidPlateauAndLateFailurePreserveState), InvalidPlateauAndLateFailurePreserveState),
     ];
@@ -48,15 +47,12 @@ internal static class CapnogramPlateauSpecifications
         }
     }
 
-    private static void ReferencePlateauRetainsSeedAndFractionalPressure()
+    private static void AuthoredPlateauPreservesLandmarksAndFractionalPressure()
     {
         var band = Plan().CreateChannel(Timeline, Co2, 0).Bands.Single();
-        byte[] bytes = new byte[band.TableQ32.Count * 8];
-        for (int index = 0; index < band.TableQ32.Count; index++)
-        { BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(index * 8), band.TableQ32[index] / 3500); }
-        Check.That(Convert.ToHexString(SHA256.HashData(bytes)).Equals(
-            "13dc38eeaf61addbe4c7ad43692b6672c2c03cb79eb8cb312bdb24e37d084c54", StringComparison.OrdinalIgnoreCase),
-            "omitting explicit plateau retains the original imported normalized seed exactly");
+        Check.That(band.TableQ32[96] == 3250 * Q && band.TableQ32[480] == 3500 * Q &&
+            Enumerable.Range(97, 383).All(index => band.TableQ32[index] > band.TableQ32[index - 1]),
+            "authored plateau keeps nominal C/D pressures without the imported staircase");
         var channel = Plan(1234).CreateChannel(Timeline, Co2, 0);
         Check.That(Compose(Plan(1234)).EvaluateAt(375_000_000) == 734 * Q && channel.Plane.OffsetNumerator == 5 &&
             channel.Plane.ScaleDenominator == 100, "12.34mmHg plateau includes the5mmHg wire baseline only once");
@@ -66,6 +62,22 @@ internal static class CapnogramPlateauSpecifications
         { Check.That(raised.EvaluateAt(time) == lower.EvaluateAt(time), "equal translation of baseline and both endpoints preserves raw morphology"); }
         Check.That(Compose(Plan(500) with { EndExpiratoryMmHg = 5 }).EvaluateAt(1_000_000_000) == 0,
             "equal baseline and endpoints produce no exhaled increment without division by zero");
+    }
+
+    private static void ImportedCapnogramCheckpointRetainsItsSamples()
+    {
+        var channel = Plan().CreateChannel(Timeline, Co2, 0);
+        var legacy = channel.Bands.Single() with
+        {
+            TableQ32 = Array.AsReadOnly(CapnogramTables.Cycle.Select(value => value * 3500).ToArray())
+        };
+        var original = PhysiologySignalGenerator.Start(Timeline, channel.Plane.ProfileId, 1, [legacy]);
+        original.GenerateBefore(3_800_000_000, 400, 100);
+        var restored = PhysiologySignalGenerator.Restore(JsonSerializer.Deserialize<PhysiologySignalState>(
+            JsonSerializer.Serialize(original.CaptureState()))!);
+        Check.That(restored.CaptureState().Bands.Single().TableQ32.SequenceEqual(legacy.TableQ32) &&
+            original.GenerateBefore(8_000_000_000, 500, 100).SequenceEqual(restored.GenerateBefore(8_000_000_000, 500, 100)),
+            "old embedded tables retain active inspiratory tails and future samples across restore");
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Resp, Co2, 1, 1, 1, 0, 40,

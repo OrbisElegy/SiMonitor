@@ -33,7 +33,7 @@ internal static class PulmonaryArterySpecifications
             "PA has explicit mechanical arrival, systolic peak and a smaller notch recovery");
         short[] tail = samples.Skip(84).Take(32).Select(sample => sample.NormalizedValue).ToArray();
         Check.That(tail.Zip(tail.Skip(1)).All(pair => pair.First >= pair.Second) && tail[^1] == 0 &&
-            samples.All(sample => sample.NormalizedValue is >= 0 and <= 1500), "adapted source tail does not inherit oscillation or negative pulse increments");
+            samples.All(sample => sample.NormalizedValue is >= 0 and <= 1500), "authored source tail has no oscillation or negative pulse increments");
         var abp = new ArterialPulsePlan(40_000_000, 640_000_000, 10, 15).CreateChannel(Timeline, Pa, 0);
         Check.That(!abp.Bands[0].TableQ32.SequenceEqual(Pulse.CreateChannel(Timeline, Pa, 0).Bands[0].TableQ32),
             "same timing and pressure inputs retain an independent PA shape rather than scaled ABP");

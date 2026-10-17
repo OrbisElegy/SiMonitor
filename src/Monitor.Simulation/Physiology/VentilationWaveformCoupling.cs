@@ -23,36 +23,41 @@ internal static class VentilationWaveformCoupling
     }
 
     internal static PhysiologyWaveformChannelPlan Capnogram(PhysiologyWaveformChannelPlan channel,
-        VentilationTransportPlan ventilation)
+        VentilationTransportPlan ventilation, CapnogramPlan sourcePlan)
     {
         RealtimeOxygenationSource.ValidateVentilation(ventilation);
         var pattern = channel.Physiology.RespiratoryPattern;
         int length = RespiratoryPatternDepth.Length(pattern);
         int[] depths = Enumerable.Range(0, length).Select(slot => RespiratoryPatternDepth.At(pattern, (ulong)slot)).ToArray();
         List<EventWaveformBand> bands = [];
-        foreach (var band in channel.Bands)
+        foreach (int depth in depths.Distinct())
         {
-            foreach (int depth in depths.Distinct())
+            long tidalNanoliters = (long)ventilation.TidalVolumeMicrolitersBtps * depth;
+            long deadSpaceNanoliters = (long)ventilation.DeadSpaceMicrolitersBtps * 1000;
+            if (!ventilation.AirwayOpen || tidalNanoliters <= deadSpaceNanoliters) { continue; }
+            long expirationNs = channel.Physiology.BreathPeriodNs - channel.Physiology.InspirationDurationNs;
+            // Scale the authored dead-space segment by VD/VT relative to
+            // 150/450, retaining a positive rise and plateau at all limits.
+            long deadSpaceNs = Math.Clamp((long)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)sourcePlan.DeadSpaceNs * deadSpaceNanoliters * 3, tidalNanoliters), 1, expirationNs - 2);
+            long riseNs = Math.Min(sourcePlan.RiseNs, expirationNs - deadSpaceNs - 1);
+            // The Hermite slopes belong to physical time. Regenerate all paths
+            // after retiming; merely changing the phase map would reintroduce
+            // a corner where the expiratory rise meets the plateau.
+            var depthPlan = sourcePlan with { DeadSpaceNs = deadSpaceNs, RiseNs = riseNs };
+            var depthChannel = depthPlan.CreateChannel(channel.Physiology, channel.Plane.ChannelId, channel.QualityFlags);
+            foreach (var band in depthChannel.Bands)
             {
-                long tidalNanoliters = (long)ventilation.TidalVolumeMicrolitersBtps * depth;
-                long deadSpaceNanoliters = (long)ventilation.DeadSpaceMicrolitersBtps * 1000;
-                if (!ventilation.AirwayOpen || tidalNanoliters <= deadSpaceNanoliters) { continue; }
-                var phases = band.PhasePoints!.ToArray();
-                long expirationNs = phases[^2].OffsetNs;
-                // Scale the authored dead-space segment by VD/VT relative to
-                // 150/450, retaining a positive rise and plateau at all limits.
-                long deadSpaceNs = Math.Clamp((long)FixedPointMath.RoundDivideTiesToEven(
-                    (Int128)phases[1].OffsetNs * deadSpaceNanoliters * 3, tidalNanoliters), 1, expirationNs - 2);
-                long riseNs = Math.Min(phases[2].OffsetNs - phases[1].OffsetNs, expirationNs - deadSpaceNs - 1);
-                phases[1] = phases[1] with { OffsetNs = deadSpaceNs };
-                phases[2] = phases[2] with { OffsetNs = deadSpaceNs + riseNs };
                 var gains = band.ExpirationCycleGainsPermille;
                 if (length > 1)
                 {
-                    gains = Array.AsReadOnly(Enumerable.Range(0, length).Select(slot => depths[slot] == depth
-                        ? gains?[slot] ?? 1000 : 0).ToArray());
+                    // A morphology can have a different breath-cycle length
+                    // (for example four IMV slots against eleven Cheyne slots).
+                    // Keep the complete joint period when applying depth gates.
+                    int[] depthGains = Enumerable.Range(0, length).Select(slot => depths[slot] == depth ? 1000 : 0).ToArray();
+                    gains = CapnogramMorphology.CombineGains(gains, depthGains);
                 }
-                bands.Add(band with { PhasePoints = Array.AsReadOnly(phases), ExpirationCycleGainsPermille = gains });
+                bands.Add(band with { ExpirationCycleGainsPermille = gains });
             }
         }
         // Preserve the inspired baseline and sensor timing even with no gas.
@@ -61,7 +66,9 @@ internal static class VentilationWaveformCoupling
             bands.Add(channel.Bands[0] with
             {
                 TableQ32 = Array.AsReadOnly(new long[channel.Bands[0].TableQ32.Count]),
-                ExpirationCycleGainsPermille = null
+                ExpirationCycleGainsPermille = null,
+                ExpirationActivationGainsPermille = null,
+                ExpirationCycleOrigin = 0
             });
         }
         return channel with { Bands = bands.AsReadOnly() };

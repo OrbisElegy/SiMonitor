@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text.Json;
 using Monitor.Simulation.Acquisition;
+using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
 namespace Monitor.Specs;
@@ -16,6 +17,7 @@ internal static class ArterialPulseSpecifications
     [
         new(nameof(ArterialSeedRetainsPressureScaleAndMechanicalTiming), ArterialSeedRetainsPressureScaleAndMechanicalTiming),
         new(nameof(ArterialNotchAndBaselineAreExplicit), ArterialNotchAndBaselineAreExplicit),
+        new(nameof(PressureContoursHaveBoundedSlopeChanges), PressureContoursHaveBoundedSlopeChanges),
         new(nameof(ArterialWireAndRestorePreservePressure), ArterialWireAndRestorePreservePressure),
         new(nameof(ArterialInvalidPlansAndLateFailureAreAtomic), ArterialInvalidPlansAndLateFailureAreAtomic),
     ];
@@ -47,11 +49,32 @@ internal static class ArterialPulseSpecifications
         var samples = Samples(Pulse);
         Check.That(samples[76].NormalizedValue < samples[75].NormalizedValue &&
             samples[76].NormalizedValue < samples[78].NormalizedValue && samples[78].NormalizedValue < samples[53].NormalizedValue,
-            "documented adapted notch falls locally then recovers below the systolic peak");
+            "authored notch falls locally then recovers below the systolic peak");
         Check.That(samples.Select(sample => sample.NormalizedValue).SequenceEqual(Samples(Pulse with { BaselineMmHg = 60 }).Select(sample => sample.NormalizedValue)),
             "baseline is an affine pressure component, not pulse morphology or display gain");
         Check.That(Samples(Pulse with { PulseHeightMmHg = 0 }).All(sample => sample.NormalizedValue == 0),
             "zero pulse height retains the caller baseline without inventing pulse events");
+    }
+
+    private static void PressureContoursHaveBoundedSlopeChanges()
+    {
+        var arterial = new ArterialPulsePlan(0, 600_000_000, 0, 1).CreateChannel(Timeline, Abp, 0);
+        var pulmonary = new PulmonaryArteryPulsePlan(0, 640_000_000, 0, 1).CreateChannel(Timeline, Abp, 0);
+        foreach (var channel in new[] { arterial, pulmonary })
+        {
+            var table = channel.Bands[0].TableQ32;
+            long unit = 100 * FixedPointMath.Q32One;
+            Check.That(table.Count == 256 && table[0] == 0 && table.Max() == unit &&
+                table.All(value => value >= 0 && value <= unit),
+                "independent authored contours retain calibrated peaks and nonnegative bounded support");
+            for (int index = 0; index < table.Count; index++)
+            {
+                long before = index == 0 ? 0 : table[index - 1];
+                long after = index + 1 == table.Count ? 0 : table[index + 1];
+                Check.That(Math.Abs(after - 2 * table[index] + before) < unit / 120,
+                    "pressure slope changes remain bounded at the onset, joins, notch and final baseline");
+            }
+        }
     }
 
     private static PhysiologyWaveformGroup Group() => PhysiologyWaveformGroup.Start(Ecg, Abp, 1, 1, 1, 0, 16,

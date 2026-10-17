@@ -152,8 +152,26 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
     {
         ValidateVentilation(ventilation);
         var physiology = (transport ?? _transport).CaptureState().Physiology;
+        if (physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        {
+            // Check every authored slot before publication: the first breath
+            // need not be the deepest or have the shortest active inspiration.
+            for (ulong cycle = 0; cycle < SpontaneousRespirationSchedule.Length; cycle++)
+            {
+                long activeInspirationNs = SpontaneousRespirationSchedule.InspirationDurationNs(physiology, cycle) -
+                    SpontaneousRespirationSchedule.InspiratoryPauseNs(physiology, cycle);
+                // Nonoverlapping inspirations cannot exceed their highest
+                // flow rate over one solver step, even if several tiny breaths
+                // fit inside that step. Do not cap this bound at one breath.
+                Int128 maximumIntervalVolume = (Int128)ventilation.TidalVolumeMicrolitersBtps *
+                    SpontaneousRespirationSchedule.DepthPermille(cycle) * OxygenReservoirModel.StepNs;
+                if (ventilation.AirwayOpen && (maximumIntervalVolume + activeInspirationNs - 1) / activeInspirationNs > 100_000_000)
+                { throw new ArgumentException("Oxygenation.VentilationFlowTooHigh"); }
+            }
+            return;
+        }
         long flowDurationNs = physiology.InspirationDurationNs - physiology.InspiratoryPauseNs;
-        // All supported depth patterns peak at 1000 permille. Bound the integer
+        // The original depth patterns peak at 1000 permille. Bound the integer
         // interval volume before accepting controls, including sub-step breaths.
         Int128 volumeNumerator = (Int128)ventilation.TidalVolumeMicrolitersBtps * 1000 * Math.Min(flowDurationNs, OxygenReservoirModel.StepNs);
         if (ventilation.AirwayOpen && (volumeNumerator + flowDurationNs - 1) / flowDurationNs > 100_000_000)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Monitor.Simulation.Physiology;
 
-public enum RespiratoryPattern { Regular, CheyneStokesIllustration, IntermittentIllustration }
+public enum RespiratoryPattern { Regular, CheyneStokesIllustration, IntermittentIllustration, SpontaneousIllustration }
 
 // Authored eleven-slot example: nine crescendo/decrescendo breaths, then
 // two absent slots. Depth is relative effort, not tidal volume or gas pressure.
@@ -10,6 +10,7 @@ internal static class RespiratoryPatternDepth
     internal static int At(RespiratoryPattern pattern, ulong cycle) => pattern switch
     {
         RespiratoryPattern.Regular => 1000,
+        RespiratoryPattern.SpontaneousIllustration => SpontaneousRespirationSchedule.DepthPermille(cycle),
         RespiratoryPattern.CheyneStokesIllustration => (cycle % 11) switch
         {
             0 or 8 => 200,
@@ -27,6 +28,7 @@ internal static class RespiratoryPatternDepth
     internal static int Length(RespiratoryPattern pattern) => pattern switch
     {
         RespiratoryPattern.Regular => 1,
+        RespiratoryPattern.SpontaneousIllustration => SpontaneousRespirationSchedule.Length,
         RespiratoryPattern.CheyneStokesIllustration => 11,
         RespiratoryPattern.IntermittentIllustration => 10,
         _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPattern", "pattern"),

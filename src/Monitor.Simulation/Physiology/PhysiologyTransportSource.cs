@@ -68,10 +68,12 @@ public sealed class PhysiologyTransportSource
         var ventilation = _state.Ventilation;
         if (fromSimTimeNs != toExclusiveSimTimeNs && ventilation.AirwayOpen)
         {
-            ulong first = (ulong)((fromSimTimeNs - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
-            ulong last = (ulong)((toExclusiveSimTimeNs - 1 - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
+            bool spontaneous = physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration;
+            ulong first = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, fromSimTimeNs) :
+                (ulong)((fromSimTimeNs - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
+            ulong last = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, toExclusiveSimTimeNs - 1) :
+                (ulong)((toExclusiveSimTimeNs - 1 - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
             if (last - first >= (ulong)remaining) { throw new ArgumentException("Transport.EventBudgetExceeded", nameof(maximumEvents)); }
-            long flowDurationNs = physiology.InspirationDurationNs - physiology.InspiratoryPauseNs;
             for (ulong cycle = first; cycle <= last; cycle++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -79,12 +81,18 @@ public sealed class PhysiologyTransportSource
                 bool altered = physiology.ActivityAfterBreaths is not { } after || cycle >= after &&
                     (physiology.ActivityDurationBreaths is not { } duration || cycle - after < duration);
                 if (altered && physiology.RespiratoryActivity != RespiratoryActivity.Breathing) { continue; }
-                int depth = RespiratoryPatternDepth.At(physiology.RespiratoryPattern, cycle);
+                int depth = spontaneous ? SpontaneousRespirationSchedule.DepthPermille(cycle) :
+                    RespiratoryPatternDepth.At(physiology.RespiratoryPattern, cycle);
                 // The explicit reference VT gives the relative source depth its
                 // physical scale; display amplitude/polarity is never consulted.
                 long tidalNanoliters = (long)ventilation.TidalVolumeMicrolitersBtps * depth;
                 long alveolarNanoliters = Math.Max(0, tidalNanoliters - (long)ventilation.DeadSpaceMicrolitersBtps * 1000);
-                long startNs = checked(physiology.EpochAnchorSimTimeNs + (long)cycle * physiology.BreathPeriodNs);
+                long startNs = spontaneous ? checked((long)((Int128)physiology.EpochAnchorSimTimeNs +
+                    SpontaneousRespirationSchedule.StartOffsetNs(physiology, cycle))) :
+                    checked(physiology.EpochAnchorSimTimeNs + (long)cycle * physiology.BreathPeriodNs);
+                long flowDurationNs = spontaneous ? SpontaneousRespirationSchedule.InspirationDurationNs(physiology, cycle) -
+                    SpontaneousRespirationSchedule.InspiratoryPauseNs(physiology, cycle) :
+                    physiology.InspirationDurationNs - physiology.InspiratoryPauseNs;
                 delivered = checked(delivered + Portion(tidalNanoliters, startNs, flowDurationNs));
                 alveolar = checked(alveolar + Portion(alveolarNanoliters, startNs, flowDurationNs));
             }

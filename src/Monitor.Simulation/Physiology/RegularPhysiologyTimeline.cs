@@ -229,6 +229,8 @@ public sealed class RegularPhysiologyTimeline
         { throw new PhysiologyTimelineException("SeededRhythm.UnsupportedPattern", nameof(state)); }
         PacingReference.Validate(plan);
         plan.RateAdjustment?.Validate(plan);
+        if (plan.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        { SpontaneousRespirationSchedule.Validate(plan); }
         _plan = plan;
         _cursor = state.CursorSimTimeNs;
     }
@@ -320,6 +322,12 @@ public sealed class RegularPhysiologyTimeline
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration &&
+            kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart)
+        {
+            SpontaneousRespirationSchedule.Visit(plan, kind, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);
+            return;
+        }
         if (plan.Pacing is not null && PacingReference.IsCardiac(kind))
         {
             PacingReference.Visit(plan, kind, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents, visitor, cancellationToken);

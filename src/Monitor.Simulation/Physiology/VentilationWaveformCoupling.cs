@@ -16,16 +16,28 @@ internal static class VentilationWaveformCoupling
             Bands = Array.AsReadOnly(channel.Bands.Select(band => band.Trigger == PhysiologyCycleEventKind.InspirationStart
                 ? band with
                 {
-                    TableQ32 = Array.AsReadOnly(band.TableQ32.Select(value => checked((long)FixedPointMath.RoundDivideTiesToEven(
-                        (Int128)value * ventilation.TidalVolumeMicrolitersBtps, 450000))).ToArray())
+                    TableQ32 = Scale(band.TableQ32),
+                    RespiratoryCycleShapes = band.RespiratoryCycleShapes is { } shapes ? Array.AsReadOnly(shapes.Select(shape => shape with
+                    { TableQ32 = Scale(shape.TableQ32) }).ToArray()) : null
                 } : band).ToArray())
         };
+
+        IReadOnlyList<long> Scale(IReadOnlyList<long> table) => Array.AsReadOnly(table.Select(value =>
+            checked((long)FixedPointMath.RoundDivideTiesToEven((Int128)value * ventilation.TidalVolumeMicrolitersBtps, 450000))).ToArray());
     }
 
     internal static PhysiologyWaveformChannelPlan Capnogram(PhysiologyWaveformChannelPlan channel,
         VentilationTransportPlan ventilation, CapnogramPlan sourcePlan)
     {
         RealtimeOxygenationSource.ValidateVentilation(ventilation);
+        if (channel.Physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        {
+            return channel with
+            {
+                Bands = sourcePlan.CreateSpontaneousChannel(channel.Physiology,
+                    channel.Plane.ChannelId, channel.QualityFlags, ventilation).Bands
+            };
+        }
         var pattern = channel.Physiology.RespiratoryPattern;
         int length = RespiratoryPatternDepth.Length(pattern);
         int[] depths = Enumerable.Range(0, length).Select(slot => RespiratoryPatternDepth.At(pattern, (ulong)slot)).ToArray();

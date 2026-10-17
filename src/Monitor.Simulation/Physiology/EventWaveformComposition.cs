@@ -7,6 +7,8 @@ namespace Monitor.Simulation.Physiology;
 public enum AtrialFibrillationBeatSelection { Ordinary, LongShort }
 
 public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex);
+public sealed record RespiratoryCycleShape(long DelayNs, long DurationNs, IReadOnlyList<long> TableQ32,
+    IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null);
 // Local morphology selection by original ventricular beat ordinal; not a wire event.
 public readonly record struct VentricularCyclePattern(int Length, ulong IncludedSlots);
 // TriggerCycleLimit is exclusive in the trigger's cycle-index domain. It gates
@@ -21,6 +23,9 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
     public RegularPhysiologyPlan? AfTiming { get; init; }
     public SeededCardiacRate? CycleDurationRate { get; init; }
     public IReadOnlyList<int>? InspirationCycleGainsPermille { get; init; }
+    // Indexed complete respiratory contributions; the outer delay/duration
+    // bound all slots so continuation and indexed lookback remain conservative.
+    public IReadOnlyList<RespiratoryCycleShape>? RespiratoryCycleShapes { get; init; }
     // Global breath gains retain their original ordinal. Only this finite
     // activation envelope restarts when the source definition changes.
     public ulong ExpirationCycleOrigin { get; init; }
@@ -44,6 +49,7 @@ public sealed class EventWaveformComposition
     public const int MaximumEventCount = 4096;
     private readonly EventWaveformBand[] _bands;
     private readonly long[][] _tables;
+    private readonly long[][]?[] _cycleTables;
     private readonly PhysiologyCycleEvent[] _events;
 
     private EventWaveformComposition(EventWaveformState state)
@@ -53,6 +59,7 @@ public sealed class EventWaveformComposition
         { throw Invalid(); }
         _bands = new EventWaveformBand[state.Bands.Count];
         _tables = new long[_bands.Length][];
+        _cycleTables = new long[][]?[_bands.Length];
         for (int index = 0; index < _bands.Length; index++)
         {
             EventWaveformBand band = state.Bands[index];
@@ -126,13 +133,49 @@ public sealed class EventWaveformComposition
                     { throw Invalid(); }
                 }
             }
+            if (band.DepthPattern == RespiratoryPattern.SpontaneousIllustration)
+            {
+                int inspirationGain = inspirationGains?.Max() ?? 1000;
+                if (table.Any(value => (Int128)value * 1080 * inspirationGain <
+                        (Int128)short.MinValue * FixedPointMath.Q32One * 1_000_000 ||
+                    (Int128)value * 1080 * inspirationGain >
+                        (Int128)short.MaxValue * FixedPointMath.Q32One * 1_000_000)) { throw Invalid(); }
+            }
+            RespiratoryCycleShape[]? shapes = null;
+            if (band.RespiratoryCycleShapes is { } cycleShapes)
+            {
+                if (cycleShapes.Count != SpontaneousRespirationSchedule.Length ||
+                    band.Trigger is not (PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart) ||
+                    band.CycleDurationRate is not null) { throw Invalid(); }
+                shapes = new RespiratoryCycleShape[cycleShapes.Count];
+                _cycleTables[index] = new long[cycleShapes.Count][];
+                for (int slot = 0; slot < shapes.Length; slot++)
+                {
+                    var shape = cycleShapes[slot];
+                    if (shape is null || shape.DelayNs < band.DelayNs ||
+                        (Int128)shape.DelayNs + shape.DurationNs > (Int128)band.DelayNs + band.DurationNs)
+                    { throw Invalid(); }
+                    var owned = Restore(new([band with
+                    {
+                        DelayNs = shape.DelayNs,
+                        DurationNs = shape.DurationNs,
+                        TableQ32 = shape.TableQ32,
+                        PhasePoints = shape.PhasePoints,
+                        RespiratoryCycleShapes = null
+                    }], [])).CaptureState().Bands[0];
+                    long[] cycleTable = owned.TableQ32.ToArray();
+                    _cycleTables[index]![slot] = cycleTable;
+                    shapes[slot] = new(owned.DelayNs, owned.DurationNs, Array.AsReadOnly(cycleTable), owned.PhasePoints);
+                }
+            }
             _bands[index] = band with
             {
                 TableQ32 = Array.AsReadOnly(table),
                 PhasePoints = points is null ? null : Array.AsReadOnly(points),
                 ExpirationCycleGainsPermille = gains is null ? null : Array.AsReadOnly(gains),
                 InspirationCycleGainsPermille = inspirationGains is null ? null : Array.AsReadOnly(inspirationGains),
-                ExpirationActivationGainsPermille = activationGains is null ? null : Array.AsReadOnly(activationGains)
+                ExpirationActivationGainsPermille = activationGains is null ? null : Array.AsReadOnly(activationGains),
+                RespiratoryCycleShapes = shapes is null ? null : Array.AsReadOnly(shapes)
             };
             _tables[index] = table;
         }
@@ -167,14 +210,19 @@ public sealed class EventWaveformComposition
                 cancellationToken.ThrowIfCancellationRequested();
                 EventWaveformBand band = _bands[index];
                 if (!Accepts(band, item)) { continue; }
-                long elapsed = simTimeNs - item.SimTimeNs - band.DelayNs;
-                long duration = band.CycleDurationRate is { } rate ? rate.FollowingIntervalNs(item.CycleIndex) :
-                    band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs;
+                int slot = (int)(item.CycleIndex % SpontaneousRespirationSchedule.Length);
+                var shape = band.RespiratoryCycleShapes?[slot];
+                long delay = shape?.DelayNs ?? band.DelayNs;
+                long elapsed = simTimeNs - item.SimTimeNs - delay;
+                long duration = shape?.DurationNs ?? (band.CycleDurationRate is { } rate ? rate.FollowingIntervalNs(item.CycleIndex) :
+                    band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs);
                 if (elapsed < 0 || elapsed >= duration) { continue; }
                 // Equal adjacent table indices hold phase while time advances.
                 // Integer phase maps the finite support into one frozen LUT cycle.
-                ulong phase = PhaseAt(band, elapsed, duration);
-                long value = PeriodicLutLinear.Interpolate(_tables[index], phase).Value;
+                var phasePoints = shape is null ? band.PhasePoints : shape.PhasePoints;
+                long[] table = _cycleTables[index]?[slot] ?? _tables[index];
+                ulong phase = PhaseAt(phasePoints, table.Length, shape?.DurationNs ?? band.DurationNs, elapsed, duration);
+                long value = PeriodicLutLinear.Interpolate(table, phase).Value;
                 int gain = band.EjectionIllustration is { } perfusion ? PrematureBeatPerfusion.GainPermille(perfusion, item.CycleIndex) : band.ExpirationCycleGainsPermille is { } cycleGains
                     ? cycleGains[(int)(item.CycleIndex % (ulong)cycleGains.Count)]
                     : RespiratoryPatternDepth.At(band.DepthPattern, item.CycleIndex);
@@ -183,9 +231,9 @@ public sealed class EventWaveformComposition
                 if (band.ExpirationActivationGainsPermille is { } activationGains)
                 { value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * activationGains[(int)(item.CycleIndex - band.ExpirationCycleOrigin)], 1000); }
                 if (band.CardiogenicRippleDurationNs > 0 && value > 0 &&
-                    (band.PhasePoints is not { Count: > 2 } points || elapsed >= points[2].OffsetNs))
+                    (phasePoints is not { Count: > 2 } points || elapsed >= points[2].OffsetNs))
                 {
-                    int attenuation = CardiogenicAttenuation(band, simTimeNs - band.DelayNs);
+                    int attenuation = CardiogenicAttenuation(band, simTimeNs - delay);
                     value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * (1000 - attenuation), 1000);
                 }
                 sum += gain == 1000 ? value : FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
@@ -224,18 +272,19 @@ public sealed class EventWaveformComposition
 
     private static EventWaveformException Invalid() => new("EventWaveform.InvalidState", "state");
 
-    private static ulong PhaseAt(EventWaveformBand band, long elapsed, long duration)
+    private static ulong PhaseAt(IReadOnlyList<EventWaveformPhasePoint>? points, int tableCount,
+        long referenceDuration, long elapsed, long duration)
     {
-        if (band.PhasePoints is not { } points)
+        if (points is null)
         { return (ulong)(((UInt128)elapsed << 64) / (ulong)duration); }
-        elapsed = (long)((Int128)elapsed * band.DurationNs / duration);
+        elapsed = (long)((Int128)elapsed * referenceDuration / duration);
         for (int index = 1; index < points.Count; index++)
         {
             var right = points[index];
             if (elapsed >= right.OffsetNs) { continue; }
             var left = points[index - 1];
-            UInt128 start = ((UInt128)(uint)left.TableIndex << 64) / (uint)band.TableQ32.Count;
-            UInt128 end = ((UInt128)(uint)right.TableIndex << 64) / (uint)band.TableQ32.Count;
+            UInt128 start = ((UInt128)(uint)left.TableIndex << 64) / (uint)tableCount;
+            UInt128 end = ((UInt128)(uint)right.TableIndex << 64) / (uint)tableCount;
             return (ulong)(start + (end - start) * (ulong)(elapsed - left.OffsetNs) /
                 (ulong)(right.OffsetNs - left.OffsetNs));
         }

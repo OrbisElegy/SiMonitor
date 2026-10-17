@@ -15,7 +15,8 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
         CvpWaveComponent[] components = [A, C, X, V, Y];
-        long budget = Math.Abs((long)BaselineCentiMmHg) + Math.Abs((long)RespiratoryDeltaCentiMmHg);
+        int respiratoryGain = physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration ? 1080 : 1000;
+        long budget = Math.Abs((long)BaselineCentiMmHg) + (Math.Abs((long)RespiratoryDeltaCentiMmHg) * respiratoryGain + 999) / 1000;
         if (MaximumComponentOverlap is < 1 or > 8 || BaselineCentiMmHg is < short.MinValue or > short.MaxValue) { throw Invalid(); }
         for (int index = 0; index < components.Length; index++)
         {
@@ -56,6 +57,19 @@ public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg,
         bands.Add(new(PhysiologyCycleEventKind.InspirationStart, 0, physiology.BreathPeriodNs - physiology.ExpiratoryPauseNs,
             Array.AsReadOnly(CvpComponentTables.Respiratory.Select(value => checked(value * RespiratoryDeltaCentiMmHg)).ToArray()),
             RespiratoryPhaseMap.Create(physiology, CvpComponentTables.Respiratory.Count), DepthPattern: physiology.RespiratoryPattern));
+        if (physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        {
+            var respiratory = bands[^1];
+            bands[^1] = SpontaneousRespirationSchedule.WithCycleShapes(Enumerable.Range(0, SpontaneousRespirationSchedule.Length).Select(slot =>
+            {
+                var cycle = SpontaneousRespirationSchedule.CyclePlan(physiology, (ulong)slot);
+                return respiratory with
+                {
+                    DurationNs = cycle.BreathPeriodNs - cycle.ExpiratoryPauseNs,
+                    PhasePoints = RespiratoryPhaseMap.Create(cycle, respiratory.TableQ32.Count)
+                };
+            }).ToArray());
+        }
         // The patient baseline belongs to the source, not the wire calibration.
         // Continuation can then change it without reinterpreting acquired samples.
         return new(physiology, new(channelId, "AcqPressure125@1", 1, 100, 0, 1), bands.AsReadOnly(), qualityFlags,

@@ -19,6 +19,8 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
         Guid channelId, uint qualityFlags)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
+        if (physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        { return CreateSpontaneousChannel(physiology, channelId, qualityFlags); }
         long artifactMagnitude = Math.Abs((long)CardiacArtifactCounts);
         if (!Enum.IsDefined(Illustration) || Math.Max(AmplitudeCounts, 0) + artifactMagnitude > short.MaxValue ||
             Math.Min(AmplitudeCounts, 0) - artifactMagnitude < short.MinValue)
@@ -63,5 +65,31 @@ public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCou
                 Array.AsReadOnly(artifact)));
         }
         return new(physiology, new(channelId, "AcqResp125@1", 1, 1, 0, 1), bands.AsReadOnly(), qualityFlags);
+    }
+
+    private PhysiologyWaveformChannelPlan CreateSpontaneousChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags)
+    {
+        long effortGain = Illustration == RespirationIllustration.InspiratoryEffort ? 1300 : 1000;
+        long upper = ((long)Math.Max(AmplitudeCounts, 0) * 1080 * effortGain + 999_999) / 1_000_000 + Math.Abs((long)CardiacArtifactCounts);
+        long lower = ((long)Math.Min(AmplitudeCounts, 0) * 1080 * effortGain - 999_999) / 1_000_000 - Math.Abs((long)CardiacArtifactCounts);
+        if (upper > short.MaxValue || lower < short.MinValue)
+        { throw new EventWaveformException("Respiration.InvalidPlan", "plan"); }
+        var channels = new PhysiologyWaveformChannelPlan[SpontaneousRespirationSchedule.Length];
+        for (ulong cycle = 0; cycle < (ulong)channels.Length; cycle++)
+        {
+            var cyclePlan = SpontaneousRespirationSchedule.CyclePlan(physiology, cycle);
+            var shape = this with
+            {
+                InspiratoryEffortDelayNs = InspiratoryEffortDelayNs is { } delay
+                    ? SpontaneousRespirationSchedule.Scale(delay, cyclePlan.BreathPeriodNs, physiology.BreathPeriodNs) : null,
+                InspiratoryEffortDurationNs = InspiratoryEffortDurationNs is { } duration
+                    ? Math.Max(1, SpontaneousRespirationSchedule.Scale(duration, cyclePlan.BreathPeriodNs, physiology.BreathPeriodNs)) : null
+            };
+            channels[cycle] = shape.CreateChannel(cyclePlan, channelId, qualityFlags);
+        }
+        var bands = channels[0].Bands.Select((band, index) => band.Trigger != PhysiologyCycleEventKind.InspirationStart ? band :
+            SpontaneousRespirationSchedule.WithCycleShapes(channels.Select(channel => channel.Bands[index]).ToArray()) with
+            { DepthPattern = RespiratoryPattern.SpontaneousIllustration }).ToArray();
+        return channels[0] with { Physiology = physiology, Bands = Array.AsReadOnly(bands) };
     }
 }

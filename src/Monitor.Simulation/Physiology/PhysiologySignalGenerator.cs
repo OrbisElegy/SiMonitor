@@ -127,6 +127,7 @@ public sealed class PhysiologySignalGenerator
                     PhasePoints = pair.Second.PhasePoints,
                     ExpirationCycleGainsPermille = pair.Second.ExpirationCycleGainsPermille,
                     InspirationCycleGainsPermille = pair.Second.InspirationCycleGainsPermille,
+                    RespiratoryCycleShapes = pair.Second.RespiratoryCycleShapes,
                     ExpirationActivationGainsPermille = pair.Second.ExpirationActivationGainsPermille,
                     ExpirationCycleOrigin = pair.Second.ExpirationCycleOrigin
                 } == pair.Second &&
@@ -134,6 +135,7 @@ public sealed class PhysiologySignalGenerator
                 (pair.First.PhasePoints ?? []).SequenceEqual(pair.Second.PhasePoints ?? []) &&
                 (pair.First.ExpirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationCycleGainsPermille ?? []) &&
                 (pair.First.InspirationCycleGainsPermille ?? []).SequenceEqual(pair.Second.InspirationCycleGainsPermille ?? []) &&
+                SameRespiratoryShapes(pair.First.RespiratoryCycleShapes, pair.Second.RespiratoryCycleShapes) &&
                 (pair.First.ExpirationActivationGainsPermille ?? []).SequenceEqual(pair.Second.ExpirationActivationGainsPermille ?? []));
         // Reprepared schedules are value-equivalent even when their derived
         // tables/caches have different identities. Unchanged channels need no tails.
@@ -145,7 +147,10 @@ public sealed class PhysiologySignalGenerator
         if (definition.Bands.Any(band => band.ExpirationActivationGainsPermille is not null))
         {
             Int128 sinceFirstExpiration = (Int128)boundary - current.Clock.EpochAnchorSimTimeNs - nextPlan.InspirationDurationNs;
-            ulong origin = sinceFirstExpiration <= 0 ? 0 : checked((ulong)((sinceFirstExpiration + nextPlan.BreathPeriodNs - 1) / nextPlan.BreathPeriodNs));
+            ulong origin = nextPlan.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration
+                ? SpontaneousRespirationSchedule.FirstExpirationAtOrAfter(
+                    nextPlan with { EpochAnchorSimTimeNs = current.Clock.EpochAnchorSimTimeNs }, boundary)
+                : sinceFirstExpiration <= 0 ? 0 : checked((ulong)((sinceFirstExpiration + nextPlan.BreathPeriodNs - 1) / nextPlan.BreathPeriodNs));
             definition = definition with
             {
                 Bands = Array.AsReadOnly(definition.Bands.Select((band, index) => band.ExpirationActivationGainsPermille is null
@@ -172,6 +177,12 @@ public sealed class PhysiologySignalGenerator
     private static bool SameRate(SeededCardiacRate? left, SeededCardiacRate? right) => left is null || right is null
         ? left is null && right is null
         : left.HeartRateBpm == right.HeartRateBpm && left.SeedHex == right.SeedHex && left.VariationPermille == right.VariationPermille;
+
+    private static bool SameRespiratoryShapes(IReadOnlyList<RespiratoryCycleShape>? left, IReadOnlyList<RespiratoryCycleShape>? right) =>
+        left is null || right is null ? left is null && right is null : left.Count == right.Count && left.Zip(right).All(pair =>
+            pair.First.DelayNs == pair.Second.DelayNs && pair.First.DurationNs == pair.Second.DurationNs &&
+            pair.First.TableQ32.SequenceEqual(pair.Second.TableQ32) &&
+            (pair.First.PhasePoints ?? []).SequenceEqual(pair.Second.PhasePoints ?? []));
 
     internal long EvaluateAt(long timeNs, CancellationToken cancellationToken = default)
     {

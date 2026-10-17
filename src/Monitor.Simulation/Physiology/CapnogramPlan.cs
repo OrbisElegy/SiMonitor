@@ -16,6 +16,8 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
         Guid channelId, uint qualityFlags)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
+        if (physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
+        { return CreateSpontaneousChannel(physiology, channelId, qualityFlags); }
         if (PlateauStartCentiMmHg is not null && Illustration is not (CapnogramIllustration.Reference or
             CapnogramIllustration.Rebreathing or CapnogramIllustration.ExhaustedAbsorber or CapnogramIllustration.CardiogenicOscillations))
         { throw new EventWaveformException("Capnogram.CustomPlateauUnsupported", "plan"); }
@@ -101,5 +103,62 @@ public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long Inspirato
             _ = EventWaveformComposition.Restore(new(bands, []));
         }
         return new(physiology, new(channelId, "AcqCO2_100@1", 1, 100, BaselineMmHg, 1), bands, qualityFlags);
+    }
+
+    internal PhysiologyWaveformChannelPlan CreateSpontaneousChannel(RegularPhysiologyPlan physiology, Guid channelId,
+        uint qualityFlags, VentilationTransportPlan? ventilation = null)
+    {
+        // Validate the authored reference before preparing any derived slot.
+        var reference = CreateChannel(physiology with { RespiratoryPattern = RespiratoryPattern.Regular }, channelId, qualityFlags);
+        if (ventilation is not null) { RealtimeOxygenationSource.ValidateVentilation(ventilation); }
+        var channels = new PhysiologyWaveformChannelPlan[SpontaneousRespirationSchedule.Length];
+        long referenceExpiration = physiology.BreathPeriodNs - physiology.InspirationDurationNs;
+        for (ulong slot = 0; slot < (ulong)channels.Length; slot++)
+        {
+            var cycle = SpontaneousRespirationSchedule.CyclePlan(physiology, slot);
+            long expiration = cycle.BreathPeriodNs - cycle.InspirationDurationNs;
+            long nextInspiration = SpontaneousRespirationSchedule.InspirationDurationNs(physiology, slot + 1);
+            if (expiration < 3) { throw new EventWaveformException("Capnogram.InvalidPlan", "plan"); }
+            long deadSpace = Math.Clamp(SpontaneousRespirationSchedule.Scale(DeadSpaceNs, expiration, referenceExpiration), 1, expiration - 2);
+            long rise = Math.Clamp(SpontaneousRespirationSchedule.Scale(RiseNs, expiration, referenceExpiration), 1, expiration - deadSpace - 1);
+            long fall = Math.Clamp(SpontaneousRespirationSchedule.Scale(InspiratoryFallNs, nextInspiration, physiology.InspirationDurationNs), 1, nextInspiration);
+            bool gas = true;
+            if (ventilation is not null)
+            {
+                long tidalNanoliters = (long)ventilation.TidalVolumeMicrolitersBtps * SpontaneousRespirationSchedule.DepthPermille(slot);
+                long deadSpaceNanoliters = (long)ventilation.DeadSpaceMicrolitersBtps * 1000;
+                gas = ventilation.AirwayOpen && tidalNanoliters > deadSpaceNanoliters;
+                if (gas)
+                {
+                    deadSpace = Math.Clamp((long)FixedPointMath.RoundDivideTiesToEven(
+                        (Int128)deadSpace * deadSpaceNanoliters * 3, tidalNanoliters), 1, expiration - 2);
+                    rise = Math.Min(rise, expiration - deadSpace - 1);
+                }
+            }
+            // This local plan carries only waveform phase constraints. Events
+            // still come from the shared irregular timeline; the falling limb
+            // occupies the next breath's inspiration, not this breath's one.
+            var phasePlan = cycle with
+            {
+                BreathPeriodNs = checked(expiration + nextInspiration),
+                InspirationDurationNs = nextInspiration,
+                InspiratoryPauseNs = 0,
+                ExpiratoryPauseNs = 0
+            };
+            var shapePlan = this with { DeadSpaceNs = deadSpace, RiseNs = rise, InspiratoryFallNs = fall };
+            var channel = shapePlan.CreateChannel(phasePlan, channelId, qualityFlags);
+            if (!gas)
+            {
+                channel = channel with
+                {
+                    Bands = Array.AsReadOnly(channel.Bands.Select(band => band with
+                    { TableQ32 = Array.AsReadOnly(new long[band.TableQ32.Count]) }).ToArray())
+                };
+            }
+            channels[slot] = channel;
+        }
+        var bands = reference.Bands.Select((_, index) =>
+            SpontaneousRespirationSchedule.WithCycleShapes(channels.Select(channel => channel.Bands[index]).ToArray())).ToArray();
+        return reference with { Physiology = physiology, Bands = Array.AsReadOnly(bands) };
     }
 }

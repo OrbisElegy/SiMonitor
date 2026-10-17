@@ -14,7 +14,7 @@
   {
     "Id": "topic-3",
     "Category": "Vital signs",
-    "Text": "In the Breathing and CO₂ section of Settings → Vital signs, set the target and the variation. Only regular breathing supports this. Both the target minus the variation and the target plus the variation must lie within 5–80 mmHg. One expiration keeps a single generated target, while different breaths can vary; the same random seed and settings reproduce the same sequence. The monitor EtCO₂ is still measured from the generated CO₂ waveform and can differ from the target.",
+    "Text": "In the Breathing and CO₂ section of Settings → Vital signs, set the target and the variation. Regular breathing and Natural spontaneous breathing support this. Both the target minus the variation and the target plus the variation must lie within 5–80 mmHg. One expiration keeps a single generated target, while different breaths can vary; the same random seed and settings reproduce the same sequence. The monitor EtCO₂ is still measured from the generated CO₂ waveform and can differ from the target.",
     "Title": "Random end-tidal CO₂ variation"
   },
   {
@@ -327,7 +327,7 @@
     "Id": "signal-templates-capnogram",
     "Category": "Waveforms and display",
     "Title": "Pair capnogram morphology with RESP",
-    "Text": "Select EtCO₂ and respiration templates independently, then Apply. Pair IMV with the IMV respiration template, and a curare cleft with Additional inspiratory effort; both signals share the respiratory clock. Spontaneous ventilation can use Regular breathing. Obstruction has no unique thoracic impedance shape; adjust respiratory rate and inspiratory fraction for the teaching scenario. Gas concentration is not chest motion or tidal volume. A CO₂-only change does not require a duplicate RESP template. Reference expiration, rebreathing, exhausted absorber and cardiogenic oscillations support a custom plateau start. Other templates retain their characteristic contour; selecting them clears and disables that option."
+    "Text": "Select EtCO₂ and respiration templates independently, then Apply. Pair IMV with the IMV respiration template, and a curare cleft with Additional inspiratory effort; both signals share the respiratory clock. Pair EtCO₂ Spontaneous ventilation with RESP Natural spontaneous breathing. Select it in the Spontaneous breathing group under Waveform generation → Respiration, then Apply. Breath depth and intervals vary mildly around the configured rate, without breath holds or pathological pauses; RESP and CO₂ follow the same breathing rhythm. Natural spontaneous breathing currently supports a configured rate of 7–55 breaths/min; adjust a rate outside this range before applying. This is the current template range, not a medically normal range. Select Regular breathing when fixed intervals are wanted. Obstruction has no unique thoracic impedance shape; adjust respiratory rate and inspiratory fraction for the teaching scenario. Gas concentration is not chest motion or tidal volume. A CO₂-only change does not require a duplicate RESP template. Reference expiration, rebreathing, exhausted absorber and cardiogenic oscillations support a custom plateau start. Other templates retain their characteristic contour; selecting them clears and disables that option."
   },
   {
     "Id": "signal-templates-intubation",

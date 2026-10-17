@@ -24,7 +24,7 @@ internal sealed class StylePreviewCatalog
     private readonly (long TimeNs, double Value)[][] _capnogram = new (long, double)[DesignPreviewSettings.CapnogramChoiceCount][];
     private static readonly Lazy<StylePreviewCatalog> Current = new(() => Load(Path.Combine(AppContext.BaseDirectory, FileName)));
     internal static StylePreviewData Get(int ecg, int respiration, int ejection) =>
-        Current.Value._styles.TryGetValue((ecg, respiration is >= 4 and < 6 ? 0 : respiration, ejection), out var data) ? data : throw new ArgumentException("Preview.IncompatibleStyle");
+        Current.Value._styles.TryGetValue((ecg, respiration is >= 4 and < 7 ? 0 : respiration, ejection), out var data) ? data : throw new ArgumentException("Preview.IncompatibleStyle");
     internal static (long TimeNs, double Value)[] Respiration(int index) =>
         index >= 0 && index < DesignPreviewSettings.RespirationChoiceCount ? Current.Value._respiration[index] : throw new ArgumentOutOfRangeException(nameof(index));
     internal static (long TimeNs, double Value)[] Signal(int channel, int index)
@@ -35,7 +35,7 @@ internal sealed class StylePreviewCatalog
     private static StylePreviewCatalog Load(string path)
     {
         using var file = File.OpenRead(path); using var reader = new BinaryReader(file, Encoding.UTF8);
-        if (reader.ReadInt32() != 0x33565053 || reader.ReadInt32() != CombinationCount) { throw new InvalidDataException("Preview.InvalidCatalog"); }
+        if (reader.ReadInt32() != 0x34565053 || reader.ReadInt32() != CombinationCount) { throw new InvalidDataException("Preview.InvalidCatalog"); }
         var catalog = new StylePreviewCatalog();
         (long, double)[] ReadSamples()
         {
@@ -114,7 +114,7 @@ internal sealed class StylePreviewCatalog
         string temporary = destination + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary), Encoding.UTF8))
         {
-            writer.Write(0x33565053); writer.Write(keys.Count);
+            writer.Write(0x34565053); writer.Write(keys.Count);
             void WriteSamples((long TimeNs, double Value)[] samples)
             {
                 writer.Write(samples.Length);

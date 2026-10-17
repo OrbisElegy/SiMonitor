@@ -1370,6 +1370,7 @@ internal static class DesignPreviewSmokeChecks
         var tidal = StylePreviewCatalog.Respiration(1);
         var intermittent = StylePreviewCatalog.Respiration(2);
         var absent = StylePreviewCatalog.Respiration(3);
+        var spontaneous = StylePreviewCatalog.Respiration(6);
         Require(tidal[^1].TimeNs >= DesignPreviewSettings.RespirationPreviewDurationNs - 40_000_000,
             "respiration thumbnail includes the entire eleven-breath pattern");
         double Peak((long TimeNs, double Value)[] samples, int breath) => samples.Where(s => s.TimeNs >= breath * 3_750_000_000L && s.TimeNs < (breath + 1) * 3_750_000_000L).Max(s => Math.Abs(s.Value));
@@ -1377,6 +1378,11 @@ internal static class DesignPreviewSmokeChecks
             "cached tidal overview shows crescendo, decrescendo and the entire pause");
         Require(Peak(regular, 9) > 0 && Peak(intermittent, 3) == 0 && Peak(intermittent, 5) > 0 && absent.All(s => s.Value == 0),
             "all four respiratory choices remain distinguishable from actual source data");
+        Require(spontaneous.SequenceEqual(DesignPreviewWindow.CreateRespirationPreview(6)) &&
+            !spontaneous.SequenceEqual(regular) && spontaneous[^1].TimeNs == regular[^1].TimeNs,
+            "natural spontaneous breathing has a complete independent preview from the same source used by Apply");
+        Require(ReferenceEquals(StylePreviewCatalog.Get(0, 6, 0), StylePreviewCatalog.Get(0, 0, 0)),
+            "independent natural respiration reuses the unchanged ECG and pressure combination preview");
     }
     private static void VerifyAtrialProductStyles()
     {
@@ -2816,6 +2822,51 @@ internal static class DesignPreviewSmokeChecks
             }
             window.Settings.TemplateSignals.SelectedIndex = 1;
             Capture(window, "ui-template-resp-effort.png");
+            var spontaneous = window.Settings.TemplatePages[1].CardButtons.ElementAt(6);
+            Require(spontaneous.IsEnabled && AutomationProperties.GetName(spontaneous)!.Contains("自然自主呼吸", StringComparison.Ordinal),
+                "natural spontaneous breathing is an enabled appended RESP template");
+            var previousSpontaneous = window.Session;
+            spontaneous.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(window.Settings.RespirationSelection == 6 && ReferenceEquals(previousSpontaneous, window.Session),
+                "selecting natural spontaneous breathing updates only the draft");
+            window.Settings.CapnogramSelection = 3;
+            window.Settings.EtCo2Variation.Value = 1;
+            window.RestartSettings();
+            Require(!ReferenceEquals(previousSpontaneous, window.Session) &&
+                window.Session.Configuration.RespiratoryPattern == Monitor.Simulation.Physiology.RespiratoryPattern.SpontaneousIllustration &&
+                window.Session.Configuration.RespirationIllustration == Monitor.Simulation.Physiology.RespirationIllustration.Reference &&
+                window.Session.Configuration.CapnogramIllustration == Monitor.Simulation.Physiology.CapnogramIllustration.SpontaneousVentilation &&
+                window.Session.Configuration.SeededCo2 is not null,
+                "natural RESP and spontaneous capnogram apply with independent seeded CO2 variation");
+            Capture(window, "ui-template-spontaneous-resp.png");
+            foreach (int rate in new[] { 7, 55 })
+            {
+                var previous = window.Session;
+                window.Settings.RespiratoryRate.Value = rate;
+                window.RestartSettings();
+                Require(!ReferenceEquals(previous, window.Session) &&
+                    window.Session.Configuration.BreathPeriodMilliseconds == decimal.Round(60000m / rate, 0, MidpointRounding.ToEven),
+                    "natural respiration accepts both supported nominal rate endpoints");
+            }
+            foreach (int rate in new[] { 6, 56, 60 })
+            {
+                var previous = window.Session;
+                window.Settings.RespiratoryRate.Value = rate;
+                window.ApplySettings();
+                Require(ReferenceEquals(previous, window.Session) && window.Settings.RespiratoryRate.Value == rate &&
+                    window.Settings.Status.Text == window.Localization.Get("validation.spontaneousRespirationRate"),
+                    "unsupported natural respiration rates keep the running source and draft value with an actionable error");
+            }
+            window.Settings.RespirationSelection = 0;
+            foreach (int rate in new[] { 6, 60 })
+            {
+                var previous = window.Session;
+                window.Settings.RespiratoryRate.Value = rate;
+                window.RestartSettings();
+                Require(!ReferenceEquals(previous, window.Session), "regular respiration retains both existing rate endpoints");
+            }
+            window.Settings.RespiratoryRate.Value = 16;
+            window.Settings.EtCo2Variation.Value = 0;
             window.Settings.RespirationSelection = 0;
             window.Settings.CapnogramSelection = 1;
             window.RestartSettings();

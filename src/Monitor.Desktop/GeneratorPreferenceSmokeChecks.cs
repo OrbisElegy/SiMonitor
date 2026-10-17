@@ -13,7 +13,7 @@ internal static class GeneratorPreferenceSmokeChecks
         string path = Path.Combine(directory, "settings.json");
         try
         {
-            foreach (int selection in new[] { 0, 1, 19, 107, 137, 180, 2 })
+            foreach (int selection in new[] { 0, 1, 19, 107, 137, 180, 3, 2 })
             {
                 var window = new DesignPreviewWindow();
                 MonitorGeneratorPreferences expected;
@@ -52,6 +52,13 @@ internal static class GeneratorPreferenceSmokeChecks
                         actual.Numbers.OrderBy(p => p.Key).SequenceEqual(expected.Numbers.OrderBy(p => p.Key)) &&
                         actual.Flags.OrderBy(p => p.Key).SequenceEqual(expected.Flags.OrderBy(p => p.Key)) &&
                         actual.Choices.OrderBy(p => p.Key).SequenceEqual(expected.Choices.OrderBy(p => p.Key)), "complete editor round trip");
+                    if (selection == 3)
+                    {
+                        Require(actual.Respiration == 6 && reopened.Session.Configuration.RespiratoryPattern ==
+                            Monitor.Simulation.Physiology.RespiratoryPattern.SpontaneousIllustration &&
+                            reopened.Session.Configuration.SeededCo2 is not null,
+                            "natural spontaneous breathing restores with independent seeded CO2 variation");
+                    }
                     Require(reopened.Session.SimulationTimeNs == 0 && File.ReadAllText(path) == bytes,
                         "restore starts at zero without writing the source file");
                     for (int step = 0; step < 64; step++)
@@ -80,6 +87,7 @@ internal static class GeneratorPreferenceSmokeChecks
                 g => g["EcgName"] = "unknown template",
                 g => g["Pleth"] = 3,
                 g => g["Capnogram"] = 13,
+                g => g["Respiration"] = 7,
                 g => g["Numbers"]!.AsObject().Remove("RespiratoryRate"),
                 g => g["Numbers"]!["RespiratoryRate"] = 600,
                 g => g["Ejection"] = 2,
@@ -124,6 +132,12 @@ internal static class GeneratorPreferenceSmokeChecks
         {
             settings.CardiacRateEnabled.IsChecked = true; settings.HeartRate.Value = 90;
             settings.RateVariation.Value = 5; settings.EtCo2Variation.Value = 2;
+        }
+        if (selection == 3)
+        {
+            settings.RespirationSelection = 6;
+            settings.CapnogramSelection = 3;
+            settings.EtCo2Variation.Value = 2;
         }
         if (selection == 19)
         {

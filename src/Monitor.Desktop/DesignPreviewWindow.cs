@@ -701,6 +701,8 @@ internal sealed partial class DesignPreviewWindow : Window
             Settings.PlethSelection < 0 || Settings.PlethSelection >= DesignPreviewSettings.PlethChoiceCount ||
             Settings.CapnogramSelection < 0 || Settings.CapnogramSelection >= DesignPreviewSettings.CapnogramChoiceCount)
         { throw new ArgumentException("GeneratorPreferences.InvalidSelection"); }
+        if (Settings.RespirationSelection == 6 && Settings.RespiratoryRate.Value is < 7 or > 55)
+        { throw new ArgumentException("Preview.SpontaneousRespirationRateOutOfRange"); }
         var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection, Settings.PlethSelection, Settings.CapnogramSelection);
         if (SeededRhythmSchedule.Supports(config.ConductionPattern))
         {
@@ -947,6 +949,8 @@ internal sealed partial class DesignPreviewWindow : Window
         { SetStatus("validation.repolarization"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.TContourChestRequired")
         { SetStatus("validation.waveLead"); }
+        catch (ArgumentException exception) when (exception.Message == "Preview.SpontaneousRespirationRateOutOfRange")
+        { SetStatus("validation.spontaneousRespirationRate"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidBreathingTiming")
         { SetStatus("validation.breathingDetail", Settings.BreathingConstraintDescription()); }
         catch (ArgumentException exception) when (exception.Message == "Oxygenation.VentilationFlowTooHigh")
@@ -1078,7 +1082,13 @@ internal sealed partial class DesignPreviewWindow : Window
         }
         config = config with
         {
-            RespiratoryPattern = resp switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
+            RespiratoryPattern = resp switch
+            {
+                1 => RespiratoryPattern.CheyneStokesIllustration,
+                2 => RespiratoryPattern.IntermittentIllustration,
+                6 => RespiratoryPattern.SpontaneousIllustration,
+                _ => RespiratoryPattern.Regular
+            },
             RespiratoryActivity = resp == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing,
             RespirationIllustration = resp switch
             {
@@ -1133,8 +1143,8 @@ internal sealed partial class DesignPreviewWindow : Window
     }
     internal static (long TimeNs, double Value)[] CreateRespirationPreview(int resp)
     {
-        // One cached 11-breath overview includes crescendo, decrescendo and
-        // pauses; use the exact same respiratory configuration as Apply.
+        // A cached overview spans eleven nominal breaths, including depth
+        // variation and pauses; use the same respiratory configuration as Apply.
         var source = PhysiologyDemoSource.Create(ResolveStyle(0, resp, 0).Physiology);
         List<(long, double)> samples = [];
         for (int step = 1; step <= (DesignPreviewSettings.RespirationPreviewDurationNs + 199_999_999) / 200_000_000; step++)

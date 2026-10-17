@@ -23,7 +23,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate()
     {
-        if (ApplyDelaySeconds < 0 || ApplyDelaySeconds > 60 || ApplyDelaySeconds * 10 != decimal.Truncate(ApplyDelaySeconds * 10) || Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 5 ||
+        if (ApplyDelaySeconds < 0 || ApplyDelaySeconds > 60 || ApplyDelaySeconds * 10 != decimal.Truncate(ApplyDelaySeconds * 10) || Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 6 ||
             Ejection is < 0 or > 4 || Pleth is < 0 or > 2 || Capnogram is < 0 or > 12 || Seed is null || Seed.Length > 1024 ||
             Numbers is null || Flags is null || Choices is null ||
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)

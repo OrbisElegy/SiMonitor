@@ -28,6 +28,7 @@ internal sealed partial class DesignPreviewSettings
     private static readonly Dictionary<string, string> TemplateGroupKeys = new()
     {
         ["规则呼吸"] = "respirationTemplate.groupRegular",
+        ["自主呼吸"] = "respirationTemplate.groupSpontaneous",
         ["异常呼吸示意"] = "respirationTemplate.groupAbnormal",
         ["节律相关"] = "ejectionTemplate.groupRhythm",
         ["异常射血示意"] = "ejectionTemplate.groupAbnormal",
@@ -42,7 +43,12 @@ internal sealed partial class DesignPreviewSettings
     {
         _templatePages.Add(new(this, "generation.ecg", 0, EcgChoices, EcgTemplateKey, EcgChooserGroups.For, EcgChooserGroups.Ordered,
             () => EcgSelection, x => EcgSelection = x));
-        _templatePages.Add(new(this, "generation.respiration", 1, RespirationChoices, RespirationTemplateKey, i => i == 0 ? "规则呼吸" : "异常呼吸示意", null,
+        _templatePages.Add(new(this, "generation.respiration", 1, RespirationChoices, RespirationTemplateKey, i => i switch
+        {
+            0 => "规则呼吸",
+            6 => "自主呼吸",
+            _ => "异常呼吸示意"
+        }, null,
             () => RespirationSelection, x => RespirationSelection = x));
         _templatePages.Add(new(this, "generation.ejection", 3, EjectionChoices, EjectionTemplateKey, i => i == 0 ? "节律相关" : "异常射血示意", null,
             () => EjectionSelection, x => EjectionSelection = x));

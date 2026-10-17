@@ -27,7 +27,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal static int EjectionChoiceCount => EjectionChoices.Length;
     internal static int PlethChoiceCount => PlethChoices.Length;
     internal static int CapnogramChoiceCount => CapnogramChoices.Length;
-    private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量", "间歇指令通气（IMV）", "额外吸气努力"];
+    private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量", "间歇指令通气（IMV）", "额外吸气努力", "自然自主呼吸"];
     private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血", "过度阻尼（压力波形）"];
     private static readonly string[] PlethChoices = ["参考脉搏", "低灌注", "运动干扰"];
     private static readonly string[] CapnogramChoices = ["参考呼气", "食管插管（衰减示意）", "右主支气管插管（双相示意）", "自发通气", "间歇指令通气（IMV）", "阻塞形态", "肺气肿（形态示意）", "肌松消退（箭毒切迹）", "再呼吸", "CO₂吸收剂耗竭", "心源性振荡", "部分机械气道阻塞", "猪尾样（呼气末上翘）"];

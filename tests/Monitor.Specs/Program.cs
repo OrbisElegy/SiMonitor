@@ -73,6 +73,7 @@ internal static class Program
             .. MonitorContinuationSpecifications.All,
             .. LiveEcg12Specifications.All,
             .. CapnographyMeasurementSpecifications.All,
+            .. AbnormalCapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,
             .. TextMessageSpecifications.All,
             .. EcgHeartRateMeasurementSpecifications.All,

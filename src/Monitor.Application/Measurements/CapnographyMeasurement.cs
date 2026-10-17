@@ -11,15 +11,20 @@ public sealed record CapnographyResult(CapnographyReading EndTidalCentiMmHg, Cap
 {
     public CapnographyActivity? Activity { get; init; }
 }
-public sealed record MeasuredExpiration(long RiseTimeNs, long PeakTimeNs, long ConfirmedAtNs, int EndTidalCentiMmHg);
+public sealed record MeasuredExpiration(long RiseTimeNs, long PeakTimeNs, long ConfirmedAtNs, int EndTidalCentiMmHg)
+{
+    public long EndTidalTimeNs { get; init; } = PeakTimeNs;
+}
 
-// Initial engineering estimator for AcqCO2_100@1, baseline <=2mmHg and
-// excursions >=5mmHg. Not validated for artifacts, rebreathing or CPR.
+// Engineering estimator for AcqCO2_100@1 with an acquired inspiratory baseline
+// and excursions >=5mmHg. Terminal descent is inferred from samples alone;
+// this is not a validated device algorithm or a diagnostic classifier.
 // Input is validated acquisition wire only: no generator plan/event access.
 public sealed class CapnographyMeasurement
 {
     private const long StepNs = 10_000_000;
     private const long FreshnessNs = 10_000_000_000;
+    private const int HistorySamples = 1000;
     public const long RateWindowNs = 20_000_000_000;
     public const int MaximumRateIntervals = 4;
     private State _state = new();
@@ -55,7 +60,7 @@ public sealed class CapnographyMeasurement
         if (sameClock && (block.StartSimTimeNs < _state.NextTime || block.BlockSequence <= _state.Sequence || plane.FirstSampleIndex < _state.NextIndex))
         { throw new ArgumentException("Capnography.OutOfOrder", nameof(wire)); }
         var next = same && block.StartSimTimeNs == _state.NextTime && plane.FirstSampleIndex == _state.NextIndex &&
-            _state.Sequence != ulong.MaxValue && block.BlockSequence == _state.Sequence + 1 ? _state with { } : new State();
+            _state.Sequence != ulong.MaxValue && block.BlockSequence == _state.Sequence + 1 ? Copy(_state) : new State();
         List<MeasuredExpiration> events = [];
         for (int i = 0; i < plane.Samples.Count; i++)
         {
@@ -99,11 +104,11 @@ public sealed class CapnographyMeasurement
 
     // Opaque, immutable in-process continuation; no externally editable state
     // or unbounded replay history. Durable checkpoint serialization is deferred.
-    public Checkpoint Capture() => new(ChannelId, _state with { });
+    public Checkpoint Capture() => new(ChannelId, Copy(_state));
     public static CapnographyMeasurement Restore(Checkpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        return new(checkpoint.Channel) { _state = checkpoint.Value with { } };
+        return new(checkpoint.Channel) { _state = Copy(checkpoint.Value) };
     }
     public sealed class Checkpoint
     {
@@ -128,6 +133,9 @@ public sealed class CapnographyMeasurement
             s.Intervals = [];
             s.CompletedAt = s.PreviousStart = null;
             s.FilterCount = 0;
+            s.Baseline = null;
+            s.BaselineCount = 0;
+            s.HistoryCount = s.HistoryCursor = 0;
             s.UsableSince = null;
             return;
         }
@@ -140,10 +148,41 @@ public sealed class CapnographyMeasurement
         s.Previous1 = raw;
         s.FilterCount = Math.Min(2, s.FilterCount + 1);
         if (s.FilterCount < 2) { return; }
+        s.History[s.HistoryCursor] = value;
+        s.HistoryCursor = (s.HistoryCursor + 1) % HistorySamples;
+        s.HistoryCount = Math.Min(HistorySamples, s.HistoryCount + 1);
         if (!s.Active)
         {
-            if (value <= 200)
+            if (s.Baseline is null)
             {
+                // A stable segment establishes an observed baseline even when
+                // inspired CO2 is nonzero. A constant elevated trace can arm,
+                // but cannot complete a breath without a subsequent excursion.
+                if (s.BaselineCount == 0 || value < s.BaselineMinimum - 100 || value > s.BaselineMaximum + 100)
+                {
+                    s.BaselineMinimum = s.BaselineMaximum = value;
+                    s.BaselineCount = 1;
+                }
+                else
+                {
+                    s.BaselineMinimum = Math.Min(s.BaselineMinimum, value);
+                    s.BaselineMaximum = Math.Max(s.BaselineMaximum, value);
+                    s.BaselineCount++;
+                    if (s.BaselineMaximum - s.BaselineMinimum > 100)
+                    { s.BaselineMinimum = s.BaselineMaximum = value; s.BaselineCount = 1; }
+                }
+                if (s.BaselineCount >= 10)
+                {
+                    s.Baseline = s.BaselineMinimum;
+                    s.Armed = true;
+                    s.Poor = false;
+                    s.UsableSince ??= time;
+                }
+                return;
+            }
+            if (value <= s.Baseline.Value + 200)
+            {
+                s.Baseline = Math.Min(s.Baseline.Value, value);
                 s.LowCount = Math.Min(10, s.LowCount + 1);
                 if (s.LowCount >= 10)
                 {
@@ -153,7 +192,7 @@ public sealed class CapnographyMeasurement
                 }
                 s.HighCount = 0;
             }
-            else if (s.Armed && value >= 500)
+            else if (s.Armed && value >= s.Baseline.Value + 500)
             {
                 if (s.HighCount++ == 0)
                 {
@@ -179,7 +218,13 @@ public sealed class CapnographyMeasurement
             s.Peak = value;
             s.PeakTime = time;
         }
-        if (value <= 200) { s.LowCount++; } else { s.LowCount = 0; }
+        int lowThreshold = s.Baseline!.Value + Math.Max(200, (s.Peak - s.Baseline.Value) / 5);
+        if (value <= lowThreshold)
+        {
+            s.LowMinimum = s.LowCount == 0 ? value : Math.Min(s.LowMinimum, value);
+            s.LowCount++;
+        }
+        else { s.LowCount = 0; }
         if (time - s.Start >= FreshnessNs)
         {
             ClearCycle(s);
@@ -188,23 +233,135 @@ public sealed class CapnographyMeasurement
             s.EndTidal = null;
             s.Intervals = [];
             s.PreviousStart = s.CompletedAt = null;
+            s.Baseline = null;
+            s.BaselineCount = 0;
             return;
         }
-        if (s.LowCount < 10) { return; }
+        // A settled lower segment can establish a changed inspired baseline,
+        // even when it no longer crosses the previous cycle's low threshold.
+        // Require 180 ms below the known threshold, or a separately settled
+        // 200 ms lower segment, so brief near-baseline clefts stay intrabreath.
+        bool settledLow = SettledLow(s, out int lowMinimum);
+        if (s.LowCount < 18 && !settledLow) { return; }
+        if (settledLow) { s.LowMinimum = lowMinimum; }
         if (time - s.Start >= 300_000_000)
         {
             long? interval = s.PreviousStart is { } previous ? s.Start - previous : null;
             s.Intervals = interval is >= 500_000_000 and <= RateWindowNs
                 ? s.Intervals.Append(new Interval(s.PreviousStart!.Value, s.Start))
                     .Where(i => i.StartNs >= time - RateWindowNs).TakeLast(MaximumRateIntervals).ToArray() : [];
+            // Ordinary flat/rising plateaus retain the established filtered
+            // peak. Only an observed reverse-plateau corner replaces it.
             s.EndTidal = s.Peak;
+            long endTidalTime = s.PeakTime;
+            if (ReversePlateauTerminal(s, time) is { } reverse)
+            { s.EndTidal = reverse.Value; endTidalTime = reverse.TimeNs; }
+            // Coalesce a terminal shoulder within 1 mmHg of the measured peak.
+            // This retains the established ordinary capnogram's quantized value
+            // instead of biasing it downward by the descent detector's delay.
+            if (s.Peak - s.EndTidal.Value is >= 0 and <= 100)
+            { s.EndTidal = s.Peak; endTidalTime = s.PeakTime; }
             s.CompletedAt = time;
             s.PreviousStart = s.Start;
-            events.Add(new(s.Start, s.PeakTime, time, s.Peak));
+            events.Add(new(s.Start, s.PeakTime, time, s.EndTidal.Value) { EndTidalTimeNs = endTidalTime });
         }
+        s.Baseline = s.LowMinimum;
         ClearCycle(s);
         s.Armed = true;
     }
+
+    private static bool SettledLow(State s, out int minimum)
+    {
+        minimum = int.MaxValue;
+        if (s.HistoryCount < 20) { return false; }
+        int maximum = int.MinValue;
+        for (int index = s.HistoryCount - 20; index < s.HistoryCount; index++)
+        {
+            int value = HistoryAt(s, index);
+            minimum = Math.Min(minimum, value);
+            maximum = Math.Max(maximum, value);
+        }
+        return maximum - minimum <= 20 && maximum <= s.Peak - 500;
+    }
+
+    private static (int Value, long TimeNs)? ReversePlateauTerminal(State s, long timeNs)
+    {
+        // Search only the final descent into the acquired low segment. A
+        // preceding cleft ends at its rebound and is outside this segment.
+        int half = s.LowMinimum + (s.Peak - s.LowMinimum) / 2;
+        int high = s.HistoryCount - 1;
+        while (high >= 0 && HistoryAt(s, high) <= half) { high--; }
+        if (high < 10) { return null; }
+        int start = high;
+        while (start > 0 && HistoryAt(s, start) <= HistoryAt(s, start - 1) + 10) { start--; }
+        (int Value, long TimeNs)? result = null;
+        for (int index = start + 5; index <= high && index + 10 < s.HistoryCount; index++)
+        {
+            int leftDrop = HistoryAt(s, index - 5) - HistoryAt(s, index);
+            int rightDrop = HistoryAt(s, index + 5) - HistoryAt(s, index + 10);
+            if (leftDrop < 3 || rightDrop * 2 <= leftDrop * 3 ||
+                !NearlyLinearDescent(s, index - 5, leftDrop) || !NearlyLinearDescent(s, index + 5, rightDrop))
+            { continue; }
+            // Intersect the two local descending lines across their 50 ms
+            // gap. This recovers a steepening corner without equating an
+            // earlier maximum or an arbitrary absolute slope with end-tidal CO2.
+            int difference = rightDrop - leftDrop;
+            int numerator = HistoryAt(s, index + 5) - HistoryAt(s, index) + rightDrop;
+            if (numerator < 0 || numerator > difference) { continue; }
+            int value = HistoryAt(s, index) - checked((int)FixedPointMath.RoundDivideTiesToEven((Int128)leftDrop * numerator, difference));
+            long at = timeNs - (s.HistoryCount - 1L - index) * StepNs +
+                (long)FixedPointMath.RoundDivideTiesToEven((Int128)5 * StepNs * numerator, difference);
+            if (value >= half && at > s.Start) { result = (value, at); }
+        }
+        // A rounded inspiratory shoulder may contain no locally straight
+        // corner. Locate its strongest acceleration over 30 ms, then extend
+        // that local quadratic back to the preceding acquired plateau slope.
+        // A straight-corner estimate remains preferable when it precedes this
+        // acceleration; later straight portions belong to the falling limb.
+        int strongestAcceleration = 0;
+        var corner = result;
+        for (int index = start + 9; index <= high && index + 3 < s.HistoryCount; index++)
+        {
+            int leftDrop = HistoryAt(s, index - 3) - HistoryAt(s, index);
+            int rightDrop = HistoryAt(s, index) - HistoryAt(s, index + 3);
+            int acceleration = rightDrop - leftDrop;
+            int plateauDrop = HistoryAt(s, index - 9) - HistoryAt(s, index - 6);
+            int twiceSlope = leftDrop + rightDrop;
+            if (acceleration <= Math.Max(5, strongestAcceleration) || plateauDrop < 3 ||
+                leftDrop < 0 || twiceSlope <= plateauDrop * 3)
+            { continue; }
+            strongestAcceleration = acceleration;
+            long accelerationTime = timeNs - (s.HistoryCount - 1L - index) * StepNs;
+            if (corner is { } straight && straight.TimeNs <= accelerationTime &&
+                accelerationTime - straight.TimeNs <= 90_000_000)
+            { result = corner; continue; }
+            long offsetNs = (long)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)(twiceSlope - 2 * plateauDrop) * 3 * StepNs, 2 * acceleration);
+            if (offsetNs is < 0 or > 90_000_000) { continue; }
+            int value = HistoryAt(s, index) + checked((int)FixedPointMath.RoundDivideTiesToEven(
+                (Int128)twiceSlope * twiceSlope - (Int128)4 * plateauDrop * plateauDrop, 8 * acceleration));
+            long at = accelerationTime - offsetNs;
+            if (value >= half && value <= s.Peak && at > s.Start)
+            { result = (value, at); }
+        }
+        return result;
+    }
+
+    private static bool NearlyLinearDescent(State s, int start, int totalDrop)
+    {
+        int tolerance = Math.Max(10, totalDrop / 5);
+        for (int index = start; index < start + 5; index++)
+        {
+            int drop = HistoryAt(s, index) - HistoryAt(s, index + 1);
+            if (drop < 0 || Math.Abs(drop * 5 - totalDrop) > tolerance) { return false; }
+        }
+        return true;
+    }
+
+    private static int HistoryAt(State s, int index) =>
+        s.History[(s.HistoryCursor - s.HistoryCount + index + HistorySamples) % HistorySamples];
+
+    private static State Copy(State state) => state with { History = (int[])state.History.Clone() };
 
     private static void ClearCycle(State s)
     {
@@ -219,10 +376,13 @@ public sealed class CapnographyMeasurement
         internal long NextTime, Start, PeakTime;
         internal ulong NextIndex, Sequence;
         internal long? FirstSample, LastSample, PreviousStart, CompletedAt, UsableSince;
-        internal int? EndTidal;
+        internal int? EndTidal, Baseline;
         // Replace rather than mutate arrays, preserving checkpoint ownership.
         internal Interval[] Intervals = [];
         internal bool Poor, Armed, Active;
-        internal int LowCount, HighCount, Peak, Previous1, Previous2, FilterCount;
+        internal int LowCount, HighCount, Peak, Previous1, Previous2, FilterCount,
+            BaselineCount, BaselineMinimum, BaselineMaximum, LowMinimum;
+        internal int[] History = new int[HistorySamples];
+        internal int HistoryCount, HistoryCursor;
     }
 }

@@ -47,7 +47,8 @@ internal static class GeneratorPreferenceSmokeChecks
                         reopened.Settings.AppliedRespirationParameters.Text, reopened.Settings.AppliedEjectionParameters.Text }),
                         "startup overview describes the restored applied configuration");
                     Require(!reopened.PreferenceNotice.IsVisible && actual.Ecg == expected.Ecg && actual.EcgName == expected.EcgName &&
-                        actual.Respiration == expected.Respiration && actual.Ejection == expected.Ejection && actual.Seed == expected.Seed &&
+                        actual.Respiration == expected.Respiration && actual.Ejection == expected.Ejection &&
+                        actual.Pleth == expected.Pleth && actual.Capnogram == expected.Capnogram && actual.Seed == expected.Seed &&
                         actual.Numbers.OrderBy(p => p.Key).SequenceEqual(expected.Numbers.OrderBy(p => p.Key)) &&
                         actual.Flags.OrderBy(p => p.Key).SequenceEqual(expected.Flags.OrderBy(p => p.Key)) &&
                         actual.Choices.OrderBy(p => p.Key).SequenceEqual(expected.Choices.OrderBy(p => p.Key)), "complete editor round trip");
@@ -64,17 +65,21 @@ internal static class GeneratorPreferenceSmokeChecks
             string valid = File.ReadAllText(path);
             var legacy = JsonNode.Parse(valid)!.AsObject();
             legacy["Generator"]!["Numbers"]!.AsObject().Remove("AtrialRate");
+            legacy["Generator"]!.AsObject().Remove("Pleth");
+            legacy["Generator"]!.AsObject().Remove("Capnogram");
             File.WriteAllText(path, legacy.ToJsonString());
             var olderSettings = new DesignPreviewWindow(path);
             try
             {
-                Require(!olderSettings.PreferenceNotice.IsVisible && olderSettings.Settings.AtrialRate.Value == 75,
+                Require(!olderSettings.PreferenceNotice.IsVisible && olderSettings.Settings.AtrialRate.Value == 75 && olderSettings.Settings.PlethSelection == 0 && olderSettings.Settings.CapnogramSelection == 0,
                     "older preferences without an independent atrial rate retain the default");
             }
             finally { olderSettings.Close(); }
 
             foreach (var edit in new Action<JsonObject>[] {
                 g => g["EcgName"] = "unknown template",
+                g => g["Pleth"] = 3,
+                g => g["Capnogram"] = 13,
                 g => g["Numbers"]!.AsObject().Remove("RespiratoryRate"),
                 g => g["Numbers"]!["RespiratoryRate"] = 600,
                 g => g["Ejection"] = 2,
@@ -98,6 +103,13 @@ internal static class GeneratorPreferenceSmokeChecks
     {
         settings.EcgSelection = selection; settings.RespirationSelection = selection == 2 ? 1 : 0;
         settings.EjectionSelection = selection == 2 ? 1 : 0;
+        if (selection == 180)
+        {
+            settings.PlethSelection = 1;
+            settings.CapnogramSelection = 9;
+            settings.RespirationSelection = 4;
+            settings.EjectionSelection = 4;
+        }
         settings.Oxygenation.Realtime.IsChecked = false;
         settings.OpticalEnabled.IsChecked = true; settings.OpticalTarget.Value = 96.5m;
         settings.OpticalVariation.Value = 2; settings.OpticalModulation.Value = .8m;

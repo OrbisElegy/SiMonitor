@@ -9,6 +9,9 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     string Seed, IReadOnlyDictionary<string, decimal?> Numbers,
     IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    // Optional additions preserve the original saved constructor schema.
+    public int Pleth { get; init; }
+    public int Capnogram { get; init; }
     public PressureTransducerLimits PressureTransducers { get; init; } = new();
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; } =
         EcgElectricalTherapy.Snapshot(new Dictionary<string, ElectricalConversionSettings>());
@@ -20,8 +23,8 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public void Validate()
     {
-        if (ApplyDelaySeconds < 0 || ApplyDelaySeconds > 60 || ApplyDelaySeconds * 10 != decimal.Truncate(ApplyDelaySeconds * 10) || Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 3 ||
-            Ejection is < 0 or > 3 || Seed is null || Seed.Length > 1024 ||
+        if (ApplyDelaySeconds < 0 || ApplyDelaySeconds > 60 || ApplyDelaySeconds * 10 != decimal.Truncate(ApplyDelaySeconds * 10) || Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 5 ||
+            Ejection is < 0 or > 4 || Pleth is < 0 or > 2 || Capnogram is < 0 or > 12 || Seed is null || Seed.Length > 1024 ||
             Numbers is null || Flags is null || Choices is null ||
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }

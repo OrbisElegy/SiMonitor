@@ -111,7 +111,7 @@ internal sealed partial class DesignPreviewWindow : Window
         Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
         var defaults = BuildConfiguredSources();
         _session = defaults.Session;
-        _session.DiscardStartup();
+        DiscardSteadyStartup(_session);
         _ecg = defaults.Paper;
         Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
         if (preferences.Generator is { } generator)
@@ -120,7 +120,7 @@ internal sealed partial class DesignPreviewWindow : Window
             {
                 Settings.RestoreGenerator(generator);
                 var restored = BuildConfiguredSources();
-                restored.Session.DiscardStartup();
+                DiscardSteadyStartup(restored.Session);
                 Settings.MarkParametersApplied(restored.Configuration, restored.Physiology);
                 _session = restored.Session; _ecg = restored.Paper;
             }
@@ -683,15 +683,25 @@ internal sealed partial class DesignPreviewWindow : Window
         if (Page == 1) { SelectPage(1); }
     }
 
+    private static void DiscardSteadyStartup(LocalMonitorPreviewSession session)
+    {
+        // Esophageal washout is the teaching event, so it must remain visible.
+        if (session.Configuration.CapnogramIllustration != CapnogramIllustration.EsophagealIntubation)
+        { session.DiscardStartup(); }
+    }
+
     private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources() => CaptureSourceBuilder()();
 
     // Capture controls on the dispatcher; the returned computation owns no UI objects.
     private Func<(LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology)> CaptureSourceBuilder()
     {
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
-            Settings.RespirationSelection is < 0 or > 3 || Settings.EjectionSelection is < 0 or > 3)
+            Settings.RespirationSelection < 0 || Settings.RespirationSelection >= DesignPreviewSettings.RespirationChoiceCount ||
+            Settings.EjectionSelection < 0 || Settings.EjectionSelection >= DesignPreviewSettings.EjectionChoiceCount ||
+            Settings.PlethSelection < 0 || Settings.PlethSelection >= DesignPreviewSettings.PlethChoiceCount ||
+            Settings.CapnogramSelection < 0 || Settings.CapnogramSelection >= DesignPreviewSettings.CapnogramChoiceCount)
         { throw new ArgumentException("GeneratorPreferences.InvalidSelection"); }
-        var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
+        var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection, Settings.PlethSelection, Settings.CapnogramSelection);
         if (SeededRhythmSchedule.Supports(config.ConductionPattern))
         {
             var rhythm = Settings.ReadRhythm(config.ConductionPattern);
@@ -816,7 +826,7 @@ internal sealed partial class DesignPreviewWindow : Window
             var prepared = background ? await Task.Run(() =>
             {
                 var result = build();
-                if (restart) { result.Session.DiscardStartup(); }
+                if (restart) { DiscardSteadyStartup(result.Session); }
                 return result;
             }) : build();
             if (_closed || !ReferenceEquals(editor, Settings)) { return; }
@@ -824,7 +834,7 @@ internal sealed partial class DesignPreviewWindow : Window
             long? effective = null;
             if (restart)
             {
-                if (!background) { next.DiscardStartup(); }
+                if (!background) { DiscardSteadyStartup(next); }
                 Pause();
                 _session = next;
                 _trendHistory.Clear();
@@ -841,7 +851,9 @@ internal sealed partial class DesignPreviewWindow : Window
                 effective = _session.ScheduleSource(next, delayNs,
                     string.Join(" · ", Localization.Get(DesignPreviewSettings.EcgTemplateKey(selection.EcgSelection)),
                         Localization.Get(DesignPreviewSettings.RespirationTemplateKey(selection.RespirationSelection)),
-                        Localization.Get(DesignPreviewSettings.EjectionTemplateKey(selection.EjectionSelection))));
+                        Localization.Get(DesignPreviewSettings.EjectionTemplateKey(selection.EjectionSelection)),
+                        Localization.Get(DesignPreviewSettings.PlethTemplateKey((int)physiology.PlethShape)),
+                        Localization.Get(DesignPreviewSettings.CapnogramTemplateKey((int)physiology.CapnogramIllustration))));
                 _pendingPresentation = (ecgConfig, physiology, ecg, effective.Value,
                     selection.EcgSelection, selection.RespirationSelection, selection.EjectionSelection);
                 _session.UpdateDisplay(next.Display);
@@ -873,7 +885,11 @@ internal sealed partial class DesignPreviewWindow : Window
             Settings.Sound.RefreshAlarmNotices(MonitorView.ActiveNotices);
             if (Page is 0 or 1 || (Page == 2 && !ReferenceEquals(_workspace.Content, Settings)))
             { SelectPage(Page); }
-            if (restart) { SetStatus("settings.restarted"); }
+            if (restart)
+            {
+                SetStatus(physiology.CapnogramIllustration == CapnogramIllustration.EsophagealIntubation
+                    ? "settings.restartedTransient" : "settings.restarted");
+            }
             else { SetStatus("settings.scheduled", effective / 1_000_000_000m); }
             if (restart) { Start(); }
             _displayPreferences = new(next.Display, paperLayout, alarms, sound, generator, measurementMillimeters, _editableDefibrillatorConfiguration)
@@ -902,6 +918,8 @@ internal sealed partial class DesignPreviewWindow : Window
         { SetStatus("validation." + exception.Message); }
         catch (ArgumentException exception) when (exception.Message == "SeededCo2.InvalidRange")
         { SetStatus("validation.co2Range"); }
+        catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.CustomPlateauUnsupported")
+        { SetStatus("validation.templatePlateau"); }
         catch (EventWaveformException exception) when (exception.ReasonCode == "Capnogram.SeededPressureRequiresRegularBreathing")
         { SetStatus("validation.co2Regular"); }
         catch (ArgumentException exception) when (exception.Message.StartsWith("ManualVitals.", StringComparison.Ordinal))
@@ -1041,9 +1059,10 @@ internal sealed partial class DesignPreviewWindow : Window
         if (HasDevicePanel && _deviceOperatingMode == DeviceOperatingMode.Off && _timer is not null && _pendingPacingPaper is null)
         { Pause(); }
     }
-    internal static (PhysiologyDemoConfiguration Physiology, ProjectedEcgDemoConfiguration Ecg) ResolveStyle(int ecg, int resp, int ejection)
+    internal static (PhysiologyDemoConfiguration Physiology, ProjectedEcgDemoConfiguration Ecg) ResolveStyle(int ecg, int resp, int ejection, int pleth = 0, int capnogram = 0)
     {
-        if (ecg < 0 || ecg >= DesignPreviewSettings.EcgChoiceCount || resp is < 0 or > 3 || ejection is < 0 or > 3)
+        if (ecg < 0 || ecg >= DesignPreviewSettings.EcgChoiceCount || resp < 0 || resp >= DesignPreviewSettings.RespirationChoiceCount || ejection < 0 || ejection >= DesignPreviewSettings.EjectionChoiceCount ||
+            pleth < 0 || pleth >= DesignPreviewSettings.PlethChoiceCount || capnogram < 0 || capnogram >= DesignPreviewSettings.CapnogramChoiceCount)
         { throw new ArgumentOutOfRangeException(nameof(ecg), "Preview.InvalidStyle"); }
         var config = ecg switch { 1 => PhysiologyDemoConfiguration.SinusArrestPreset, 2 => PhysiologyDemoConfiguration.PrematureVentricular, 3 => PhysiologyDemoConfiguration.SinusArrhythmiaPreset, 4 => PhysiologyDemoConfiguration.PrematureAtrial, 5 => PhysiologyDemoConfiguration.PrematureJunctional, 6 => PhysiologyDemoConfiguration.Fibrillation(), 7 => PhysiologyDemoConfiguration.Fibrillation(fine: true), 8 => PhysiologyDemoConfiguration.Flutter(2), 9 => PhysiologyDemoConfiguration.Flutter(4), >= 10 and <= 17 => SecondDegreeBlockPreset.Physiology(ecg - 10), 18 => PhysiologyDemoConfiguration.JunctionalEscape, 19 => PhysiologyDemoConfiguration.VentricularEscape, 20 => PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration), 21 => PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationCoarseIllustration), 22 => PhysiologyDemoConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationFineIllustration), 23 => PhysiologyDemoConfiguration.SvtPreset, 24 => PhysiologyDemoConfiguration.SvtPreset with { SvtRbbb = true }, 25 => PhysiologyDemoConfiguration.SvtPreset with { SvtLbbb = true }, 26 => PhysiologyDemoConfiguration.VtPreset, 27 => PhysiologyDemoConfiguration.VtPreset with { VtFusion = true }, 28 => PhysiologyDemoConfiguration.VtPreset with { VtCapture = true }, 29 => PhysiologyDemoConfiguration.VtPreset with { VtBidirectional = true }, 30 => PhysiologyDemoConfiguration.VtPreset with { VtTwisting = true }, 31 => PhysiologyDemoConfiguration.AarPreset, 32 => PhysiologyDemoConfiguration.AjrPreset, 33 => PhysiologyDemoConfiguration.AivrPreset, 34 => PhysiologyDemoConfiguration.AivrPreset with { AivrFusion = true }, 35 => PhysiologyDemoConfiguration.AivrPreset with { AivrCapture = true }, 36 => PhysiologyDemoConfiguration.AtrialEscapePreset, 37 => PhysiologyDemoConfiguration.Flutter(1), 38 => PhysiologyDemoConfiguration.Flutter(3), 39 => PhysiologyDemoConfiguration.VariableFlutter, 40 => PhysiologyDemoConfiguration.BlockedPrematureAtrial, 41 => PhysiologyDemoConfiguration.AberrantPrematureAtrial, 42 => PhysiologyDemoConfiguration.PrematureJunctional with { ConductionPattern = AvConductionPattern.PrematureJunctionalAfterQrsIllustration }, 43 => PhysiologyDemoConfiguration.PrematureJunctional with { ConductionPattern = AvConductionPattern.PrematureJunctionalOverlappingIllustration }, 44 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.VentricularBigeminyIllustration }, 45 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.VentricularTrigeminyIllustration }, 46 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.VentricularCoupletIllustration }, 47 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.InterpolatedPvcIllustration }, 48 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.PolymorphicPvcIllustration }, 49 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.MultifocalPvcIllustration }, 50 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.PolymorphicVentricularCoupletIllustration }, 51 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.RonTLongQtPvcIllustration }, 52 => PhysiologyDemoConfiguration.PrematureVentricular with { ConductionPattern = AvConductionPattern.ShortCoupledRonTPvcIllustration }, >= 53 and <= 58 => BundleBlockPreset.Physiology((EcgBundleBlockIllustration)(ecg - 52)), 59 => PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = false, WpwSmallerDelta = false }, 60 => PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = true, WpwSmallerDelta = false }, 61 => PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = false, WpwSmallerDelta = true }, 62 => PhysiologyDemoConfiguration.WpwPreset with { WpwNegativeV1 = true, WpwSmallerDelta = true }, 63 => PhysiologyDemoConfiguration.ShortPrPreset, 64 => PhysiologyDemoConfiguration.NormalPrDeltaPreset, 65 => PhysiologyDemoConfiguration.NormalPrDeltaPreset with { ProlongedPrDelta = true }, >= 66 and <= 71 => PhysiologyDemoConfiguration.Fibrillation(fine: ecg % 2 == 1) with { IllustrateAfAberrancy = ecg is 66 or 67 or 70 or 71, IllustrateAfSystemicPulseDeficit = ecg >= 68 }, 72 => PhysiologyDemoConfiguration.Default with { CardiacActivity = CardiacActivity.Absent }, 73 => PhysiologyDemoConfiguration.Default with { VentricularMechanicalEnabled = false }, 74 => PhysiologyDemoConfiguration.Default with { CardiacActivity = CardiacActivity.AtrialOnly }, 75 => PhysiologyDemoConfiguration.Default with { HyperkalemiaRepolarization = true }, 76 or 77 => PhysiologyDemoConfiguration.Default with { HyperkalemiaRepolarization = true, HyperkalemiaConduction = true, HyperkalemiaAbsentP = ecg == 77, CardiacActivity = ecg == 77 ? CardiacActivity.VentricularOnly : CardiacActivity.AtrialAndVentricular }, >= 78 and <= 81 => PhysiologyDemoConfiguration.Default with { HypokalemiaRepolarization = true, HypokalemiaInvertedT = ecg == 79, HypokalemiaTuFusion = ecg == 80, HypokalemiaConduction = ecg == 81 }, >= 82 and <= 86 => PhysiologyDemoConfiguration.Default with { Calcium = (CalciumIllustration)(ecg - 81) }, >= 87 and <= 89 => PhysiologyDemoConfiguration.Default with { DigitalisEffect = true, DigitalisShape = (DigitalisTShape)(ecg - 87) }, >= 90 and <= 97 => PhysiologyDemoConfiguration.Default with { Quinidine = (QuinidineIllustration)((ecg - 90) % 4 + 1), QuinidineNotchedP = ecg >= 94 }, 98 => PhysiologyDemoConfiguration.Default with { HyperkalemiaRepolarization = true, HyperkalemiaConduction = true, HyperkalemiaAbsentP = true, HyperkalemiaFusion = true, CardiacActivity = CardiacActivity.VentricularOnly }, >= 99 and <= 101 => PhysiologyDemoConfiguration.Default with { AtrialShape = (EcgAtrialIllustration)(ecg - 98) }, >= 102 and <= 106 => PhysiologyDemoConfiguration.Default with { VentricularShape = (EcgVentricularIllustration)(ecg - 101) }, >= 107 and <= 114 => PhysiologyDemoConfiguration.Default with { TContour = TContourProductPreset.Create(ecg - 107) }, >= 115 and <= 124 => PhysiologyDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create(ecg - 115) }, >= 125 and <= 134 => PhysiologyDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create(ecg - 125, InfarctionTerritory.Lateral) }, >= 135 and <= 164 => PhysiologyDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create((ecg - 135) % 10, (InfarctionTerritory)((ecg - 135) / 10 + 3)) }, _ => PhysiologyDemoConfiguration.Default };
         var ecgConfig = ecg switch { 1 => ProjectedEcgDemoConfiguration.SinusArrestPreset, 2 => ProjectedEcgDemoConfiguration.PrematureVentricular, 3 => ProjectedEcgDemoConfiguration.SinusArrhythmiaPreset, 4 => ProjectedEcgDemoConfiguration.PrematureAtrial, 5 => ProjectedEcgDemoConfiguration.PrematureJunctional, 6 => ProjectedEcgDemoConfiguration.Fibrillation(), 7 => ProjectedEcgDemoConfiguration.Fibrillation(fine: true), 8 => ProjectedEcgDemoConfiguration.Flutter(2), 9 => ProjectedEcgDemoConfiguration.Flutter(4), >= 10 and <= 17 => SecondDegreeBlockPreset.Ecg(ecg - 10), 18 => ProjectedEcgDemoConfiguration.JunctionalEscape, 19 => ProjectedEcgDemoConfiguration.VentricularEscape, 20 => ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFlutterIllustration), 21 => ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationCoarseIllustration), 22 => ProjectedEcgDemoConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationFineIllustration), 23 => ProjectedEcgDemoConfiguration.SvtPreset, 24 => ProjectedEcgDemoConfiguration.SvtRightBundlePreset, 25 => ProjectedEcgDemoConfiguration.SvtLeftBundlePreset, 26 => ProjectedEcgDemoConfiguration.VtPreset, 27 => ProjectedEcgDemoConfiguration.VtPreset with { VtFusion = true }, 28 => ProjectedEcgDemoConfiguration.VtPreset with { VtCapture = true }, 29 => ProjectedEcgDemoConfiguration.VtPreset with { VtBidirectional = true }, 30 => ProjectedEcgDemoConfiguration.VtPreset with { VtTwisting = true }, 31 => ProjectedEcgDemoConfiguration.AarPreset, 32 => ProjectedEcgDemoConfiguration.AjrPreset, 33 => ProjectedEcgDemoConfiguration.AivrPreset, 34 => ProjectedEcgDemoConfiguration.AivrPreset with { AivrFusion = true }, 35 => ProjectedEcgDemoConfiguration.AivrPreset with { AivrCapture = true }, 36 => ProjectedEcgDemoConfiguration.AtrialEscapePreset, 37 => ProjectedEcgDemoConfiguration.Flutter(1), 38 => ProjectedEcgDemoConfiguration.Flutter(3), 39 => ProjectedEcgDemoConfiguration.VariableFlutter, 40 => ProjectedEcgDemoConfiguration.BlockedPrematureAtrial, 41 => ProjectedEcgDemoConfiguration.AberrantPrematureAtrial, 42 => ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = AvConductionPattern.PrematureJunctionalAfterQrsIllustration }, 43 => ProjectedEcgDemoConfiguration.PrematureJunctional with { ConductionPattern = AvConductionPattern.PrematureJunctionalOverlappingIllustration }, 44 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.VentricularBigeminyIllustration), 45 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.VentricularTrigeminyIllustration), 46 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.VentricularCoupletIllustration), 47 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.InterpolatedPvcIllustration), 48 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.PolymorphicPvcIllustration), 49 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.MultifocalPvcIllustration), 50 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.PolymorphicVentricularCoupletIllustration), 51 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.RonTLongQtPvcIllustration), 52 => ProjectedEcgDemoConfiguration.Pvc(AvConductionPattern.ShortCoupledRonTPvcIllustration), >= 53 and <= 58 => BundleBlockPreset.Ecg((EcgBundleBlockIllustration)(ecg - 52)), 59 => ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = false, WpwSmallerDelta = false, QrsDurationMilliseconds = 140 }, 60 => ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = true, WpwSmallerDelta = false, QrsDurationMilliseconds = 140 }, 61 => ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = false, WpwSmallerDelta = true, QrsDurationMilliseconds = 110 }, 62 => ProjectedEcgDemoConfiguration.WpwPreset with { WpwNegativeV1 = true, WpwSmallerDelta = true, QrsDurationMilliseconds = 110 }, 63 => ProjectedEcgDemoConfiguration.ShortPrPreset, 64 => ProjectedEcgDemoConfiguration.NormalPrDeltaPreset, 65 => ProjectedEcgDemoConfiguration.NormalPrDeltaPreset with { ProlongedPrDelta = true, PrIntervalMilliseconds = 240 }, >= 66 and <= 71 => ProjectedEcgDemoConfiguration.Fibrillation(fine: ecg % 2 == 1) with { IllustrateAfAberrancy = ecg is 66 or 67 or 70 or 71 }, 72 => ProjectedEcgDemoConfiguration.Default with { CardiacActivity = CardiacActivity.Absent }, 73 => ProjectedEcgDemoConfiguration.Default, 74 => ProjectedEcgDemoConfiguration.Default with { CardiacActivity = CardiacActivity.AtrialOnly }, 75 => ProjectedEcgDemoConfiguration.Hyperkalemia, 76 => ProjectedEcgDemoConfiguration.HyperkalemiaWithConduction, 77 => ProjectedEcgDemoConfiguration.HyperkalemiaWithoutP, 78 => ProjectedEcgDemoConfiguration.Hypokalemia, 79 => ProjectedEcgDemoConfiguration.Hypokalemia with { HypokalemiaInvertedT = true }, 80 => ProjectedEcgDemoConfiguration.Hypokalemia with { HypokalemiaTuFusion = true }, 81 => ProjectedEcgDemoConfiguration.HypokalemiaWithConduction, >= 82 and <= 86 => ProjectedEcgDemoConfiguration.CalciumPreset((CalciumIllustration)(ecg - 81)), >= 87 and <= 89 => ProjectedEcgDemoConfiguration.Digitalis with { DigitalisShape = (DigitalisTShape)(ecg - 87) }, >= 90 and <= 97 => ProjectedEcgDemoConfiguration.QuinidinePreset((QuinidineIllustration)((ecg - 90) % 4 + 1), ecg >= 94), 98 => ProjectedEcgDemoConfiguration.HyperkalemiaWithFusion, >= 99 and <= 101 => ProjectedEcgDemoConfiguration.Default with { Atrial = (EcgAtrialIllustration)(ecg - 98) }, >= 102 and <= 106 => ProjectedEcgDemoConfiguration.Default with { Ventricular = (EcgVentricularIllustration)(ecg - 101) }, >= 107 and <= 114 => ProjectedEcgDemoConfiguration.Default with { TContour = TContourProductPreset.Create(ecg - 107) }, >= 115 and <= 124 => ProjectedEcgDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create(ecg - 115) }, >= 125 and <= 134 => ProjectedEcgDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create(ecg - 125, InfarctionTerritory.Lateral) }, >= 135 and <= 164 => ProjectedEcgDemoConfiguration.Default with { Infarction = InfarctionProductPreset.Create((ecg - 135) % 10, (InfarctionTerritory)((ecg - 135) / 10 + 3)) }, _ => ProjectedEcgDemoConfiguration.Default };
@@ -1060,7 +1079,23 @@ internal sealed partial class DesignPreviewWindow : Window
         config = config with
         {
             RespiratoryPattern = resp switch { 1 => RespiratoryPattern.CheyneStokesIllustration, 2 => RespiratoryPattern.IntermittentIllustration, _ => RespiratoryPattern.Regular },
-            RespiratoryActivity = resp == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing
+            RespiratoryActivity = resp == 3 ? RespiratoryActivity.Absent : RespiratoryActivity.Breathing,
+            RespirationIllustration = resp switch
+            {
+                4 => RespirationIllustration.IntermittentMandatoryVentilation,
+                5 => RespirationIllustration.InspiratoryEffort,
+                _ => RespirationIllustration.Reference
+            },
+            PressureMeasurement = ejection == 4 ? PressureMeasurementIllustration.Overdamped : PressureMeasurementIllustration.Reference,
+            PlethShape = (PlethIllustration)pleth,
+            CapnogramIllustration = (CapnogramIllustration)capnogram
+        };
+        var capnogramDefaults = SignalTemplatePresets.Capnogram(capnogram);
+        config = config with
+        {
+            Co2BaselineMmHg = capnogramDefaults.Co2BaselineMmHg,
+            Co2RiseMilliseconds = capnogramDefaults.Co2RiseMilliseconds,
+            Co2FallMilliseconds = capnogramDefaults.Co2FallMilliseconds
         };
         if (ejection == 1 && ecg != 2) { throw new ArgumentException("Preview.EjectionRequiresPvc"); }
         if (ejection == 2)

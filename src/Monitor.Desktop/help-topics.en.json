@@ -310,5 +310,47 @@
     "Category": "Waveforms and display",
     "Title": "D3 enclosure and controls",
     "Text": "Select the D3 inspired skin under Settings → Display. The enclosure fixes three waveform rows. A .simskin v2 archive includes its button materials and default energy table; legacy JSON skins are rejected. D3 defaults to 21 steps from 1–360 J. An applied manual table takes priority here too and survives skin changes and relaunch. Turn on Use skin default energy steps under Advanced parameters → Defibrillator and apply to restore the skin defaults. Leaving the enclosure restores the previous row count and additional rows, including after relaunch. Select Off, Monitor, Manual defib, AED or Pacer by clicking the target angle or printed mode label, dragging the selector, scrolling, or using arrow keys. Selection stops at either end without wrapping. Printed labels stay fixed; only the pointer moves, once the mode change takes effect. Manual operation follows energy selection, charge, then hold shock; synchronized delivery exits Sync. Changing mode, pausing or leaving monitoring cancels discharge authority. The default manual target is 200 J and the adult AED protocol targets are 200→300→360 J. Both use the nearest allowed step in the active energy table, choosing the lower step on a tie. AED advances only after actual delivery; softkeys pause for CPR or resume a complete analysis. Each softkey sits beneath its screen label, with matching function and availability. The physical Charge label stays fixed and charging progress appears on screen. Use the corresponding softkey to resume AED analysis; Charge does not restart analysis. Freeze holds waveform pixels while measurements continue. Event records the session time in the printable event history. Gain changes the ECG range, with its current value shown on screen; Lead changes the display lead. Drag or scroll the navigation dial, or use arrow keys, to select. Briefly press its center or use Enter/Space to confirm; dragging never confirms. Pacing supports 30–210 ppm and 0–200 mA. Hold 4:1 to multiply the actual stimulus interval by four; release restores it at the acquisition boundary. The temporary reduction is never saved. Pacing remains based on teaching templates, without the manufacturer’s Demand inhibition or patient-specific capture thresholds. Charging uses a fixed seven-second teaching interval. Off pauses simulation; power-on first settles any required pacing stop. The battery indicator does not read the computer battery."
+  },
+  {
+    "Id": "signal-templates-pressure",
+    "Category": "Waveforms and display",
+    "Title": "Overdamping is a pressure measurement response",
+    "Text": "Choose Overdamped pressure waveform under Waveform generation → Ejection. The ABP measurement response becomes slow, with a rounded upstroke, smaller pulse pressure and a weaker notch. This does not mean absent ejection or asphyxia and does not change ECG, PLETH or RESP. Pressure targets describe the source before damping; measured systolic and diastolic pressure may differ."
+  },
+  {
+    "Id": "signal-templates-pleth",
+    "Category": "Waveforms and display",
+    "Title": "PLETH: low perfusion and motion artifact",
+    "Text": "Select Reference pulse, Low perfusion or Motion artifact under PLETH. Low perfusion reduces relative pulsatile amplitude; automatic scaling can enlarge small pulses, so use a fixed range to compare amplitude. Motion corrupts the pulse waveform and may make PR or SpO₂ signal quality insufficient. These templates do not automatically change the oxygenation target or ABP, and do not need duplicate normal RESP templates."
+  },
+  {
+    "Id": "signal-templates-capnogram",
+    "Category": "Waveforms and display",
+    "Title": "Pair capnogram morphology with RESP",
+    "Text": "Select EtCO₂ and respiration templates independently, then Apply. Pair IMV with the IMV respiration template, and a curare cleft with Additional inspiratory effort; both signals share the respiratory clock. Spontaneous ventilation can use Regular breathing. Obstruction has no unique thoracic impedance shape; adjust respiratory rate and inspiratory fraction for the teaching scenario. Gas concentration is not chest motion or tidal volume. A CO₂-only change does not require a duplicate RESP template. Reference expiration, rebreathing, exhausted absorber and cardiogenic oscillations support a custom plateau start. Other templates retain their characteristic contour; selecting them clears and disables that option."
+  },
+  {
+    "Id": "signal-templates-intubation",
+    "Category": "Waveforms and display",
+    "Title": "Intubation illustrations and biphasic expiration",
+    "Text": "Esophageal intubation illustrates residual CO₂ falling over consecutive ventilations to almost no expired CO₂. Thoracic movement may persist, so RESP need not disappear. The right mainstem intubation template illustrates a possible biphasic contour, which also occurs with other causes of uneven lung emptying. Right mainstem intubation can have a nearly normal capnogram; a biphasic contour is not specific to it. Restarting or restoring this template preserves its first washout breaths instead of discarding startup; other measurements may need to warm up."
+  },
+  {
+    "Id": "signal-templates-obstruction",
+    "Category": "Waveforms and display",
+    "Title": "Obstruction, emphysema and the pigtail contour",
+    "Text": "Obstructive morphology slows the expiratory upstroke and slopes the plateau. The emphysema template illustrates one uneven-emptying contour, not every emphysema case. Partial mechanical obstruction presets longer rise and inspiratory fall times; advanced controls remain editable. Pigtail means a terminal expiratory upturn, which can occur with sampling-line leaks or terminal small-airway closure. It has no unique cause or corresponding RESP shape."
+  },
+  {
+    "Id": "signal-templates-cleft",
+    "Category": "Waveforms and display",
+    "Title": "Curare cleft and cardiogenic oscillations",
+    "Text": "Waning neuromuscular blockade can allow inspiratory effort and a curare cleft in the CO₂ plateau. The cleft does not quantify neuromuscular blockade. Cardiogenic oscillations are small CO₂ variations associated with cardiac activity, not extra spontaneous breaths, and usually do not need a separate RESP template."
+  },
+  {
+    "Id": "signal-templates-rebreathing",
+    "Category": "Waveforms and display",
+    "Title": "Rebreathing and an exhausted CO₂ absorber",
+    "Text": "Rebreathing raises the inspired CO₂ baseline above zero. Exhausted soda lime or another CO₂ absorber is one possible cause, so both templates may produce similar contours. Choosing a capnogram sets its baseline and rise/fall defaults; advanced controls can then change them. Returning to Reference expiration restores those defaults. A raised CO₂ baseline alone does not require a thoracic impedance change."
   }
 ]

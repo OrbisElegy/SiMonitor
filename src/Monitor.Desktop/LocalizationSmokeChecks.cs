@@ -269,6 +269,8 @@ internal static class LocalizationSmokeChecks
         var templates = DesignPreviewSettings.EcgTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EcgTemplateKey(index), Name: name))
             .Concat(DesignPreviewSettings.RespirationTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.RespirationTemplateKey(index), Name: name)))
             .Concat(DesignPreviewSettings.EjectionTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.EjectionTemplateKey(index), Name: name)))
+            .Concat(DesignPreviewSettings.PlethTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.PlethTemplateKey(index), Name: name)))
+            .Concat(DesignPreviewSettings.CapnogramTemplateIdentities.Select((name, index) => (Key: DesignPreviewSettings.CapnogramTemplateKey(index), Name: name)))
             .Concat(EcgChooserGroups.Ordered.Select(name => (Key: EcgChooserGroups.Key(name), Name: name)))
             .Concat(DesignPreviewSettings.TemplateGroupIdentities.Select(name => (Key: DesignPreviewSettings.TemplateGroupKey(name), Name: name)));
         foreach (var (key, name) in templates)

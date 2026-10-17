@@ -21,8 +21,16 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal static IReadOnlyList<string> EcgTemplateIdentities => EcgChoices;
     internal static IReadOnlyList<string> RespirationTemplateIdentities => RespirationChoices;
     internal static IReadOnlyList<string> EjectionTemplateIdentities => EjectionChoices;
-    private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量"];
-    private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血"];
+    internal static IReadOnlyList<string> PlethTemplateIdentities => PlethChoices;
+    internal static IReadOnlyList<string> CapnogramTemplateIdentities => CapnogramChoices;
+    internal static int RespirationChoiceCount => RespirationChoices.Length;
+    internal static int EjectionChoiceCount => EjectionChoices.Length;
+    internal static int PlethChoiceCount => PlethChoices.Length;
+    internal static int CapnogramChoiceCount => CapnogramChoices.Length;
+    private static readonly string[] RespirationChoices = ["规则呼吸", "潮式呼吸", "间断呼吸示意", "无呼吸分量", "间歇指令通气（IMV）", "额外吸气努力"];
+    private static readonly string[] EjectionChoices = ["随当前节律", "早搏弱射血（需室早）", "2:1漏搏（需窦性参考）", "无有效射血", "过度阻尼（压力波形）"];
+    private static readonly string[] PlethChoices = ["参考脉搏", "低灌注", "运动干扰"];
+    private static readonly string[] CapnogramChoices = ["参考呼气", "食管插管（衰减示意）", "右主支气管插管（双相示意）", "自发通气", "间歇指令通气（IMV）", "阻塞形态", "肺气肿（形态示意）", "肌松消退（箭毒切迹）", "再呼吸", "CO₂吸收剂耗竭", "心源性振荡", "部分机械气道阻塞", "猪尾样（呼气末上翘）"];
     private int _ecgSelection;
     private int _appliedShapeSelection;
     private EcgTContourPlan? _appliedTContour;
@@ -34,6 +42,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal int AppliedRespirationSelection { get; private set; }
     internal TextBlock AppliedRespirationParameters { get; } = Text("");
     internal TextBlock AppliedEjectionParameters { get; } = Text("");
+    internal TextBlock AppliedSignalTemplates { get; } = Text("");
     internal void MarkParametersApplied(ProjectedEcgDemoConfiguration configuration, PhysiologyDemoConfiguration physiology,
         int? ecgSelection = null, int? respirationSelection = null, int? ejectionSelection = null)
     {
@@ -60,6 +69,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             CardiacActivity.Absent or CardiacActivity.AtrialOnly || VentricularDisorganizationReference.IsPattern(physiology.ConductionPattern);
         Localization.Bind(AppliedEjectionParameters, TextBlock.TextProperty, text => text.Format("advanced.appliedEjection",
             text.GetString(EjectionTemplateKey(ejection)), text.GetString(noEjection ? "advanced.noEjection" : "advanced.ejectionFromRhythm")));
+        Localization.Bind(AppliedSignalTemplates, TextBlock.TextProperty, text => text.Format("advanced.appliedSignalTemplates",
+            text.GetString(PlethTemplateKey((int)physiology.PlethShape)), text.GetString(CapnogramTemplateKey((int)physiology.CapnogramIllustration))));
         RefreshShapeSummary();
     }
     private void RefreshShapeSummary()
@@ -181,6 +192,23 @@ internal sealed partial class DesignPreviewSettings : UserControl
         return (baselineMmHg, targetMmHg, plateauCentiMmHg);
     }
     internal int EjectionSelection { get; set; }
+    internal int PlethSelection { get; set; }
+    private int _capnogramSelection;
+    internal int CapnogramSelection
+    {
+        get => _capnogramSelection;
+        set
+        {
+            if (_capnogramSelection == value) { return; }
+            var defaults = SignalTemplatePresets.Capnogram(value);
+            _capnogramSelection = value;
+            Co2Baseline.Value = defaults.Co2BaselineMmHg;
+            Co2Rise.Value = defaults.Co2RiseMilliseconds;
+            Co2Fall.Value = defaults.Co2FallMilliseconds;
+            Co2CustomPlateau.IsEnabled = SignalTemplatePresets.SupportsCustomPlateau(value);
+            if (!Co2CustomPlateau.IsEnabled) { Co2CustomPlateau.IsChecked = false; }
+        }
+    }
     internal Button Apply { get; } = new() { MinWidth = 88, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     internal Button Restart { get; } = new() { MinWidth = 104, MinHeight = 44 };
     internal NumericUpDown ApplyDelaySeconds { get; } = new()
@@ -381,6 +409,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         appliedParameters.Children.Add(AppliedEcgParameters);
         appliedParameters.Children.Add(AppliedRespirationParameters);
         appliedParameters.Children.Add(AppliedEjectionParameters);
+        appliedParameters.Children.Add(AppliedSignalTemplates);
         advancedGroups.Add(("advanced.sectionApplied", appliedParameters));
         advancedGroups.Add(("skin.defibrillator", Defibrillator));
         advancedGroups.Add(("pressureRange.title", PressureTransducers));
@@ -686,8 +715,15 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal void OpenAdvanced(int channel)
     {
+        if (channel == 2)
+        {
+            Tabs.SelectedIndex = 5;
+            SectionPages[5].SelectedSection = 2;
+            return;
+        }
         Tabs.SelectedIndex = 6;
-        SectionPages[6].SelectedSection = channel switch { 0 => 0, 1 => 1, _ => 2 };
+        SectionPages[6].SelectedSection = channel switch { 0 => 0, 1 or 4 => 1, _ => 2 };
+        if (channel == 4) { RespirationGroups.SelectedIndex = 1; }
     }
     private void ResetRespirationDraft()
     {
@@ -745,6 +781,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _co2Shape.Children.Add(LocalizedText("advanced.co2Baseline"));
         _co2Shape.Children.Add(Co2Baseline);
         _co2Shape.Children.Add(Co2CustomPlateau);
+        if (!Co2CustomPlateau.IsEnabled) { _co2Shape.Children.Add(LocalizedText("advanced.templatePlateau")); }
         _co2Shape.Children.Add(LocalizedText("advanced.plateauStart"));
         _co2Shape.Children.Add(Co2PlateauStart);
         Localization.Bind(Co2Baseline, AutomationProperties.NameProperty, "advanced.co2BaselineName");

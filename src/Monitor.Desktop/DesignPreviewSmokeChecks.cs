@@ -975,6 +975,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyIntegratedWindow);
         NativeSmokePartition.Run(DisplayPreferenceSmokeChecks.Verify);
         NativeSmokePartition.Run(GeneratorPreferenceSmokeChecks.Verify);
+        NativeSmokePartition.Run(VerifySignalTemplateProducts);
         NativeSmokePartition.Run(() => { CardiacRateSmokeChecks.Verify(); SettingsApplySmokeChecks.Verify(); });
         NativeSmokePartition.Run(PressureTargetSmokeChecks.Verify);
         NativeSmokePartition.Run(PressureTargetSmokeChecks.VerifyDriftApply);
@@ -1194,7 +1195,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.TemplateSignals.SelectedIndex = 1;
             Capture(window, "ui-preview-respiration.png");
             var respiration = window.Settings.TemplatePages[1];
-            Require(!respiration.Browsable && respiration.CardButtons.Count() == 4 && respiration.Search.Parent is null,
+            Require(!respiration.Browsable && respiration.CardButtons.Count() == DesignPreviewSettings.RespirationChoiceCount && respiration.Search.Parent is null,
                 "short catalogues show every template under group headings");
             Card(respiration, "潮式呼吸").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Require(window.Settings.RespirationSelection == 1 && ReferenceEquals(unchanged, window.Session), "respiration card changes only the draft");
@@ -2753,12 +2754,87 @@ internal static class DesignPreviewSmokeChecks
         }
         finally { window.Close(); }
     }
+    private static void VerifySignalTemplateProducts()
+    {
+        var window = new DesignPreviewWindow { Width = 1440, Height = 940 };
+        window.Show();
+        try
+        {
+            window.SelectPage(2);
+            window.Settings.Tabs.SelectedIndex = 1;
+            Require(window.Settings.TemplatePages.Count == 5 && window.Settings.TemplatePages[3].Title == "generation.pleth" &&
+                window.Settings.TemplatePages[4].Title == "generation.capnogram", "PLETH and EtCO2 append independent signal tabs");
+            var initial = window.Session;
+            window.Settings.TemplateSignals.SelectedIndex = 3;
+            var pleth = window.Settings.TemplatePages[3];
+            pleth.CardButtons.ElementAt(1).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(window.Settings.PlethSelection == 1 && ReferenceEquals(initial, window.Session), "PLETH card only updates draft");
+            Capture(window, "ui-template-pleth.png");
+            window.Settings.TemplateSignals.SelectedIndex = 4;
+            var capnogram = window.Settings.TemplatePages[4];
+            Require(capnogram.CardButtons.Count() == 13 && capnogram.CardButtons.All(button => button.IsEnabled), "every capnogram template has a selectable prebuilt preview");
+            capnogram.CardButtons.ElementAt(8).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Require(window.Settings.CapnogramSelection == 8 && window.Settings.Co2Baseline.Value == 5 &&
+                ReferenceEquals(initial, window.Session), "rebreathing card fills the inspired baseline without applying");
+            Capture(window, "ui-template-capnogram.png");
+            window.RestartSettings();
+            Require(!ReferenceEquals(initial, window.Session) && window.Session.Configuration.Co2BaselineMmHg == 5 &&
+                window.Session.Configuration.PlethShape == Monitor.Simulation.Physiology.PlethIllustration.LowPerfusion &&
+                window.Session.Configuration.CapnogramIllustration == Monitor.Simulation.Physiology.CapnogramIllustration.Rebreathing,
+                "raised-baseline capnogram and PLETH apply together");
+            for (int index = 0; index < DesignPreviewSettings.CapnogramChoiceCount; index++)
+            {
+                window.Settings.CapnogramSelection = index;
+                Require(window.Settings.Co2CustomPlateau.IsEnabled == SignalTemplatePresets.SupportsCustomPlateau(index),
+                    "custom plateau remains available only for shapes that preserve that parameter");
+                var previous = window.Session;
+                window.RestartSettings();
+                Require(!ReferenceEquals(previous, window.Session) && (int)window.Session.Configuration.CapnogramIllustration == index,
+                    "every capnogram default applies through the complete source builder");
+                Require(StylePreviewCatalog.Signal(4, index).SequenceEqual(SignalTemplatePresets.CreatePreview(4, index)),
+                    "capnogram preview samples match its authored source");
+            }
+            window.Settings.CapnogramSelection = 0;
+            Require(window.Settings.Co2Baseline.Value == 0 && window.Settings.Co2Rise.Value == 250 && window.Settings.Co2Fall.Value == 200,
+                "returning to reference restores capnogram defaults");
+            window.Settings.PlethSelection = 0;
+            window.Settings.EjectionSelection = 4;
+            window.RestartSettings();
+            Require(window.Session.Configuration.PressureMeasurement == Monitor.Simulation.Physiology.PressureMeasurementIllustration.Overdamped &&
+                window.Session.Configuration.VentricularMechanicalEnabled, "overdamping preserves mechanical ejection");
+            window.Settings.TemplateSignals.SelectedIndex = 2;
+            Capture(window, "ui-template-overdamped.png");
+            window.Settings.EjectionSelection = 0;
+            foreach (var pair in new[] { (Respiration: 4, Capnogram: 4), (Respiration: 5, Capnogram: 7) })
+            {
+                window.Settings.RespirationSelection = pair.Respiration;
+                window.Settings.CapnogramSelection = pair.Capnogram;
+                var previous = window.Session;
+                window.RestartSettings();
+                Require(!ReferenceEquals(previous, window.Session) && (int)window.Session.Configuration.RespirationIllustration == pair.Respiration - 3,
+                    "paired breathing effort and gas templates apply on their shared timeline");
+            }
+            window.Settings.TemplateSignals.SelectedIndex = 1;
+            Capture(window, "ui-template-resp-effort.png");
+            window.Settings.RespirationSelection = 0;
+            window.Settings.CapnogramSelection = 1;
+            window.RestartSettings();
+            for (int i = 0; i < 100; i++) { window.Session.Advance(200_000_000); }
+            Require(window.Session.Samples(4, 0, 5_000_000_000).Any(s => s.Value > 5) &&
+                window.Session.Samples(4, 18_000_000_000, 20_000_000_000).All(s => s.Value < 1),
+                "esophageal restart preserves visible washout before expired CO2 disappears");
+            window.SelectPage(0);
+            Capture(window, "ui-template-esophageal-live.png");
+        }
+        finally { window.Close(); }
+    }
+
     private static void VerifyPrebuiltStyles()
     {
         int count = 0;
         for (int ecg = 0; ecg < DesignPreviewSettings.EcgChoiceCount; ecg++)
             for (int resp = 0; resp < 4; resp++)
-                for (int ejection = 0; ejection < 4; ejection++)
+                for (int ejection = 0; ejection < DesignPreviewSettings.EjectionChoiceCount; ejection++)
                 {
                     bool valid = true;
                     try { DesignPreviewWindow.ResolveStyle(ecg, resp, ejection); } catch (ArgumentException) { valid = false; }

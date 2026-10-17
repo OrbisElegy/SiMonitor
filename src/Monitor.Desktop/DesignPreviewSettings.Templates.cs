@@ -23,12 +23,16 @@ internal sealed partial class DesignPreviewSettings
     internal static string EcgTemplateKey(int index) => $"ecgTemplate.t{index:D3}";
     internal static string RespirationTemplateKey(int index) => $"respirationTemplate.t{index}";
     internal static string EjectionTemplateKey(int index) => $"ejectionTemplate.t{index}";
+    internal static string PlethTemplateKey(int index) => $"plethTemplate.t{index}";
+    internal static string CapnogramTemplateKey(int index) => $"capnogramTemplate.t{index}";
     private static readonly Dictionary<string, string> TemplateGroupKeys = new()
     {
         ["规则呼吸"] = "respirationTemplate.groupRegular",
         ["异常呼吸示意"] = "respirationTemplate.groupAbnormal",
         ["节律相关"] = "ejectionTemplate.groupRhythm",
         ["异常射血示意"] = "ejectionTemplate.groupAbnormal",
+        ["脉搏信号"] = "plethTemplate.groupSignal",
+        ["呼气形态"] = "capnogramTemplate.groupShape",
     };
     internal static IEnumerable<string> TemplateGroupIdentities => TemplateGroupKeys.Keys;
     internal static string TemplateGroupKey(string group) =>
@@ -42,6 +46,10 @@ internal sealed partial class DesignPreviewSettings
             () => RespirationSelection, x => RespirationSelection = x));
         _templatePages.Add(new(this, "generation.ejection", 3, EjectionChoices, EjectionTemplateKey, i => i == 0 ? "节律相关" : "异常射血示意", null,
             () => EjectionSelection, x => EjectionSelection = x));
+        _templatePages.Add(new(this, "generation.pleth", 2, PlethChoices, PlethTemplateKey, _ => "脉搏信号", null,
+            () => PlethSelection, x => PlethSelection = x));
+        _templatePages.Add(new(this, "generation.capnogram", 4, CapnogramChoices, CapnogramTemplateKey, _ => "呼气形态", null,
+            () => CapnogramSelection, x => CapnogramSelection = x));
         TemplateSignals.ItemsSource = _templatePages.Select(page =>
         {
             var tab = new TabItem
@@ -293,9 +301,14 @@ internal sealed partial class DesignPreviewSettings
             try
             {
                 var owner = _owner;
-                var source = owner.Preview(_channel == 0 ? index : owner.EcgSelection, _channel == 1 ? index : owner.RespirationSelection,
-                    _channel == 3 ? index : owner.EjectionSelection);
-                panel.Children.Add(owner.Thumbnail(() => source, _channel, _channel == 1 ? index : null));
+                if (_channel is 2 or 4)
+                { panel.Children.Add(new SignalTemplateThumbnail(_channel, index, owner.Localization)); }
+                else
+                {
+                    var source = owner.Preview(_channel == 0 ? index : owner.EcgSelection, _channel == 1 ? index : owner.RespirationSelection,
+                        _channel == 3 ? index : owner.EjectionSelection);
+                    panel.Children.Add(owner.Thumbnail(() => source, _channel, _channel == 1 ? index : null));
+                }
                 candidate.Click += (_, _) =>
                 {
                     _write(index);

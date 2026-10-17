@@ -15,20 +15,27 @@ internal sealed record StylePreviewData((long TimeNs, double Value)[] Ecg, (long
 internal sealed class StylePreviewCatalog
 {
     internal static EcgLead PreviewLead(int ecg) => ecg switch { 180 => EcgLead.I, >= 125 and <= 134 => EcgLead.I, >= 135 and <= 144 => EcgLead.V2, >= 145 and <= 154 => EcgLead.V4, >= 155 and <= 164 => EcgLead.V3, _ => EcgLead.II };
-    internal const int CombinationCount = 1456;
+    internal const int CombinationCount = 2180;
     internal static long DurationNs(int ecg) => ecg is >= 165 and <= 179 ? 8_000_000_000 : ecg is >= 66 and <= 71 ? 12_000_000_000 : ecg is 48 or 49 ? 12_800_000_000 : ecg == 50 ? 8_000_000_000 : ecg is 51 or 52 ? 6_400_000_000 : ecg == 44 ? 3_200_000_000 : ecg == 45 ? 4_800_000_000 : ecg == 46 ? 8_000_000_000 : ecg == 47 ? 6_000_000_000 : ecg is 4 or 40 or 41 ? 6_200_000_000 : ecg is 5 or 42 or 43 ? 6_400_000_000 : ecg == 39 ? 3_600_000_000 : ecg is 27 or 28 or 34 or 35 ? 12_000_000_000 : ecg is >= 10 and <= 19 ? 5_000_000_000 : 3_000_000_000;
     private const string FileName = "style-previews.bin";
     private readonly Dictionary<(int, int, int), StylePreviewData> _styles = [];
-    private readonly (long TimeNs, double Value)[][] _respiration = new (long, double)[4][];
+    private readonly (long TimeNs, double Value)[][] _respiration = new (long, double)[DesignPreviewSettings.RespirationChoiceCount][];
+    private readonly (long TimeNs, double Value)[][] _pleth = new (long, double)[DesignPreviewSettings.PlethChoiceCount][];
+    private readonly (long TimeNs, double Value)[][] _capnogram = new (long, double)[DesignPreviewSettings.CapnogramChoiceCount][];
     private static readonly Lazy<StylePreviewCatalog> Current = new(() => Load(Path.Combine(AppContext.BaseDirectory, FileName)));
     internal static StylePreviewData Get(int ecg, int respiration, int ejection) =>
-        Current.Value._styles.TryGetValue((ecg, respiration, ejection), out var data) ? data : throw new ArgumentException("Preview.IncompatibleStyle");
+        Current.Value._styles.TryGetValue((ecg, respiration is >= 4 and < 6 ? 0 : respiration, ejection), out var data) ? data : throw new ArgumentException("Preview.IncompatibleStyle");
     internal static (long TimeNs, double Value)[] Respiration(int index) =>
-        index is >= 0 and < 4 ? Current.Value._respiration[index] : throw new ArgumentOutOfRangeException(nameof(index));
+        index >= 0 && index < DesignPreviewSettings.RespirationChoiceCount ? Current.Value._respiration[index] : throw new ArgumentOutOfRangeException(nameof(index));
+    internal static (long TimeNs, double Value)[] Signal(int channel, int index)
+    {
+        var samples = channel switch { 2 => Current.Value._pleth, 4 => Current.Value._capnogram, _ => throw new ArgumentOutOfRangeException(nameof(channel)) };
+        return index >= 0 && index < samples.Length ? samples[index] : throw new ArgumentOutOfRangeException(nameof(index));
+    }
     private static StylePreviewCatalog Load(string path)
     {
         using var file = File.OpenRead(path); using var reader = new BinaryReader(file, Encoding.UTF8);
-        if (reader.ReadInt32() != 0x32565053 || reader.ReadInt32() != CombinationCount) { throw new InvalidDataException("Preview.InvalidCatalog"); }
+        if (reader.ReadInt32() != 0x33565053 || reader.ReadInt32() != CombinationCount) { throw new InvalidDataException("Preview.InvalidCatalog"); }
         var catalog = new StylePreviewCatalog();
         (long, double)[] ReadSamples()
         {
@@ -48,11 +55,13 @@ internal sealed class StylePreviewCatalog
             var key = (reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
             var lead = (EcgLead)reader.ReadInt32();
             if (!Enum.IsDefined(lead) || lead != PreviewLead(key.Item1)) { throw new InvalidDataException("Preview.InvalidLead"); }
-            if ((key.Item1 < 0 || key.Item1 >= DesignPreviewSettings.EcgChoiceCount) || key.Item2 is < 0 or > 3 || key.Item3 is < 0 or > 3 ||
+            if ((key.Item1 < 0 || key.Item1 >= DesignPreviewSettings.EcgChoiceCount) || key.Item2 is < 0 or > 3 || key.Item3 < 0 || key.Item3 >= DesignPreviewSettings.EjectionChoiceCount ||
                 !catalog._styles.TryAdd(key, new(ReadSamples(), ReadSamples(), lead)))
             { throw new InvalidDataException("Preview.InvalidKey"); }
         }
-        for (int i = 0; i < 4; i++) { catalog._respiration[i] = ReadSamples(); }
+        for (int i = 0; i < catalog._respiration.Length; i++) { catalog._respiration[i] = ReadSamples(); }
+        for (int i = 0; i < catalog._pleth.Length; i++) { catalog._pleth[i] = ReadSamples(); }
+        for (int i = 0; i < catalog._capnogram.Length; i++) { catalog._capnogram[i] = ReadSamples(); }
         if (file.Position != file.Length) { throw new InvalidDataException("Preview.TrailingData"); }
         return catalog;
     }
@@ -87,7 +96,7 @@ internal sealed class StylePreviewCatalog
         var keys = new List<(int Ecg, int Resp, int Ejection)>();
         for (int ecg = 0; ecg < DesignPreviewSettings.EcgChoiceCount; ecg++)
             for (int resp = 0; resp < 4; resp++)
-                for (int ejection = 0; ejection < 4; ejection++)
+                for (int ejection = 0; ejection < DesignPreviewSettings.EjectionChoiceCount; ejection++)
                 {
                     try { DesignPreviewWindow.ResolveStyle(ecg, resp, ejection); keys.Add((ecg, resp, ejection)); }
                     catch (ArgumentException) { /* Intentionally unavailable style combination. */ }
@@ -105,7 +114,7 @@ internal sealed class StylePreviewCatalog
         string temporary = destination + ".tmp";
         using (var writer = new BinaryWriter(File.Create(temporary), Encoding.UTF8))
         {
-            writer.Write(0x32565053); writer.Write(keys.Count);
+            writer.Write(0x33565053); writer.Write(keys.Count);
             void WriteSamples((long TimeNs, double Value)[] samples)
             {
                 writer.Write(samples.Length);
@@ -117,11 +126,13 @@ internal sealed class StylePreviewCatalog
                 writer.Write((int)data[i].Lead);
                 WriteSamples(data[i].Ecg); WriteSamples(data[i].Abp);
             }
-            for (int i = 0; i < 4; i++) { WriteSamples(DesignPreviewWindow.CreateRespirationPreview(i)); }
+            for (int i = 0; i < DesignPreviewSettings.RespirationChoiceCount; i++) { WriteSamples(DesignPreviewWindow.CreateRespirationPreview(i)); }
+            for (int i = 0; i < DesignPreviewSettings.PlethChoiceCount; i++) { WriteSamples(SignalTemplatePresets.CreatePreview(2, i)); }
+            for (int i = 0; i < DesignPreviewSettings.CapnogramChoiceCount; i++) { WriteSamples(SignalTemplatePresets.CreatePreview(4, i)); }
         }
         _ = Load(temporary); // Refuse incomplete/malformed output before publishing.
         File.Move(temporary, destination, true);
-        Console.WriteLine($"Generated {keys.Count} style combinations and 4 full respiration previews: {destination}");
+        Console.WriteLine($"Generated {keys.Count} style combinations and independent RESP, PLETH and CO2 previews: {destination}");
         return 0;
     }
 }

@@ -359,7 +359,11 @@ Auto NIBP 弹出自动开关和 1/2/3/5/10/15 分钟间隔，默认 5 分钟。
 
 `style-previews.bin` 是由 [StylePreviewCatalog](../../src/Monitor.Desktop/StylePreviewCatalog.cs) 生成、从 `AppContext.BaseDirectory` 加载的内部构建资源，不是导入病例或公共网络格式。
 
-它用 .NET `BinaryWriter` 的小端数值顺序写入 magic `0x32565053`、组合数，再写各项 `(ecg, respiration, ejection, lead)`、ECG 与 ABP 样本数组，最后写呼吸预览数组。每组样本为 `Int32 count` 后接 `(Int64 timeNs, Double value)`；时间严格递增、值必须有限。读取器检查 magic、固定组合数量、键范围与唯一性、预期导联、样本数量及尾随数据。
+它用 .NET `BinaryWriter` 的小端数值顺序写入 magic `0x33565053`、组合数，再写各项 `(ecg, respiration, ejection, lead)`、ECG 与 ABP 样本数组，最后依次写 RESP、PLETH、CO₂ 的独立预览数组。每组样本为 `Int32 count` 后接 `(Int64 timeNs, Double value)`；时间严格递增、值必须有限。读取器检查 magic、固定组合数量、键范围与唯一性、预期导联、样本数量及尾随数据。旧目录不能直接加载，需由构建入口重新生成。
+
+模板页按 ECG、RESP、射血、PLETH、EtCO₂ 分页；选择卡片仅修改草稿，应用后才改变实时源。
+独立的 PLETH／CO₂ 卡片使用同一纵轴范围，以免自动缩放隐藏低灌注或非零吸入基线。
+食管插管初启和从头开始时保留最初的洗脱过程，不跳过启动波形；运行中启用的有限序列从激活后开始。
 
 生成时先写 `OUTPUT_PATH.tmp`、重新加载校验，再替换目标文件。构建自动生成目录；产品构建要求 `UsePrebuiltStylePreviews=true` 和存在的 `StylePreviewBinary`，跨平台发布使用宿主生成的目录，不执行目标平台程序。
 

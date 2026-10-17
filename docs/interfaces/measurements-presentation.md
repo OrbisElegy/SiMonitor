@@ -151,6 +151,23 @@ static LiveWaveformMeasurements Restore(LiveWaveformMeasurements.Checkpoint chec
 [PressurePulseTracker](../../src/Monitor.Application/Measurements/PressurePulseTracker.cs) 定义
 `PulsePressureReading` 的收缩压、舒张压、最后峰值时刻和其独立状态。
 
+### EtCO₂ 与 CO₂ 呼吸率
+
+`CapnographyMeasurement` 只使用采集样本，不读取模板名称、呼吸计划或目标 EtCO₂。
+吸气基线由稳定的低段更新；呼吸门限相对于该基线计算，因此再呼吸的非零基线
+仍可产生有效呼吸。恒定高值缺少完整周期，不产生呼气事件或刷新数值。
+
+呼气经下降和低段确认后，测量器从末次下降段寻找反向平台与更陡吸气下降的交界，
+有明确证据时使用该处的终末 CO₂，避免将早期较高峰值当成 EtCO₂；否则保留过滤后
+的呼气峰值。直线交界使用局部斜率求交；圆滑交界结合末次下降的局部加速与此前
+观测到的平台斜率回推，避免依赖源波形具有折角。
+`MeasuredExpiration.PeakTimeNs` 仍表示全周期峰时，新增的 `EndTidalTimeNs`
+表示数值对应的终末估计时刻，`ConfirmedAtNs` 表示后续确认时刻，三者不可混用。
+平台切迹与低幅振荡需要通过同一呼吸确认条件，
+不能仅因局部下降就另计一次呼吸。食管插管示意的残余气体消失后，旧结果按原有
+新鲜度窗口过期，不以模板目标补值。检测所需的有界历史随 checkpoint 一同恢复。
+形态与测量边界的依据见[非 ECG 波形调研](../research/physiology/non-ecg-waveform-templates.md)。
+
 ### 光学血氧与脉率
 
 [OpticalSaturationMeasurement](../../src/Monitor.Application/Measurements/OpticalSaturationMeasurement.cs)

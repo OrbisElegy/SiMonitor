@@ -42,6 +42,7 @@
 - [独立氧合模型：原型与参数验证](research/oxygenation/oxygenation-prototype.md)
 - [逐搏充盈与房室时序](research/physiology/cardiac-filling-perfusion.md)
 - [潮式呼吸与呼出 CO₂ 的单向教学响应](research/physiology/cheyne-stokes-co2-coupling.md)
+- [压力、PLETH、EtCO₂ 与 RESP 模板依据](research/physiology/non-ecg-waveform-templates.md)
 - [长 RR 间期 Pleth 衰减调研](research/physiology/pleth-runoff-research.md)
 - [SVT 充盈限制与血压修正](research/physiology/svt-perfusion.md)
 - [机械射血停止与恢复后的血管压力：调研与实现方案](research/physiology/vascular-pressure-runoff-research.md)

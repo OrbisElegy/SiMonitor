@@ -40,6 +40,9 @@ establish Windows device behavior or release acceptance.
 - [Long-RR Pleth runoff](../research/physiology/pleth-runoff-research.md) explains a bounded pulse tail
   that avoids premature zero output during long RR intervals. It does not model
   a complete optical sensor or determine numeric SpO₂.
+- [Pressure, PLETH, capnogram and RESP templates](../research/physiology/non-ecg-waveform-templates.md)
+  documents waveform evidence, corrected terminology and the distinction between
+  gas measurements, chest movement and pressure/optical artifacts.
 - [SVT perfusion](../research/physiology/svt-perfusion.md) documents the author-selected filling
   saturation factor for the fixed 200 bpm SVT presets. It corrects excessive
   pressure from an unchanged per-beat input; it is not a patient-calibrated model.

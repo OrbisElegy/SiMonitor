@@ -381,6 +381,7 @@ public sealed record CapnographyResult(CapnographyReading EndTidalCentiMmHg, Cap
 }
 public sealed record MeasuredExpiration(long RiseTimeNs, long PeakTimeNs, long ConfirmedAtNs, int EndTidalCentiMmHg)
 {
+    public long EndTidalTimeNs { get; init; }
 }
 public sealed class CapnographyMeasurement
 {
@@ -1744,6 +1745,8 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 ```csharp
 public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Respiration, int Ejection, string Seed, IReadOnlyDictionary<string, decimal?> Numbers, IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
 {
+    public int Pleth { get; init; }
+    public int Capnogram { get; init; }
     public PressureTransducerLimits PressureTransducers { get; init; }
     public IReadOnlyDictionary<string, ElectricalConversionSettings> ElectricalConversions { get; init; }
     public IReadOnlyDictionary<string, ElectricalConversionSettings> AedElectricalConversions { get; init; }

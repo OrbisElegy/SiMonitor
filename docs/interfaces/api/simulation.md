@@ -577,6 +577,10 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public bool HyperkalemiaAbsentP { get; init; }
     public bool HyperkalemiaFusion { get; init; }
     public int AbpPulsePermille { get; init; }
+    public PressureMeasurementIllustration PressureMeasurement { get; init; }
+    public PlethIllustration PlethShape { get; init; }
+    public CapnogramIllustration CapnogramIllustration { get; init; }
+    public RespirationIllustration RespirationIllustration { get; init; }
     public int PaPulsePermille { get; init; }
     public int CvpBaselineCentiMmHg { get; init; }
     public VascularPressureTarget? AbpTarget { get; init; }
@@ -610,6 +614,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public static PhysiologyIllustrationConfiguration Disorganized(AvConductionPattern pattern);
     public static PhysiologyIllustrationConfiguration Fibrillation(bool fine = false);
     public CapnogramPlan ResolveCapnogram();
+    public RespirationPlan ResolveRespiration();
     public RegularPhysiologyPlan ResolvePlan();
 }
 ```
@@ -897,7 +902,7 @@ public sealed class SampledArterialOxygenation : IArterialOxygenationSource
 ```csharp
 public sealed record ArterialPulsePlan(long TransitDelayNs, long DurationNs, int BaselineMmHg, int PulseHeightMmHg)
 {
-    public const string EvidenceId = "InfirmaryArterialPulseDraft@1";
+    public const string EvidenceId = "AuthoredArterialPulse@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
 ```
@@ -1066,6 +1071,29 @@ public static class CalciumRepolarizationReference
 }
 ```
 
+## Physiology/CapnogramIllustration.cs
+
+源码：[CapnogramIllustration.cs](../../../src/Monitor.Simulation/Physiology/CapnogramIllustration.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public enum CapnogramIllustration
+{
+    Reference,
+    EsophagealIntubation,
+    RightMainstemIntubation,
+    SpontaneousVentilation,
+    IntermittentMandatoryVentilation,
+    Obstructive,
+    Emphysema,
+    CurareCleft,
+    Rebreathing,
+    ExhaustedAbsorber,
+    CardiogenicOscillations,
+    MechanicalObstruction,
+    Pigtail
+}
+```
+
 ## Physiology/CapnogramPlan.cs
 
 源码：[CapnogramPlan.cs](../../../src/Monitor.Simulation/Physiology/CapnogramPlan.cs) · 命名空间：`Monitor.Simulation.Physiology`
@@ -1073,8 +1101,9 @@ public static class CalciumRepolarizationReference
 ```csharp
 public sealed record CapnogramPlan(long DeadSpaceNs, long RiseNs, long InspiratoryFallNs, int BaselineMmHg, int EndExpiratoryMmHg, int? PlateauStartCentiMmHg = null, long TransportDelayNs = 0, long DispersionStepNs = 0)
 {
+    public CapnogramIllustration Illustration { get; init; }
     public SeededExpirationPressure? SeededPressure { get; init; }
-    public const string EvidenceId = "InfirmaryCapnogramDraft@1";
+    public const string EvidenceId = "AuthoredCapnogram@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
 ```
@@ -1123,7 +1152,7 @@ public sealed record CvpWaveComponent(long DelayNs, long DurationNs, int Magnitu
 }
 public sealed record CentralVenousPressurePlan(int BaselineCentiMmHg, CvpWaveComponent A, CvpWaveComponent C, CvpWaveComponent X, CvpWaveComponent V, CvpWaveComponent Y, int RespiratoryDeltaCentiMmHg, int MaximumComponentOverlap = 1)
 {
-    public const string EvidenceId = "InfirmaryCvpComponentsDraft@2";
+    public const string EvidenceId = "AuthoredCvpComponents@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
 ```
@@ -1607,6 +1636,11 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
 {
     public RegularPhysiologyPlan? AfTiming { get; init; }
     public SeededCardiacRate? CycleDurationRate { get; init; }
+    public IReadOnlyList<int>? InspirationCycleGainsPermille { get; init; }
+    public ulong ExpirationCycleOrigin { get; init; }
+    public IReadOnlyList<int>? ExpirationActivationGainsPermille { get; init; }
+    public long CardiogenicRippleDurationNs { get; init; }
+    public int CardiogenicRipplePermille { get; init; }
 }
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands, IReadOnlyList<PhysiologyCycleEvent> Events)
 {
@@ -1973,9 +2007,12 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 }
 public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
+    public PressureMeasurementIllustration PressureMeasurement { get; init; }
+    public PlethIllustration PlethShape { get; init; }
 }
 public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)
 {
+    public IReadOnlyList<SensorWaveformIllustration> SensorIllustrations { get; init; }
 }
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels, WaveformBlockAssemblerState Assembler)
 {
@@ -2103,7 +2140,7 @@ public static class PrematureVentricularReference
 ```csharp
 public sealed record PulmonaryArteryPulsePlan(long TransitDelayNs, long DurationNs, int BaselineMmHg, int PulseHeightMmHg)
 {
-    public const string EvidenceId = "InfirmaryPulmonaryArteryDraft@1";
+    public const string EvidenceId = "AuthoredPulmonaryArteryPulse@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
 ```
@@ -2267,6 +2304,19 @@ public sealed class RegularPhysiologyTimeline
 }
 ```
 
+## Physiology/RespirationIllustration.cs
+
+源码：[RespirationIllustration.cs](../../../src/Monitor.Simulation/Physiology/RespirationIllustration.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public enum RespirationIllustration
+{
+    Reference,
+    IntermittentMandatoryVentilation,
+    InspiratoryEffort
+}
+```
+
 ## Physiology/RespirationPlan.cs
 
 源码：[RespirationPlan.cs](../../../src/Monitor.Simulation/Physiology/RespirationPlan.cs) · 命名空间：`Monitor.Simulation.Physiology`
@@ -2274,6 +2324,9 @@ public sealed class RegularPhysiologyTimeline
 ```csharp
 public sealed record RespirationPlan(int AmplitudeCounts, int CardiacArtifactCounts = 0)
 {
+    public RespirationIllustration Illustration { get; init; }
+    public long? InspiratoryEffortDelayNs { get; init; }
+    public long? InspiratoryEffortDurationNs { get; init; }
     public const string EvidenceId = "RespirationIllustrationDraft@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
@@ -2361,6 +2414,29 @@ public sealed class SeededVascularVariation : IEquatable<SeededVascularVariation
     public override bool Equals(object? obj);
     public override int GetHashCode();
     public int GainPermille(long simTimeNs);
+}
+```
+
+## Physiology/SensorWaveformIllustrations.cs
+
+源码：[SensorWaveformIllustrations.cs](../../../src/Monitor.Simulation/Physiology/SensorWaveformIllustrations.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public enum PressureMeasurementIllustration
+{
+    Reference,
+    Overdamped
+}
+public enum PlethIllustration
+{
+    Reference,
+    LowPerfusion,
+    MotionArtifact
+}
+public sealed record SensorWaveformIllustration(long FromSimTimeNs, PressureMeasurementIllustration PressureMeasurement = PressureMeasurementIllustration.Reference, PlethIllustration PlethShape = PlethIllustration.Reference)
+{
+    public int? PlethTransitionFromGainPpm { get; init; }
+    public int PlethTransitionFromMotionPpm { get; init; }
 }
 ```
 
@@ -2477,9 +2553,10 @@ public enum VascularPressureMorphologyKind
     Arterial,
     PulmonaryArtery
 }
-public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKind Kind, long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@2", int MaximumPulseOverlap = 1)
+public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKind Kind, long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@3", int MaximumPulseOverlap = 1)
 {
-    public const string EvidenceId = "VascularPressureMorphologyRatio@2";
+    public const string EvidenceId = "VascularPressureMorphologyRatio@3";
+    public const string LegacyEvidenceId = "VascularPressureMorphologyRatio@2";
 }
 ```
 

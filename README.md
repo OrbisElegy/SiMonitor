@@ -16,6 +16,8 @@ D3 参考皮肤固定三行，其他皮肤可独立配置波形行数。通用�
 
 技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
+压力、PLETH、EtCO₂ 及对应 RESP 模板的形态依据与术语见[非 ECG 波形调研](docs/research/physiology/non-ecg-waveform-templates.md)。
+
 
 ## 运行截图
 

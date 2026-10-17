@@ -371,6 +371,10 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 其余报警阈值倍率随各 MeasurementLimits 描述定义，不能把存储整数当 UI 显示单位。
 
 版本 13 增加 Sound.OutputDeviceId（null 表示系统默认）和 Muted（默认 false）；旧版本缺省时使用这两个默认值。
+
+`Generator.Pleth` 与 `Generator.Capnogram` 为可选的独立模板索引，缺省为 0（参考模板），
+当前范围分别为 0–2 和 0–12；`Respiration` 扩至 0–5，`Ejection` 扩至 0–4。
+旧模板索引含义不变，旧 JSON 省略新字段时保留原波形；越界选择在加载时拒绝。
 设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
 
 版本 14 增加 Generator.ElectricalConversions，按稳定 ECG 模板标识保存允许转复与独立的单／双相能量阈值。旧文件缺省为空映射；切换到窦律不删除原模板配置。见[电击转复接口](electrical-conversion.md)。

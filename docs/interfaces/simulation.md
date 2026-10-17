@@ -268,6 +268,22 @@ static PhysiologyTransportSource PhysiologyIllustrationSource.CreateTransport(
 三个压力零偏范围为 ±1000 centi-mmHg，CVP 基线为 -500–3000，ABP/PA 脉幅倍率为 500–2000 permille。
 零偏在真实源之后、wire 量化之前加入；超出 Int16 时整批拒绝，不截断压力。
 
+非 ECG 模板由四个显式配置字段选择：`PressureMeasurement`、`PlethShape`、
+`CapnogramIllustration` 和 `RespirationIllustration`，缺省均为 `Reference`。
+`Overdamped` 仅平滑 ABP 测量轨迹，`LowPerfusion` 仅降低 PLETH 脉动分量，
+`MotionArtifact` 在 PLETH 叠加确定性伪差并传播质量标记；不改变实际机械事件或循环输送。
+组状态的 `SensorIllustrations` 保存有界的采样边界历史，以保留切换前尚未组块的样本。
+运行中切换 PLETH 模板时，脉动增益与运动伪差权重在 1 秒内按模拟时间平滑过渡，
+脉搏时序不变；初次启动或从头开始直接使用所选模板。历史项的
+`PlethTransitionFromGainPpm`／`PlethTransitionFromMotionPpm` 保存切换点的实际权重，
+1000000 表示单位权重，前者为 null 表示无过渡。快速反向切换从当前权重继续，
+重复选择同一目标不重启过渡；恢复和实时输出使用相同权重求值。
+进入运动干扰立即标记差信号，退出时待残余运动权重归零才解除该标记。
+`CapnogramPlan.Illustration` 选择气体形态，`RespirationPlan.Illustration` 独立选择胸廓形态；
+IMV 与额外吸气努力可配对，其他异常 CO₂ 模板不自动清空或改变 RESP。
+食管插管使用有限呼气序列，新启用时从下一口呼气开始衰减，结束后不循环回升。
+模板的医学依据、终末值与峰值区别见[非 ECG 波形调研](../research/physiology/non-ecg-waveform-templates.md)。
+
 [RegularPhysiologyTimeline](../../src/Monitor.Simulation/Physiology/RegularPhysiologyTimeline.cs)
 提供 `Start(RegularPhysiologyPlan)`、`Restore(RegularPhysiologyState)`、`CaptureState()` 和
 `AdvanceBefore(long exclusiveSimTimeNs, int maximumEvents, CancellationToken cancellationToken = default)`。
@@ -307,6 +323,8 @@ R-on-T 保留 500/200 ms 联律间期；房扑通过 `EventWaveformBand.CycleDur
 最多 32 个 band、4096 个事件；LUT 长度 4–65536 且为二次幂、首项为零；事件身份唯一并按时间/种类排序。
 `TriggerCycleLimit` 为排除端点，只阻止新触发，已触发尾部仍完成；`TriggerCycleResume` 沿原周期索引恢复。
 超出 band 支撑区间贡献为零，叠加超出 Int16 对应 Q32 范围会抛 `EventWaveform.AmplitudeOverflow`。
+状态保存每个 band 的实际 `TableQ32` 与相位定义；恢复直接使用快照中的表，
+不会按当前默认模板重新生成，因此形态生成器更新不改变已有事件波段快照的输出。
 
 [PhysiologySignalGenerator](../../src/Monitor.Simulation/Physiology/PhysiologySignalGenerator.cs)
 将事件定义采样为 `PhysiologySignalSample(Tick, ValueQ32, NormalizedValue)`；主要签名为：
@@ -374,6 +392,21 @@ group 的 `Start` 在通用身份/预算参数后接 `RegularPhysiologyPlan phys
 [PlethRunoffSource.cs](../../src/Monitor.Simulation/Physiology/PlethRunoffSource.cs)、
 [RespirationPlan.cs](../../src/Monitor.Simulation/Physiology/RespirationPlan.cs)、
 [CapnogramPlan.cs](../../src/Monitor.Simulation/Physiology/CapnogramPlan.cs)。
+
+默认 CO₂、ABP、PA 与 CVP 使用项目自制的平滑形态，源头以局部保形三次 Hermite
+曲线生成 Q32 LUT。CO₂ 按相位对应的实际纳秒时间计算切线，保留可配置的死腔、
+上升、平台与吸气下降时间；局部平段和极值受约束，避免过冲。
+采样率仍为 CO₂ 100 Hz、压力 125 Hz，采集与测量消费同一源样本；
+界面插点不改变源波形或测量输入。心搏／呼吸事件、传播延迟、压力 RC 储库、
+目标压力求解和测量／恢复路径沿用原接口。CVP 的 a、v 波及房扑心房分量采用新曲线；
+c、x、y 与呼吸分量保留原有 `CvpComponentTables` 项目自制 smoothstep 表及呼吸相位映射。
+PLETH 沿用既有项目自制形态，ECG 不在本次形态迁移范围内。
+
+`VascularPressureMorphologyPlan.ModelId` 的默认值及 `EvidenceId` 为
+`VascularPressureMorphologyRatio@3`，`LegacyEvidenceId` 保留 `VascularPressureMorphologyRatio@2`。
+新建默认压力源使用 `@3` 形态；显式 `@2` 定义及旧 checkpoint 继续按旧形态求值，
+不能只改版本字符串而重新解释已保存的压力状态。
+
 早搏、AF、传导房扑、充盈和固定节律灌注通过各自 `Supports` / `IsPattern` / `GainPermille` 或预设选取；
 不应由显示波幅反推出搏出量。形态参考类通常提供 `CreateLeadIIBands`、`CreateElectrodes` 或专用 plan，
 全部具体重载以声明清单和对应 `*Reference.cs` / `*Plan.cs` 为准，生成的 `*Tables.cs` 保留其来源。

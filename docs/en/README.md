@@ -20,6 +20,9 @@ See the [interface reference](../interfaces/README.md) (Chinese) for current mod
 
 ECG event integration and capability limits: [enhanced monitoring interface](../interfaces/alarms/ecg-monitoring.md) and [reference notes](../research/physiology/ecg-monitoring.md).
 
+Pressure, PLETH, EtCO₂ and corresponding RESP template evidence and terminology:
+[non-ECG waveform research](../research/physiology/non-ecg-waveform-templates.md).
+
 ## Screenshots
 
 **Main monitor view**

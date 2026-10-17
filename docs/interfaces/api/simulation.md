@@ -1629,6 +1629,9 @@ public enum AtrialFibrillationBeatSelection
 public readonly record struct EventWaveformPhasePoint(long OffsetNs, int TableIndex)
 {
 }
+public sealed record RespiratoryCycleShape(long DelayNs, long DurationNs, IReadOnlyList<long> TableQ32, IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null)
+{
+}
 public readonly record struct VentricularCyclePattern(int Length, ulong IncludedSlots)
 {
 }
@@ -1637,6 +1640,7 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
     public RegularPhysiologyPlan? AfTiming { get; init; }
     public SeededCardiacRate? CycleDurationRate { get; init; }
     public IReadOnlyList<int>? InspirationCycleGainsPermille { get; init; }
+    public IReadOnlyList<RespiratoryCycleShape>? RespiratoryCycleShapes { get; init; }
     public ulong ExpirationCycleOrigin { get; init; }
     public IReadOnlyList<int>? ExpirationActivationGainsPermille { get; init; }
     public long CardiogenicRippleDurationNs { get; init; }
@@ -2341,7 +2345,8 @@ public enum RespiratoryPattern
 {
     Regular,
     CheyneStokesIllustration,
-    IntermittentIllustration
+    IntermittentIllustration,
+    SpontaneousIllustration
 }
 ```
 

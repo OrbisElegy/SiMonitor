@@ -325,6 +325,10 @@ R-on-T 保留 500/200 ms 联律间期；房扑通过 `EventWaveformBand.CycleDur
 超出 band 支撑区间贡献为零，叠加超出 Int16 对应 Q32 范围会抛 `EventWaveform.AmplitudeOverflow`。
 状态保存每个 band 的实际 `TableQ32` 与相位定义；恢复直接使用快照中的表，
 不会按当前默认模板重新生成，因此形态生成器更新不改变已有事件波段快照的输出。
+`RespiratoryCycleShapes` 可为吸气或呼气触发的 band 保存 32 项
+`RespiratoryCycleShape(DelayNs, DurationNs, TableQ32, PhasePoints)`，按原始呼吸序号选取。
+外层 `DelayNs`／`DurationNs` 必须包住全部逐次支撑区间，供历史回看与接续尾部使用；
+每项的表、时长和相位按普通 band 的规则校验并复制。缺省 null 保留原单表路径。
 
 [PhysiologySignalGenerator](../../src/Monitor.Simulation/Physiology/PhysiologySignalGenerator.cs)
 将事件定义采样为 `PhysiologySignalSample(Tick, ValueQ32, NormalizedValue)`；主要签名为：
@@ -412,9 +416,16 @@ PLETH 沿用既有项目自制形态，ECG 不在本次形态迁移范围内。
 全部具体重载以声明清单和对应 `*Reference.cs` / `*Plan.cs` 为准，生成的 `*Tables.cs` 保留其来源。
 
 `RespiratoryActivity.Breathing`、`EffortOnly`、`Absent` 是源活动设置；努力不等于有呼出气。
-`RespiratoryPattern` 为 `Regular`、`CheyneStokesIllustration`、`IntermittentIllustration`。
+`RespiratoryPattern` 为 `Regular`、`CheyneStokesIllustration`、`IntermittentIllustration`、
+`SpontaneousIllustration`；原有枚举值保持不变，自然自主呼吸追加为 3。
+自然自主呼吸采用固定 32 次的有界序列，周期偏移为 ±7%，深度为 920–1080‰，
+总时长精确保持 32 个标称周期，不产生缺失的呼吸。吸气时长及显式设置的吸／呼气暂停
+沿实际周期缩放；它仍要求 `Breathing` 且不与 `ActivityAfterBreaths`／`ActivityDurationBreaths` 混用。
+RESP、CVP 呼吸分量、CO₂ 与通气输送共享逐次时序和深浅；
+心源伪差及心搏时序独立，CO₂ 运输延迟和色散间隔不随周期缩放。
 CO₂ 相位包括死腔、上升、平台和下一次吸气下降；可配置 1:2:1 三路径色散。
-非规则深度的 CO₂ 教学响应通过内部 `RespiratoryCo2Response` 形成，不是公开服务或完整 CO₂ 质量守恒求解器。
+潮式及间歇呼吸的 CO₂ 教学响应通过内部 `RespiratoryCo2Response` 形成，不是公开服务或完整 CO₂ 质量守恒求解器。
+自然自主呼吸不将胸廓深度直接乘到 CO₂ 浓度，并支持独立的 `SeededExpirationPressure` 浓度变化。
 向 `PhysiologyIllustrationSource.Create` 传 ventilation 后，内部耦合按 VT 缩放 RESP，按 VD/VT 调整 CO₂ 死腔段；
 气道关闭或单次潮气量不超过死腔时保留基线但无呼出 CO₂ excursion。
 
@@ -452,6 +463,8 @@ transport 层允许 VT 0–3000000、VD 0–1000000、FiO₂ 100000–1000000；
 `BloodFlowTransportPlan` 含每搏量 0–250000 µL、射血时长 1–1000 ms、`StrokeVolumeResponse` 和 AF 脉搏短绌开关；
 response 必须适配 physiology。`Integrate` 最多 60 s / 4096 事件，返回送气、肺泡通气、有效血流体积 nL。
 它是纯索引积分，任意划分区间的整数前缀差保留总体积；`EffortOnly`/`Absent`、零深度和关闭气道均不送气。
+自然自主呼吸按实际吸气起点与非暂停吸气时长积分，每口送气量乘以对应深度系数；
+每口肺泡通气量仍先扣除死腔。实时送气上限校验逐一检查实际周期，包含超过标称值的深呼吸。
 
 `OxygenReservoirParameters` 使用肺容积 mL(BTPS)、液体血容量 mL、Hb g/dL、基础耗氧 mL(STPD)/min。
 储库气量和氧量使用 mL(STPD)，BTPS/STPD 换算仅由求解器负责；不能把血容量做气体换算。

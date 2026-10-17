@@ -359,9 +359,14 @@ Auto NIBP 弹出自动开关和 1/2/3/5/10/15 分钟间隔，默认 5 分钟。
 
 `style-previews.bin` 是由 [StylePreviewCatalog](../../src/Monitor.Desktop/StylePreviewCatalog.cs) 生成、从 `AppContext.BaseDirectory` 加载的内部构建资源，不是导入病例或公共网络格式。
 
-它用 .NET `BinaryWriter` 的小端数值顺序写入 magic `0x33565053`、组合数，再写各项 `(ecg, respiration, ejection, lead)`、ECG 与 ABP 样本数组，最后依次写 RESP、PLETH、CO₂ 的独立预览数组。每组样本为 `Int32 count` 后接 `(Int64 timeNs, Double value)`；时间严格递增、值必须有限。读取器检查 magic、固定组合数量、键范围与唯一性、预期导联、样本数量及尾随数据。旧目录不能直接加载，需由构建入口重新生成。
+它用 .NET `BinaryWriter` 的小端数值顺序写入 magic `0x34565053`、组合数，再写各项 `(ecg, respiration, ejection, lead)`、ECG 与 ABP 样本数组，最后依次写 RESP、PLETH、CO₂ 的独立预览数组。每组样本为 `Int32 count` 后接 `(Int64 timeNs, Double value)`；时间严格递增、值必须有限。读取器检查 magic、固定组合数量、键范围与唯一性、预期导联、样本数量及尾随数据。旧目录不能直接加载，需由构建入口重新生成。
 
 模板页按 ECG、RESP、射血、PLETH、EtCO₂ 分页；选择卡片仅修改草稿，应用后才改变实时源。
+RESP 的“自然自主呼吸”追加为索引 6，原有 0–5 索引及保存偏好保持原意；
+它使用 `RespiratoryPattern.SpontaneousIllustration` 与 `RespirationIllustration.Reference`。
+主界面对此模板的设定频率接受 7–55 次/分，范围外显示可操作错误并保留原会话，不夹紧输入；
+这是当前模板的工程范围，非医学正常范围，其他模板继续接受 6–60 次/分。
+独立 RESP 预览使用与应用相同的源配置；ECG／ABP 的组合缓存复用规则呼吸项。
 独立的 PLETH／CO₂ 卡片使用同一纵轴范围，以免自动缩放隐藏低灌注或非零吸入基线。
 食管插管初启和从头开始时保留最初的洗脱过程，不跳过启动波形；运行中启用的有限序列从激活后开始。
 

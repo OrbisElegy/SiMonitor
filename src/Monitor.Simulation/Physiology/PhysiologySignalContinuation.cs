@@ -14,6 +14,7 @@ internal sealed class PhysiologySignalContinuation
     internal PhysiologySignalSegment Segment { get; }
     private readonly VascularPressureSource? _pressure;
     private readonly PlethRunoffSource? _pleth;
+    private readonly EventWaveformComposition? _composition;
     private readonly bool _hasContinuousActivity;
     internal long SupportNs { get; }
 
@@ -41,7 +42,8 @@ internal sealed class PhysiologySignalContinuation
         }
         else
         {
-            var owned = EventWaveformComposition.Restore(new(segment.Bands, [])).CaptureState().Bands;
+            _composition = EventWaveformComposition.Restore(new(segment.Bands, []));
+            var owned = _composition.CaptureState().Bands;
             segment = segment with { Bands = owned };
             _hasContinuousActivity = owned.Any(b => IsContinuousActivity(b.Trigger));
             SupportNs = owned.Max(b => checked(b.DelayNs + b.DurationNs));
@@ -73,7 +75,7 @@ internal sealed class PhysiologySignalContinuation
         var events = timeline.AdvanceBefore(to, EventWaveformComposition.MaximumEventCount, cancellationToken)
             .Where(item => IsContinuousActivity(item.Kind)
                 ? includeContinuousActivity : item.SimTimeNs >= Segment.FromEventTimeNs).ToArray();
-        return checked(baseline + EventWaveformComposition.Restore(new(Segment.Bands, events)).EvaluateAt(timeNs, cancellationToken));
+        return checked(baseline + _composition!.WithEvents(events).EvaluateAt(timeNs, cancellationToken));
     }
 
     private static bool IsContinuousActivity(PhysiologyCycleEventKind kind) => kind is

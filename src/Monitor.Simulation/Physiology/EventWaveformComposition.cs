@@ -52,6 +52,14 @@ public sealed class EventWaveformComposition
     private readonly long[][]?[] _cycleTables;
     private readonly PhysiologyCycleEvent[] _events;
 
+    private EventWaveformComposition(EventWaveformComposition source, IReadOnlyList<PhysiologyCycleEvent> events)
+    {
+        _bands = source._bands;
+        _tables = source._tables;
+        _cycleTables = source._cycleTables;
+        _events = CopyAndValidateEvents(events);
+    }
+
     private EventWaveformComposition(EventWaveformState state)
     {
         if (state is null || state.Bands is null || state.Bands.Count is < 1 or > MaximumBandCount ||
@@ -179,22 +187,32 @@ public sealed class EventWaveformComposition
             };
             _tables[index] = table;
         }
-        _events = state.Events.ToArray();
+        _events = CopyAndValidateEvents(state.Events);
+    }
+
+    private PhysiologyCycleEvent[] CopyAndValidateEvents(IReadOnlyList<PhysiologyCycleEvent> events)
+    {
+        if (events is null || events.Count > MaximumEventCount) { throw Invalid(); }
+        PhysiologyCycleEvent[] owned = events.ToArray();
         HashSet<(PhysiologyCycleEventKind, ulong)> identities = [];
-        for (int index = 0; index < _events.Length; index++)
+        for (int index = 0; index < owned.Length; index++)
         {
-            PhysiologyCycleEvent item = _events[index];
+            PhysiologyCycleEvent item = owned[index];
             if (item.SimTimeNs < 0 || !Enum.IsDefined(item.Kind) || !identities.Add((item.Kind, item.CycleIndex))) { throw Invalid(); }
-            if (index > 0 && (_events[index - 1].SimTimeNs > item.SimTimeNs ||
-                _events[index - 1].SimTimeNs == item.SimTimeNs && _events[index - 1].Kind >= item.Kind)) { throw Invalid(); }
+            if (index > 0 && (owned[index - 1].SimTimeNs > item.SimTimeNs ||
+                owned[index - 1].SimTimeNs == item.SimTimeNs && owned[index - 1].Kind >= item.Kind)) { throw Invalid(); }
             foreach (EventWaveformBand band in _bands.Where(band => Accepts(band, item)))
             {
                 if ((Int128)item.SimTimeNs + band.DelayNs + band.DurationNs > long.MaxValue) { throw Invalid(); }
             }
         }
+        return owned;
     }
 
     public static EventWaveformComposition Restore(EventWaveformState state) => new(state);
+    // Only this already validated composition's immutable owned waveforms are
+    // shared. Replacement events still receive complete validation and a copy.
+    internal EventWaveformComposition WithEvents(IReadOnlyList<PhysiologyCycleEvent> events) => new(this, events);
     public EventWaveformState CaptureState() => new(Array.AsReadOnly(_bands), Array.AsReadOnly(_events));
 
     public long EvaluateAt(long simTimeNs, CancellationToken cancellationToken = default)

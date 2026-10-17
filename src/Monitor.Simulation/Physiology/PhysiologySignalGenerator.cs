@@ -25,6 +25,7 @@ public sealed class PhysiologySignalGenerator
     private PhysiologySignalContinuation? _active;
     private SignalSampleClock _clock;
     private readonly IReadOnlyList<EventWaveformBand> _bands;
+    private readonly EventWaveformComposition? _composition;
     private readonly long _lookbackNs;
     private readonly int _pressureBaselineCentiMmHg;
     private readonly VascularPressurePlan? _vascularPressurePlan;
@@ -39,6 +40,7 @@ public sealed class PhysiologySignalGenerator
         _timeline = RegularPhysiologyTimeline.Restore(source._timeline.CaptureState());
         _clock = SignalSampleClock.Restore(source._clock.CaptureState());
         _bands = source._bands;
+        _composition = source._composition;
         _lookbackNs = source._lookbackNs;
         _pressureBaselineCentiMmHg = source._pressureBaselineCentiMmHg;
         _vascularPressurePlan = source._vascularPressurePlan;
@@ -82,7 +84,8 @@ public sealed class PhysiologySignalGenerator
         }
         else
         {
-            _bands = EventWaveformComposition.Restore(new(state.Bands, [])).CaptureState().Bands;
+            _composition = EventWaveformComposition.Restore(new(state.Bands, []));
+            _bands = _composition.CaptureState().Bands;
             state.Timeline.Plan.RateAdjustment?.ValidateBands(state.Timeline.Plan, _bands);
             if (_bands.Any(b => b.EjectionIllustration is { } mode && mode != state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             if (_bands.Any(b => b.AfBeatSelection is not null) && !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
@@ -195,8 +198,8 @@ public sealed class PhysiologySignalGenerator
             var state = _timeline.CaptureState();
             var timeline = RegularPhysiologyTimeline.Restore(state with
             { CursorSimTimeNs = Math.Max(state.Plan.EpochAnchorSimTimeNs, timeNs - _lookbackNs) });
-            return EventWaveformComposition.Restore(new(_bands,
-                timeline.AdvanceBefore(checked(timeNs + 1), EventWaveformComposition.MaximumEventCount, cancellationToken)))
+            return _composition!.WithEvents(
+                timeline.AdvanceBefore(checked(timeNs + 1), EventWaveformComposition.MaximumEventCount, cancellationToken))
                 .EvaluateAt(timeNs, cancellationToken) + (long)_pressureBaselineCentiMmHg * FixedPointMath.Q32One;
         }
         foreach (var previous in _history)
@@ -249,7 +252,7 @@ public sealed class PhysiologySignalGenerator
         long start = Math.Max(timeline.Plan.EpochAnchorSimTimeNs, timeline.CursorSimTimeNs - _lookbackNs);
         var trialTimeline = RegularPhysiologyTimeline.Restore(timeline with { CursorSimTimeNs = start });
         IReadOnlyList<PhysiologyCycleEvent> events = trialTimeline.AdvanceBefore(exclusiveSimTimeNs, maximumEvents, cancellationToken);
-        EventWaveformComposition? composition = _vascularPressure is null && PlethRunoff is null ? EventWaveformComposition.Restore(new(_bands, events)) : null;
+        EventWaveformComposition? composition = _composition?.WithEvents(events);
         var trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
         var output = new PhysiologySignalSample[ticks.Count];

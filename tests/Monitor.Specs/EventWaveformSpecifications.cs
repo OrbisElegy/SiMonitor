@@ -19,6 +19,7 @@ internal static class EventWaveformSpecifications
         new(nameof(ElectricalEventsAnchorSeparateWaveBands), ElectricalEventsAnchorSeparateWaveBands),
         new(nameof(RespirationOccupiesTheWholeBreath), RespirationOccupiesTheWholeBreath),
         new(nameof(EventWaveformsOwnInputsAndRejectInvalidComposition), EventWaveformsOwnInputsAndRejectInvalidComposition),
+        new(nameof(ReplacingEventsRetainsOwnedShapesAndValidatesEveryEvent), ReplacingEventsRetainsOwnedShapesAndValidatesEveryEvent),
         new(nameof(EventWaveformsReachAcquisitionAndWire), EventWaveformsReachAcquisitionAndWire),
     ];
 
@@ -87,6 +88,36 @@ internal static class EventWaveformSpecifications
         Check.That(assembler.Push(id, acquired.Take(49).ToArray()).Count == 0, "recording waits only for a complete source window");
         byte[] wire = WaveformEnvelopeCodec.EncodeRaw(assembler.Push(id, acquired.Skip(49).ToArray()).Single());
         Check.That(WaveformEnvelopeCodec.Decode(wire).Planes[0].Samples.SequenceEqual(expected), "event waveform survives native sampling and 200ms binary encoding");
+    }
+
+    private static void ReplacingEventsRetainsOwnedShapesAndValidatesEveryEvent()
+    {
+        long[] table = [0, 20 * Q, 0, 0];
+        long[] cycleTable = [0, 40 * Q, 0, 0];
+        EventWaveformPhasePoint[] phases = [new(0, 0), new(4, 4)];
+        var shape = new RespiratoryCycleShape(1, 4, cycleTable, phases);
+        var band = new EventWaveformBand(PhysiologyCycleEventKind.InspirationStart, 1, 4, table)
+        { RespiratoryCycleShapes = Enumerable.Repeat(shape, 32).ToArray() };
+        var source = EventWaveformComposition.Restore(new([band], [new(0, PhysiologyCycleEventKind.InspirationStart, 0)]));
+        PhysiologyCycleEvent[] events = [new(10, PhysiologyCycleEventKind.InspirationStart, 1)];
+        var replaced = source.WithEvents(events);
+        events[0] = new(20, PhysiologyCycleEventKind.InspirationStart, 2);
+        Array.Clear(table);
+        Array.Clear(cycleTable);
+        phases[1] = new(2, 2);
+        Check.That(source.EvaluateAt(2) == 40 * Q && replaced.EvaluateAt(12) == 40 * Q &&
+            replaced.EvaluateAt(22) == 0 && EventWaveformComposition.Restore(replaced.CaptureState()).EvaluateAt(12) == 40 * Q,
+            "event replacement owns its event array and keeps the previously deep-owned cycle tables and phase maps");
+        var valid = new PhysiologyCycleEvent(10, PhysiologyCycleEventKind.InspirationStart, 1);
+        Reject(() => source.WithEvents(null!), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents(Enumerable.Repeat(valid, EventWaveformComposition.MaximumEventCount + 1).ToArray()), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents([valid with { SimTimeNs = -1 }]), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents([valid with { Kind = (PhysiologyCycleEventKind)999 }]), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents([valid, valid with { SimTimeNs = 11 }]), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents([valid, valid with { SimTimeNs = 9, CycleIndex = 2 }]), "EventWaveform.InvalidState");
+        Reject(() => source.WithEvents([valid with { SimTimeNs = long.MaxValue - 4 }]), "EventWaveform.InvalidState");
+        Check.That(source.EvaluateAt(2) == 40 * Q && replaced.EvaluateAt(12) == 40 * Q,
+            "rejected replacements leave both accepted event windows unchanged");
     }
 
     private static void Reject(Action action, string reason)

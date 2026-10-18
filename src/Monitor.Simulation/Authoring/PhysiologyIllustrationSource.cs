@@ -157,6 +157,7 @@ public static class PhysiologyIllustrationSource
         }
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
+        channels[0] = channels[0] with { EcgInterference = configuration.EcgInterference };
         channels[3] = channels[3] with { PressureMeasurement = configuration.PressureMeasurement };
         channels[2] = channels[2] with { PlethShape = configuration.PlethShape };
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);

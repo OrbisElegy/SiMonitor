@@ -555,6 +555,7 @@ public static class LiveEcgIllustrationSource
 ```csharp
 public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMilliseconds, int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null, int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125, int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0, int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
+    public SeededEcgInterference? EcgInterference { get; init; }
     public bool Dextrocardia { get; init; }
     public PacingIllustration? Pacing { get; init; }
     public PacingOutputSettings? PacingOutput { get; init; }
@@ -1817,7 +1818,7 @@ public static class LeftBundleBlockReference
 ```csharp
 public sealed class LiveEcgProjection
 {
-    public LiveEcgProjection(RegularPhysiologyPlan plan, IReadOnlyList<ElectrodeWaveformPlan> electrodes);
+    public LiveEcgProjection(RegularPhysiologyPlan plan, IReadOnlyList<ElectrodeWaveformPlan> electrodes, SeededEcgInterference? interference = null);
     public LiveEcgProjection Fork();
     public void ContinueWith(LiveEcgProjection definition);
     public IReadOnlyList<ElectrodeSignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples, int maximumEvents);
@@ -2011,6 +2012,7 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 }
 public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
+    public SeededEcgInterference? EcgInterference { get; init; }
     public PressureMeasurementIllustration PressureMeasurement { get; init; }
     public PlethIllustration PlethShape { get; init; }
 }
@@ -2440,6 +2442,7 @@ public enum PlethIllustration
 }
 public sealed record SensorWaveformIllustration(long FromSimTimeNs, PressureMeasurementIllustration PressureMeasurement = PressureMeasurementIllustration.Reference, PlethIllustration PlethShape = PlethIllustration.Reference)
 {
+    public SeededEcgInterference? EcgInterference { get; init; }
     public int? PlethTransitionFromGainPpm { get; init; }
     public int PlethTransitionFromMotionPpm { get; init; }
 }
@@ -2816,5 +2819,27 @@ public static class DextrocardiaReference
     public const string EvidenceId = "MirrorImageDextrocardiaIllustration@1";
     public static IReadOnlyList<ElectrodeWaveformPlan> CreateElectrodes();
     public static IReadOnlyList<EventWaveformBand> CreateLeadIIBands();
+}
+```
+
+## Physiology/SeededEcgInterference.cs
+
+源码：[SeededEcgInterference.cs](../../../src/Monitor.Simulation/Physiology/SeededEcgInterference.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed class SeededEcgInterference : IEquatable<SeededEcgInterference>
+{
+    public const string PatternId = "SeededEcgInterference@1";
+    public string SeedHex { get; }
+    public int SpikeAmplitudeMicrovolts { get; }
+    public int SpikeProbabilityPermille { get; }
+    public int BaselineAmplitudeMicrovolts { get; }
+    public int BaselineKnotMilliseconds { get; }
+    public SeededEcgInterference(string seedHex, int spikeAmplitudeMicrovolts, int spikeProbabilityPermille, int baselineAmplitudeMicrovolts, int baselineKnotMilliseconds);
+    public long ElectrodeMicrovoltsQ32(EcgElectrode electrode, long simTimeNs);
+    public long LeadIIMicrovoltsQ32(long simTimeNs);
+    public bool Equals(SeededEcgInterference? other);
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
 }
 ```

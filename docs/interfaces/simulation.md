@@ -567,3 +567,23 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 再构造源；充电、等待同步、取消和过期不能据此创建放电。现有桌面未接入该触发链。
 放电电流没有 ECG 电压换算或自动复律效果。定性依据、作者参数与未实现内容见
 [起搏与除颤技术说明](../research/physiology/pacing-defibrillation.md)。
+
+## ECG 采样干扰
+
+`PhysiologyIllustrationConfiguration.EcgInterference` 接受不可变的
+`SeededEcgInterference`；`null` 保留原始采样。构造参数包含 64 位小写十六进制
+种子、毛刺幅度（0–5000 μV）、每电极每 100 ms 出现概率（0–1000 permille）、
+基线幅度（0–2000 μV）和基线控制点间隔（200–10000 ms）。两种幅度分别约束
+任意两电极间的最大绝对偏移，叠加后上界为两者之和；不是 RMS 或峰峰值。
+
+`SeededEcgInterference@1` 从独立命名流生成电极键，用显式模 2⁶⁴ 运算的
+SplitMix64 finalizer 按源时间索引控制点和毛刺窗口。基线使用整数 smoothstep，
+毛刺持续 1–3 个 250 Hz 采样点。求值不消耗随机游标，因此分批、复制、暂停、
+恢复和按时间乱序读取不改变结果；改变幅度不改变随机事件时间。
+
+七通道源在 `SensorWaveformIllustration.EcgInterference` 中保留采样时段历史，
+接续不重写待组包样本，恢复会核对包含干扰的记录。实时十二导联在量化前叠加
+电极电位，保留精确导联恒等式，投影 II 供监护、检测与记录共用；不额外修改
+非 ECG 波形或生理事件。干扰不预先强制标为无效，检测器按真实采样判断。
+转复到窦性参考保留干扰设置。桌面数值写入既有生成器偏好；旧文件缺少这些
+字段时恢复关闭状态，随机种子沿用生命体征设置。

@@ -90,6 +90,7 @@ public sealed record PhysiologyIllustrationConfiguration(
     public VascularPressureTarget? PaTarget { get; init; }
     public VascularPressureVariation? PressureVariation { get; init; }
     public SeededExpirationPressure? SeededCo2 { get; init; }
+    public SeededEcgInterference? EcgInterference { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }

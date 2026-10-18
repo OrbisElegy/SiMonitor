@@ -15,6 +15,7 @@ public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiol
     WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags,
     VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
+    public SeededEcgInterference? EcgInterference { get; init; }
     public PressureMeasurementIllustration PressureMeasurement { get; init; }
     public PlethIllustration PlethShape { get; init; }
 }
@@ -137,8 +138,8 @@ public sealed class PhysiologyWaveformGroup
             PhysiologySignalGenerator.Start(plan.Physiology, plan.Plane.ProfileId, streamEpoch, plan.Bands, plan.VascularPressure, plan.PlethRunoff, plan.PressureBaselineCentiMmHg).CaptureState(),
             plan.QualityFlags, plan.PressureZeroOffsetCentiMmHg)
         {
-            SensorIllustrations = plan.PressureMeasurement == PressureMeasurementIllustration.Reference && plan.PlethShape == PlethIllustration.Reference
-                ? [] : [new(plan.Physiology.EpochAnchorSimTimeNs, plan.PressureMeasurement, plan.PlethShape)]
+            SensorIllustrations = plan.PressureMeasurement == PressureMeasurementIllustration.Reference && plan.PlethShape == PlethIllustration.Reference && plan.EcgInterference is null
+                ? [] : [new(plan.Physiology.EpochAnchorSimTimeNs, plan.PressureMeasurement, plan.PlethShape) { EcgInterference = plan.EcgInterference }]
         }).ToArray();
         var assembler = WaveformBlockAssembler.Start(sessionId, instanceId, timebaseEpoch,
             streamEpoch, configurationRevision, firstBlockSequence, plans[0].Physiology.EpochAnchorSimTimeNs,

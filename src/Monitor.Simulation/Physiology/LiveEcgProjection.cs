@@ -8,9 +8,11 @@ namespace Monitor.Simulation.Physiology;
 public sealed class LiveEcgProjection
 {
     private PhysiologySignalGenerator[] _electrodes;
+    private SeededEcgInterference? _interference;
 
-    public LiveEcgProjection(RegularPhysiologyPlan plan, IReadOnlyList<ElectrodeWaveformPlan> electrodes)
+    public LiveEcgProjection(RegularPhysiologyPlan plan, IReadOnlyList<ElectrodeWaveformPlan> electrodes, SeededEcgInterference? interference = null)
     {
+        _interference = interference;
         var owned = ElectrodeWaveformComposition.Restore(new(electrodes, [])).CaptureState().Electrodes;
         _electrodes = owned.Select(electrode => PhysiologySignalGenerator.Start(plan,
             "AcqECGMonitor250@1", 1, electrode.Bands)).ToArray();
@@ -18,7 +20,7 @@ public sealed class LiveEcgProjection
 
     private LiveEcgProjection(PhysiologySignalGenerator[] electrodes) => _electrodes = electrodes;
 
-    public LiveEcgProjection Fork() => new(_electrodes.Select(electrode => electrode.Fork()).ToArray());
+    public LiveEcgProjection Fork() => new(_electrodes.Select(electrode => electrode.Fork()).ToArray()) { _interference = _interference };
 
     public void ContinueWith(LiveEcgProjection definition)
     {
@@ -26,6 +28,7 @@ public sealed class LiveEcgProjection
         var electrodes = _electrodes.Select((electrode, index) =>
             electrode.ContinueWith(definition._electrodes[index].CaptureState())).ToArray();
         _electrodes = electrodes;
+        _interference = definition._interference;
     }
 
     public IReadOnlyList<ElectrodeSignalSample> GenerateBefore(long exclusiveSimTimeNs, int maximumSamples, int maximumEvents)
@@ -36,7 +39,8 @@ public sealed class LiveEcgProjection
         var result = new ElectrodeSignalSample[channels[0].Count];
         for (int index = 0; index < result.Length; index++)
         {
-            long Value(int electrode) => channels[electrode][index].ValueQ32;
+            long Value(int electrode) => checked(channels[electrode][index].ValueQ32 +
+                (_interference?.ElectrodeMicrovoltsQ32((EcgElectrode)electrode, channels[electrode][index].Tick.SimTimeNs) ?? 0));
             var leads = EcgLeadProjection.Project(new(Value(0), Value(1), Value(2), Value(3), Value(4),
                 Value(5), Value(6), Value(7), Value(8), Value(9)));
             short[] values = Enum.GetValues<EcgLead>().Select(lead => checked((short)FixedPointMath.RoundDivideTiesToEven(

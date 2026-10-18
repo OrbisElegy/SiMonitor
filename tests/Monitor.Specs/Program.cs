@@ -72,6 +72,7 @@ internal static class Program
             .. MonitorDisplaySpecifications.All,
             .. MonitorContinuationSpecifications.All,
             .. LiveEcg12Specifications.All,
+            .. EcgInterferenceSpecifications.All,
             .. CapnographyMeasurementSpecifications.All,
             .. AbnormalCapnographyMeasurementSpecifications.All,
             .. MeasurementDisplaySpecifications.All,

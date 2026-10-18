@@ -16,6 +16,7 @@ public static class SinusIllustrationConfiguration
             RespirationIllustration = current.RespirationIllustration,
             CapnogramIllustration = current.CapnogramIllustration,
             PressureMeasurement = current.PressureMeasurement,
+            EcgInterference = current.EcgInterference,
             PlethShape = current.PlethShape,
             RespiratoryActivity = current.RespiratoryActivity,
             RespiratoryPattern = current.RespiratoryPattern,

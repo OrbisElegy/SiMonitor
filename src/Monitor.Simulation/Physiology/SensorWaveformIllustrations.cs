@@ -21,6 +21,7 @@ public sealed record SensorWaveformIllustration(long FromSimTimeNs,
     PressureMeasurementIllustration PressureMeasurement = PressureMeasurementIllustration.Reference,
     PlethIllustration PlethShape = PlethIllustration.Reference)
 {
+    public SeededEcgInterference? EcgInterference { get; init; }
     // A continued source starts from its effective weights at the switch.
     // Null keeps initial/restarted templates at their selected steady state.
     public int? PlethTransitionFromGainPpm { get; init; }
@@ -51,6 +52,7 @@ internal static class SensorWaveformIllustrations
                 item.FromSimTimeNs <= previous || !Enum.IsDefined(item.PressureMeasurement) || !Enum.IsDefined(item.PlethShape) ||
                 item.PressureMeasurement != PressureMeasurementIllustration.Reference && profileId != "AcqPressure125@1" ||
                 item.PlethShape != PlethIllustration.Reference && profileId != "AcqPleth125@1" ||
+                item.EcgInterference is not null && profileId != "AcqECGMonitor250@1" ||
                 item.PlethTransitionFromGainPpm is { } gain && (gain is < 80_000 or > UnityPpm || profileId != "AcqPleth125@1") ||
                 item.PlethTransitionFromMotionPpm is < 0 or > UnityPpm ||
                 item.PlethTransitionFromGainPpm is null && item.PlethTransitionFromMotionPpm != 0)
@@ -63,7 +65,8 @@ internal static class SensorWaveformIllustrations
         SensorWaveformIllustration next, long boundarySimTimeNs, long pendingFromSimTimeNs)
     {
         var current = At(history, boundarySimTimeNs);
-        if (current.PressureMeasurement == next.PressureMeasurement && current.PlethShape == next.PlethShape)
+        if (current.PressureMeasurement == next.PressureMeasurement && current.PlethShape == next.PlethShape &&
+            Equals(current.EcgInterference, next.EcgInterference))
         { return history; }
         if (current.PlethShape != next.PlethShape)
         {
@@ -110,7 +113,7 @@ internal static class SensorWaveformIllustrations
             valueQ32 = checked(valueQ32 + (long)FixedPointMath.RoundDivideTiesToEven(
                 (Int128)MotionCounts(timeNs - epochAnchorSimTimeNs) * FixedPointMath.Q32One * weights.MotionPpm, UnityPpm));
         }
-        return valueQ32;
+        return checked(valueQ32 + (illustration.EcgInterference?.LeadIIMicrovoltsQ32(timeNs) ?? 0));
     }
 
     internal static uint Quality(uint qualityFlags, SensorWaveformIllustration illustration, long timeNs) =>

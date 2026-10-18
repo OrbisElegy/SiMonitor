@@ -71,6 +71,6 @@ public static class LiveEcgIllustrationSource
             electrodes = Array.AsReadOnly(electrodes.Select(electrode => electrode with
             { Bands = adjustment.AdjustBands(plan, electrode.Bands) }).ToArray());
         }
-        return new LiveEcgProjection(plan, electrodes);
+        return new LiveEcgProjection(plan, electrodes, configuration.EcgInterference);
     }
 }

@@ -6,7 +6,7 @@
   "supportedManualVitals": ["nibp"],
   "fixedWaveformRows": 3,
   "deviceProfile": "biphasic-360",
-  "background": "#080E0C",
+  "background": "#1C2723",
   "channelColors": [
     "#32F063",
     "#F1E763",

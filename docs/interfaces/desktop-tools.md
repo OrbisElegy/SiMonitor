@@ -91,6 +91,10 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 纹理在 UI 生命周期内共享，不增加刷新定时器，不逐帧读取屏幕或做 FFT；全窗口混合仍有绘制成本。
 水印不进入采样、测量、报警、治疗或导出的 PDF。PDF 和纸张继续使用原有的“仅为教学模拟”声明。
 
+内置监护皮肤使用离开纯黑的暗色底：Generic 为深蓝灰 `#18232D`，ePM 为炭灰 `#1C242B`，
+D3 为深灰绿 `#1C2723`，D3 数值区也跟随皮肤底色。此调整用于降低低强度纹理在近黑背景上的
+相对反差，不改变水印强度或波形颜色，也不保证肉眼不可见；导入皮肤仍遵循其自身配置的底色。
+
 Google 的 [SynthID 说明](https://deepmind.google/models/synthid/)介绍其图像嵌入和检测能力，
 公开的 [SynthID Text](https://github.com/google-deepmind/synthid-text) 是文本生成水印实现，
 不是可直接给本地 Avalonia 窗口嵌入图像水印的 SDK。因此此原型使用自主实现的固定频域标记，

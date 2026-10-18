@@ -175,7 +175,7 @@ internal sealed partial class GenericMonitorSkin
         monitor.Children.Add(content.Numerics);
         Grid.SetRow(monitor, 1);
         display.Children.Add(monitor);
-        var measurements = new Grid { ColumnDefinitions = new("54*,46*"), Background = Brush.Parse("#080D11") };
+        var measurements = new Grid { ColumnDefinitions = new("54*,46*"), Background = Background };
         var extras = new UniformGrid { Columns = 3 };
         extras.Children.Add(content.Temperature);
         extras.Children.Add(content.Custom1);

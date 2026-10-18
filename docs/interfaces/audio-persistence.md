@@ -373,7 +373,7 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 版本 13 增加 Sound.OutputDeviceId（null 表示系统默认）和 Muted（默认 false）；旧版本缺省时使用这两个默认值。
 
 `Generator.Pleth` 与 `Generator.Capnogram` 为可选的独立模板索引，缺省为 0（参考模板），
-当前范围分别为 0–2 和 0–12；`Respiration` 扩至 0–5，`Ejection` 扩至 0–4。
+当前范围分别为 0–2 和 0–12；`Respiration` 扩至 0–6，`Ejection` 扩至 0–4。
 旧模板索引含义不变，旧 JSON 省略新字段时保留原波形；越界选择在加载时拒绝。
 设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
 
@@ -389,7 +389,7 @@ Warning 3500–60000、Critical 250–2000，另有 InfoTone。
 Generator 保存 Ecg/EcgName、Respiration/Ejection、Seed、Numbers/Flags/Choices、ApplyDelaySeconds、Oxygenation；
 ApplyDelaySeconds 为 0–60、0.1 s 步进，三个字典上限分别 64/32/16。它不是仿真 checkpoint。
 
-Load 找不到文件/目录：返回 `MonitorDisplayConfiguration.Default()`、PaperLayout=0，rejected=false。
+Load 找不到文件/目录：返回 `MonitorDisplayConfiguration.Default(MonitorSkin.FourRows)`、PaperLayout=0，rejected=false。
 IO、权限、JSON 或参数校验失败：返回相同默认值，rejected=true，不改写坏文件。
 有效旧文件保留缺省 Alarms/Sound/Generator 为 null，应用调用方自行选择回退值。
 Save 先做参数校验，再创建随机同目录 `.tmp` 文件、序列化、Flush(flushToDisk:true)、
@@ -467,4 +467,6 @@ PCM 核验／试听，不证明声卡或扬声器的物理输出与时延。
 9–13 秒解除储能并恢复背景音，使用运行时共享混音器且不中断报警时间线。
 
 版本 18 增加 `Generator.AedElectricalConversions`，其校验与手动映射一致；读取 1–17 版时
-复制已有 `ElectricalConversions`，迁移后分别保存，不共享可变字典。未设置的新规则默认关闭。
+复制已有 `ElectricalConversions`，迁移后分别保存，不共享可变字典。已保存的逐模板规则优先；
+未设置的规则使用 `ElectricalConversionSettings.Default`：启用、单相阈值 200 J、双相阈值 150 J、
+电击后停顿 0 ms。实际转复仍须满足模板、模式与严格大于阈值的交付能量条件。

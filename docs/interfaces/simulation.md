@@ -336,7 +336,8 @@ R-on-T 保留 500/200 ms 联律间期；房扑通过 `EventWaveformBand.CycleDur
 ```csharp
 static PhysiologySignalGenerator Start(RegularPhysiologyPlan plan, string profileId,
     ulong streamEpoch, IReadOnlyList<EventWaveformBand> bands,
-    VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null);
+    VascularPressurePlan? vascularPressure = null, PlethRunoffPlan? plethRunoff = null,
+    int pressureBaselineCentiMmHg = 0);
 IReadOnlyList<PhysiologySignalSample> GenerateBefore(long exclusiveSimTimeNs,
     int maximumSamples, int maximumEvents, CancellationToken cancellationToken = default);
 static PhysiologyWaveformGroup Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch,
@@ -564,8 +565,12 @@ operation 为 `Start/Stop`，origin 为 `ScenarioOverride/SensorModel/LatentPhys
 批次至多一百万样本，先验证数量后分配；超范围、时间溢出与取消均不发布部分结果。
 
 放电源不消费安全时钟、不依赖 Domain 或 UI。调用方在真正 Delivered 后将安全时间映射为源时间，
-再构造源；充电、等待同步、取消和过期不能据此创建放电。现有桌面未接入该触发链。
-放电电流没有 ECG 电压换算或自动复律效果。定性依据、作者参数与未实现内容见
+再构造源；充电、等待同步、取消和过期不能据此创建放电。
+`DefibrillationWaveform` 单独只输出电流，不修改 ECG 或生理计划。桌面已将 AED／除颤器确认的
+放电交给 `LocalMonitorPreviewSession.ApplyElectricalShock`：`DefibrillationEcgArtifact` 构造电流源并生成
+前端恢复伪差，将受影响 ECG 样本标记为不可判读；符合转复条件时，会话在 200 ms 源配置边界
+安排窦性转换和可选的电击后暂停。该 ECG 输出是归一化教学耦合，不是人体电流—电压的定量标定。
+调用条件与生效规则见[电击转复接口](electrical-conversion.md)。定性依据、作者参数与限制见
 [起搏与除颤技术说明](../research/physiology/pacing-defibrillation.md)。
 
 ## ECG 采样干扰

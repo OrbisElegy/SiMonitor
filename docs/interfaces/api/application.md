@@ -354,6 +354,25 @@ public interface ITextLocalizer
 }
 ```
 
+## Localization/TextMessage.cs
+
+源码：[TextMessage.cs](../../../src/Monitor.Application/Localization/TextMessage.cs) · 命名空间：`Monitor.Application.Localization`
+
+行为与参数约定见[本地化接口](../localization.md)。
+
+```csharp
+public sealed class TextMessage : IEquatable<TextMessage>
+{
+    public TextMessage(string key, params object[] arguments);
+    public string Key { get; }
+    public IReadOnlyList<object> Arguments { get; }
+    public string Render(ITextLocalizer text);
+    public bool Equals(TextMessage? other);
+    public override bool Equals(object? obj);
+    public override int GetHashCode();
+}
+```
+
 ## Measurements/CapnographyMeasurement.cs
 
 源码：[CapnographyMeasurement.cs](../../../src/Monitor.Application/Measurements/CapnographyMeasurement.cs) · 命名空间：`Monitor.Application.Measurements`
@@ -668,6 +687,7 @@ public enum MeasurementTechnicalFault
 }
 public sealed record MeasurementDisplay(string NumericText, string? TopNotice)
 {
+    public TextMessage? TopNoticeMessage { get; init; }
     public static MeasurementDisplay Resolve(MeasurementSource source, WaveformMeasurementStatus status, string? validNumericText, MeasurementTechnicalFault fault = MeasurementTechnicalFault.None);
 }
 ```
@@ -866,7 +886,7 @@ public sealed class AlarmLifecycleJournal
 public sealed record AlarmNotificationPolicy(int RepeatSuppressionMilliseconds = 0, int ReminderMilliseconds = 0)
 {
     public AlarmSoundDuration SoundDuration { get; init; }
-    public const int MaximumMilliseconds = 3600000;
+    public const int MaximumMilliseconds = 3_600_000;
     public static AlarmNotificationPolicy Default { get; }
     public void Validate();
 }
@@ -1488,7 +1508,7 @@ public sealed partial class LocalMonitorPreviewSession
     public EcgElectricalTherapyProfile? ElectricalTherapy { get; private set; }
     public long? PendingSourceTimeNs { get; private set; }
     public LiveMeasurementSnapshot? Measurements { get; }
-    public ManualVitalSigns ManualVitals { get; }
+    public ManualVitalSigns ManualVitals { get; private set; }
     public NibpMeasurement Nibp { get; }
     public PressureTransducerLimits PressureTransducers { get; private set; }
     public long SimulationTimeNs { get; private set; }
@@ -1537,9 +1557,13 @@ public sealed record MeasurementLimits(bool Enabled, int? CriticalLow, int? Warn
 }
 public sealed record MeasurementLimitDescriptor(MonitorNumeric Numeric, string Id, string Label, string Unit, int Divisor, int Minimum, int Maximum, MeasurementLimits TeachingDefaults)
 {
+    public string LabelKey { get; }
+    public TextMessage LabelMessage { get; }
 }
 public static class MeasuredLimitNotice
 {
+    public static MeasurementLimitDescriptor HeartRateDescriptor { get; }
+    public static MeasurementLimitDescriptor SpO2Descriptor { get; }
     public static IReadOnlyList<MeasurementLimitDescriptor> Descriptors { get; }
     public static MeasurementLimitDescriptor Describe(MonitorNumeric numeric);
     public static MonitorNotice? Evaluate(MonitorNumeric numeric, MeasurementLimits limits, LiveMeasurementSnapshot snapshot);
@@ -1559,6 +1583,7 @@ public sealed record BoundaryConfirmationTiming(int TriggerMilliseconds, int Rec
 public sealed record MeasurementConfirmationTiming(BoundaryConfirmationTiming CriticalLow, BoundaryConfirmationTiming WarningLow, BoundaryConfirmationTiming WarningHigh, BoundaryConfirmationTiming CriticalHigh)
 {
     public static MeasurementConfirmationTiming DefaultFor(MonitorNumeric numeric);
+    public void ValidateFor(MonitorNumeric numeric);
     public void Validate();
 }
 ```
@@ -1785,6 +1810,7 @@ public sealed record MonitorNotice(string Id, MonitorNoticeLevel Level, string T
 {
     public MonitorNumeric? Numeric { get; init; }
     public bool Audible { get; init; }
+    public TextMessage? Message { get; init; }
 }
 public sealed class MonitorNoticeRotation
 {

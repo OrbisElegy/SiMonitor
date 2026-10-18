@@ -21,6 +21,15 @@
   由 `Render(ITextLocalizer)` 按读者语言生成文本。监护提示（`MonitorNotice.Message`）和
   测量顶部提示（`MeasurementDisplay.TopNoticeMessage`）在保留中文默认文本的同时附带消息；
   消息不参与行为判断，按结构比较相等。
+- `TextMessage(string key, params object[] arguments)` 要求 key 非空白、参数数组非 null，
+  每个参数只能是字符串或嵌套 `TextMessage`；不接受数值或 null 参数项。
+  构造时复制参数数组，通过 `Key` 和 `Arguments` 读取；`Render` 要求非 null 的本地化器，
+  先渲染嵌套消息，再调用 `Format`。完整声明见[应用索引](api/application.md#localizationtextmessagecs)。
+- `MeasurementLimitDescriptor.LabelKey` 将稳定的 `Id` 转为 `numeric.` 前缀的驼峰 key，
+  例如 `resp-rate` → `numeric.respRate`；`LabelMessage` 返回携带该 key 的零参数 `TextMessage`。
+  `Label` 仍保留默认文本，`Numeric`、`Id`、单位和倍率不受语言切换影响。
+  `MeasuredLimitNotice.HeartRateDescriptor`、`SpO2Descriptor` 提供对应指标的独立描述，
+  不包含在附加指标编辑器使用的 `Descriptors` 集合中；`Describe(numeric)` 可按指标取得描述。
 - 校验错误、字段名和原因说明在桌面层以 key 保存，状态文本在语言切换时重新生成；
   领域与仿真异常仍使用 `ReasonCode`，由桌面层映射到 key。
 - 帮助主题按语言分别存放：`help-topics.json` 为中文参考集，`help-topics.en.json` 为英文，`help-topics.zh-TW.json` 为繁体中文；

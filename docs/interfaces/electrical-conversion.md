@@ -41,7 +41,7 @@
 
 `MonitorGeneratorPreferences.ElectricalConversions` 是完整的独立映射，包括当前未选中的模板。
 `EcgElectricalTherapy.Snapshot` 校验支持的标识、非空记录、阈值和条目上限，并返回字典副本。
-`DisplayPreferenceStore` 写版本 18，读 1–18；旧文件缺少手动映射时使用关闭的默认规则。
+`DisplayPreferenceStore` 写版本 18，读 1–18；旧文件缺少手动映射或模板项时使用当前开启的默认规则，显式关闭仍保留。
 重新打开应用、切换为窦律后保存、再选择原模板都应保留映射。
 
 AED 独立映射为 `MonitorGeneratorPreferences.AedElectricalConversions`，记录相同的开关、单／双相阈值与停顿。
@@ -88,7 +88,8 @@ var result = session.ApplyElectricalShock(delivery, preparedSinusSession);
 
 `DeliverySequence` 在一个本地会话内从正整数单调递增，跨模板切换不重置；相同／更早序号
 返回 `DuplicateDelivery`。放电时间必须等于当前仿真时间。已消费的能量不足、方式错误或被
-待切换状态阻挡的实际放电也不能改能量后重试；无效输入、无效目标源则原子拒绝，保留状态。
+待切换状态阻挡的实际放电也不能改能量后重试；无效交付输入则原子拒绝，保留状态。
+只有判定为 `Eligible`、需要排定转复时才验证目标源；目标验证失败不消费交付，也不改变状态。
 新建会话重置此计数，外部权威仍应验证会话身份与自身事件去重。
 
 ## 手动除颤与设备配置
@@ -105,7 +106,7 @@ var result = session.ApplyElectricalShock(delivery, preparedSinusSession);
 2.5 秒 ECG 恢复；手动自动解除为 60 秒，AED 为 30 秒。能量表由皮肤清单提供，已应用的手动表优先；
 D3 参考外观的默认表有 21 档（1–10 J 每 1 J，之后 15、20、30、50、70、100、150、170、200、300、360 J）。
 设备参数覆盖期间保留用户可编辑配置，离开后恢复；外观身份和研究出处不作为行为接口。
-具体研究依据和模拟差异见 [D3 调研](../research/devices/beneheart-d3.md)。
+设备参数的解析与固定覆盖见 [MonitorDeviceProfiles](../../src/Monitor.Desktop/MonitorDeviceProfile.cs)。
 
 通用面板的按住 `4:1` 使用 `PacingOutputSettings.PulseDivision = 4`，实际输出周期变为所选
 30–210 ppm 周期的四倍，所选频率和电流不变；默认值 `1` 恢复普通输出。分频参数仅接受
@@ -210,7 +211,8 @@ CPR 在简短的开始按压指令播完后起拍，从首拍起完成 30 次按
 
 `ApplyElectricalShock(delivery, preparedSinusSession, ecgRecoveryMilliseconds = 1000)` 为每个
 非重复、有效的实际放电创建 `DefibrillationEcgArtifact`。转复失败只叠加伪迹，不改变心律。
-非法目标源不会发布部分序列或消费交付；重复交付不会重复添加伪迹。
+判定为 `Eligible` 后若目标源非法，不会发布部分序列或消费交付；其他结果不校验目标源，仍记录有效实际放电及伪迹。
+重复交付不会重复添加伪迹。
 
 伪迹以实际放电仿真时间定位。全部监护波形、测量与治疗证据消费同一次仿真推进的采样，
 放电后下一帧即显示伪迹，恢复与转复接续同一源。`Samples` 提供统一采样历史，

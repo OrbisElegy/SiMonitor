@@ -71,9 +71,9 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 
 偏好路径由 `Environment.SpecialFolder.LocalApplicationData` 加 `Monitor/display-preferences.json` 构成；不依赖启动工作目录。保存失败时本次内存配置仍可生效，由界面报告不能持久保存。具体字段、版本和错误语义见[音频与持久化](audio-persistence.md)。
 
-语言选择位于“设置 → 通用”，即时切换已迁移的中英文文案，并独立保存至
-`Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
-会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
+语言选择位于“设置 → 通用”，支持 English、简体中文、繁體中文和“随当前系统语言”，
+即时生效并独立保存至 `Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；
+首次启动和恢复全部默认设置使用 `system`，按当前系统 UI 语言解析。接入范围、绑定和失败语义见[本地化接口](localization.md)。
 
 ## 屏幕模拟来源水印
 
@@ -138,6 +138,8 @@ python3 tools/screen_watermark.py screenshot.png
 ```sh
 python3 tools/check_screen_watermark.py
 ```
+
+`--fixtures PATH` 可指定桌面检查生成的样本目录，默认 `artifacts/watermark/`；缺少必需样本时以用法错误 `2` 退出。
 
 该检查还需要 `ffmpeg`（带 `libx264`），覆盖 PNG、JPEG 90/75、等比缩放、裁剪及其组合，
 并将动态帧编码为 H.264 CRF 23 后抽帧检测；纯色、规则网格和固定种子噪声作为负例。
@@ -307,7 +309,7 @@ ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用�
 皮肤包不能携带可执行行为。
 有效能量表按“已应用的手动表优先，否则使用皮肤清单默认表”解析，与这些设备行为参数分别处理。
 
-内置参考外观依据见 [D3 面板调研](../research/devices/beneheart-d3.md)。外壳按固定逻辑尺寸等比缩放，
+内置外观由 [D3 清单](../../src/Monitor.Desktop/Assets/Skins/d3/manifest.json)与[通用机壳绘制](../../src/Monitor.Desktop/GenericMonitorSkin.Enclosure.cs)定义。外壳按固定逻辑尺寸等比缩放，
 该皮肤的 4:3 屏幕固定三行；提手、电极板收纳区、报警灯、交流／电池／就绪指示、扬声器与全部操作区在同一面板内。
 模式旋钮提供关机、监护、手动、AED、起搏，可点击目标角度或印刷档位，也可拖动、滚轮或用方向键选档。
 两端停止、不环绕；档位文字固定印刷，仅指针表示当前档位，且只在宿主接受切换并回传状态后转动。
@@ -376,7 +378,7 @@ ECG 电复律页另有逐模板心脏停顿时间，默认 0；监护恢复不�
 
 ## 手动生命体征与皮肤读数
 
-“设置 → 生命体征 → 手动体征”提供 NIBP、体温与两个独立的自定义槽位，各项默认关闭。
+“设置 → 生命体征 → 手动体征”提供 NIBP、体温与两个独立的自定义槽位；NIBP 默认启用，体温与自定义项默认关闭。
 NIBP 的收缩压、舒张压、平均压均手动输入，单位 mmHg，要求
 `0 ≤ 舒张压 ≤ 平均压 ≤ 收缩压 ≤ 300`；平均压不自动计算，也不与 ABP 联动。
 体温范围为 0–50 ℃、一位小数。这些范围是编辑器输入边界，不代表临床参考范围。
@@ -390,7 +392,8 @@ NIBP 的收缩压、舒张压、平均压均手动输入，单位 mmHg，要求
 当前监护界面在底部显示启用的项目，并标记“手动体征”；NIBP 配置是下一次袖带测量的目标值，显示使用 `LocalMonitorPreviewSession.Nibp.Reading`。
 
 应用前完整校验；普通应用与延时应用沿用 `ScheduleSource` 的仿真时间边界，暂停时不推进；
-重新开始使用新会话的手动值，恢复默认设置关闭所有项目。手动值仅在当前会话中保留，不写入本地偏好。
+重新开始使用新会话的手动值；恢复默认设置启用 NIBP 并恢复 120/80（平均 93）mmHg 目标，关闭体温与自定义项。
+手动值仅在当前会话中保留，不写入本地偏好。
 
 ## NIBP 袖带测量
 
@@ -449,7 +452,7 @@ RESP 的“自然自主呼吸”追加为索引 6，原有 0–5 索引及保存
 
 生成时先写 `OUTPUT_PATH.tmp`、重新加载校验，再替换目标文件。构建自动生成目录；产品构建要求 `UsePrebuiltStylePreviews=true` 和存在的 `StylePreviewBinary`，跨平台发布使用宿主生成的目录，不执行目标平台程序。
 
-`help-topics.json`（简体中文）与 `help-topics.en.json`（英文）是嵌入式帮助资源，后者以 `WithCulture="false"` 嵌入主程序集；两者主题 id 及顺序一致，分类一一对应。`eng/dependencies.json` 和许可文本也作为资源嵌入。它们不是用户偏好或实时患者状态的存储接口。
+`help-topics.json`（简体中文）、`help-topics.en.json`（英文）与 `help-topics.zh-TW.json`（繁体中文）是嵌入式帮助资源，后两者以 `WithCulture="false"` 嵌入主程序集；三者主题 id 及顺序一致，分类一一对应。`eng/dependencies.json` 和许可文本也作为资源嵌入。它们不是用户偏好或实时患者状态的存储接口。
 
 ## 构建、依赖及发布命令
 
@@ -476,6 +479,8 @@ RESP 的“自然自主呼吸”追加为索引 6，原有 0–5 索引及保存
 | [check_desktop_launch.py](../../tools/check_desktop_launch.py) | `ASSEMBLY`、`--development`；默认检查 Linux 开发版或产品版无参启动，开发版可追加检查 `--ui-preview`。需可用的图形显示、`xwininfo` 和 `xprop`；按进程 ID 确认窗口，不依赖版本及界面语言，运行目录隔离为临时目录 |
 | [check_native_audio_binding.py](../../tools/check_native_audio_binding.py) | 无自定义参数；使用 Debug `Monitor.Specs.dll` 和隔离测试音频库，同时确认生产试听入口拒绝测试后端 |
 | [native ABI 检查](../../native/sim_audio_native/tests/check_abi.py) | `LIBRARY [--production-unavailable]`；详见[原生音频说明](../../native/sim_audio_native/README.md) |
+| [check_localization_keys.py](../../tools/check_localization_keys.py) | 无自定义参数；核对产品 C# 源码中字面量引用的 key 是否存在于简体中文目录，跳过 bin/obj、`*SmokeChecks.cs` 与 `*Fixture.cs`；不识别运行时构造的 key。成功返回 `0`，缺失返回 `1`，参数错误返回 `2` |
+| [selected_therapy_voice.py](../../tools/selected_therapy_voice.py) | 无自定义参数；核对清单所列已选中文 F1 录音及可选贴片提示扩展的 SHA-256 和 48 kHz 单声道 PCM16 格式。成功输出核验结果，资源或校验异常向外传播；同模块的 `selected_voice_path(prompt_id, text)` 还校验传入文字与清单一致，供离线生成器验证并取得录音路径 |
 | [spdx_headers.py](../../tools/spdx_headers.py) | `--check` 只检查；省略时会补写许可头，范围见贡献指南 |
 | [check_commit_message.py](../../tools/check_commit_message.py) | `MESSAGE_FILE`；读取当前 Git author 与消息，检查仓库提交格式，返回 0 或 1 |
 
@@ -494,6 +499,7 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 | `--list-svg-fixtures` | 标准输出列出 SVG 场景名 |
 | `--svg-fixture NAME` | 标准输出合成三角波 SVG；支持 live、nodata、frozen、frozen-nodata、review、review-nodata、paused、paused-nodata、stopped、stopped-nodata、frozen-return、review-return |
 | `--audio-tone-fixture` | 标准输出二进制 WAV；重定向到文件，不能将文本日志混入此流 |
+| `--therapy-audio-fixture OUTPUT_DIRECTORY` | 生成中英文治疗完整流程及储能优先混音 WAV，标准输出文件路径；细节见[治疗声音](audio-persistence.md#治疗声音)。成功返回 `0`，用法错误返回 `2`，执行或取消异常向外传播 |
 | `--audio-native-audition ABSOLUTE_LIBRARY [DEVICE_ID]` | 在实际生产后端试听；不接受相对库路径或测试 null 后端 |
 | `--audio-native-diagnostics ABSOLUTE_LIBRARY [DEVICE_ID]` | 设备／输出时钟诊断 |
 | `--audio-native-clock-probe ABSOLUTE_LIBRARY [DEVICE_ID]` | 原生音频时钟采样 |
@@ -502,13 +508,14 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 | `--audio-wasapi-diagnostics [DEVICE_ID]` | 打开托管 WASAPI 流但不播放，输出流路径、缓冲、周期和队列目标 JSON；设备不可用返回 `1` |
 | `--audio-alsa-audition [PCM_NAME]` | 用 Linux ALSA 输出播放同样的五声；PCM 名称默认 `default` |
 | `--audio-alsa-diagnostics [PCM_NAME]` | 打开 ALSA 流但不播放，输出缓冲、周期和队列目标 JSON；`null` PCM 可在无声卡环境检查 |
+| `--audio-output-devices` | 以 JSON 输出当前平台的输出设备 ID 与名称，只枚举、不打开音频流；成功返回 `0`，用法错误返回 `2`，已取消返回 `130` |
 | `--oxygen-transport-fixture OUTPUT.json` | 导出短暂停呼吸／恢复的输运输入 |
 | `--oxygen-deep-transport-fixture OUTPUT.json` | 导出较深去饱和输运输入 |
 | `--oxygenation-replay-check RESULT.json` | 将离线回放结果接入光学测量链 |
 | `--oxygenation-deep-replay-check RESULT.json` | 较深去饱和结果的测量链接入 |
 | `--oxygenation-realtime-check DEEP_RESULT.json` | 对照离线结果与实时 decimal 氧合求解器 |
 
-分派源码：[Program](../../tests/Monitor.Specs/Program.cs)、[SVG](../../tests/Monitor.Specs/SvgFixtureCommand.cs)、[WAV](../../tests/Monitor.Specs/AudioFixtureCommand.cs)、[原生音频](../../tests/Monitor.Specs/NativeAudioCommand.cs)、[氧合](../../tests/Monitor.Specs/OxygenationFixtureCommand.cs)。SVG／WAV／原生音频入口区分成功 0、执行错误 1、用法错误 2 和取消 130；氧合入口的捕获异常（含取消）返回 1，用法错误返回 2。它们是开发数据通道，不是临床 ECG、评分输入或桌面产品启动参数。
+分派源码：[Program](../../tests/Monitor.Specs/Program.cs)、[SVG](../../tests/Monitor.Specs/SvgFixtureCommand.cs)、[监护音 WAV](../../tests/Monitor.Specs/AudioFixtureCommand.cs)、[治疗音 WAV](../../tests/Monitor.Specs/TherapyAudioFixtureCommand.cs)、[原生音频](../../tests/Monitor.Specs/NativeAudioCommand.cs)、[托管音频与设备枚举](../../tests/Monitor.Specs/ManagedAudioCommand.cs)、[氧合](../../tests/Monitor.Specs/OxygenationFixtureCommand.cs)。SVG／监护音 WAV／原生音频入口区分成功 0、执行错误 1、用法错误 2 和取消 130；氧合入口的捕获异常（含取消）返回 1，用法错误返回 2。它们是开发数据通道，不是临床 ECG、评分输入或桌面产品启动参数。
 
 ## 生成器和氧合实验
 

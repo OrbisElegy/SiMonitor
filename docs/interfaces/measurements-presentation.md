@@ -328,7 +328,7 @@ void Reset();
 每个方向独立分配 owner 内身份，Warning/Critical 升降级保留身份，恢复与数据中断使用不同原因。
 记录由确认状态同步生成，不改变 `MonitorNotice` 相等性、横幅轮换或声音请求。详细状态、
 有界保留和连续性边界见[本地报警生命周期接口](alarms/alarm-lifecycle.md)。
-其 `Attention` 提供独立的用户确认、恢复保持和旧修订拒绝契约，见[确认与保持状态接口](alarms/alarm-attention.md)；已确认标记、恢复后视觉保持和声音仲裁使用该状态；默认监护皮肤不添加操作按钮，确认入口留待后续皮肤接口；偏好只保存保持策略。
+其 `Attention` 提供独立的用户确认、恢复保持和旧修订拒绝契约，见[确认与保持状态接口](alarms/alarm-attention.md)；已确认标记、恢复后视觉保持和声音仲裁使用该状态；默认监护皮肤通过“报警”按钮打开当前报警列表，提供逐条确认，命令绑定所见 owner、事件身份与修订；偏好只保存保持策略。
 `ConfigureNotifications` 可为已有条件配置独立重复抑制及持续提醒；`NotificationRecords`
 提供有界通知意图，`DroppedNotificationCount` 明确淘汰情况。首次及确认升级不额外延迟，
 同级重复只延后通知，持续提醒不改变事件。显式单组声音通道可消费这些意图，产品默认仍为原持续声音；详见[通知决策接口](alarms/alarm-notification-policy.md)及[声音执行接口](alarms/alarm-notification-sound.md)。
@@ -559,7 +559,7 @@ context 和各策略。权限、显示像素、正在拖动的手势不属于保
 切换抓手与测量保留卡尺；1:1 恢复 100% 显示比例，四角框适应窗口，垃圾桶清除测量。纸图和卡尺使用同一显示变换，
 缩放和平移不改变采样时间和幅值。“设置 → 显示 → 十二导联纸图”的结果单位可选 ms/mV 或纸面 mm；
 mm 模式显示 Δx = Δt(ms)/40、Δy = ΔV(mV)×10，保留较晚点减较早点的符号，不显示辅助频率。
-该选项只改变结果与预览格式，不移动卡尺；点击“应用”后随版本 12 显示偏好保存，旧文件缺少该项时默认 ms/mV。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。`Display` 按时间排序
+该选项只改变结果与预览格式，不移动卡尺；点击“应用”后随显示偏好保存，旧文件缺少该项时默认 ms/mV。采样值按平面 `raw × scale + offset` 换算为精确微伏有理数。`Display` 按时间排序
 两点（不论先放哪一点），用 `EcgManualMeasurement.Calculate` 给出 Δt（水平距离）、较晚一点减较早一点的 ΔV（垂直
 距离）和可选辅助频率；只有第一点时 `HoverResult` 给出按悬停点放置的预览。`ReasonCode` 为 Idle、Placing、Ready、
 Disabled 或 CourseLocked。策略非 Enabled 时撤除测量点并拒绝新操作。不识别波形起止点，不保存测量点，也不写回记录。

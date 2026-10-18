@@ -38,6 +38,16 @@ public sealed class AudioClockBridge
 }
 ```
 
+## Audio/AudioOutputDevices.Alsa.cs
+
+源码：[AudioOutputDevices.Alsa.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputDevices.Alsa.cs) · 命名空间：`Monitor.Infrastructure.Audio`
+
+```csharp
+public static partial class AudioOutputDevices
+{
+}
+```
+
 ## Audio/AudioOutputDevices.cs
 
 源码：[AudioOutputDevices.cs](../../../src/Monitor.Infrastructure/Audio/AudioOutputDevices.cs) · 命名空间：`Monitor.Infrastructure.Audio`
@@ -644,7 +654,7 @@ public sealed class EncryptedSqliteBackupService
 ```csharp
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
-    public bool TherapyControlsVisible { get; init; } = true;
+    public bool TherapyControlsVisible { get; init; }
     public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
     public MonitorDisplayConfiguration? UnlockedSkinDisplay { get; init; }
     public bool CustomDefibrillatorEnergySteps { get; init; }

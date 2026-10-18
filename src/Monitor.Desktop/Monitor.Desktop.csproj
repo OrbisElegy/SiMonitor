@@ -43,6 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/app-icon.ico" />
+    <EmbeddedResource Include="Assets/Watermarks/screen-v1.json" LogicalName="Monitor.Watermarks.screen-v1.json" />
     <EmbeddedResource Include="Assets/Skins/**/*" LogicalName="Monitor.Skins/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="help-topics.json" LogicalName="Monitor.Help.Topics" />
     <EmbeddedResource Include="help-topics.en.json" LogicalName="Monitor.Help.Topics.en" WithCulture="false" />

@@ -184,7 +184,9 @@ internal sealed partial class DesignPreviewWindow : Window
             ClipToBounds = true,
             Child = _workspace
         };
-        main.Children.Add(card); Content = root;
+        main.Children.Add(card);
+        ScreenWatermark.Attach(root);
+        Content = root;
         Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         Deactivated += (_, _) =>
         {

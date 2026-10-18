@@ -127,6 +127,7 @@ internal sealed class Ecg12PrintWindow : Window
         root.Children.Add(body);
         Grid.SetRow(footer, 1);
         root.Children.Add(footer);
+        ScreenWatermark.Attach(root);
         Content = root;
         foreach (var text in new[] { Heading, Subtitle, Candidate, Diagnosis }) { text.TextChanged += (_, _) => ScheduleRefresh(); }
         foreach (var combo in new[] { PrintTemplate, Speed, Gain }) { combo.SelectionChanged += (_, _) => ScheduleRefresh(); }

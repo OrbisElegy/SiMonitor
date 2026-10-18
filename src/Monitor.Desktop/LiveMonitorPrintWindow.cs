@@ -106,6 +106,7 @@ internal sealed class LiveMonitorPrintWindow : Window
         root.Children.Add(body);
         Grid.SetRow(footer, 1);
         root.Children.Add(footer);
+        ScreenWatermark.Attach(root);
         Content = root;
         foreach (var combo in new[] { RecordType, Lead, Speed, Gain, Color })
         { combo.SelectionChanged += (_, _) => ScheduleRefresh(); }

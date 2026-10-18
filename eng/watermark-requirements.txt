@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Optional offline detector/check tools only; Python >= 3.12. Not shipped in the desktop app.
+numpy==2.5.4
+pillow==13.0.0

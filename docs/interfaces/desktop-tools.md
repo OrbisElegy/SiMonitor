@@ -75,6 +75,71 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 `Monitor/display-preferences.language.json`。它不应用参数或替换仿真会话；恢复全部默认设置
 会同时恢复中文。接入范围、绑定和失败语义见[本地化接口](localization.md)。
 
+## 屏幕模拟来源水印
+
+正式桌面入口的 `DesignPreviewWindow`（监护、内嵌十二导联、侧栏纸图及其他页面）、
+`Ecg12PrintWindow` 和 `LiveMonitorPrintWindow` 在内容最上层添加
+[ScreenWatermark](../../src/Monitor.Desktop/ScreenWatermark.cs)。系统截图和录屏捕获到的是
+含标记的最终窗口像素；仅调用子控件渲染、旧版开发演示窗口、外部 PDF 阅读器及原生弹出窗口
+不在这一接入范围。皮肤切换不替换窗口级标记，标记也不截获鼠标或键盘输入。
+
+该实现为低强度频域水印原型。固定标识 `SiMonitor.Synthetic.Screen.v1` 的参数保存在
+[screen-v1.json](../../src/Monitor.Desktop/Assets/Watermarks/screen-v1.json)，嵌入程序集并由检测工具
+共用；不写入用户、设备或病人身份。12 个不同方向的载波生成一张 256 DIP 周期纹理，
+用极低透明度黑白像素平铺；每个 RGB 通道的扰动上限为 2/255。
+这只是数值上限，不是任何显示器上都不可见的保证，仍须实际显示环境的感知验收。
+纹理在 UI 生命周期内共享，不增加刷新定时器，不逐帧读取屏幕或做 FFT；全窗口混合仍有绘制成本。
+水印不进入采样、测量、报警、治疗或导出的 PDF。PDF 和纸张继续使用原有的“仅为教学模拟”声明。
+
+Google 的 [SynthID 说明](https://deepmind.google/models/synthid/)介绍其图像嵌入和检测能力，
+公开的 [SynthID Text](https://github.com/google-deepmind/synthid-text) 是文本生成水印实现，
+不是可直接给本地 Avalonia 窗口嵌入图像水印的 SDK。因此此原型使用自主实现的固定频域标记，
+没有集成或仿称 SynthID，也不引入模型或云端依赖。
+
+### 离线检测
+
+[screen_watermark.py](../../tools/screen_watermark.py)读取截图或已经抽取的录屏帧，无需无水印原图，
+不上传图片。检测工具单独需要 Python 3.12+、NumPy 和 Pillow；桌面程序不依赖 Python。
+在独立 Python 环境安装工具依赖后，从仓库根目录运行：
+
+```sh
+python3 -m pip install -r eng/watermark-requirements.txt
+python3 tools/screen_watermark.py screenshot.png
+```
+
+检测先限制文字、网格和波形强边缘的贡献，再用带 Hann 窗的 FFT 搜索重复载波；候选还需通过
+相位编码的一致性校验，允许共同平移，避免把规则纸格的频谱尖峰直接当作水印。
+搜索范围为最终图片每 DIP 的 0.5–4 像素，包含系统 DPI 与后续等比缩放的乘积。
+分析图最长边最多 1600 像素；原图或缩小后的短边小于 256 像素时返回信息不足。
+裁剪不要求对齐纹理原点，但保留面积、内容复杂度和压缩强度都会影响结果。
+
+| JSON `status` | 退出码 | 含义 |
+|---|---|---|
+| `marker_detected` | 0 | 频率和相位与公开的模拟屏幕标记匹配 |
+| `not_detected` | 1 | 本次未达到检测阈值，不代表真实采集 |
+| `insufficient_size` | 1 | 图片太小或过窄，无法完成这一检测 |
+| 输入／解码错误 | 2 | stderr 说明错误，不产生真实性结论 |
+
+`spectral_score` 是相邻频谱背景的幅度比，`phase_consistency` 是共同平移后的相位一致性指标，
+二者都不是概率或经标定的置信度；阈值是工程启发式，尚无独立大样本的误报率保证。
+这是可公开复制、可移除的来源提示，既不是密码学签名，也不能保证阻止恶意伪造或修改程序。
+**检出不能证明整幅图片的来源，未检出更不能证明内容真实。**
+
+### 验证与边界
+
+`ScreenWatermarkSmokeChecks` 通过实际 Avalonia 渲染保存三种皮肤、十二导联纸图、两类打印预览、
+不同 DPI 的含标记／不含标记对照，以及动态监护帧到被 Git 忽略的 `artifacts/watermark/`。
+它检查像素扰动上限、完整覆盖、输入穿透和测量不变。先运行现有桌面检查，再运行：
+
+```sh
+python3 tools/check_screen_watermark.py
+```
+
+该检查还需要 `ffmpeg`（带 `libx264`），覆盖 PNG、JPEG 90/75、等比缩放、裁剪及其组合，
+并将动态帧编码为 H.264 CRF 23 后抽帧检测；纯色、规则网格和固定种子噪声作为负例。
+这些条件是回归样本，不是对任意图片或编码器的鲁棒性承诺。JPEG 50、低码率视频、反复转码、
+重度降噪、小区域裁剪、旋转、非等比缩放及手机拍屏不在首版保证范围；打印扫描也未接入。
+
 ## 实时监护打印
 
 实时监护底部“打印”调用 `LocalMonitorPreviewSession.CapturePrintSnapshot()`，复制当前保留的

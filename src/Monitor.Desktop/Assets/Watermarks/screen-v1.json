@@ -1,0 +1,12 @@
+{
+  "marker": "SiMonitor.Synthetic.Screen.v1",
+  "period": 256,
+  "amplitude": 0.6,
+  "maximumDelta": 2,
+  "phaseStep": 0.137,
+  "carriers": [
+    [7, 11], [13, -5], [17, 9], [5, -19],
+    [11, 23], [19, -17], [23, 7], [9, -29],
+    [27, 13], [15, -31], [29, 21], [21, -27]
+  ]
+}

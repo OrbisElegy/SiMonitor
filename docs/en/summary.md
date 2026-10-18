@@ -6,6 +6,11 @@ diagnosis, or treatment. The repository contains a .NET desktop application,
 deterministic simulation code, a native audio adapter, build tools, executable
 specifications, and dependency and license records.
 
+Product windows carry an experimental low-strength screen marker; screenshots and video frames can be
+checked with the [offline detector](../interfaces/desktop-tools.md#屏幕模拟来源水印).
+Detection is a provenance clue, not authentication, and absence does not establish authenticity.
+PDF and paper output retain the explicit teaching declaration.
+
 ## Build and verification
 
 Use Python 3.11 or newer, a stable .NET 10 SDK, CMake 3.20 or newer, and a C

@@ -8,6 +8,10 @@ internal sealed partial class DesignPreviewSettings
 {
     private Dictionary<string, NumericUpDown> GeneratorNumbers() => new()
     {
+        ["EcgSpikeAmplitude"] = EcgInterference.SpikeAmplitude,
+        ["EcgSpikeProbability"] = EcgInterference.SpikeProbability,
+        ["EcgBaselineAmplitude"] = EcgInterference.BaselineAmplitude,
+        ["EcgBaselineKnotSeconds"] = EcgInterference.BaselineKnotSeconds,
         ["HeartRate"] = HeartRate,
         ["AtrialRate"] = AtrialRate,
         ["PauseDuration"] = PauseDuration,
@@ -83,6 +87,7 @@ internal sealed partial class DesignPreviewSettings
     // pulse factors. Every earlier field must be present.
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
+        "EcgSpikeAmplitude", "EcgSpikeProbability", "EcgBaselineAmplitude", "EcgBaselineKnotSeconds",
         "AtrialRate", "PauseDuration", "ConductionPercent", "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
     };
     private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)

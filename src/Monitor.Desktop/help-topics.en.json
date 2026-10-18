@@ -352,5 +352,11 @@
     "Category": "Waveforms and display",
     "Title": "Rebreathing and an exhausted CO₂ absorber",
     "Text": "Rebreathing raises the inspired CO₂ baseline above zero. Exhausted soda lime or another CO₂ absorber is one possible cause, so both templates may produce similar contours. Choosing a capnogram sets its baseline and rise/fall defaults; advanced controls can then change them. Returning to Reference expiration restores those defaults. A raised CO₂ baseline alone does not require a thoracic impedance change."
+  },
+  {
+    "Id": "ecg-interference",
+    "Category": "Waveform generation",
+    "Title": "ECG acquisition interference and replay",
+    "Text": "Under Waveform presets → ECG → Advanced parameters → ECG acquisition interference, set spike amplitude/probability and baseline amplitude/knot interval. Apply takes effect at the acquisition boundary. Both amplitudes default to zero (disabled). Amplitude bounds the absolute voltage difference between any two electrodes. Spikes last 4–12 ms; probability applies per electrode per 100 ms window. Baseline drift smoothly interpolates pseudorandom control points. The random seed under Vital signs is shared as a root seed, with an independent interference stream. Identical seed, settings and source time reproduce identical samples regardless of batching or pauses; restart replays them and a different seed generates another pattern. Interference reaches monitoring, detection, recordings and twelve-lead samples. Strong interference may affect heart rate and AED analysis. Conversion does not clear acquisition interference."
   }
 ]

@@ -738,6 +738,7 @@ internal sealed partial class DesignPreviewWindow : Window
             AbpTarget = Settings.ReadPressureTarget(arterial: true),
             PaTarget = Settings.ReadPressureTarget(arterial: false),
             PressureVariation = Settings.ReadPressureVariation(),
+            EcgInterference = Settings.EcgInterference.Read(Settings.RateSeed.Text ?? ""),
             CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "vitals.cvpBaselineField"),
             Co2EndExpiratoryMmHg = co2TargetMmHg
         };
@@ -900,6 +901,8 @@ internal sealed partial class DesignPreviewWindow : Window
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
         { SetStatus("validation.baselineRestart"); }
+        catch (ArgumentException exception) when (exception.Message == "EcgInterference.InvalidConfiguration")
+        { SetStatus("ecgInterference.invalid"); }
         catch (ArgumentException exception) when (exception.Message == "Defibrillator.InvalidConfiguration")
         { SetStatus("defib.invalid"); }
         catch (ArgumentException exception) when (exception.Message == "PressureTransducer.InvalidLimits")

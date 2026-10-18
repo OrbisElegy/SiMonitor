@@ -100,6 +100,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ShapeEditStatus.IsVisible = true;
         }
     }
+    internal EcgInterferenceEditor EcgInterference { get; }
     internal ElectricalConversionEditor ElectricalConversion { get; }
     internal ElectricalConversionEditor AedConversion { get; }
     internal PacingPermissionEditor PacingPermissions { get; }
@@ -307,6 +308,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Oxygenation = new OxygenationSettingsPanel(Localization);
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
+        EcgInterference = new(Localization);
         ElectricalConversion = new ElectricalConversionEditor(Localization);
         AedConversion = new ElectricalConversionEditor(Localization, automated: true);
         PacingPermissions = new PacingPermissionEditor(Localization);
@@ -766,6 +768,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
         if (ElectricalConversion.IsVisible) { _advancedEcg.Children.Add(ElectricalConversion); }
         if (AedConversion.IsVisible) { _advancedEcg.Children.Add(AedConversion); }
+        _advancedEcg.Children.Add(EcgInterference);
         _advancedEcg.Children.Add(PacingPermissions);
         SectionPages[6].SetDetail(0, null, null);
         _advancedEcg.Children.Add(ShapeEditStatus);

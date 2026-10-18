@@ -22,6 +22,10 @@ internal static class GeneratorPreferenceSmokeChecks
                 try
                 {
                     Configure(window.Settings, selection);
+                    window.Settings.EcgInterference.SpikeAmplitude.Value = 650;
+                    window.Settings.EcgInterference.SpikeProbability.Value = 12.5m;
+                    window.Settings.EcgInterference.BaselineAmplitude.Value = 250;
+                    window.Settings.EcgInterference.BaselineKnotSeconds.Value = 2.7m;
                     window.Settings.PauseDuration.Value = 2700;
                     window.Settings.ConductionPercent.Value = 40;
                     window.RestartSettings(); original = window.Session;
@@ -72,12 +76,15 @@ internal static class GeneratorPreferenceSmokeChecks
             string valid = File.ReadAllText(path);
             var legacy = JsonNode.Parse(valid)!.AsObject();
             legacy["Generator"]!["Numbers"]!.AsObject().Remove("AtrialRate");
+            foreach (string key in new[] { "EcgSpikeAmplitude", "EcgSpikeProbability", "EcgBaselineAmplitude", "EcgBaselineKnotSeconds" })
+            { legacy["Generator"]!["Numbers"]!.AsObject().Remove(key); }
             legacy["Generator"]!.AsObject().Remove("Pleth");
             legacy["Generator"]!.AsObject().Remove("Capnogram");
             File.WriteAllText(path, legacy.ToJsonString());
             var olderSettings = new DesignPreviewWindow(path);
             try
             {
+                Require(olderSettings.Session.Configuration.EcgInterference is null, "legacy preferences restore interference disabled");
                 Require(!olderSettings.PreferenceNotice.IsVisible && olderSettings.Settings.AtrialRate.Value == 75 && olderSettings.Settings.PlethSelection == 0 && olderSettings.Settings.CapnogramSelection == 0,
                     "older preferences without an independent atrial rate retain the default");
             }

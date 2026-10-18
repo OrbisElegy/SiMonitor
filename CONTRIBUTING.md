@@ -92,7 +92,7 @@ When the signing key is on a smart card, keep the card connected and enter
 its PIN only through the local GPG pinentry prompt. Never put a PIN in a
 commit message, command argument, repository file, or chat.
 
-## Commits
+## TL;DR
 
 Basicly the same as Linux kernel patch style:
 

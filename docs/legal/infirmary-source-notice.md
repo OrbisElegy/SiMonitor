@@ -1,15 +1,15 @@
 # Infirmary Integrated 来源与归属声明
 
 动脉波形种子改编自 Ibi Keller（Tanjera）的 Infirmary Integrated，
-来源固定于提交 `0e0eccd2f6e0705b77641a024c20a35cbf9b90e1`，
-按 Apache-2.0 许可。上游 `Waveform.Draw.cs` 中的归属声明原文为
+来源冻结于提交 `0e0eccd2f6e0705b77641a024c20a35cbf9b90e1`，
+原始项目按 Apache-2.0 许可。上游 `Waveform.Draw.cs` 中的归属声明原文为
 “By Ibi Keller (Tanjera), (c) 2017-2023”；绘图数据文件没有单独的版权标头。
 
 - [原始 ABP_Default 顶点](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Dictionary.Plots.cs)
 - [原始绘制与引用方式](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/II%20Library/Classes/Waveform.Draw.cs)
 - [原始许可证](https://github.com/tanjera/infirmary-integrated/blob/0e0eccd2f6e0705b77641a024c20a35cbf9b90e1/License.md)
 
-完整许可正文保存在 `eng/licenses/infirmary-integrated-LICENSE.md`，
+源项目的完整许可正文保存在 `eng/licenses/infirmary-integrated-LICENSE.md`，
 仅规范化了行尾空白。该提交的完整递归文件树中没有 NOTICE 文件。
 改编仅限下述波形顶点；未纳入上游绘制代码、定时器或其他资源。
 
@@ -39,7 +39,7 @@ SYS／DIA／MAP、阻尼、冲洗及传感器故障尚未实现。
 记录在 `eng/physiology/infirmary-capnogram.json` 中，附有源文件、顶点和
 许可证哈希。同样适用 Apache-2.0 许可及归属声明。
 未复制其他上游代码或资源。重新生成只需已提交的清单和许可正文，
-无需本地上游克隆或网络。
+无需本地上游克隆。
 
 修改方式：在开头补入零值和死腔段；将原始索引 0..14（前补零值）
 用于上升段、14..212 用于平台段、212..223 用于下降段；
@@ -93,4 +93,4 @@ V 波提取使用心室波形索引 36..86，将其 0.81 峰值归一化，
 可选展宽会将改编后的 CO₂ 表拆成对称的四分之一／二分之一／四分之一延迟路径，
 定点余数保留在中间路径。这一项目原创的响应属于运行时修改；
 引入的种子及归属声明不变，禁用后保留此前输出。
-它不是上游或制造商指定的响应核。
+它不是上游或厂商指定的响应核。

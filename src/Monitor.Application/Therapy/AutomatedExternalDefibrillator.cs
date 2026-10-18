@@ -160,6 +160,7 @@ public sealed class AutomatedExternalDefibrillator(ManualDefibrillator device, I
     private static int[]? SnapshotEnergySequence(ManualDefibrillator device, IReadOnlyList<int>? energySequenceJoules)
     {
         ArgumentNullException.ThrowIfNull(device);
+        energySequenceJoules ??= device.Configuration.AedEnergySequenceJoules;
         if (energySequenceJoules is null) { return null; }
         if (energySequenceJoules.Count is < 1 or > 64)
         { throw new ArgumentException("Aed.InvalidEnergySequence", nameof(energySequenceJoules)); }

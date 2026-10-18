@@ -2307,6 +2307,7 @@ public static class EcgPacingPermissions
 public sealed record DefibrillatorConfiguration(IReadOnlyList<int> EnergyStepsJoules,
     DefibrillationWaveformKind Waveform, int ChargeDurationMilliseconds, int AutoDisarmSeconds)
 {
+    public IReadOnlyList<int>? AedEnergySequenceJoules { get; init; }
     public int EcgRecoveryMilliseconds { get; init; }
     public static DefibrillatorConfiguration Default { get; }
     public DefibrillatorConfiguration Snapshot();

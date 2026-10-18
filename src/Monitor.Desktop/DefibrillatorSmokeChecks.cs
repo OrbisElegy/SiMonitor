@@ -16,8 +16,49 @@ namespace Monitor.Desktop;
 
 internal static class DefibrillatorSmokeChecks
 {
+    private static readonly int[] CustomAedSequence = [100, 200, 300];
+
+    private static void VerifyAedSequenceEditor()
+    {
+        var editor = new DefibrillatorSettingsEditor(new DesktopLocalization("en"));
+        int[] skinSteps = [100, 200, 360];
+        editor.SetSkinDefaults(DefibrillatorConfiguration.Default, skinSteps, false,
+            DefibrillatorConfiguration.Default with { AedEnergySequenceJoules = CustomAedSequence });
+        Require(editor.AedSteps.IsEffectivelyEnabled && editor.Read().AedEnergySequenceJoules!.SequenceEqual(skinSteps),
+            "custom AED targets remain editable on fixed profiles and map to the new skin table");
+        string path = Path.Combine(Path.GetTempPath(), "monitor-aed-sequence-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var window = new DesignPreviewWindow(path);
+            try
+            {
+                window.Settings.Defibrillator.AedSteps.Text = "100, 200, 300";
+                window.RestartSettings();
+                Require(window.Defibrillator.Configuration.AedEnergySequenceJoules!.SequenceEqual(CustomAedSequence), "applied sequence reaches the device");
+                window.Settings.Defibrillator.AedSteps.Text = "300, 200";
+                Require(window.Settings.Defibrillator.Error.IsVisible, "decreasing sequence reports inline validation");
+                var original = window.Session;
+                window.RestartSettings();
+                Require(ReferenceEquals(original, window.Session), "invalid sequence cannot replace the session");
+            }
+            finally { window.Close(); }
+            var reopened = new DesignPreviewWindow(path);
+            try
+            {
+                Require(reopened.Settings.Defibrillator.AedSteps.Text == "100, 200, 300", "applied sequence survives reopening despite invalid unsaved draft");
+                reopened.Settings.Defibrillator.AedSteps.Text = "100, 100, 200";
+                Require(!reopened.Settings.Defibrillator.Error.IsVisible, "repeated steps are valid");
+                reopened.Settings.Defibrillator.AedSteps.Text = "";
+                Require(reopened.Settings.Defibrillator.Read().AedEnergySequenceJoules is null, "blank restores the device protocol");
+            }
+            finally { reopened.Close(); }
+        }
+        finally { File.Delete(path); }
+    }
+
     internal static void Verify()
     {
+        VerifyAedSequenceEditor();
         VerifyEnergyDefaults();
         VerifyFixedHardwareLabels();
         long now = 0;

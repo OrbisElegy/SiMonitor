@@ -18,6 +18,7 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
     private string _manualSteps = string.Join(", ", DefibrillatorConfiguration.Default.EnergyStepsJoules);
     private bool _restoring;
     internal TextBlock Error { get; } = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Firebrick, IsVisible = false };
+    internal TextBox AedSteps { get; } = new() { MaxLength = 512, TextWrapping = TextWrapping.Wrap, MinHeight = 40 };
     internal TextBox Steps { get; } = new() { MaxLength = 512, TextWrapping = TextWrapping.Wrap, MinHeight = 40 };
     internal ComboBox Waveform { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
     internal NumericUpDown ChargeSeconds { get; } = new() { Minimum = 0.1m, Maximum = 60, Increment = 0.1m, FormatString = "0.0" };
@@ -38,7 +39,7 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
         panel.Children.Add(UseSkinEnergySteps);
         foreach (var (key, control) in new (string, Control)[]
         {
-            ("defib.steps", Steps), ("defib.waveform", Waveform),
+            ("defib.steps", Steps), ("defib.aedSteps", AedSteps), ("defib.waveform", Waveform),
             ("defib.chargeSeconds", ChargeSeconds), ("defib.autoDisarmSeconds", AutoDisarmSeconds), ("defib.ecgRecoverySeconds", EcgRecoverySeconds)
         })
         {
@@ -71,6 +72,10 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
             RefreshEnergySelection();
             ValidateDraft();
         };
+        AedSteps.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty) { ValidateDraft(); }
+        };
         Waveform.SelectionChanged += (_, _) => ValidateDraft();
         ChargeSeconds.ValueChanged += (_, _) => ValidateDraft();
         AutoDisarmSeconds.ValueChanged += (_, _) => ValidateDraft();
@@ -89,6 +94,8 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
         var ownedEditable = editable.Snapshot();
         var ownedProfile = deviceProfile?.Snapshot();
         var ownedSteps = (ownedEditable with { EnergyStepsJoules = skinEnergySteps }).Snapshot().EnergyStepsJoules;
+        var effective = (ownedEditable with
+        { EnergyStepsJoules = customEnergySteps ? ownedEditable.EnergyStepsJoules : ownedSteps }).Snapshot();
         _restoring = true;
         try
         {
@@ -96,6 +103,7 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
             _editable = ownedEditable;
             _skinEnergySteps = ownedSteps;
             _manualSteps = string.Join(", ", ownedEditable.EnergyStepsJoules);
+            AedSteps.Text = string.Join(", ", ownedEditable.AedEnergySequenceJoules?.Select(effective.NearestEnergy) ?? []);
             UseSkinEnergySteps.IsChecked = !customEnergySteps;
             RestoreBehaviorFields(ownedProfile ?? ownedEditable);
             foreach (var control in new Control[] { Waveform, ChargeSeconds, AutoDisarmSeconds, EcgRecoverySeconds })
@@ -117,15 +125,20 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
                 string[] values = (Steps.Text ?? "").Split([',', '，', ' ', '\n', '\r', ';', '；'], StringSplitOptions.RemoveEmptyEntries);
                 steps = values.Select(value => int.Parse(value, CultureInfo.InvariantCulture)).ToArray();
             }
+            int[]? sequence = string.IsNullOrWhiteSpace(AedSteps.Text) ? null :
+                AedSteps.Text.Split([',', '，', ' ', '\n', '\r', ';', '；'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(value => int.Parse(value, CultureInfo.InvariantCulture)).ToArray();
+            if (sequence is not null && sequence.Any(energy => !steps.Contains(energy)))
+            { throw new ArgumentException("Defibrillator.InvalidConfiguration"); }
             if (DeviceOverride is { } fixedConfiguration)
-            { return (fixedConfiguration with { EnergyStepsJoules = steps }).Snapshot(); }
+            { return (fixedConfiguration with { EnergyStepsJoules = steps, AedEnergySequenceJoules = sequence }).Snapshot(); }
             if (ChargeSeconds.Value is not { } seconds || seconds * 1000 != decimal.Truncate(seconds * 1000) ||
                 AutoDisarmSeconds.Value is not { } timeout || timeout != decimal.Truncate(timeout) ||
                 EcgRecoverySeconds.Value is not { } recovery || recovery * 1000 != decimal.Truncate(recovery * 1000))
             { throw new ArgumentException("Defibrillator.InvalidConfiguration"); }
             return new DefibrillatorConfiguration(steps,
                 (DefibrillationWaveformKind)Waveform.SelectedIndex, checked((int)(seconds * 1000)), checked((int)timeout))
-            { EcgRecoveryMilliseconds = checked((int)(recovery * 1000)) }.Snapshot();
+            { EcgRecoveryMilliseconds = checked((int)(recovery * 1000)), AedEnergySequenceJoules = sequence }.Snapshot();
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         { throw new ArgumentException("Defibrillator.InvalidConfiguration", error); }
@@ -139,6 +152,7 @@ internal sealed class DefibrillatorSettingsEditor : UserControl
         {
             _editable = owned;
             _manualSteps = string.Join(", ", owned.EnergyStepsJoules);
+            AedSteps.Text = string.Join(", ", owned.AedEnergySequenceJoules ?? []);
             RestoreBehaviorFields(DeviceOverride ?? owned);
         }
         finally { _restoring = false; }

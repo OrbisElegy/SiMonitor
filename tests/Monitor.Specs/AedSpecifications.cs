@@ -20,6 +20,7 @@ internal static class AedSpecifications
         new(nameof(AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm), AedToleratesOnlyIsolatedCaptureInEstablishedWideRhythm),
         new(nameof(AedCaptureHistoryCannotSurviveInvalidEvidence), AedCaptureHistoryCannotSurviveInvalidEvidence),
         new(nameof(AedCompletesLiveVtCaptureWorkflow), AedCompletesLiveVtCaptureWorkflow),
+        new(nameof(ConfiguredAedStaircaseConvertsOnThirdDelivery), ConfiguredAedStaircaseConvertsOnThirdDelivery),
         new(nameof(AedEnergySequenceAdvancesOnlyAfterDelivery), AedEnergySequenceAdvancesOnlyAfterDelivery),
         new(nameof(AedEnergySequenceValidatesBeforeChangingDevice), AedEnergySequenceValidatesBeforeChangingDevice),
         new(nameof(AedCprControlsRemoveChargeAndRequireNewAnalysis), AedCprControlsRemoveChargeAndRequireNewAnalysis)
@@ -51,6 +52,49 @@ internal static class AedSpecifications
         }
         Check.That(aed.Phase == AedPhase.ShockAdvised, "fresh sustained VF evidence leads to charged advice");
         return now;
+    }
+
+    private static void ConfiguredAedStaircaseConvertsOnThirdDelivery()
+    {
+        int[] steps = [100, 200, 300];
+        var device = new ManualDefibrillator(Interaction, DefibrillatorConfiguration.Default with
+        { AedEnergySequenceJoules = steps, ChargeDurationMilliseconds = 100 }, 50);
+        steps[0] = 300;
+        var aed = new AutomatedExternalDefibrillator(device);
+        var profile = new EcgElectricalTherapyProfile("ecgTemplate.t021", ElectricalConversionSettings.Default)
+        { AedSettings = new(true, 200, 200) };
+        var session = new LocalMonitorPreviewSession(
+            PhysiologyIllustrationConfiguration.Disorganized(AvConductionPattern.VentricularFibrillationCoarseIllustration),
+            MonitorDisplayConfiguration.Default(), electricalTherapy: profile);
+        long now = 0;
+        aed.Enable(now, now);
+        for (int delivery = 1; delivery <= 3; delivery++)
+        {
+            while (aed.Phase != AedPhase.ShockAdvised)
+            {
+                now += StepNs;
+                session.Advance(StepNs);
+                aed.Tick(now, now, Evidence(now));
+                Check.That(now < 40_000_000_000, "configured AED eventually becomes ready");
+            }
+            Check.That(aed.PressShock(Interaction, now, now, Evidence(now)), "each step requires held confirmation");
+            DeliveredElectricalShock? shock = null;
+            for (int i = 0; i < 10; i++)
+            {
+                now += StepNs;
+                session.Advance(StepNs);
+                shock = aed.Tick(now, now, Evidence(now));
+            }
+            Check.That(shock is not null && shock.EnergyJoules == delivery * 100, "configured staircase uses an owned snapshot");
+            var sinus = session.PrepareSinusAfterShock(new(EcgElectricalTherapy.SinusTemplateId, ElectricalConversionSettings.Default));
+            var response = session.ApplyElectricalShock(shock!, sinus);
+            Check.That(response.Outcome == (delivery < 3 ? ElectricalConversionOutcome.EnergyTooLow : ElectricalConversionOutcome.ConversionScheduled),
+                "100 J and equal-threshold 200 J fail; 300 J schedules conversion without accumulating energy");
+            aed.ReleaseShock(now);
+            aed.ResumeAnalyzing(now, now);
+        }
+        for (int i = 0; i < 40; i++) { session.Advance(StepNs); }
+        Check.That(session.ElectricalTherapy!.TemplateId == EcgElectricalTherapy.SinusTemplateId, "third actual discharge completes sinus conversion");
     }
 
     private static void AedEnergySequenceAdvancesOnlyAfterDelivery()

@@ -56,7 +56,8 @@ internal sealed partial class DesignPreviewWindow
                 ? _editableDefibrillatorConfiguration.EnergyStepsJoules : _skinPackage.DefaultEnergyStepsJoules
         }).Snapshot();
         _defibrillator = new(Guid.NewGuid(), configuration, profile is null ? _editableEnergyJoules : _therapy.EnergyJoules);
-        _aed = new(_defibrillator, profile?.AedEnergySequenceJoules.Select(configuration.NearestEnergy).ToArray());
+        _aed = new(_defibrillator, (_editableDefibrillatorConfiguration.AedEnergySequenceJoules ??
+            profile?.AedEnergySequenceJoules)?.Select(configuration.NearestEnergy).ToArray());
         _therapy = _therapy with { EnergyJoules = _defibrillator.EnergyJoules };
         Settings.Defibrillator.SetSkinDefaults(profile?.ManualConfiguration, _skinPackage.DefaultEnergyStepsJoules,
             _customDefibrillatorEnergySteps, _editableDefibrillatorConfiguration);

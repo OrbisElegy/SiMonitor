@@ -819,6 +819,7 @@ internal sealed partial class DesignPreviewWindow : Window
             bool customEnergySteps = Settings.Defibrillator.CustomEnergySteps;
             var editableDefibrillator = ((_skinPackage.DeviceProfile is null ? defibrillator : _editableDefibrillatorConfiguration) with
             {
+                AedEnergySequenceJoules = defibrillator.AedEnergySequenceJoules,
                 EnergyStepsJoules = customEnergySteps ? defibrillator.EnergyStepsJoules : _editableDefibrillatorConfiguration.EnergyStepsJoules
             }).Snapshot();
             var sinusTherapy = CaptureSinusTherapy();

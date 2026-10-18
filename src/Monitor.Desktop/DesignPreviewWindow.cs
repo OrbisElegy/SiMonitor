@@ -59,6 +59,7 @@ internal sealed partial class DesignPreviewWindow : Window
     private readonly LanguagePreferenceStore? _languagePreferences;
     private readonly MonitorTherapyPreferenceStore? _therapyPreferences;
     private readonly Func<long> _safetyClock;
+    private readonly bool _startAudioOutput;
     private ManualDefibrillator _defibrillator = null!;
     private AutomatedExternalDefibrillator _aed = null!;
     internal AutomatedExternalDefibrillator Aed => _aed;
@@ -73,10 +74,11 @@ internal sealed partial class DesignPreviewWindow : Window
     internal TextBlock LanguageNotice { get; } = Text("", 12);
     private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
-    internal DesignPreviewWindow(string? preferencesPath = null, Func<long>? safetyClock = null)
+    internal DesignPreviewWindow(string? preferencesPath = null, Func<long>? safetyClock = null, bool startAudioOutput = true)
     {
         long clockStart = Stopwatch.GetTimestamp();
         _safetyClock = safetyClock ?? (() => Stopwatch.GetElapsedTime(clockStart).Ticks * 100);
+        _startAudioOutput = startAudioOutput;
         Title = ProductIdentity.WindowTitle;
         Width = 1440; Height = 940; MinWidth = 960; MinHeight = 640;
         RequestedThemeVariant = ThemeVariant.Light;
@@ -187,7 +189,12 @@ internal sealed partial class DesignPreviewWindow : Window
         main.Children.Add(card);
         ScreenWatermark.Attach(root);
         Content = root;
-        Opened += (_, _) => { Settings.Sound.StartOutput(); Start(); }; Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
+        Opened += (_, _) =>
+        {
+            if (_startAudioOutput) { Settings.Sound.StartOutput(); }
+            Start();
+        };
+        Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
         Deactivated += (_, _) =>
         {
             ReleaseDeviceMomentaryInputs();
@@ -491,7 +498,7 @@ internal sealed partial class DesignPreviewWindow : Window
     private void ConnectSettings()
     {
         ConnectSkinSettings();
-        if (IsVisible) { Settings.Sound.StartOutput(); }
+        if (IsVisible && _startAudioOutput) { Settings.Sound.StartOutput(); }
         Settings.LanguageChanged += SelectLanguage;
         Settings.MeasurementUnits.SelectionChanged += (_, _) => EcgPage?.SetMeasurementUnits(Settings.MeasurementUnits.SelectedIndex == 1);
         void UpdateNotificationMode()

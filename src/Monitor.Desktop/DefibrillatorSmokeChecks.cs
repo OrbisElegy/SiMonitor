@@ -389,7 +389,10 @@ internal static class DefibrillatorSmokeChecks
     internal static void VerifyAed()
     {
         long safetyNs = 0;
-        var window = new DesignPreviewWindow(safetyClock: () => safetyNs);
+        // Other native smoke shards share the desktop. Keep their focus changes
+        // out of this manually driven workflow; exercise deactivation explicitly.
+        var window = new DesignPreviewWindow(safetyClock: () => safetyNs, startAudioOutput: false)
+        { ShowActivated = false };
         window.Show();
         ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
@@ -425,6 +428,14 @@ internal static class DefibrillatorSmokeChecks
             Advance(162);
             Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
                 "live VF automatically charges AED");
+            NotifyDeactivation(window);
+            Require(window.Aed.Phase == AedPhase.Suspended && window.Defibrillator.State.Energy == EnergyState.Idle &&
+                !controls.Shock.IsEnabled && window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Cancelled,
+                "deactivation clears AED advice and charge and publishes cancellation even in a manually driven fixture");
+            Click(controls.Charge);
+            Advance(162);
+            Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
+                "AED advice resumes only after explicit reanalysis following deactivation");
             Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "shock advice text remains visible without countdown arguments");
             window.Localization.Select("en");
             Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "active AED prompt follows language changes");
@@ -434,8 +445,10 @@ internal static class DefibrillatorSmokeChecks
             long capturedSimulationTimeNs = window.Session.SimulationTimeNs;
             var capturedPhase = window.Aed.Phase;
             Capture(window, "generic-aed-shock-advised.png");
-            Require(window.Session.SimulationTimeNs == capturedSimulationTimeNs && window.Aed.Phase == capturedPhase,
-                "rendering an AED snapshot preserves the manually advanced time and advice");
+            Require(window.Session.SimulationTimeNs == capturedSimulationTimeNs,
+                $"rendering an AED snapshot preserves manually advanced time ({capturedSimulationTimeNs} -> {window.Session.SimulationTimeNs})");
+            Require(window.Aed.Phase == capturedPhase,
+                $"rendering an AED snapshot preserves advice without native focus interference ({capturedPhase} -> {window.Aed.Phase})");
             Click(controls.Shock);
             Require(window.Session.ShockArtifacts.Count == 0, "an ordinary click cannot discharge AED");
             Require(window.Settings.Sound.TherapyRelayCount == 0, "ready and button clicks do not emit a discharge relay");
@@ -550,6 +563,16 @@ internal static class DefibrillatorSmokeChecks
     }
     private static void KeyEvent(Button button, bool keyDown) => button.RaiseEvent(new KeyEventArgs
     { RoutedEvent = keyDown ? InputElement.KeyDownEvent : InputElement.KeyUpEvent, Key = Key.Space });
+
+    // Invoke the same locked-framework notification used by native focus loss,
+    // without competing with other smoke processes for the desktop foreground.
+    private static void NotifyDeactivation(Window window)
+    {
+        var handler = typeof(WindowBase).GetMethod("HandleDeactivated",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Locked framework deactivation handler is unavailable.");
+        handler.Invoke(window, null);
+    }
 
     private static void Capture(Window window, string name)
     {

@@ -14,7 +14,10 @@ internal static class AlarmAttentionPresentationSmokeChecks
 {
     internal static void Verify()
     {
-        var window = new DesignPreviewWindow();
+        // This fixture publishes synthetic readings and checks sound requests.
+        // A real device failure can asynchronously refresh the untouched session
+        // over those readings when popup layout drains the dispatcher.
+        var window = new DesignPreviewWindow(startAudioOutput: false);
         window.Show();
         window.Pause();
         try
@@ -126,6 +129,8 @@ internal static class AlarmAttentionPresentationSmokeChecks
                 popupImage.Save("artifacts/alarm-list.png", PngBitmapEncoderOptions.Default);
             }
             skin.AlarmsButton.Flyout.Hide();
+            Require(!window.Settings.Sound.OutputStarted && window.Settings.Sound.OutputNotice is null,
+                "native popup rendering does not open an audio device or overwrite the injected alarm readings");
             VerifyAlarmActions();
             var retained = State();
             editor.LatchUntilAcknowledged.IsChecked = false;

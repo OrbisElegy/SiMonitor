@@ -33,6 +33,7 @@ internal sealed partial class DesignPreviewWindow : Window
     internal LiveMonitorView MonitorView { get; private set; }
     private LocalMonitorPreviewSession _session;
     private DispatcherTimer? _timer;
+    private readonly MonitorFramePacer _framePacer = new(Stopwatch.Frequency);
     private long _lastTick;
     private bool _closed;
     private bool _applying;
@@ -996,7 +997,7 @@ internal sealed partial class DesignPreviewWindow : Window
     {
         if (_closed || _timer is not null || HasDevicePanel && _deviceOperatingMode == DeviceOperatingMode.Off) { return; }
         _lastTick = Stopwatch.GetTimestamp();
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _timer = new DispatcherTimer { Interval = _framePacer.Start(_lastTick) };
         _timer.Tick += OnTick; _timer.Start(); UpdateState();
     }
     internal void Pause()
@@ -1014,6 +1015,8 @@ internal sealed partial class DesignPreviewWindow : Window
         long now = Stopwatch.GetTimestamp();
         long elapsed = DemoFrameTiming.ResolveElapsed(Stopwatch.GetElapsedTime(_lastTick, now));
         _lastTick = now; Pulse(sender, elapsed);
+        if (ReferenceEquals(sender, _timer) && _timer is { IsEnabled: true })
+        { _timer.Interval = _framePacer.CompleteFrame(Stopwatch.GetTimestamp()); }
     }
     internal void Pulse(object? timer, long deltaNs)
     {

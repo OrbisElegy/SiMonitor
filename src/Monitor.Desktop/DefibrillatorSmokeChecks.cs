@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Monitor.Application.Measurements;
 using Monitor.Application.Therapy;
 using Monitor.Domain.Therapy;
@@ -389,10 +390,7 @@ internal static class DefibrillatorSmokeChecks
     internal static void VerifyAed()
     {
         long safetyNs = 0;
-        // Other native smoke shards share the desktop. Keep their focus changes
-        // out of this manually driven workflow; exercise deactivation explicitly.
-        var window = new DesignPreviewWindow(safetyClock: () => safetyNs, startAudioOutput: false)
-        { ShowActivated = false };
+        var window = new DesignPreviewWindow(safetyClock: () => safetyNs, startAudioOutput: false);
         window.Show();
         ((GenericMonitorSkin)window.MonitorTrace.Skin!).ShowTherapy.IsChecked = true;
         try
@@ -407,6 +405,10 @@ internal static class DefibrillatorSmokeChecks
             // This fixture advances both clocks explicitly; rendering must not
             // let a wall-clock dispatcher tick advance only simulation time.
             window.ActiveTimer!.Stop();
+            // Settle native startup and layout before beginning the AED workflow.
+            // Later snapshots only arrange content: ShowActivated cannot prevent
+            // queued focus notifications from other native smoke processes.
+            DesktopViewportSmokeChecks.Layout(window);
             void Advance(int frames)
             {
                 for (int frame = 0; frame < frames; frame++)
@@ -428,14 +430,6 @@ internal static class DefibrillatorSmokeChecks
             Advance(162);
             Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
                 "live VF automatically charges AED");
-            NotifyDeactivation(window);
-            Require(window.Aed.Phase == AedPhase.Suspended && window.Defibrillator.State.Energy == EnergyState.Idle &&
-                !controls.Shock.IsEnabled && window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Cancelled,
-                "deactivation clears AED advice and charge and publishes cancellation even in a manually driven fixture");
-            Click(controls.Charge);
-            Advance(162);
-            Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
-                "AED advice resumes only after explicit reanalysis following deactivation");
             Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "shock advice text remains visible without countdown arguments");
             window.Localization.Select("en");
             Require(controls.Status.Text == window.Localization.Get("aed.phase.ShockAdvised"), "active AED prompt follows language changes");
@@ -444,11 +438,29 @@ internal static class DefibrillatorSmokeChecks
             window.Localization.Select("zh-CN");
             long capturedSimulationTimeNs = window.Session.SimulationTimeNs;
             var capturedPhase = window.Aed.Phase;
-            Capture(window, "generic-aed-shock-advised.png");
+            // Reproduce focus loss queued during capture on every platform,
+            // without depending on other shards or the host window manager.
+            bool deactivationDelivered = false;
+            Dispatcher.UIThread.Post(() =>
+            {
+                deactivationDelivered = true;
+                NotifyDeactivation(window);
+            });
+            Capture(window, "generic-aed-shock-advised.png", processPendingEvents: false);
             Require(window.Session.SimulationTimeNs == capturedSimulationTimeNs,
                 $"rendering an AED snapshot preserves manually advanced time ({capturedSimulationTimeNs} -> {window.Session.SimulationTimeNs})");
             Require(window.Aed.Phase == capturedPhase,
                 $"rendering an AED snapshot preserves advice without native focus interference ({capturedPhase} -> {window.Aed.Phase})");
+            Require(!deactivationDelivered, "snapshot layout leaves unrelated dispatcher input pending");
+            Dispatcher.UIThread.RunJobs();
+            Require(deactivationDelivered && window.Aed.Phase == AedPhase.Suspended &&
+                window.Defibrillator.State.Energy == EnergyState.Idle && !controls.Shock.IsEnabled &&
+                window.Settings.Sound.PublishedTherapy?.Phase == TherapySoundPhase.Cancelled,
+                "dispatching deactivation clears AED advice and charge and publishes cancellation");
+            Click(controls.Charge);
+            Advance(162);
+            Require(window.Aed.Phase == AedPhase.ShockAdvised && controls.Shock.IsEnabled && controls.ChargeLit,
+                "AED advice resumes only after explicit reanalysis following deactivation");
             Click(controls.Shock);
             Require(window.Session.ShockArtifacts.Count == 0, "an ordinary click cannot discharge AED");
             Require(window.Settings.Sound.TherapyRelayCount == 0, "ready and button clicks do not emit a discharge relay");
@@ -472,7 +484,7 @@ internal static class DefibrillatorSmokeChecks
             Advance(50);
             Require(window.Aed.Phase == AedPhase.Cpr && window.Session.ElectricalTherapy!.TemplateId == "ecgTemplate.t000",
                 "post-shock quiet interval and sinus transition preserve the CPR cycle");
-            Capture(window, "generic-aed-cpr.png");
+            Capture(window, "generic-aed-cpr.png", processPendingEvents: false);
             Advance(2350);
             Require(window.Aed.Phase == AedPhase.Analyzing, "120 seconds of CPR starts another analysis");
             Advance(180);
@@ -574,9 +586,9 @@ internal static class DefibrillatorSmokeChecks
         handler.Invoke(window, null);
     }
 
-    private static void Capture(Window window, string name)
+    private static void Capture(Window window, string name, bool processPendingEvents = true)
     {
-        DesktopViewportSmokeChecks.Layout(window, 1440, 940);
+        DesktopViewportSmokeChecks.Layout(window, 1440, 940, processPendingEvents);
         using var image = new RenderTargetBitmap(new PixelSize(1440, 940), new Vector(96, 96));
         image.Render((Control)window.Content!);
         Directory.CreateDirectory("artifacts");

@@ -9,12 +9,14 @@ namespace Monitor.Desktop;
 // use an explicit content viewport, independent of screen resolution and DPI.
 internal static class DesktopViewportSmokeChecks
 {
-    internal static void Layout(Window window, double width = 1440, double height = 940)
+    internal static void Layout(Window window, double width = 1440, double height = 940,
+        bool processPendingEvents = true)
     {
         var root = (Control)window.Content!;
         root.Width = width;
         root.Height = height;
-        Dispatcher.UIThread.RunJobs();
+        // Manually driven snapshots must not consume unrelated input or timers.
+        if (processPendingEvents) { Dispatcher.UIThread.RunJobs(); }
         root.InvalidateMeasure();
         root.Measure(new Size(width, height));
         root.Arrange(new Rect(0, 0, width, height));

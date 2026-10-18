@@ -26,6 +26,8 @@ internal static class DesktopSmokeChecks
         if (valid) { NativeSmokePartition.Run(() => DesktopMeasurementSmokeChecks.Verify()); }
         if (valid) { NativeSmokePartition.Run(VentricularFibrillationLongRunSmokeChecks.Verify); }
         if (valid) { NativeSmokePartition.Run(GenericSkinSmokeChecks.Verify); }
+        if (valid) { NativeSmokePartition.Run(LiveMonitorTraceSmokeChecks.Verify); }
+        if (valid) { NativeSmokePartition.Run(LiveMonitorTraceIncrementalSmokeChecks.Verify); }
         if (valid) { NativeSmokePartition.Run(SkinPackageSmokeChecks.Verify); }
         if (valid) { NativeSmokePartition.Run(EnclosureSkinSmokeChecks.Verify); }
         if (valid) { NativeSmokePartition.Run(WaveformAlarmBannerSmokeChecks.Verify); }

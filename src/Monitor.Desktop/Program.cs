@@ -30,6 +30,8 @@ internal static class Program
             return 2;
         }
 #endif
-        return AppBuilder.Configure<MonitorApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
+        return AppBuilder.Configure<MonitorApp>().UsePlatformDetect()
+            .With(new X11PlatformOptions { UseRetainedFramebuffer = true })
+            .StartWithClassicDesktopLifetime(args);
     }
 }

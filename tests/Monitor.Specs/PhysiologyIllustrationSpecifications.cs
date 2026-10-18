@@ -14,7 +14,8 @@ internal static class PhysiologyIllustrationSpecifications
     // envelopes for the first six seconds of source time (30 complete blocks).
     // These same source windows are now available without the former acquisition wait.
     // Goldens include the documented filling corrections and authored smooth
-    // ABP/PA/CVP/CO2 contours. ECG, RESP and PLETH retain their previous samples.
+    // ABP/PA/CVP/CO2 contours, including the ejection-bounded AIVR baseline.
+    // ECG, RESP and PLETH retain their previous samples.
     // CVP now encodes absolute pressure; normalize only that representation back
     // to the recorded baseline/increment pair before hashing. Frozen hashes still
     // guard every physical sample, other channel and acquisition metadata.
@@ -54,7 +55,7 @@ internal static class PhysiologyIllustrationSpecifications
             ("AtrialEscapePreset", PhysiologyDemoConfiguration.AtrialEscapePreset, 30, "5504d44aea5b9e97665e840409abc56e91834f37e7d4ead5e6dc2c569393f280"),
             ("AarPreset", PhysiologyDemoConfiguration.AarPreset, 30, "b014ab6eab4fa9df98c4ca8d2ea4a207335eda249f93c0dd3025c3dd482436da"),
             ("AjrPreset", PhysiologyDemoConfiguration.AjrPreset, 30, "10aa268f63b2de4337aa7b5340b53700767756b93d93559465b64003137db5d3"),
-            ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "e15fdc9222310271f5ebd74f18946b6d78130f4d0625e56167875cd6fd616fbb"),
+            ("AivrPreset", PhysiologyDemoConfiguration.AivrPreset, 30, "05181dac836c290d9ccf5fe4a0353126d240471116edba0cdef8e31e25c9083e"),
             ("VtPreset", PhysiologyDemoConfiguration.VtPreset, 30, "c2c478f9a04f045565a0434ca1dd7c8ff5f5896a9c155b3d66f25ca4a4051cfc"),
             ("SvtPreset", PhysiologyDemoConfiguration.SvtPreset, 30, "ff02e9a949a3903ae71640e7fa505a3b4f67a55248e4ae2151f6a472f1e02e1d"),
             ("PrematureVentricular", PhysiologyDemoConfiguration.PrematureVentricular, 30, "805a1b3a3a48a2d3f200568bec468e06b729669b098f84ad03d1b7da8fac35a0"),

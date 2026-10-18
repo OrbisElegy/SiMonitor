@@ -408,8 +408,14 @@ c、x、y 与呼吸分量保留原有 `CvpComponentTables` 项目自制 smoothst
 PLETH 沿用既有项目自制形态，ECG 不在本次形态迁移范围内。
 
 `VascularPressureMorphologyPlan.ModelId` 的默认值及 `EvidenceId` 为
-`VascularPressureMorphologyRatio@3`，`LegacyEvidenceId` 保留 `VascularPressureMorphologyRatio@2`。
-新建默认压力源使用 `@3` 形态；显式 `@2` 定义及旧 checkpoint 继续按旧形态求值，
+`VascularPressureMorphologyRatio@4`，`PreviousEvidenceId` 保留 `@3`，
+`LegacyEvidenceId` 保留 `VascularPressureMorphologyRatio@2`。
+当使用按搏出量线性叠加的压力形态，且形态时长短于名义室性周期时，`@4` 将残余
+基线向本搏周期终点的调整限制在射血阶段内，避免三度 AVB 等强弱搏交替时在波尾
+继续上升或下降。调整使用有界、单调的时间映射；保留切迹、原周期起止压力和
+周期结束后的 RC 衰减。重叠形态沿用既有叠加路径；这类分离脉搏的目标校准纳入
+全部有效搏动，与测量端的平均压力对应。
+新建默认压力源使用 `@4`；显式 `@2`、`@3` 定义及旧 checkpoint 继续按旧形态求值，
 不能只改版本字符串而重新解释已保存的压力状态。
 
 早搏、AF、传导房扑、充盈和固定节律灌注通过各自 `Supports` / `IsPattern` / `GainPermille` 或预设选取；

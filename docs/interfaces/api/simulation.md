@@ -2561,9 +2561,10 @@ public enum VascularPressureMorphologyKind
     Arterial,
     PulmonaryArtery
 }
-public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKind Kind, long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@3", int MaximumPulseOverlap = 1)
+public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKind Kind, long DurationNs, int PulseHeightCentiMmHg, string ModelId = "VascularPressureMorphologyRatio@4", int MaximumPulseOverlap = 1)
 {
-    public const string EvidenceId = "VascularPressureMorphologyRatio@3";
+    public const string EvidenceId = "VascularPressureMorphologyRatio@4";
+    public const string PreviousEvidenceId = "VascularPressureMorphologyRatio@3";
     public const string LegacyEvidenceId = "VascularPressureMorphologyRatio@2";
 }
 ```

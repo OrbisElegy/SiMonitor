@@ -30,6 +30,7 @@ public sealed class VascularPressureSource
     private readonly long _referenceOnsetQ32;
     private readonly long[]? _morphologyTable;
     private readonly bool _useLinearStrokeMorphology;
+    private readonly bool _useEjectionBoundedMorphology;
     private readonly int _variationProbeGainPermille;
 
     private VascularPressureSource(RegularPhysiologyPlan physiology, VascularPressurePlan plan, int variationProbeGainPermille = 1000)
@@ -89,7 +90,8 @@ public sealed class VascularPressureSource
         if (WholeStepDecay(_decayHorizonNs / MeshStepNs) != 0) { throw Invalid(); }
         if (plan.Morphology is { } morphology)
         {
-            if (morphology.ModelId is not (VascularPressureMorphologyPlan.EvidenceId or VascularPressureMorphologyPlan.LegacyEvidenceId) ||
+            if (morphology.ModelId is not (VascularPressureMorphologyPlan.EvidenceId or
+                VascularPressureMorphologyPlan.PreviousEvidenceId or VascularPressureMorphologyPlan.LegacyEvidenceId) ||
                 !Enum.IsDefined(morphology.Kind) || morphology.DurationNs <= 0 ||
                 morphology.MaximumPulseOverlap is < 1 or > 8 || morphology.DurationNs > support ||
                 ((Int128)morphology.DurationNs + ventricularPeriod - 1) / ventricularPeriod > morphology.MaximumPulseOverlap ||
@@ -102,6 +104,9 @@ public sealed class VascularPressureSource
             // from the sparse mechanical event stream.
             _morphologyPeriodNs = physiology.PacingOutput is { PulseDivision: 4 } output
                 ? output.PeriodNs / output.PulseDivision : (long)ventricularPeriod;
+            _useEjectionBoundedMorphology = _useLinearStrokeMorphology &&
+                morphology.ModelId == VascularPressureMorphologyPlan.EvidenceId &&
+                morphology.DurationNs < _morphologyPeriodNs;
             long endDecay = Decay(_morphologyPeriodNs);
             long endInput = EjectionCoefficient(_morphologyPeriodNs);
             _referenceOnsetQ32 = (long)FixedPointMath.RoundDivideTiesToEven(
@@ -287,8 +292,10 @@ public sealed class VascularPressureSource
             }, CancellationToken.None);
         // Weak premature or filling-limited beats are often below the pulse detector's
         // threshold; calibrate on full-strength beats whenever a rhythm has enough of them.
+        // With ejection-bounded baselines the separated weak pulses also have
+        // stable troughs, so include them in the displayed pressure average.
         var strong = accepted.Where(item => item.GainPermille >= StrongBeatGainPermille).ToList();
-        var beats = (strong.Count >= MinimumStrongBeatCount ? strong : accepted)
+        var beats = (!_useEjectionBoundedMorphology && strong.Count >= MinimumStrongBeatCount ? strong : accepted)
             .Take(CalibrationBeatCount).Select(item => item.Beat).ToList();
         Int128 onsets = 0;
         Int128 peaks = 0;
@@ -409,6 +416,20 @@ public sealed class VascularPressureSource
                     EjectionCoefficient(age, morphologyEjectionDuration) * FixedPointMath.Q32One;
                 result += FixedPointMath.RoundDivideTiesToEven((replacement - input) * morphologyGain,
                     (Int128)1000 * FixedPointMath.Q62One);
+                if (_useEjectionBoundedMorphology)
+                {
+                    // The shaped baseline is S0*gain + residual*decay(age).
+                    // Settle that residual to this beat's nominal endpoint during
+                    // ejection, rather than letting it pull the completed contour
+                    // up or down throughout diastole. The endpoint still joins
+                    // the original RC history exactly; no volume is added.
+                    Int128 asymptote = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One;
+                    Int128 onset = FixedPointMath.RoundDivideTiesToEven((Int128)_referenceOnsetQ32 * morphologyGain, 1000);
+                    Int128 residual = result - pulse - asymptote - onset;
+                    long referenceAge = EjectionBoundedReferenceAge(age, morphologyEjectionDuration);
+                    result = asymptote + onset + pulse + FixedPointMath.RoundDivideTiesToEven(
+                        residual * Decay(referenceAge - age), FixedPointMath.Q62One);
+                }
             }
         }
         else if (morphologyAge is not null || pulse != 0)
@@ -431,6 +452,21 @@ public sealed class VascularPressureSource
         if (result < 0 || result > short.MaxValue * FixedPointMath.Q32One)
         { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(simTimeNs)); }
         return (long)result;
+    }
+
+    // Monotone Hermite time mapping: slope one at onset, zero at ejection
+    // end. It reaches the nominal cycle endpoint before the contour runs out,
+    // avoiding an abrupt baseline slope change at the end of ejection.
+    private long EjectionBoundedReferenceAge(long ageNs, long ejectionDurationNs)
+    {
+        if (ageNs >= ejectionDurationNs) { return _morphologyPeriodNs; }
+        long position = (long)FixedPointMath.RoundDivideTiesToEven((Int128)ageNs * FixedPointMath.Q32One, ejectionDurationNs);
+        long square = (long)FixedPointMath.RoundDivideTiesToEven((Int128)position * position, FixedPointMath.Q32One);
+        long cube = (long)FixedPointMath.RoundDivideTiesToEven((Int128)square * position, FixedPointMath.Q32One);
+        long mappedAge = (long)FixedPointMath.RoundDivideTiesToEven(
+            (Int128)(3 * square - 2 * cube) * _morphologyPeriodNs +
+            (Int128)(position - 2 * square + cube) * ejectionDurationNs, FixedPointMath.Q32One);
+        return Math.Clamp(mappedAge, ageNs, _morphologyPeriodNs);
     }
 
     // The rhythm's stroke response, scaled by the optional seeded drift at the beat's time.

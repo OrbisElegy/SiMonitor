@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text.Json;
 using Monitor.Simulation.Acquisition;
+using Monitor.Simulation.Authoring;
 using Monitor.Simulation.Determinism;
 using Monitor.Simulation.Physiology;
 
@@ -30,6 +31,10 @@ internal static class VascularPressureMorphologySpecifications
         new(nameof(VascularMorphologyBlocksAndRestoredPendingSamplesKeepExactBytes), VascularMorphologyBlocksAndRestoredPendingSamplesKeepExactBytes),
         new(nameof(VascularMorphologyRejectsUnsafeOrUnknownPlansAtomically), VascularMorphologyRejectsUnsafeOrUnknownPlansAtomically),
         new(nameof(VascularMorphologyDefaultsKeepOriginalSourcesUnchanged), VascularMorphologyDefaultsKeepOriginalSourcesUnchanged),
+        new(nameof(VascularWeakStrokeTailsDoNotDrift), VascularWeakStrokeTailsDoNotDrift),
+        new(nameof(VascularPreviousMorphologyRetainsWeakStrokeSamples), VascularPreviousMorphologyRetainsWeakStrokeSamples),
+        new(nameof(VascularWeakStrokeVersionsRestorePendingSamples), VascularWeakStrokeVersionsRestorePendingSamples),
+        new(nameof(VascularWeakStrokeCompletesBeforePassiveRunoff), VascularWeakStrokeCompletesBeforePassiveRunoff),
     ];
 
     private static void VascularMorphologyMatchesAuthoredContoursAtSteadyState()
@@ -270,6 +275,138 @@ internal static class VascularPressureMorphologySpecifications
                     "old RC plans and no-mechanical-event trajectories remain bit-identical under optional shape support");
             }
         }
+    }
+
+    private static void VascularWeakStrokeTailsDoNotDrift()
+    {
+        foreach (var configuration in new[]
+        {
+            PhysiologyIllustrationConfiguration.JunctionalEscape,
+            PhysiologyIllustrationConfiguration.VentricularEscape,
+            PhysiologyIllustrationConfiguration.AivrPreset,
+            PhysiologyIllustrationConfiguration.Default with { SeededRate = new(30, new string('a', 64), 50) },
+        })
+        {
+            var state = PhysiologyIllustrationSource.Create(configuration).CaptureState();
+            foreach (int row in new[] { 3, 5 })
+            {
+                var generator = state.Channels.Single(channel => channel.ChannelId == PhysiologyIllustrationSource.ChannelId(row)).Generator;
+                var physiology = generator.Timeline.Plan;
+                var pressure = generator.VascularPressure!;
+                var source = VascularPressureSource.Create(physiology, pressure);
+                var raw = VascularPressureSource.Create(physiology, pressure with { Morphology = null });
+                var beats = new List<PhysiologyCycleEvent>();
+                RegularPhysiologyTimeline.VisitVentricularMechanical(physiology, 0, 70_000_000_000,
+                    200, beats.Add, CancellationToken.None);
+                foreach (int index in new[] { 0, 1, 2, beats.Count - 3, beats.Count - 2 })
+                {
+                    long arrival = beats[index].SimTimeNs + pressure.TransitDelayNs;
+                    long nextArrival = beats[index + 1].SimTimeNs + pressure.TransitDelayNs;
+                    int reboundIndex = row == 3 ? 132 : 120;
+                    long startAge = Math.Max(pressure.EjectionDurationNs, pressure.Morphology!.DurationNs * reboundIndex / 256);
+                    long previous = source.EvaluateAt(arrival + startAge);
+                    for (long time = arrival + startAge + 1_000_000; time < nextArrival; time += 1_000_000)
+                    {
+                        long value = source.EvaluateAt(time);
+                        Check.That(value <= previous + 16 && value >= pressure.AsymptoticPressureCentiMmHg * Q,
+                            "after the authored notch rebound, strong and weak beats decay without an extra rise or undershoot");
+                        if (time >= arrival + physiology.VentricularPeriodNs)
+                        {
+                            Check.That(value == raw.EvaluateAt(time),
+                                "the nominal cycle endpoint rejoins the original RC history without changing ejected volume");
+                        }
+                        previous = value;
+                    }
+                    foreach (long age in new[] { pressure.EjectionDurationNs, pressure.Morphology.DurationNs })
+                    {
+                        Check.That(Math.Abs(source.EvaluateAt(arrival + age + 1) - source.EvaluateAt(arrival + age - 1)) < Q / 100,
+                            "ejection and contour endpoints remain continuous at nanosecond resolution");
+                    }
+                    long notchAge = pressure.Morphology.DurationNs * (row == 3 ? 124 : 108) / 256;
+                    long reboundAge = pressure.Morphology.DurationNs * reboundIndex / 256;
+                    Check.That(source.EvaluateAt(arrival + reboundAge) > source.EvaluateAt(arrival + notchAge) + Q,
+                        "settling the baseline during ejection preserves the authored dicrotic notch rebound");
+                }
+            }
+        }
+    }
+
+    private static void VascularPreviousMorphologyRetainsWeakStrokeSamples()
+    {
+        foreach (var (configuration, expectedQ32) in new[]
+        {
+            (PhysiologyIllustrationConfiguration.JunctionalEscape, new long[] { 23420640371540, 23126679421443 }),
+            (PhysiologyIllustrationConfiguration.VentricularEscape, new long[] { 14026057820999, 14155281595894 }),
+        })
+        {
+            var generator = PhysiologyIllustrationSource.Create(configuration).CaptureState().Channels
+                .Single(channel => channel.ChannelId == PhysiologyIllustrationSource.ChannelId(3)).Generator;
+            var physiology = generator.Timeline.Plan;
+            var pressure = generator.VascularPressure!;
+            var legacy = VascularPressureSource.Create(physiology, pressure with
+            { Morphology = pressure.Morphology! with { ModelId = VascularPressureMorphologyPlan.PreviousEvidenceId } });
+            for (int index = 0; index < expectedQ32.Length; index++)
+            {
+                long time = physiology.VentricularMechanicalOffsetNs +
+                    (30 + index) * (long)physiology.VentricularPeriodNs + pressure.TransitDelayNs + 700_000_000;
+                Check.That(legacy.EvaluateAt(time) == expectedQ32[index],
+                    "version 3 retains frozen weak-stroke samples instead of reinterpreting saved source definitions");
+            }
+        }
+    }
+
+    private static void VascularWeakStrokeVersionsRestorePendingSamples()
+    {
+        var physiology = CompleteAvBlockVentricularReference.CreatePlan();
+        foreach (string modelId in new[] { VascularPressureMorphologyPlan.PreviousEvidenceId, VascularPressureMorphologyPlan.EvidenceId })
+        {
+            var pressure = Arterial with
+            {
+                UseCardiacFillingPerfusion = true,
+                Morphology = Arterial.Morphology! with { ModelId = modelId },
+            };
+            var group = PhysiologyWaveformGroup.Start(Abp, Pa, 1, 1, 1, 0, 32,
+                [pressure.CreateChannel(physiology, Abp, 0)]);
+            _ = group.AdvanceTo(4_100_000_000, 600, 32, 100);
+            var restored = PhysiologyWaveformGroup.Restore(JsonSerializer.Deserialize<PhysiologyWaveformGroupState>(
+                JsonSerializer.Serialize(group.CaptureState()))!);
+            var expected = group.AdvanceTo(8_800_000_000, 600, 32, 100);
+            var actual = restored.AdvanceTo(8_800_000_000, 600, 32, 100);
+            Check.That(expected.Count == actual.Count && expected.Zip(actual).All(pair => pair.First.SequenceEqual(pair.Second)),
+                "both morphology versions restore pending samples and alternating weak strokes with exact wire bytes");
+        }
+    }
+
+    private static void VascularWeakStrokeCompletesBeforePassiveRunoff()
+    {
+        var physiology = CompleteAvBlockVentricularReference.CreatePlan() with
+        { VentricularMechanicalEnabled = false, MechanicalAfterCycles = 2 };
+        var pressure = Arterial with { UseCardiacFillingPerfusion = true, TransitDelayNs = 2_480_000_003 };
+        var source = VascularPressureSource.Create(physiology, pressure);
+        var raw = VascularPressureSource.Create(physiology, pressure with { Morphology = null });
+        var previousVersion = VascularPressureSource.Create(physiology, pressure with
+        { Morphology = pressure.Morphology! with { ModelId = VascularPressureMorphologyPlan.PreviousEvidenceId } });
+        long arrival = physiology.VentricularMechanicalOffsetNs + (long)physiology.VentricularPeriodNs + pressure.TransitDelayNs;
+        long endpoint = arrival + (long)physiology.VentricularPeriodNs;
+        Check.That(source.EvaluateAt(arrival) == previousVersion.EvaluateAt(arrival) &&
+            source.EvaluateAt(endpoint) == previousVersion.EvaluateAt(endpoint),
+            "the shaped baseline preserves both original endpoint pressures for a weak last beat");
+        long level = source.EvaluateAt(arrival + pressure.Morphology!.DurationNs);
+        for (long time = arrival + pressure.Morphology.DurationNs; time < endpoint; time += 8_000_000)
+        {
+            Check.That(Math.Abs(source.EvaluateAt(time) - level) <= 16,
+                "the completed weak pulse has no additional baseline excursion before the nominal cycle endpoint");
+        }
+        long previous = source.EvaluateAt(endpoint);
+        for (long time = endpoint; time < endpoint + 10_000_000_000; time += 8_000_000)
+        {
+            long value = source.EvaluateAt(time);
+            Check.That(value == raw.EvaluateAt(time) && value <= previous,
+                "a missing next ejection leaves exactly the original passive runoff after the completed contour");
+            previous = value;
+        }
+        Check.That(Math.Abs(source.EvaluateAt(endpoint + 1) - source.EvaluateAt(endpoint - 1)) < Q / 100,
+            "the completed baseline adjustment rejoins passive runoff continuously");
     }
 
     private static EventWaveformComposition Contour(RegularPhysiologyPlan physiology,

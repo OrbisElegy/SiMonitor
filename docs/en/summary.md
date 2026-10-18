@@ -13,11 +13,11 @@ PDF and paper output retain the explicit teaching declaration.
 
 ## Build and verification
 
-Use Python 3.11 or newer, a stable .NET 10 SDK, CMake 3.20 or newer, and a C
+Use Python 3.11 or newer, a .NET 10 SDK, CMake 3.20 or newer, and a C
 compiler. Windows audio builds also need Visual Studio C++ Build Tools and a
 Windows SDK. From the repository root, `python3 tools/build.py --jobs 32`
 prepares locked dependencies, builds the native audio library, and builds the
-Release solution. On Windows, replace `python3` with `py -3`.
+Release solution. On Windows, use either `python3` or `py -3`.
 Run the desktop application with
 `dotnet run --project src/Monitor.Desktop --no-build --configuration Release`.
 For a local release candidate, run `python3 tools/build_release.py --jobs 32`;
@@ -59,8 +59,14 @@ establish Windows device behavior or release acceptance.
   pinned upstream commit, Apache-2.0 attribution, source and license hashes,
   and exact local waveform adaptations for ABP, CO₂, PA, and CVP components.
 - [License scope](../legal/license-scope.md) distinguishes project-authored code from
-  third-party material and describes distribution obligations and outstanding
-  release-package review.
+  third-party material and describes distribution obligations and the scope
+  of bundled resources and therapy recordings.
+
+The reviewed research reports identify GPT-6-Astra as their research author.
+Jason Zou, who has a medical education background, reviewed readability and
+medical terminology. This review does not establish that models implemented
+from those reports have undergone peer review or experimental validation
+against real physiology.
 
 Project-authored code is licensed under **AGPL-3.0-or-later**. Third-party
 material retains its own terms and attribution. Consult [LICENSE](../../LICENSE),
@@ -68,10 +74,15 @@ the [license scope](../legal/license-scope.md), [dependency ledger](../../eng/de
 and [third-party licenses](../../eng/licenses) before redistribution.
 The simulation models and engineering checks do not constitute clinical validation.
 
-Pacing includes fifteen fixed examples covering chamber/site choices, implant routes and output/capture/sensing failures. Defibrillation is an independent, finite current source (monophasic or biphasic), not a template or a desktop shock control. See the [research and limitations](../research/physiology/pacing-defibrillation.md).
+Therapy audio uses selected Mandarin F1 and English E1 recordings. The application
+embeds fixed WAV files and includes their source notices and licenses under
+`therapy-licenses/`; voice models are not bundled. Embedding the recordings does
+not relicense them under the project's AGPL license.
+
+Pacing includes fifteen fixed examples covering chamber/site choices, implant routes and output/capture/sensing failures. The independent defibrillation current source supports monophasic and biphasic waveforms. The desktop applies confirmed shocks through an adapter that adds ECG artifacts and schedules eligible rhythm conversions. See the [research and limitations](../research/physiology/pacing-defibrillation.md).
 
 Per-template shock response, independent monophasic/biphasic thresholds and skin integration are documented in the [electrical conversion contract](../interfaces/electrical-conversion.md).
 
 The default Generic skin uses four waveform rows (ECG, PLETH, RESP, CO₂), a white NIBP tile and two custom parameter slots. Therapy and toolbar buttons use live host commands. The D3 inspired enclosure includes a mode selector, three context softkeys and hardware controls, with a fixed three-row screen and bundled button materials. The in-process desktop composition port is described in [desktop interfaces](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤).
 
-D3 source references and model limits are recorded in the [device research](../research/devices/beneheart-d3.md).
+D3 enclosure behavior and model limits are documented in the [desktop interfaces](../interfaces/desktop-tools.md#通用整机面板).

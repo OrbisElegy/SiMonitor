@@ -2,7 +2,8 @@
 
 [项目说明](../README.md) · [English](en/README.md)
 
-接口文档描述当前实现的调用契约；技术调研记录模型依据、作者选择和适用边界。
+接口文档描述当前已经实现的API；技术调研记录模拟建模的理论
+依据、选择情况和适用边界。
 
 ## 英文指南
 
@@ -32,12 +33,8 @@
 
 ## 技术调研
 
-- [D3 整机面板与操作依据](research/devices/beneheart-d3.md)
-
 - [起搏与除颤波形依据](research/physiology/pacing-defibrillation.md)
-
 - [ECG 监护检测依据与能力边界](research/physiology/ecg-monitoring.md)
-
 - [短／长警报声音语义与实现映射](research/alarms/alarm-sound-duration-research.md)
 - [独立氧合下降模型调研](research/oxygenation/oxygenation-model-research.md)
 - [独立氧合模型：原型与参数验证](research/oxygenation/oxygenation-prototype.md)

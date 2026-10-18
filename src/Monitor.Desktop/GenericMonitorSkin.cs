@@ -246,6 +246,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin, IMonitorDeviceP
     }
 
     public MonitorChannels Channels => MonitorChannels.All;
+    public MonitorManualVitals SupportedManualVitals => _package.SupportedManualVitals;
     public MonitorChannels AdditionalMonitoredChannels => TwelveLeadVisible ? MonitorChannels.Ecg : MonitorChannels.None;
     public string Id => _package.Id;
     public IBrush Background => _package.Background;

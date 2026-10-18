@@ -11,6 +11,8 @@ internal interface IMonitorSkin
     public IMonitorDevicePanel? DevicePanel => null;
     public MonitorChannels Channels { get; }
     public MonitorChannels AdditionalMonitoredChannels => MonitorChannels.None;
+    // Presentation capability only; it does not disable acquisition or erase user settings.
+    public MonitorManualVitals SupportedManualVitals => MonitorManualVitals.All;
     public string Id { get; }
     public IBrush Background { get; }
     public bool CompactWaveformLabels => false;
@@ -19,6 +21,17 @@ internal interface IMonitorSkin
     public IBrush ChannelBrush(int channel);
     public Control Compose(MonitorSkinContent content);
     public void RefreshLayout() { }
+}
+
+[Flags]
+internal enum MonitorManualVitals
+{
+    None = 0,
+    Temperature = 1,
+    Custom1 = 2,
+    Custom2 = 4,
+    Nibp = 8,
+    All = Temperature | Custom1 | Custom2 | Nibp
 }
 
 internal sealed record MonitorSkinContent(

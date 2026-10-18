@@ -3,6 +3,7 @@
   "id": "generic",
   "name": "Generic",
   "layout": "generic",
+  "supportedManualVitals": ["temperature", "custom1", "custom2", "nibp"],
   "background": "#000000",
   "channelColors": [
     "#53F28C",

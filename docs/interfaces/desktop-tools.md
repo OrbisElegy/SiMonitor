@@ -163,12 +163,16 @@ Generic 与 ePM 共用 `GenericMonitorSkin` 的宿主命令控件，分别装配
 轮换进度，重排不重置计时。横幅沿用宿主的确认、恢复与模拟时钟闪烁状态，长文字
 省略显示并可查看完整提示。无通道来源的系统通知仍由顶部全局报警区呈现。
 底部十个图标键连接实际宿主操作，“NIBP停止全部”停止当前测量并关闭自动测量，
-“主菜单”进入设置页。未填写的温度／自定义参数不占床旁屏幕空间。
+“主菜单”进入设置页。内置床旁和机壳皮肤仅显示 NIBP，温度／自定义参数即使已启用也不占屏幕空间。
 床旁 NIBP 上方显示自动测量倒计时：以 `NextMeasurementAtNs` 和当前仿真时间计算
 剩余时长，进度条表示所选测量间隔的剩余比例；暂停仿真时冻结，下一次自动测量开始时
 重置。关闭自动测量、停止全部或禁用 NIBP 后隐藏倒计时，不显示固定满进度线。
 `IMonitorSkin.CompactWaveformLabels`、`NumericFontSize`、`WarningBrush` 提供显示参数，
 `MonitorSkinContent.Trends` 提供宿主维护的测量记录控件。
+`IMonitorSkin.SupportedManualVitals` 通过 `MonitorManualVitals` 标志集分别声明
+`Temperature`、`Custom1`、`Custom2`、`Nibp` 的显示能力（默认 `All`，可选 `None`）。
+宿主在装配时隐藏不支持的控件，刷新时清空其读数；皮肤实例生命周期内能力保持不变。
+这只限制显示，不修改会话、采集、报警或用户已启用的生命征设置；换回支持的皮肤即可恢复显示。
 
 切换皮肤保留采集会话、暂停状态、导联、十二导联视图、报警确认和血压记录，
 取消待放电状态并退出 AED；活动起搏先安排停止。待生效的源或起搏切换完成后才能换皮肤。
@@ -193,12 +197,16 @@ ECG／PLETH／RESP／CO₂，ePM 恢复前三行。显式更改通道时沿用�
 | `version` | 整数 `2`；不兼容未发布的 v1 裸 JSON |
 | `id` / `name` | 小写 ASCII 标识符 1–64 字符／不含控制字符的名称 1–64 字符 |
 | `layout` | `generic`、`bedside` 或 `defibrillator` |
+| `supportedManualVitals` | 可选字符串数组，允许 `temperature`、`custom1`、`custom2`、`nibp`，不允许重复或未知项；空数组禁用全部手动读数。省略或 null 时按布局采用默认能力：`generic` 全部，`bedside`／`defibrillator` 仅 NIBP；旧保存包同样适用 |
 | `fixedWaveformRows` | null 或 3、4、5、7；机壳布局必须声明，D3 内置值为 3 |
 | `background` / `warningColor` / `nibpColor` | 不透明 `#RRGGBB` |
 | `channelColors` | 七种颜色：ECG、RESP、PLETH、ABP、CO₂、PA、CVP |
 | `deviceProfile` | 可选的可信设备参数档案标识；机壳布局必须声明，当前内置档案为 `biphasic-360` |
 | `defaultEnergyStepsJoules` | 所有包必填；1–64 个 1–1000 J 整数，严格升序且不重复 |
 | `materials` | 语义名到包内资源路径的映射；无资源时为空对象 |
+
+`supportedManualVitals` 可在任意布局按项目覆盖默认能力，参与包语义比较并随导入／导出保存。
+内置 Generic 显式声明全部四项，ePM 12C 与 D3 显式声明 `nibp`。
 
 `layout` 选择通用绘制与操作布局，`deviceProfile` 仅从可信注册表绑定参数实例，两者分别解析。
 此前未发布的 `beneheart-d3` 参数标识不再接受；旧实验包需改用 `biphasic-360` 重新打包，或从新版重新导出。

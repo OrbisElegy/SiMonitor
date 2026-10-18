@@ -3,6 +3,7 @@
   "id": "epm12-inspired",
   "name": "ePM 12C · Inspired",
   "layout": "bedside",
+  "supportedManualVitals": ["nibp"],
   "background": "#080A0B",
   "channelColors": [
     "#20F44A",

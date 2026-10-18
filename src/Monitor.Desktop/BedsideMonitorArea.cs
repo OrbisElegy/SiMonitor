@@ -42,7 +42,7 @@ internal sealed class BedsideMonitorArea : Grid
 
     private void UpdateExtras()
     {
-        bool visible = _manualTiles.Any(tile => tile.Reading.Length > 0);
+        bool visible = _manualTiles.Any(tile => tile.IsVisible && tile.Reading.Length > 0);
         _extras.IsVisible = visible;
         RowDefinitions[1].Height = new GridLength(visible ? 182 : 118);
     }

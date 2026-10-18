@@ -30,6 +30,7 @@ internal sealed class MonitorSkinPackage
         public required string Id { get; init; }
         public required string Name { get; init; }
         public required string Layout { get; init; }
+        public string[]? SupportedManualVitals { get; init; }
         public int? FixedWaveformRows { get; init; }
         public string? DeviceProfile { get; init; }
         public required int[] DefaultEnergyStepsJoules { get; init; }
@@ -58,6 +59,7 @@ internal sealed class MonitorSkinPackage
         _document = document;
         _assets = assets;
         _materials = materials;
+        SupportedManualVitals = ResolveSupportedManualVitals(document);
         DeviceProfile = MonitorDeviceProfiles.Resolve(document.DeviceProfile);
         DefaultEnergyStepsJoules = (DefibrillatorConfiguration.Default with { EnergyStepsJoules = document.DefaultEnergyStepsJoules })
             .Snapshot().EnergyStepsJoules;
@@ -72,6 +74,7 @@ internal sealed class MonitorSkinPackage
     internal bool Bedside => Layout == "bedside";
     internal bool Defibrillator => Layout == "defibrillator";
     internal int? FixedWaveformRows => _document.FixedWaveformRows;
+    internal MonitorManualVitals SupportedManualVitals { get; }
     internal MonitorDeviceProfile? DeviceProfile { get; }
     internal IReadOnlyList<int> DefaultEnergyStepsJoules { get; }
     internal IBrush Background { get; }
@@ -80,7 +83,8 @@ internal sealed class MonitorSkinPackage
     internal IBrush ChannelBrush(int channel) => _channels[channel];
     internal MonitorSkinMaterial Material(string key) => _materials[key];
     internal bool Matches(MonitorSkinPackage other) => Id == other.Id && Name == other.Name &&
-        Layout == other.Layout && FixedWaveformRows == other.FixedWaveformRows && _document.DeviceProfile == other._document.DeviceProfile &&
+        Layout == other.Layout && SupportedManualVitals == other.SupportedManualVitals &&
+        FixedWaveformRows == other.FixedWaveformRows && _document.DeviceProfile == other._document.DeviceProfile &&
         DefaultEnergyStepsJoules.SequenceEqual(other.DefaultEnergyStepsJoules) &&
         _document.Background == other._document.Background && _document.WarningColor == other._document.WarningColor &&
         _document.NibpColor == other._document.NibpColor && _document.ChannelColors.SequenceEqual(other._document.ChannelColors) &&
@@ -91,6 +95,28 @@ internal sealed class MonitorSkinPackage
     internal static MonitorSkinPackage Generic { get; } = BuiltIn("generic");
     internal static MonitorSkinPackage BedsideMonitor { get; } = BuiltIn("epm12");
     internal static MonitorSkinPackage DefibrillatorEnclosure { get; } = BuiltIn("d3");
+
+    private static MonitorManualVitals ResolveSupportedManualVitals(Document document)
+    {
+        // Older packages inherit the capabilities of their layout, including persisted built-ins.
+        if (document.SupportedManualVitals is null)
+        { return document.Layout == "generic" ? MonitorManualVitals.All : MonitorManualVitals.Nibp; }
+        var supported = MonitorManualVitals.None;
+        foreach (string name in document.SupportedManualVitals)
+        {
+            var vital = name switch
+            {
+                "temperature" => MonitorManualVitals.Temperature,
+                "custom1" => MonitorManualVitals.Custom1,
+                "custom2" => MonitorManualVitals.Custom2,
+                "nibp" => MonitorManualVitals.Nibp,
+                _ => throw new ArgumentException("Skin.InvalidManualVital")
+            };
+            if ((supported & vital) != 0) { throw new ArgumentException("Skin.DuplicateManualVital"); }
+            supported |= vital;
+        }
+        return supported;
+    }
 
     private static MonitorSkinPackage BuiltIn(string id)
     {

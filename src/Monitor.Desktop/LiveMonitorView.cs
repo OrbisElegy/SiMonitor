@@ -75,6 +75,11 @@ internal sealed partial class LiveMonitorView : UserControl
         _trace = trace;
         TwelveLeadTrace = new(trace, localization ?? new DesktopLocalization()) { IsVisible = false };
         _skin = skin;
+        var supportedManualVitals = skin?.SupportedManualVitals ?? MonitorManualVitals.All;
+        _temperature.IsVisible = supportedManualVitals.HasFlag(MonitorManualVitals.Temperature);
+        _custom1.IsVisible = supportedManualVitals.HasFlag(MonitorManualVitals.Custom1);
+        _custom2.IsVisible = supportedManualVitals.HasFlag(MonitorManualVitals.Custom2);
+        _nibp.IsVisible = supportedManualVitals.HasFlag(MonitorManualVitals.Nibp);
         trace.Skin = skin;
         _localization = localization ?? new DesktopLocalization();
         _trendHistory = trendHistory ?? new();
@@ -275,7 +280,7 @@ internal sealed partial class LiveMonitorView : UserControl
         var values = _trace.Session.ManualVitals;
         string caption = _localization.Get("manual.caption");
         var nibpState = _trace.Session.Nibp;
-        if (_skin?.CompactWaveformLabels == true)
+        if (_skin?.CompactWaveformLabels == true && _nibp.IsVisible)
         { _nibp.UpdateNibpCountdown(nibpState, _trace.Session.SimulationTimeNs, _localization); }
         var nibpPresentation = (nibpState.Reading, nibpState.Phase, nibpState.MeasuredAtNs);
         if (values == _shownManualVitals && caption == _shownManualCaption && _shownNibp == nibpPresentation) { return; }
@@ -296,13 +301,16 @@ internal sealed partial class LiveMonitorView : UserControl
                 long seconds = nibpState.MeasuredAtNs.GetValueOrDefault() / 1_000_000_000;
                 nibpDetail = string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600:00}:{seconds / 60 % 60:00}:{seconds % 60:00}");
             }
-            _nibp.Update("NIBP", nibpValue, nibpDetail, mean);
-            _temperature.Update(_localization.Get("manual.temperatureLabel"),
-                values.TemperatureDeciCelsius is { } deciCelsius ? (deciCelsius / 10m).ToString("0.0", CultureInfo.InvariantCulture) : "---", "°C");
-            if (values.Nibp is null) { _nibp.Clear(); }
-            if (values.TemperatureDeciCelsius is null) { _temperature.Clear(); }
-            UpdateCustom(_custom1, values.Custom1);
-            UpdateCustom(_custom2, values.Custom2);
+            if (_nibp.IsVisible && values.Nibp is not null) { _nibp.Update("NIBP", nibpValue, nibpDetail, mean); }
+            else { _nibp.Clear(); }
+            if (_temperature.IsVisible && values.TemperatureDeciCelsius is { } deciCelsius)
+            {
+                _temperature.Update(_localization.Get("manual.temperatureLabel"),
+                    (deciCelsius / 10m).ToString("0.0", CultureInfo.InvariantCulture), "°C");
+            }
+            else { _temperature.Clear(); }
+            UpdateCustom(_custom1, _custom1.IsVisible ? values.Custom1 : null);
+            UpdateCustom(_custom2, _custom2.IsVisible ? values.Custom2 : null);
             return;
         }
         _manualPanel.Children.Clear();

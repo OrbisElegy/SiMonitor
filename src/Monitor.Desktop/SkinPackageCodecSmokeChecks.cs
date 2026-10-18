@@ -23,6 +23,7 @@ internal static class SkinPackageCodecSmokeChecks
             var restored = MonitorSkinPackage.Read(input);
             Require(restored.Matches(package), "archive roundtrip retains metadata, layout and every material byte");
             Require(restored.DeviceProfile == package.DeviceProfile, "archive roundtrip retains the trusted device profile selection");
+            Require(restored.SupportedManualVitals == package.SupportedManualVitals, "archive roundtrip retains manual vital capabilities");
             Require(restored.DefaultEnergyStepsJoules.SequenceEqual(package.DefaultEnergyStepsJoules), "archive roundtrip retains every default energy step");
             Require(original.AsSpan().SequenceEqual(Export(restored)), "canonical export is reproducible after import");
             Require(Enumerable.Range(0, 7).All(channel => restored.ChannelBrush(channel).ToString() == package.ChannelBrush(channel).ToString()),
@@ -57,6 +58,26 @@ internal static class SkinPackageCodecSmokeChecks
             "package energy tables expose an owned read-only snapshot");
         var source = Entries(Export(MonitorSkinPackage.DefibrillatorEnclosure));
         var generic = Entries(Export(MonitorSkinPackage.Generic));
+        foreach (var package in new[] { MonitorSkinPackage.Generic, MonitorSkinPackage.BedsideMonitor, MonitorSkinPackage.DefibrillatorEnclosure })
+        {
+            var expected = package == MonitorSkinPackage.Generic ? MonitorManualVitals.All : MonitorManualVitals.Nibp;
+            Require(package.SupportedManualVitals == expected && WithManualVitals(package, null).Matches(package),
+                "built-ins and older packages inherit the supported manual displays of their layout");
+        }
+        var subset = WithManualVitals(MonitorSkinPackage.Generic, ["custom2", "temperature"]);
+        Require(subset.SupportedManualVitals == (MonitorManualVitals.Custom2 | MonitorManualVitals.Temperature) &&
+            !subset.Matches(MonitorSkinPackage.Generic) && subset.Matches(WithManualVitals(subset, ["temperature", "custom2"])),
+            "capabilities are an order-independent subset included in package identity");
+        using (var input = new MemoryStream(Export(subset)))
+        { Require(MonitorSkinPackage.Read(input).Matches(subset), "custom capability subsets survive export"); }
+        Require(WithManualVitals(MonitorSkinPackage.Generic, []).SupportedManualVitals == MonitorManualVitals.None,
+            "an empty capability list disables every manual display");
+        foreach (var invalid in new JsonNode?[]
+        {
+            JsonValue.Create("nibp"), JsonValue.Create(8), new JsonArray("unknown"),
+            new JsonArray("Nibp"), new JsonArray("nibp", "nibp"), new JsonArray((JsonNode?)null), new JsonArray(1)
+        })
+        { Reject(Archive(Rewrite(generic, "manifest.json", json => json["supportedManualVitals"] = invalid)), "invalid manual display capabilities"); }
         using (var input = new MemoryStream(Archive(Rewrite(source, "manifest.json", json =>
             json["defaultEnergyStepsJoules"] = JsonSerializer.SerializeToNode(CustomDefaultEnergyStepsJoules)))))
         {
@@ -190,6 +211,16 @@ internal static class SkinPackageCodecSmokeChecks
         manifest["materials"] = references;
         totalLimit.Insert(0, ("manifest.json", Encoding.UTF8.GetBytes(manifest.ToJsonString())));
         Reject(Archive(totalLimit), "aggregate expanded size limit");
+    }
+
+    internal static MonitorSkinPackage WithManualVitals(MonitorSkinPackage package, string[]? names)
+    {
+        using var input = new MemoryStream(Archive(Rewrite(Entries(Export(package)), "manifest.json", json =>
+        {
+            if (names is null) { json.Remove("supportedManualVitals"); }
+            else { json["supportedManualVitals"] = JsonSerializer.SerializeToNode(names); }
+        })));
+        return MonitorSkinPackage.Read(input);
     }
 
     private static byte[] Export(MonitorSkinPackage package)

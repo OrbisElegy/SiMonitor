@@ -407,7 +407,7 @@ internal sealed partial class LiveMonitorView : UserControl
             double maximum = samples.Max(sample => sample.Value);
             if (maximum > minimum) { level = Math.Clamp((samples[^1].Value - minimum) / (maximum - minimum), 0, 1); }
         }
-        foreach (var (_, bar) in _opticalRows) { bar.Level = level; bar.InvalidateVisual(); }
+        foreach (var (_, bar) in _opticalRows) { bar.Level = level; }
     }
     internal void RefreshAttention()
     {
@@ -446,18 +446,18 @@ internal sealed partial class LiveMonitorView : UserControl
         }
         foreach (var (channel, primary, secondary) in _rows)
         {
-            secondary.Text = "";
+            string secondaryText = "";
             switch (channel)
             {
                 case 0:
                     primary.Text = Value(MeasurementSource.Ecg, snapshot.HeartRate.Status, snapshot.HeartRate.MilliBeatsPerMinute, 1000, "HR");
-                    secondary.Text = RepolarizationText(snapshot.EcgMonitoring);
+                    secondaryText = RepolarizationText(snapshot.EcgMonitoring);
                     break;
                 case 1:
                     primary.Text = Value(MeasurementSource.ImpedanceRespiration, snapshot.ImpedanceRespiration.Status, snapshot.ImpedanceRespiration.MilliBreathsPerMinute, 1000, "RR"); break;
                 case 2:
                     primary.Text = Value(MeasurementSource.SpO2, snapshot.SpO2.Status, snapshot.SpO2.SaturationMilliPercent, 1000, "SpO₂") + (snapshot.SpO2.IsQuestionable ? "?" : "");
-                    secondary.Text = "PR  " + Value(MeasurementSource.Pleth, snapshot.PulseRate.Status, snapshot.PulseRate.MilliBeatsPerMinute, 1000, "PR") + " bpm"; break;
+                    secondaryText = "PR  " + Value(MeasurementSource.Pleth, snapshot.PulseRate.Status, snapshot.PulseRate.MilliBeatsPerMinute, 1000, "PR") + " bpm"; break;
                 case 4:
                     primary.Text = Value(MeasurementSource.Co2, snapshot.Capnography.EndTidalCentiMmHg.Status, snapshot.Capnography.EndTidalCentiMmHg.Value, 100, "EtCO₂");
                     // Keep the measured value while bindings translate its unit, even when paused.
@@ -470,10 +470,11 @@ internal sealed partial class LiveMonitorView : UserControl
                     {
                         string sys = Value(MeasurementSource.Pressure, pulse.Status, pulse.SystolicCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
                         string dia = Value(MeasurementSource.Pressure, pulse.Status, pulse.DiastolicCentiMmHg, 100, LiveMonitorTrace.Names[channel]);
-                        secondary.Text = "SYS/DIA " + sys + "/" + dia;
+                        secondaryText = "SYS/DIA " + sys + "/" + dia;
                     }
                     break;
             }
+            if (channel != 4) { secondary.Text = secondaryText; }
         }
         foreach (var (pi, _) in _opticalRows)
         { pi.Text = "PI " + (snapshot.SpO2.PerfusionMilliPercent is { } value ? ((decimal)value / 1000).ToString("0.00", CultureInfo.InvariantCulture) : "---") + " %"; }
@@ -562,13 +563,31 @@ internal sealed partial class LiveMonitorView : UserControl
     }
     private sealed class PulseIndicator(IBrush color) : Control
     {
-        internal double Level;
+        private static readonly IBrush DarkBrush = Brush.Parse("#263C48");
+        private double _level;
+        private int _litSegments;
+        internal double Level
+        {
+            get => _level;
+            set
+            {
+                // Match the rendering comparison exactly at segment boundaries,
+                // including non-finite values, while retaining the acquired level.
+                int lit = 0;
+                double boundary = value * 12;
+                while (lit < 12 && lit < boundary) { lit++; }
+                _level = value;
+                if (_litSegments == lit) { return; }
+                _litSegments = lit;
+                InvalidateVisual();
+            }
+        }
         public override void Render(DrawingContext context)
         {
             base.Render(context);
             for (int i = 0; i < 12; i++)
             {
-                var brush = i < Level * 12 ? color : Brush.Parse("#263C48");
+                var brush = i < Level * 12 ? color : DarkBrush;
                 context.FillRectangle(brush, new Rect(3, Bounds.Height - (i + 1) * Bounds.Height / 12 + 1, Math.Max(0, Bounds.Width - 6), Math.Max(0, Bounds.Height / 12 - 2)));
             }
         }

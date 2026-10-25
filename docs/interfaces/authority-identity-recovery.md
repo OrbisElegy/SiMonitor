@@ -317,7 +317,8 @@ ConnectionHealthState CompleteRelocking(long authorityMonotonicNs);
 2 s 为 plane Disconnected。required plane ID 必须非空、唯一，数量 1–128。
 连接静默按 monotonic 时间计；plane 进度计时只累计 sessionRunning 期间，Advance 用旧运行状态累计后切换。
 plane 断开与 ConnectionState 分开保存。块重复/旧序号返回 IgnoredDuplicateOrStale；跳号或换 epoch
-返回 IgnoredDiscontinuous；断开或重锁时返回 RequiresResync。重同步用 ResetPlaneAfterResync 更新游标。
+返回 IgnoredDiscontinuous；断开或重锁时返回 RequiresResync。重同步用 ResetPlaneAfterResync 更新游标，
+同时按传入的权威时间评估连接静默期限；该操作不刷新服务端活动时间，也不解除已断开的控制连接。
 WebSocketClose/IoError/TlsFailure 立即断连；这些枚举并不实现真实网络运输。
 Disconnected 不会因普通 server activity 自动恢复，需 BeginRelocking → CompleteRelocking。
 

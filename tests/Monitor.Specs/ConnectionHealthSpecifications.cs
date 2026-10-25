@@ -18,6 +18,8 @@ internal static class ConnectionHealthSpecifications
             TransportFailuresDisconnectImmediately),
         new(nameof(PlaneProgressRemainsIndependentFromControlHealth),
             PlaneProgressRemainsIndependentFromControlHealth),
+        new(nameof(PlaneResyncPreservesConnectionSilenceDeadlines),
+            PlaneResyncPreservesConnectionSilenceDeadlines),
         new(nameof(PausedSimulationFreezesOnlyPlaneProgressClock),
             PausedSimulationFreezesOnlyPlaneProgressClock),
         new(nameof(CheckpointAndInvalidTransitionsFailClosed),
@@ -106,6 +108,27 @@ internal static class ConnectionHealthSpecifications
             .RequiredPlanes.Single(plane => plane.PlaneId == PlaneB).Health ==
                 SamplePlaneProgressHealth.Healthy,
             "a disconnected plane requires an explicit resynchronization cursor");
+    }
+
+    private static void PlaneResyncPreservesConnectionSilenceDeadlines()
+    {
+        foreach (var (authorityMonotonicNs, expected) in new[]
+        {
+            (2_999_999_999L, ConnectionState.Connected),
+            (3_000_000_000L, ConnectionState.Suspect),
+            (5_000_000_000L, ConnectionState.Disconnected),
+        })
+        {
+            ConnectionHealthStateMachine machine = Start(sessionRunning: true);
+            ConnectionHealthState reset = machine.ResetPlaneAfterResync(
+                PlaneA, 5, 20, authorityMonotonicNs);
+            Check.That(reset.ConnectionState == expected && reset.LastServerActivityAtNs == 0 &&
+                reset.RequiredPlanes.Single(plane => plane.PlaneId == PlaneA).Health == SamplePlaneProgressHealth.Healthy &&
+                reset.RequiredPlanes.Single(plane => plane.PlaneId == PlaneB).Health == SamplePlaneProgressHealth.Disconnected,
+                "resetting one plane must honor control silence deadlines and retain the other plane's failure");
+            Check.That(Equivalent(ConnectionHealthStateMachine.Restore(reset).CaptureState(), reset),
+                "every successful plane reset must publish a restorable connection checkpoint");
+        }
     }
 
     private static void PausedSimulationFreezesOnlyPlaneProgressClock()

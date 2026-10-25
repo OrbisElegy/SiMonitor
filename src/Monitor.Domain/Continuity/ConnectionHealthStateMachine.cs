@@ -264,6 +264,7 @@ public sealed class ConnectionHealthStateMachine
         }
 
         MoveTo(authorityMonotonicNs);
+        EvaluateConnectionSilence();
         PlaneTracker plane = _requiredPlanes[planeIndex];
         plane.StreamEpoch = streamEpoch;
         plane.LastBlockSequence = lastBlockSequence;

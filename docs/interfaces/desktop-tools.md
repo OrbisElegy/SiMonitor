@@ -30,12 +30,12 @@ dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 | `--study-demo` | 在记录壳中启动合成记录及卡尺交互 |
 | `--smoke-test` | 启动桌面规格检查；完成后退出 |
 | `--smoke-shard INDEX COUNT` | 分片桌面检查；`0 <= INDEX < COUNT <= 32`，各片为独立进程 |
-| `--product-check [ASSEMBLY_PATH]` | 检查产品程序集；可指定路径，入口仍由开发版承载 |
+| `--product-check ASSEMBLY_PATH` | 检查产品程序集；必须指定可读取的程序集文件路径，入口仍由开发版承载 |
 | `--generate-style-previews OUTPUT_PATH` | 生成有限预览目录后退出，不启动 Avalonia 窗口 |
 
 声音输出在 Linux 默认使用系统 ALSA 库，其他平台默认使用原生音频库。启动前设置环境变量 `SIMONITOR_AUDIO_OUTPUT` 为 `native`、`wasapi` 或 `alsa`（不区分大小写）可覆盖默认值，例如在 Windows 上用 `wasapi` 与原生输出对比；未设置或其他值使用平台默认。
 
-未知组合／多余参数返回 `2`。`ProductRelease=true` 定义 `SIMONITOR_RELEASE`，产品程序只接受无参数启动；包括 `--ui-preview` 在内的开发参数均返回 `2`。普通 `Release` 编译配置本身不等于 `ProductRelease=true`。
+未知组合／多余参数返回 `2`。`--product-check` 缺少路径时输出用法并返回 `2`；路径非法、文件不存在或无法读取时，在初始化图形界面前输出错误并返回 `2`。`ProductRelease=true` 定义 `SIMONITOR_RELEASE`，产品程序只接受无参数启动；包括 `--ui-preview` 在内的开发参数均返回 `2`。普通 `Release` 编译配置本身不等于 `ProductRelease=true`。
 
 ## 本地监护装配与时间
 

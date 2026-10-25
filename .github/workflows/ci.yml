@@ -88,6 +88,9 @@ jobs:
       - name: Build solution (Debug)
         run: dotnet build Monitor.slnx --no-restore --configuration Debug
 
+      - name: Build product candidate
+        run: python tools/build_release.py --offline --jobs 4
+
       - name: Check C# style
         if: runner.os == 'Linux'
         run: |
@@ -109,6 +112,7 @@ jobs:
                   'src/Monitor.Desktop/bin/Release',
                   'tests/Monitor.Specs/bin/Release',
                   'tests/Monitor.Specs/bin/Debug',
+                  'artifacts/release',
               ):
                   archive.add(directory, arcname=directory)
 
@@ -230,6 +234,14 @@ jobs:
       - name: Run desktop checks (Windows)
         if: runner.os == 'Windows'
         run: python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 4
+
+      - name: Check product candidate (Linux / Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dotnet src/Monitor.Desktop/bin/Release/net10.0/Monitor.Desktop.dll --product-check artifacts/release/Monitor.Desktop.dll
+
+      - name: Check product candidate (Windows)
+        if: runner.os == 'Windows'
+        run: dotnet src/Monitor.Desktop/bin/Release/net10.0/Monitor.Desktop.dll --product-check artifacts/release/Monitor.Desktop.dll
 
       - name: Upload desktop failure logs
         if: failure()

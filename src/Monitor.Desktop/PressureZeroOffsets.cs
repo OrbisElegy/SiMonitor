@@ -4,9 +4,9 @@ using System.Globalization;
 namespace Monitor.Desktop;
 
 // A bounded demo control, not a transducer calibration or height model.
-internal sealed record PressureZeroOffsets(int Abp = 0, int Pa = 0, int Cvp = 0)
+internal sealed record PressureZeroOffsets(int AbpCentiMmHg = 0, int PaCentiMmHg = 0, int CvpCentiMmHg = 0)
 {
-    internal static int Parse(string? text)
+    internal static int ParseCentiMmHg(string? text)
     {
         if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                 CultureInfo.InvariantCulture, out decimal value) || value is < -10 or > 10 ||

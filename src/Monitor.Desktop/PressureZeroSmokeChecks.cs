@@ -48,11 +48,11 @@ internal static class PressureZeroSmokeChecks
         foreach (string invalid in new[] { "", "abc", "NaN", "1e1", "1,25", "0.001", "10.01", "-10.01" })
         {
             bool rejected = false;
-            try { _ = PressureZeroOffsets.Parse(invalid); }
+            try { _ = PressureZeroOffsets.ParseCentiMmHg(invalid); }
             catch (ArgumentException) { rejected = true; }
             Require(rejected, "invalid decimal rejected");
         }
-        Require(PressureZeroOffsets.Parse("-0.01") == -1 && PressureZeroOffsets.Parse("+10.00") == 1000, "signed centi-mmHg precision");
+        Require(PressureZeroOffsets.ParseCentiMmHg("-0.01") == -1 && PressureZeroOffsets.ParseCentiMmHg("+10.00") == 1000, "signed centi-mmHg precision");
         var window = new WaveformDemoWindow(physiology: true);
         window.Show();
         try
@@ -74,7 +74,7 @@ internal static class PressureZeroSmokeChecks
             long time = window.SimulationTimeNs;
             window.PressureZeroInputs[2].Text = "10.01";
             Click(window.ApplyPressureZeroButton);
-            Require(window.SimulationTimeNs == time && window.ActiveTimer == timer && window.PressureOffsets.Cvp == 1 &&
+            Require(window.SimulationTimeNs == time && window.ActiveTimer == timer && window.PressureOffsets.CvpCentiMmHg == 1 &&
                 window.PressureZeroStatus.Text!.StartsWith("未应用", StringComparison.Ordinal), "invalid apply is atomic");
             window.PressureZeroInputs[2].Text = "0.01";
             window.ConductionInput.SelectedIndex = 1;

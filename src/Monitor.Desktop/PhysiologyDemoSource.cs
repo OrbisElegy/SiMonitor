@@ -11,6 +11,6 @@ internal static class PhysiologyDemoSource
     internal static PhysiologyWaveformGroup Create(PhysiologyDemoConfiguration? configuration = null, PressureZeroOffsets? pressureOffsets = null)
     {
         pressureOffsets ??= new();
-        return PhysiologyIllustrationSource.Create(configuration, pressureOffsets.Abp, pressureOffsets.Pa, pressureOffsets.Cvp);
+        return PhysiologyIllustrationSource.Create(configuration, pressureOffsets.AbpCentiMmHg, pressureOffsets.PaCentiMmHg, pressureOffsets.CvpCentiMmHg);
     }
 }

@@ -23,7 +23,7 @@ internal static class RespiratoryPatternDepth
         // Authored groups of three and two equal-depth breaths separated by
         // two and three silent slots; not a complete ataxic/Biot model.
         RespiratoryPattern.IntermittentIllustration => (cycle % 10) is 0 or 1 or 2 or 5 or 6 ? 1000 : 0,
-        _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPattern", "pattern"),
+        _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPattern", nameof(pattern)),
     };
     internal static int Length(RespiratoryPattern pattern) => pattern switch
     {
@@ -31,7 +31,7 @@ internal static class RespiratoryPatternDepth
         RespiratoryPattern.SpontaneousIllustration => SpontaneousRespirationSchedule.Length,
         RespiratoryPattern.CheyneStokesIllustration => 11,
         RespiratoryPattern.IntermittentIllustration => 10,
-        _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPattern", "pattern"),
+        _ => throw new PhysiologyTimelineException("PhysiologyTimeline.InvalidPattern", nameof(pattern)),
     };
     internal static Int128 ActiveBefore(RespiratoryPattern pattern, Int128 slot)
     {

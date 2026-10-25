@@ -65,9 +65,9 @@ public sealed class ElectrodeWaveformComposition
     {
         if (state is null || state.Electrodes is null || state.Electrodes.Count != 10 ||
             state.Events is null || state.Events.Count > EventWaveformComposition.MaximumEventCount)
-        { throw new EventWaveformException("EcgProjection.InvalidElectrodes", "state"); }
+        { throw new EventWaveformException("EcgProjection.InvalidElectrodes", nameof(state)); }
         if (!Enum.IsDefined(state.Placement))
-        { throw new EventWaveformException("EcgPlacement.InvalidWiring", "state"); }
+        { throw new EventWaveformException("EcgPlacement.InvalidWiring", nameof(state)); }
         _placement = state.Placement;
         PhysiologyCycleEvent[] events = state.Events.ToArray();
         _sources = new EventWaveformComposition[10];
@@ -75,7 +75,7 @@ public sealed class ElectrodeWaveformComposition
         {
             ElectrodeWaveformPlan plan = state.Electrodes[index];
             if (plan is null || plan.Electrode != (EcgElectrode)index)
-            { throw new EventWaveformException("EcgProjection.InvalidElectrodes", "state"); }
+            { throw new EventWaveformException("EcgProjection.InvalidElectrodes", nameof(state)); }
             _sources[index] = EventWaveformComposition.Restore(new(plan.Bands, events));
         }
     }

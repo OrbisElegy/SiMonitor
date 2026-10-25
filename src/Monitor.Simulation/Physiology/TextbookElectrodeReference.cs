@@ -12,12 +12,12 @@ public static class TextbookElectrodeReference
         EcgCycleTiming? timing = null, EcgTWaveScalePlan? tWave = null, EcgTWaveShapePlan? tShape = null, EcgStSegmentPlan? stSegment = null, EcgPWavePlan? pWave = null, EcgStTFusionPlan? fusion = null, EcgChestInfarctionPlan? infarction = null, EcgInfarctionZones? zones = null, EcgAtrialIllustration atrial = EcgAtrialIllustration.Reference, EcgVentricularIllustration ventricular = EcgVentricularIllustration.Reference, EcgTContourPlan? tContour = null)
     {
         if (tContour is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null || zones is not null || ventricular != EcgVentricularIllustration.Reference))
-        { throw new EventWaveformException("EcgTContour.ConflictingModes", "tContour"); }
+        { throw new EventWaveformException("EcgTContour.ConflictingModes", nameof(tContour)); }
         long? ventricularDuration = EcgVentricularIllustrations.QrsDurationNs(ventricular);
         if (ventricularDuration is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null || zones is not null))
-        { throw new EventWaveformException("EcgVentricular.ConflictingModes", "ventricular"); }
+        { throw new EventWaveformException("EcgVentricular.ConflictingModes", nameof(ventricular)); }
         if (zones is not null && (tWave is not null || tShape is not null || stSegment is not null || fusion is not null || infarction is not null))
-        { throw new EventWaveformException("EcgInfarction.ConflictingModes", "zones"); }
+        { throw new EventWaveformException("EcgInfarction.ConflictingModes", nameof(zones)); }
         timing ??= TextbookEcgReference.Timing with
         {
             PDurationNs = EcgAtrialIllustrations.PDurationNs(atrial) ?? TextbookEcgReference.Timing.PDurationNs,
@@ -26,7 +26,7 @@ public static class TextbookElectrodeReference
         timing.Validate();
         var atrialPlan = EcgAtrialIllustrations.Resolve(atrial, timing);
         if (atrialPlan is not null && pWave is not null)
-        { throw new EventWaveformException("EcgAtrial.ConflictingModes", "pWave"); }
+        { throw new EventWaveformException("EcgAtrial.ConflictingModes", nameof(pWave)); }
         pWave = atrialPlan ?? pWave;
         uWave?.Validate(timing);
         int[]? tScales = tWave?.CaptureScales();
@@ -105,7 +105,7 @@ public static class TextbookElectrodeReference
         if (infarction is { HasActiveRegion: true } && uWave is not null &&
             uWave.ElectrodeAmplitudesMicrovolts.Any(value => value != 0) &&
             infarction.RepolarizationDelayNs > uWave.DelayAfterTNs)
-        { throw new EventWaveformException("EcgInfarction.UOverlap", "infarction"); }
+        { throw new EventWaveformException("EcgInfarction.UOverlap", nameof(infarction)); }
         var ventricularSource = EcgVentricularIllustrations.Apply(ventricular, electrodes, timing);
         var staged = infarction?.Apply(ventricularSource, timing) ?? ventricularSource;
         staged = zones?.Apply(staged, timing, uWave) ?? staged;

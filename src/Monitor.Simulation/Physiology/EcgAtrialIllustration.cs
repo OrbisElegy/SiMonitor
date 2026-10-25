@@ -44,7 +44,7 @@ public static class EcgAtrialIllustrations
         if (timing.PDurationNs != PDurationNs(illustration) ||
             (illustration == EcgAtrialIllustration.LeftAtrialAbnormality &&
              (Int128)timing.PDurationNs * 5 <= (Int128)(timing.PrIntervalNs - timing.PDurationNs) * 8))
-        { throw new EventWaveformException("EcgAtrial.InvalidTiming", "timing"); }
+        { throw new EventWaveformException("EcgAtrial.InvalidTiming", nameof(timing)); }
         if (illustration == EcgAtrialIllustration.RightAtrialAbnormality)
         {
             // Simultaneous lobes: one tall peak without prolonging P.

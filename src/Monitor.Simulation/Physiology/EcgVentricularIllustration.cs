@@ -36,7 +36,7 @@ public static class EcgVentricularIllustrations
         if (QrsDurationNs(illustration) is not { } duration) { return source; }
         bool preserveRepolarization = illustration is EcgVentricularIllustration.BiventricularCombinedSigns or EcgVentricularIllustration.PulmonaryHeartSigns;
         if (timing.QrsDurationNs != duration || (timing.StDurationNs <= 0 && !preserveRepolarization))
-        { throw new EventWaveformException("EcgVentricular.InvalidTiming", "timing"); }
+        { throw new EventWaveformException("EcgVentricular.InvalidTiming", nameof(timing)); }
         if (preserveRepolarization)
         {
             IReadOnlyList<long>[] qrs = illustration == EcgVentricularIllustration.PulmonaryHeartSigns

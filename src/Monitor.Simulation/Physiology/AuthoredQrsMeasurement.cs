@@ -18,7 +18,7 @@ public static class AuthoredQrsMeasurements
             (Int128)stepNs * (samplesQ32.Count - 1) > 2_000_000_000 ||
             samplesQ32[0] != 0 || samplesQ32[^1] != 0 ||
             samplesQ32.Any(v => v < -32767 * FixedPointMath.Q32One || v > 32767 * FixedPointMath.Q32One))
-        { throw new EventWaveformException("EcgQrs.InvalidMeasurementWindow", "samplesQ32"); }
+        { throw new EventWaveformException("EcgQrs.InvalidMeasurementWindow", nameof(samplesQ32)); }
         long r = samplesQ32.Max();
         int first = 1;
         while (first < samplesQ32.Count && samplesQ32[first] == 0) { first++; }
@@ -47,13 +47,13 @@ public static class AuthoredQrsMeasurements
             b.Trigger == PhysiologyCycleEventKind.VentricularElectrical && b.DelayNs == 0).ToArray())
         }).ToArray();
         if (qrs.Any(e => e.Bands.Count == 0))
-        { throw new EventWaveformException("EcgQrs.MissingQrsBands", "electrodes"); }
+        { throw new EventWaveformException("EcgQrs.MissingQrsBands", nameof(electrodes)); }
         long duration = qrs.SelectMany(e => e.Bands).Max(b => b.DurationNs);
         const long step = 1_000_000;
         if (qrs.SelectMany(e => e.Bands).Any(b => b.DurationNs < 2 * step))
-        { throw new EventWaveformException("EcgQrs.InsufficientResolution", "electrodes"); }
+        { throw new EventWaveformException("EcgQrs.InsufficientResolution", nameof(electrodes)); }
         if (duration > 2_000_000_000)
-        { throw new EventWaveformException("EcgQrs.InvalidMeasurementWindow", "electrodes"); }
+        { throw new EventWaveformException("EcgQrs.InvalidMeasurementWindow", nameof(electrodes)); }
         int count = checked((int)((duration + step - 1) / step) + 1);
         long[][] samples = Enumerable.Range(0, 12).Select(_ => new long[count]).ToArray();
         var source = ElectrodeWaveformComposition.Restore(new(qrs,

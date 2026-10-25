@@ -669,8 +669,8 @@ internal sealed class WaveformDemoWindow : Window
             if (_closed || !_physiology) { return; }
             try
             {
-                var offsets = new PressureZeroOffsets(PressureZeroOffsets.Parse(PressureZeroInputs[0].Text),
-                    PressureZeroOffsets.Parse(PressureZeroInputs[1].Text), PressureZeroOffsets.Parse(PressureZeroInputs[2].Text));
+                var offsets = new PressureZeroOffsets(PressureZeroOffsets.ParseCentiMmHg(PressureZeroInputs[0].Text),
+                    PressureZeroOffsets.ParseCentiMmHg(PressureZeroInputs[1].Text), PressureZeroOffsets.ParseCentiMmHg(PressureZeroInputs[2].Text));
                 Reset(UsesPulse, pressureOffsets: offsets);
             }
             catch (ArgumentException)
@@ -1162,9 +1162,9 @@ internal sealed class WaveformDemoWindow : Window
         QrsMeasurementStatus.Text = qrsSummary;
         BreathConfiguration = breathConfiguration;
         PressureOffsets = pressureOffsets;
-        int[] pressureValues = new[] { pressureOffsets.Abp, pressureOffsets.Pa, pressureOffsets.Cvp };
-        for (int index = 0; index < pressureValues.Length; index++)
-        { PressureZeroInputs[index].Text = (pressureValues[index] / 100m).ToString("0.##", CultureInfo.InvariantCulture); }
+        int[] pressureValuesCentiMmHg = new[] { pressureOffsets.AbpCentiMmHg, pressureOffsets.PaCentiMmHg, pressureOffsets.CvpCentiMmHg };
+        for (int index = 0; index < pressureValuesCentiMmHg.Length; index++)
+        { PressureZeroInputs[index].Text = (pressureValuesCentiMmHg[index] / 100m).ToString("0.##", CultureInfo.InvariantCulture); }
         PressureZeroStatus.Text = $"已应用压力偏移（mmHg）：ABP {PressureZeroInputs[0].Text}，PA {PressureZeroInputs[1].Text}，CVP {PressureZeroInputs[2].Text}。";
         AfAberrancyInput.IsChecked = _projected ? configuration.IllustrateAfAberrancy : breathConfiguration.IllustrateAfAberrancy;
         VtTwistingInput.IsChecked = _projected ? configuration.VtTwisting : breathConfiguration.VtTwisting;

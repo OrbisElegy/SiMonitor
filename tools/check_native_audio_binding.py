@@ -8,7 +8,8 @@ import sys
 
 def main():
     root = Path(__file__).resolve().parent.parent
-    name = 'sim_audio_native.dll' if sys.platform == 'win32' else 'libsim_audio_native.so'
+    name = ('sim_audio_native.dll' if sys.platform == 'win32' else
+            'libsim_audio_native.dylib' if sys.platform == 'darwin' else 'libsim_audio_native.so')
     lib = root / 'artifacts/native-audio-test' / name
     if not lib.exists():
         lib = lib.parent / 'Release' / name

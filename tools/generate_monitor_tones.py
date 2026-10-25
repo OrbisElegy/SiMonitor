@@ -21,31 +21,38 @@ def generate(check):
         .055 * min(1, i / (rate * .008), (length - 1 - i) / (rate * .02))
         * math.sin(2 * math.pi * 795 * i / rate) for i in range(length)]
     folder = ROOT / 'src/Monitor.Infrastructure/Audio/SelectedTones'
-    folder.mkdir(parents=True, exist_ok=True)
+    if not check:
+        folder.mkdir(parents=True, exist_ok=True)
     manifest = {'sample_rate': rate, 'format': 'signed_pcm16_le_mono', 'voices': {}}
     for name, samples in voices.items():
-        assert samples[0] == samples[-1] == 0
-        assert max(abs(v) for v in samples) < config['peak_limit']
+        if samples[0] != 0 or samples[-1] != 0:
+            raise AssertionError('Selected voice endpoints must be zero')
+        if not max(abs(v) for v in samples) < config['peak_limit']:
+            raise AssertionError('Selected voice exceeds peak limit')
         data = struct.pack('<' + 'h' * len(samples), *(round(v * 32767) for v in samples))
         path = folder / (name + '.pcm')
         if check:
-            assert path.read_bytes() == data, path
+            if path.read_bytes() != data:
+                raise AssertionError(path)
         else:
             path.write_bytes(data)
         manifest['voices'][name] = {'frames': len(samples), 'sha256': hashlib.sha256(data).hexdigest()}
     bank = build_pitch_bank()
     path = folder / 'HeartbeatPitchA.pcm'
     if check:
-        assert path.read_bytes() == bank, path
+        if path.read_bytes() != bank:
+            raise AssertionError(path)
     else:
         path.write_bytes(bank)
     manifest['voices']['HeartbeatPitchA'] = manifest_entry(bank)
     if check:
-        assert {path.stem for path in folder.glob('*.pcm')} == set(manifest['voices']), 'Unlisted PCM asset'
+        if {path.stem for path in folder.glob('*.pcm')} != set(manifest['voices']):
+            raise AssertionError('Unlisted PCM asset')
     path = folder / 'manifest.json'
     data = json.dumps(manifest, indent=2) + '\n'
     if check:
-        assert path.read_text(encoding='utf-8') == data
+        if path.read_text(encoding='utf-8') != data:
+            raise AssertionError('Selected voice manifest differs')
     else:
         path.write_text(data, encoding='utf-8')
     print('PASS: selected A/A4 voices match frozen PCM16 assets')

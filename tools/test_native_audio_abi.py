@@ -4,9 +4,13 @@ import contextlib
 import io
 from pathlib import Path
 import runpy
+import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+
+import check_native_audio_binding as binding
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'native/sim_audio_native/tests/check_abi.py'
@@ -85,6 +89,31 @@ class NativeAudioAbiEntryPointTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, 'Fresh ring'):
                     self.run_cli(library, optimize, production_unavailable=False)
                 library.sa_close.assert_called_once()
+
+
+class NativeAudioBindingEntryPointTests(unittest.TestCase):
+    def test_binding_uses_the_host_library_in_each_build_layout(self):
+        for platform, name in (('win32', 'sim_audio_native.dll'),
+                               ('darwin', 'libsim_audio_native.dylib'),
+                               ('linux', 'libsim_audio_native.so')):
+            for layout in ('.', 'Release'):
+                with self.subTest(platform=platform, layout=layout), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    library = root / 'artifacts/native-audio-test' / layout / name
+                    library.parent.mkdir(parents=True)
+                    library.write_bytes(b'fixture')
+                    specs = root / 'tests/Monitor.Specs/bin/Debug/net10.0/Monitor.Specs.dll'
+                    with patch.object(binding, '__file__', str(root / 'tools/check_native_audio_binding.py')), \
+                            patch.object(binding.sys, 'platform', platform), \
+                            patch.object(binding.subprocess, 'run', side_effect=[
+                                subprocess.CompletedProcess([], 0),
+                                subprocess.CompletedProcess([], 1, stderr=b'TestBackendRejected')]) as run, \
+                            contextlib.redirect_stdout(io.StringIO()):
+                        binding.main()
+                    self.assertEqual(run.call_args_list[0].args[0],
+                                     ['dotnet', str(specs), '--audio-native-check', str(library)])
+                    self.assertEqual(run.call_args_list[1].args[0],
+                                     ['dotnet', str(specs), '--audio-native-audition', str(library)])
 
 
 if __name__ == '__main__':

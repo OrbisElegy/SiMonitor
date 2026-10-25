@@ -61,8 +61,14 @@ class SelectedToneManifestTests(unittest.TestCase):
         data = bytearray(path.read_bytes())
         data[0] ^= 1
         path.write_bytes(data)
-        with self.assertRaises(AssertionError):
-            tones.generate(True)
+        source = Path(tones.__file__).read_text(encoding='utf-8')
+        for optimize in (0, 1, 2):
+            with self.subTest(optimize=optimize):
+                namespace = {'__name__': 'selected_tones_check'}
+                exec(compile(source, tones.__file__, 'exec', optimize=optimize), namespace)
+                namespace['ROOT'] = tones.ROOT
+                with self.assertRaises(AssertionError):
+                    namespace['generate'](True)
         with self.assertRaisesRegex(SystemExit, 'differs'):
             pitch.generate(True)
 
@@ -70,6 +76,12 @@ class SelectedToneManifestTests(unittest.TestCase):
         (self.folder / 'Unlisted.pcm').write_bytes(b'\0\0')
         with self.assertRaisesRegex(AssertionError, 'Unlisted PCM asset'):
             tones.generate(True)
+
+    def test_check_missing_assets_does_not_create_directories(self):
+        root = tones.ROOT / 'missing'
+        with patch.object(tones, 'ROOT', root), self.assertRaises(FileNotFoundError):
+            tones.generate(True)
+        self.assertFalse(root.exists())
 
 
 if __name__ == '__main__':

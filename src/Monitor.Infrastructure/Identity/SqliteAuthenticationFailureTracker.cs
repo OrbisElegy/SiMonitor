@@ -219,12 +219,11 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
                 DELETE FROM authentication_failures
                 WHERE dimension = $dimension
                   AND subject_lookup = $lookup
-                  AND (occurred_at_ticks <= $window_start OR occurred_at_ticks > $now);
+                  AND occurred_at_ticks <= $window_start;
                 """;
             prune.Parameters.AddWithValue("$dimension", dimension);
             prune.Parameters.AddWithValue("$lookup", lookup);
             prune.Parameters.AddWithValue("$window_start", windowStartTicks);
-            prune.Parameters.AddWithValue("$now", nowTicks);
             prune.ExecuteNonQuery();
         }
 
@@ -246,10 +245,12 @@ public sealed class SqliteAuthenticationFailureTracker : IAuthenticationFailureT
         count.CommandText = """
             SELECT COUNT(*)
             FROM authentication_failures
-            WHERE dimension = $dimension AND subject_lookup = $lookup;
+            WHERE dimension = $dimension AND subject_lookup = $lookup
+              AND occurred_at_ticks <= $now;
             """;
         count.Parameters.AddWithValue("$dimension", dimension);
         count.Parameters.AddWithValue("$lookup", lookup);
+        count.Parameters.AddWithValue("$now", nowTicks);
         return checked((int)Convert.ToInt64(count.ExecuteScalar(), null));
     }
 

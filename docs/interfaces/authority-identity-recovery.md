@@ -215,6 +215,7 @@ interface IPlatformKeyProtector {
 `Pbkdf2PasswordHasher` 实现 IPasswordHasher：固定 PBKDF2-HMAC-SHA-256、600000 轮、
 16 字节随机 salt、32 字节 subkey，二者 Base64 存入 PasswordVerifier。
 Verify 使用固定时间比较；算法、轮数、Base64 或长度不支持返回 false。Hash 本身不执行业务密码长度策略。
+缺失或为 null 的 Base64 字段同样返回 false；解码使用固定长度缓冲区，拒绝超过 salt/subkey 长度的内容。
 
 源码：[AES-GCM 载荷](../../src/Monitor.Infrastructure/Identity/AesGcmIdentityPayloadProtector.cs)、
 [平台保护密钥文件](../../src/Monitor.Infrastructure/Identity/PlatformProtectedIdentityKeyStore.cs)。
@@ -255,6 +256,10 @@ revision、时间 ticks、锁维度和查找 token 仍作为数据库列存在�
 
 两个失败追踪器都按账户与来源独立累计：15 分钟窗口内达到 5 次，锁定 15 分钟。
 `GetLockState` 取两个维度中较晚的到期时间；`ClearAccountFailures` 不清来源记录或审计。
+`RecordFailure` 返回更新后的有效锁状态，较早失败的延迟完成不会缩短已有锁；
+失败窗口或锁到期时间无法表示时，在修改计数、锁或审计之前抛出异常。
+计数范围为 `(RecordedAtUtc - FailureWindow, RecordedAtUtc]`；较晚时间的已记录失败
+不会因较早请求延迟完成而删除，留待相应时间窗口累计。
 SQLite `RecordFailure` 只接受 `identity.password.invalid`，在同一事务中更新计数、锁和审计；
 `RecordRejection` 不能接收该 reason，避免漏记计数。`FindAudit(Guid)` 返回可空审计。
 内存实现还提供快照 `AuditRecords`，不持久化，且没有 SQLite 版本同等的 reason/字段严格校验。

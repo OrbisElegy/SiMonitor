@@ -53,6 +53,7 @@ internal static class Program
             .. ElectricalConversionSpecifications.All,
             .. AssessmentSpecifications.All,
             .. IdentitySpecifications.All,
+            .. IdentityBoundarySpecifications.All,
             .. AuthenticationSpecifications.All,
             .. PersistenceSpecifications.All,
             .. KeyProtectionSpecifications.All,

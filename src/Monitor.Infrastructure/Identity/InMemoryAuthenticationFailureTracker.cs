@@ -41,28 +41,38 @@ public sealed class InMemoryAuthenticationFailureTracker : IAuthenticationFailur
     public AuthenticationLockState RecordFailure(AuthenticationFailureAuditRecord audit)
     {
         ArgumentNullException.ThrowIfNull(audit);
+        if (audit.CanonicalUsername is null || audit.SourceAddress is null)
+        {
+            throw new ArgumentException("The authentication failure subjects must not be null.", nameof(audit));
+        }
+        DateTimeOffset windowStart = audit.RecordedAtUtc - IdentityPolicy.FailureWindow;
+        DateTimeOffset candidateLockedUntil = audit.RecordedAtUtc + IdentityPolicy.LockDuration;
         lock (_sync)
         {
             _audit.Add(audit);
             int accountCount = AddFailure(
                 _accountFailures,
                 audit.CanonicalUsername,
+                windowStart,
                 audit.RecordedAtUtc);
             int sourceCount = AddFailure(
                 _sourceFailures,
                 audit.SourceAddress,
+                windowStart,
                 audit.RecordedAtUtc);
-            DateTimeOffset? accountUntil = null;
-            DateTimeOffset? sourceUntil = null;
+            DateTimeOffset? accountUntil = ActiveLock(_accountLocks, audit.CanonicalUsername, audit.RecordedAtUtc);
+            DateTimeOffset? sourceUntil = ActiveLock(_sourceLocks, audit.SourceAddress, audit.RecordedAtUtc);
             if (accountCount >= IdentityPolicy.FailureLimit)
             {
-                accountUntil = audit.RecordedAtUtc + IdentityPolicy.LockDuration;
+                accountUntil = accountUntil is { } currentAccountUntil && currentAccountUntil > candidateLockedUntil
+                    ? currentAccountUntil : candidateLockedUntil;
                 _accountLocks[audit.CanonicalUsername] = accountUntil.Value;
             }
 
             if (sourceCount >= IdentityPolicy.FailureLimit)
             {
-                sourceUntil = audit.RecordedAtUtc + IdentityPolicy.LockDuration;
+                sourceUntil = sourceUntil is { } currentSourceUntil && currentSourceUntil > candidateLockedUntil
+                    ? currentSourceUntil : candidateLockedUntil;
                 _sourceLocks[audit.SourceAddress] = sourceUntil.Value;
             }
 
@@ -100,6 +110,7 @@ public sealed class InMemoryAuthenticationFailureTracker : IAuthenticationFailur
     private static int AddFailure(
         Dictionary<string, List<DateTimeOffset>> failures,
         string key,
+        DateTimeOffset windowStart,
         DateTimeOffset nowUtc)
     {
         if (!failures.TryGetValue(key, out List<DateTimeOffset>? values))
@@ -108,10 +119,11 @@ public sealed class InMemoryAuthenticationFailureTracker : IAuthenticationFailur
             failures.Add(key, values);
         }
 
-        DateTimeOffset windowStart = nowUtc - IdentityPolicy.FailureWindow;
-        values.RemoveAll(value => value <= windowStart || value > nowUtc);
+        // Older requests may finish after newer attempts; keep those newer failures
+        // for their own windows instead of erasing them during delayed completion.
+        values.RemoveAll(value => value <= windowStart);
         values.Add(nowUtc);
-        return values.Count;
+        return values.Count(value => value <= nowUtc);
     }
 
     private static DateTimeOffset? ActiveLock(

@@ -31,39 +31,22 @@ public sealed class Pbkdf2PasswordHasher : IPasswordHasher
     public bool Verify(ReadOnlySpan<char> password, PasswordVerifier verifier)
     {
         ArgumentNullException.ThrowIfNull(verifier);
-        if (!IsSupported(verifier))
-        {
-            return false;
-        }
-
-        byte[] salt;
-        byte[] expected;
+        Span<byte> salt = stackalloc byte[IdentityPolicy.PasswordSaltBytes];
+        Span<byte> expected = stackalloc byte[IdentityPolicy.PasswordSubkeyBytes];
+        Span<byte> actual = stackalloc byte[IdentityPolicy.PasswordSubkeyBytes];
         try
         {
-            salt = Convert.FromBase64String(verifier.SaltBase64);
-            expected = Convert.FromBase64String(verifier.SubkeyBase64);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
+            if (!TryReadVerifier(verifier, salt, expected))
+            {
+                return false;
+            }
 
-        if (salt.Length != IdentityPolicy.PasswordSaltBytes ||
-            expected.Length != IdentityPolicy.PasswordSubkeyBytes)
-        {
-            CryptographicOperations.ZeroMemory(salt);
-            CryptographicOperations.ZeroMemory(expected);
-            return false;
-        }
-
-        byte[] actual = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            verifier.Iterations,
-            HashAlgorithmName.SHA256,
-            expected.Length);
-        try
-        {
+            Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                salt,
+                actual,
+                verifier.Iterations,
+                HashAlgorithmName.SHA256);
             return CryptographicOperations.FixedTimeEquals(actual, expected);
         }
         finally
@@ -77,24 +60,11 @@ public sealed class Pbkdf2PasswordHasher : IPasswordHasher
     public bool IsSupported(PasswordVerifier verifier)
     {
         ArgumentNullException.ThrowIfNull(verifier);
-        if (!StringComparer.Ordinal.Equals(verifier.Algorithm, Algorithm) ||
-            verifier.Iterations != IdentityPolicy.PasswordIterations)
-        {
-            return false;
-        }
-
-        byte[] salt = [];
-        byte[] subkey = [];
+        Span<byte> salt = stackalloc byte[IdentityPolicy.PasswordSaltBytes];
+        Span<byte> subkey = stackalloc byte[IdentityPolicy.PasswordSubkeyBytes];
         try
         {
-            salt = Convert.FromBase64String(verifier.SaltBase64);
-            subkey = Convert.FromBase64String(verifier.SubkeyBase64);
-            return salt.Length == IdentityPolicy.PasswordSaltBytes &&
-                subkey.Length == IdentityPolicy.PasswordSubkeyBytes;
-        }
-        catch (FormatException)
-        {
-            return false;
+            return TryReadVerifier(verifier, salt, subkey);
         }
         finally
         {
@@ -102,4 +72,13 @@ public sealed class Pbkdf2PasswordHasher : IPasswordHasher
             CryptographicOperations.ZeroMemory(subkey);
         }
     }
+
+    private static bool TryReadVerifier(PasswordVerifier verifier, Span<byte> salt, Span<byte> subkey) =>
+        StringComparer.Ordinal.Equals(verifier.Algorithm, Algorithm) &&
+        verifier.Iterations == IdentityPolicy.PasswordIterations &&
+        verifier.SaltBase64 is not null && verifier.SubkeyBase64 is not null &&
+        Convert.TryFromBase64String(verifier.SaltBase64, salt, out int saltBytes) &&
+        saltBytes == IdentityPolicy.PasswordSaltBytes &&
+        Convert.TryFromBase64String(verifier.SubkeyBase64, subkey, out int subkeyBytes) &&
+        subkeyBytes == IdentityPolicy.PasswordSubkeyBytes;
 }

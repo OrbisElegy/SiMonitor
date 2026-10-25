@@ -204,7 +204,7 @@ internal static class DisplayPreferenceSmokeChecks
             }
             foreach (string invalid in new[] { "{", "null", valid.Replace("\"Version\": 18", "\"Version\": 189"),
                 valid.Replace("\"Speed\": 125", "\"Speed\": 0"), valid.Replace("\"Automatic\": false,", ""),
-                valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 32769) })
+                valid.Replace("\"PaperLayout\": 1", "\"PaperLayout\": 9"), new string(' ', 65537) })
             {
                 File.WriteAllText(path, invalid);
                 Require(store.Load(out rejected).Display.Skin == MonitorSkin.FourRows && rejected && File.ReadAllText(path) == invalid,

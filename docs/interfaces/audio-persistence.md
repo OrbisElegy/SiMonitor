@@ -331,7 +331,7 @@ path 为调用者指定路径，Save 规范化成绝对路径并创建父目录�
 存储只包含显示/报警/声音配置和可选生成器编辑输入，不保存波形状态、活动报警、测试 notice。
 Sound.HeartbeatEnabled 控制心搏音；输出随窗口启动，主音量与静音不关闭播放服务。
 
-文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；最多读取 32768 bytes、最大深度 8。
+文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；读写共用 65536 bytes 上限、最大深度 8。
 未配置字符串枚举 converter，普通 enum 属性以整数表示；字典键按 System.Text.Json 的键表示规则。
 未知属性拒绝，构造器必需参数必须存在。顶层必需 Version/Skin/Slots/PaperLayout，slot 必需
 Channel/Automatic/Minimum/Maximum/Speed；Speed 为 0.1 mm/s，合法值 125/250/500。
@@ -395,7 +395,8 @@ ApplyDelaySeconds 为 0–60、0.1 s 步进，三个字典上限分别 64/32/16�
 Load 找不到文件/目录：返回 `MonitorDisplayConfiguration.Default(MonitorSkin.FourRows)`、PaperLayout=0，rejected=false。
 IO、权限、JSON 或参数校验失败：返回相同默认值，rejected=true，不改写坏文件。
 有效旧文件保留缺省 Alarms/Sound/Generator 为 null，应用调用方自行选择回退值。
-Save 先做参数校验，再创建随机同目录 `.tmp` 文件、序列化、Flush(flushToDisk:true)、
+Save 先做参数校验并序列化；输出超过大小上限时返回 false，保留已有文件且不创建临时文件。
+大小合法后创建随机同目录 `.tmp` 文件、写入序列化内容、Flush(flushToDisk:true)、
 File.Move(overwrite:true) 发布；finally 尝试删除临时文件。
 IO/UnauthorizedAccessException 返回 false；非法参数、路径规范化或序列化的其他异常不会统一转 false。
 因此调用方应区分用户输入无效、加载被拒绝、保存失败和文件缺失；成功 Save 只说明文件发布成功。

@@ -40,6 +40,7 @@ internal static class Program
             .. MonitorPrintSnapshotSpecifications.All,
             .. NibpSpecifications.All,
             .. LanguagePreferenceSpecifications.All,
+            .. DisplayPreferenceSpecifications.All,
             .. TherapySpecifications.All,
             .. ManualDefibrillatorSpecifications.All,
             .. AedSpecifications.All,

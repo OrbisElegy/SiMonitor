@@ -18,7 +18,7 @@ public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int
 // Local preferences and generator inputs; no runtime waveform or playback state.
 public sealed class DisplayPreferenceStore(string path)
 {
-    private const int MaximumBytes = 32768;
+    private const int MaximumBytes = 65536;
     private static readonly JsonSerializerOptions Options = new()
     { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 8, WriteIndented = true, RespectRequiredConstructorParameters = true };
     private sealed record Slot([property: JsonRequired] int Channel, [property: JsonRequired] bool Automatic,
@@ -136,6 +136,8 @@ public sealed class DisplayPreferenceStore(string path)
             MeasurementMillimeters = preferences.MeasurementMillimeters,
             Slots = display.Slots
         };
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(data, Options);
+        if (bytes.Length > MaximumBytes) { return false; }
         string fullPath = Path.GetFullPath(path);
         string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -143,7 +145,7 @@ public sealed class DisplayPreferenceStore(string path)
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(stream, data, Options);
+                stream.Write(bytes);
                 stream.Flush(flushToDisk: true);
             }
             File.Move(temporary, fullPath, overwrite: true);

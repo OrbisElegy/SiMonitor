@@ -77,6 +77,9 @@ class DistributionTests(unittest.TestCase):
         self.assertIn("default master volume is 50%", info)
         self.assertIn("sound is unmuted", info)
         self.assertIn("saved settings are restored", info)
+        for companion in ("language.json", "therapy.json", "skin.simskin"):
+            self.assertIn("display-preferences." + companion, info)
+        self.assertIn("move all four files aside", info)
         self.assertIn("Linux audio uses the system ALSA library", info)
         self.assertIn("macOS currently has no sound output", info)
 

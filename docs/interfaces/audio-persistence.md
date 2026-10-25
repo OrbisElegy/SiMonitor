@@ -321,7 +321,8 @@ SIM_AUDIO_TEST 的非 Windows 构建以 1 ms 轮询原子标志实现，不代�
 ```csharp
 record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout,
     MonitorAlarmPreferences? Alarms=null, MonitorSoundPreferences? Sound=null,
-    MonitorGeneratorPreferences? Generator=null);
+    MonitorGeneratorPreferences? Generator=null, bool MeasurementMillimeters=false,
+    DefibrillatorConfiguration? Defibrillator=null);
 DisplayPreferenceStore(string path);
 DisplayPreferences Load(out bool rejected);
 bool Save(DisplayPreferences preferences);
@@ -378,7 +379,7 @@ Alarms.NoExpirationConfirmation 独立保存 CO₂ 未检出呼吸条件的 Trig
 设备 ID 禁止空白、NUL 或超过 1024 字符。保存设置不要求设备当前在线。
 
 版本 14 增加 Generator.ElectricalConversions，按稳定 ECG 模板标识保存允许转复与独立的单／双相能量阈值。旧文件缺省为空映射；切换到窦律不删除原模板配置。见[电击转复接口](electrical-conversion.md)。
-版本 15 增加 `Generator.PacingPermissions`：使用稳定的 `ecgTemplate.t000`–`t179` 标识保存
+版本 15 增加 `Generator.PacingPermissions`：使用稳定的 `ecgTemplate.t000`–`t180` 标识保存
 各模板的布尔起搏许可。缺省／旧版本为空映射，未设置即拒绝；未知模板标识或 null 映射拒绝加载。
 切换模板保留整张映射，恢复默认清空；运行态和待执行起搏请求不写入该文件。
 

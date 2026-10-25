@@ -120,7 +120,10 @@ macOS currently has no sound output.
 Applied settings are stored in local application data under
 Monitor/display-preferences.json (Windows: %LOCALAPPDATA%/Monitor/).
 Restart replays generator inputs from simulation zero, not the old timeline.
-For a clean default configuration, close the app and move that file aside.
+Language, therapy controls and the selected skin are saved separately in
+display-preferences.language.json, display-preferences.therapy.json and
+display-preferences.skin.simskin in the same directory. To restore all defaults
+manually, close the app and move all four files aside.
 
 Teaching simulator only; not for clinical decisions or patient monitoring.
 This candidate does not assert Windows soak, audio-fault or release acceptance.

@@ -110,6 +110,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.EcgSelection = 148;
             window.Settings.RespSignalAmplitude.Value = -650;
             window.Settings.OpenAdvanced(0);
+            window.Settings.EcgParameters.SelectedItem = window.Settings.EcgParameters.Items.Cast<TabItem>()
+                .Single(page => ReferenceEquals(page.Content, window.Settings.InfarctionParameters));
             Capture(window, "ui-refine-ecg-editor.png");
             Require(window.Settings.InfarctionParameters.IsVisible && window.Settings.InfarctionParameters.Parent is not null &&
                 window.Settings.ShapeEditSummary.Parent is null &&
@@ -125,7 +127,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.RespSignalAmplitude.Value = 350;
             var session = window.Session;
             window.RestartSettings();
-            window.Settings.SectionPages[6].SelectedSection = 3;
+            window.Settings.SectionPages[6].SelectedSection = 2;
             Require(ReferenceEquals(session, window.Session) && window.Settings.AppliedEcgParameters.Text == appliedEcg &&
                 window.Settings.AppliedRespirationParameters.Text == appliedRespiration,
                 "failed apply and overview navigation retain the active parameter snapshot");
@@ -685,8 +687,9 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.OpenAdvanced(0);
             Require(window.Settings.SectionPages[6].SelectedSection == 0, "ECG style opens ECG advanced group");
             window.Settings.OpenAdvanced(3);
-            Require(window.Settings.SectionPages[6].SelectedSection == 2, "ejection style opens ejection advanced group");
-            window.Settings.SectionPages[6].SelectedSection = 3;
+            Require(window.Settings.Tabs.SelectedIndex == 5 && window.Settings.SectionPages[5].SelectedSection == 3,
+                "ejection style opens pressure controls");
+            window.Settings.SectionPages[6].SelectedSection = 2;
             window.Settings.Tabs.SelectedIndex = 1; window.Settings.OpenAdvanced(1);
             Require(ReferenceEquals(live, window.Session) && window.Settings.RespSignalAmplitude.Value == -400 && window.Settings.RespCardiacArtifact.Value == 120,
                 "advanced group navigation and return preserve drafts without applying");
@@ -945,6 +948,8 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyAfVariantProductStyles);
         NativeSmokePartition.Run(VerifyStandstillProductStyles);
         NativeSmokePartition.Run(VerifyAdvancedTemplateDescriptions);
+        NativeSmokePartition.Run(EcgAdvancedSmokeChecks.VerifyCatalogue);
+        NativeSmokePartition.Run(EcgAdvancedSmokeChecks.VerifyApplyAndPersistence);
         NativeSmokePartition.Run(VerifyHyperkalemiaProductStyle);
         NativeSmokePartition.Run(VerifyHypokalemiaProductStyles);
         NativeSmokePartition.Run(VerifyCalciumProductStyles);
@@ -1304,7 +1309,7 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.Tabs.SelectedIndex = 4; Capture(window, "ui-preview-alarms.png");
             window.Settings.Tabs.SelectedIndex = 5; Capture(window, "ui-preview-vitals.png");
             window.Settings.Tabs.SelectedIndex = 6;
-            window.Settings.SectionPages[6].SelectedSection = 3;
+            window.Settings.SectionPages[6].SelectedSection = 2;
             Capture(window, "ui-preview-advanced.png");
             Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "applied parameter page shows the active style");
             Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 7, "general preferences and all six simulation categories remain available");
@@ -1561,6 +1566,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.EcgSelection = 107;
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 6;
             var editor = window.Settings.TContourParameters;
+            window.Settings.EcgParameters.SelectedItem = window.Settings.EcgParameters.Items.Cast<TabItem>()
+                .Single(page => ReferenceEquals(page.Content, editor));
             Require(editor.IsVisible && editor.Parent is not null, "compatible contour editor is reachable in advanced settings");
             editor.Peak.Value = 450; editor.SecondPeak.Value = 150; editor.Crossing.Value = 25;
             Require(window.Settings.ShapeEditStatus.Text!.Contains("待应用", StringComparison.Ordinal) &&
@@ -1791,6 +1798,8 @@ internal static class DesignPreviewSmokeChecks
             { Require(window.Session.Samples(channel, 0, zoneSource.SimulationTimeNs).SequenceEqual(zoneSource.Samples(channel, 0, zoneSource.SimulationTimeNs)), "zone edits reach shared acquired monitor channels"); }
             window.SelectPage(2); window.Settings.Tabs.SelectedIndex = 6;
             var acceptedZones = zoneEditor.ReadZones(zonePair.Ecg.Infarction);
+            window.Settings.EcgParameters.SelectedItem = window.Settings.EcgParameters.Items.Cast<TabItem>()
+                .Single(page => ReferenceEquals(page.Content, zoneEditor));
             live = window.Session;
             for (int group = 0; group < 4; group++)
             {
@@ -2177,22 +2186,22 @@ internal static class DesignPreviewSmokeChecks
                 window.Settings.Tabs.SelectedIndex = 1; window.Settings.EcgSelection = choice;
                 window.RestartSettings();
                 window.Settings.OpenAdvanced(0);
-                window.Settings.SectionPages[6].SelectedSection = 3;
+                window.Settings.SectionPages[6].SelectedSection = 2;
                 Capture(window, $"ui-preview-advanced-{choice}.png");
                 string?[] text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
                 Require(text.Any(t => t?.Contains(EcgTemplateSummary.Describe(DesignPreviewWindow.ResolveStyle(choice, 0, 0).Ecg), StringComparison.Ordinal) == true),
                     "applied parameter page renders the accepted waveform semantics");
                 window.Settings.OpenAdvanced(3);
-                Capture(window, $"ui-preview-advanced-ejection-{choice}.png");
-                text = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
-                Require(text.Contains("当前无有效射血，不提供射血强度编辑。") == (choice != 0),
-                    "advanced page derives absent ejection from rhythm as well as ejection selection");
+                Capture(window, $"ui-preview-pressure-entry-{choice}.png");
+                Require(window.Settings.Tabs.SelectedIndex == 5 && window.Settings.SectionPages[5].SelectedSection == 3 &&
+                    window.Settings.AbpPulseGain.IsEffectivelyVisible,
+                    "ejection advanced entry uses pressure controls for every rhythm");
             }
             var live = window.Session;
             window.Settings.Tabs.SelectedIndex = 1; window.Settings.EcgSelection = 74; window.Settings.EjectionSelection = 1;
-            window.Settings.OpenAdvanced(3); Capture(window, "ui-preview-advanced-incompatible.png");
-            Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.StartsWith("当前组合不兼容：", StringComparison.Ordinal) == true) &&
-                ReferenceEquals(live, window.Session), "browsing incompatible advanced settings explains conflict without mutating live session");
+            window.Settings.OpenAdvanced(3); Capture(window, "ui-preview-pressure-entry-incompatible.png");
+            Require(window.Settings.Tabs.SelectedIndex == 5 && window.Settings.SectionPages[5].SelectedSection == 3 &&
+                ReferenceEquals(live, window.Session), "pressure navigation never applies incompatible template drafts");
         }
         finally { window.Close(); }
     }

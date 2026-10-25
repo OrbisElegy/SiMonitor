@@ -21,6 +21,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; } =
         EcgPacingPermissions.Snapshot(new Dictionary<string, bool>());
     public OxygenationEditorPreferences? Oxygenation { get; init; }
+    public EcgAdvancedPreferences? EcgAdvanced { get; init; }
     public void Validate()
     {
         if (ApplyDelaySeconds < 0 || ApplyDelaySeconds > 60 || ApplyDelaySeconds * 10 != decimal.Truncate(ApplyDelaySeconds * 10) || Ecg < 0 || EcgName is null || EcgName.Length > 128 || Respiration is < 0 or > 6 ||
@@ -29,6 +30,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
             Numbers.Count > 64 || Flags.Count > 32 || Choices.Count > 16)
         { throw new ArgumentException("GeneratorPreferences.Invalid"); }
         Oxygenation?.Validate();
+        EcgAdvanced?.Validate();
         ArgumentNullException.ThrowIfNull(PressureTransducers);
         PressureTransducers.Validate();
         _ = EcgElectricalTherapy.Snapshot(ElectricalConversions);

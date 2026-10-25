@@ -39,7 +39,13 @@ internal static class ProductReleaseChecks
             var groups = (System.Collections.IDictionary)settings.GetType().GetProperty("SectionPages", flags)!.GetValue(settings)!;
             object advanced = groups[6]!;
             var advancedSections = (ListBox)advanced.GetType().GetProperty("Sections", flags)!.GetValue(advanced)!;
-            Require(advancedSections.Items.OfType<ListBoxItem>().Count(item => item.IsEnabled) == 6, "only product advanced sections");
+            string[] expectedAdvancedKeys = ["generation.ecg", "generation.respiration", "advanced.sectionApplied", "skin.defibrillator", "pressureRange.title"];
+            string[] advancedKeys = (string[])advanced.GetType().GetField("_titles", flags)!.GetValue(advanced)!;
+            Require(advancedKeys.SequenceEqual(expectedAdvancedKeys), "product advanced section keys");
+            Require(advancedSections.Items.OfType<ListBoxItem>().Count(item => item.IsEnabled) == expectedAdvancedKeys.Length,
+                "all product advanced sections enabled");
+            var advancedTools = (Control)settings.GetType().GetField("_advancedTools", flags)!.GetValue(settings)!;
+            Require(advancedTools.Parent is null, "advanced development tools unattached");
             tabs.SelectedIndex = 3;
             Capture(window, "product-release-sound.png");
             object sound = settings.GetType().GetProperty("Sound", flags)!.GetValue(settings)!;

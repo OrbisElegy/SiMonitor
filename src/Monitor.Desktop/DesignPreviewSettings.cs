@@ -33,9 +33,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private static readonly string[] CapnogramChoices = ["参考呼气", "食管插管（衰减示意）", "右主支气管插管（双相示意）", "自发通气", "间歇指令通气（IMV）", "阻塞形态", "肺气肿（形态示意）", "肌松消退（箭毒切迹）", "再呼吸", "CO₂吸收剂耗竭", "心源性振荡", "部分机械气道阻塞", "猪尾样（呼气末上翘）"];
     private int _ecgSelection;
     private int _appliedShapeSelection;
-    private EcgTContourPlan? _appliedTContour;
-    private EcgChestInfarctionPlan? _appliedInfarction;
-    private EcgInfarctionZones? _appliedZones;
     internal TextBlock ShapeEditStatus { get; } = Text("");
     internal TextBlock ShapeEditSummary { get; } = Text("");
     internal TextBlock AppliedEcgParameters { get; } = Text("");
@@ -47,9 +44,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         int? ecgSelection = null, int? respirationSelection = null, int? ejectionSelection = null)
     {
         _appliedShapeSelection = ecgSelection ?? EcgSelection;
-        _appliedTContour = configuration.TContour;
-        _appliedInfarction = configuration.Infarction;
-        _appliedZones = configuration.Zones;
+        _appliedEcgDraft = configuration with { SeededRate = null, RateAdjustment = null, RhythmSchedule = null };
+        _appliedAfPulseDeficit = physiology.IllustrateAfSystemicPulseDeficit;
         int ecg = ecgSelection ?? EcgSelection;
         int respiration = respirationSelection ?? RespirationSelection;
         int ejection = ejectionSelection ?? EjectionSelection;
@@ -75,27 +71,38 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     private void RefreshShapeSummary()
     {
+        EcgParameters.RefreshPages();
+        Localization.Bind(_currentEcgTemplate, TextBlock.TextProperty, text =>
+            text.Format("generation.selection", text.GetString(EcgTemplateKey(EcgSelection))));
         try
         {
             var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0).Ecg;
-            bool editable = config.TContour is not null || config.Infarction is not null;
-            var zones = InfarctionParameters.ReadZones(config.Infarction);
-            config = config with
-            {
-                Zones = zones,
-                TContour = TContourParameters.Read(config.TContour),
-                Infarction = zones is null ? InfarctionParameters.Read(config.Infarction) : null
-            };
-            bool applied = _appliedShapeSelection == EcgSelection && _appliedTContour == config.TContour && _appliedInfarction == config.Infarction && _appliedZones == config.Zones;
+            bool editable = EcgParameters.HasWaveformParameters || config.TContour is not null || config.Infarction is not null;
+            config = ReadEcgParameters(config);
+            _ = ProjectedEcgDemoSource.Create(config);
+            if (CardiacRateEnabled.IsChecked == true) { _ = ReadCardiacRate(); }
+            var physiology = EcgParameters.ReadPhysiology(DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0).Physiology, config);
+            bool applied = _appliedShapeSelection == EcgSelection && _appliedEcgDraft == config &&
+                _appliedAfPulseDeficit == physiology.IllustrateAfSystemicPulseDeficit;
             string status = !editable ? "advanced.shapeDefaults" : applied ? "advanced.shapeApplied" : "advanced.shapePending";
             Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, status);
             Localization.Bind(ShapeEditSummary, TextBlock.TextProperty, text => EcgTemplateSummary.Describe(text, config));
             // Only drafts that still need Apply are called out.
             ShapeEditStatus.IsVisible = status == "advanced.shapePending";
         }
-        catch (ArgumentException)
+        catch (ArgumentException error)
         {
-            Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, "advanced.shapeInvalid");
+            if (error is VitalValueException field)
+            {
+                Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, text => text.Format("validation.vitalValue",
+                    text.Format("validation.vitalField", DesktopLocalization.Label(text, field.FieldName), field.Minimum, field.Maximum, field.Step)));
+            }
+            else
+            {
+                string key = error.Message.StartsWith("CardiacRate.", StringComparison.Ordinal) ? "validation." + error.Message :
+                    IsEcgAdvancedError(error) ? EcgAdvancedErrorKey(error) : "advanced.shapeInvalid";
+                Localization.Bind(ShapeEditStatus, TextBlock.TextProperty, key);
+            }
             Localization.Bind(ShapeEditSummary, TextBlock.TextProperty, "advanced.shapeInvalidHelp");
             ShapeEditStatus.IsVisible = true;
         }
@@ -113,6 +120,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         {
             if (_ecgSelection == value) { return; }
             _ecgSelection = value;
+            var preset = DesignPreviewWindow.ResolveStyle(value, RespirationSelection, 0);
+            EcgParameters.Reset(preset.Ecg, preset.Physiology.IllustrateAfSystemicPulseDeficit);
             ElectricalConversion.Select(EcgTemplateKey(value));
             AedConversion.Select(EcgTemplateKey(value));
             PacingPermissions.Select(EcgTemplateKey(value));
@@ -292,7 +301,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private readonly StackPanel _co2Shape = new() { Spacing = 16 };
     private readonly StackPanel _co2Response = new() { Spacing = 16 };
     private readonly WrapPanel _co2Timing = new() { Orientation = Orientation.Horizontal };
-    private readonly StackPanel _advancedEjection = new() { Spacing = 16 };
     internal DefibrillatorSettingsEditor Defibrillator { get; }
     internal PressureTransducerEditor PressureTransducers { get; }
     private readonly StackPanel _advancedTools = new() { Spacing = 16 };
@@ -308,16 +316,28 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Oxygenation = new OxygenationSettingsPanel(Localization);
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
+        TContourParameters.Reset(null);
+        InfarctionParameters.Reset(null);
+        EcgParameters = new EcgAdvancedParameterEditor(Localization);
         EcgInterference = new(Localization);
         ElectricalConversion = new ElectricalConversionEditor(Localization);
         AedConversion = new ElectricalConversionEditor(Localization, automated: true);
         PacingPermissions = new PacingPermissionEditor(Localization);
+        EcgParameters.AddPage("ecgAdvanced.tContour", TContourParameters);
+        EcgParameters.AddPage("ecgAdvanced.infarction", InfarctionParameters);
+        EcgParameters.AddPage("ecgAdvanced.conversion", ElectricalConversion);
+        EcgParameters.AddPage("ecgAdvanced.aedConversion", AedConversion);
+        EcgParameters.AddPage("ecgAdvanced.interference", EcgInterference);
+        EcgParameters.AddPage("ecgAdvanced.pacing", PacingPermissions);
+        EcgParameters.RefreshPages();
         Defibrillator = new DefibrillatorSettingsEditor(Localization);
         PressureTransducers = new PressureTransducerEditor(Localization);
         InitializeLocalization();
         _preview = preview; _respirationPreview = respirationPreview;
         TContourParameters.Changed += RefreshShapeSummary;
         InfarctionParameters.Changed += RefreshShapeSummary;
+        EcgParameters.Changed += RefreshShapeSummary;
+        Localization.LocaleChanged += RefreshShapeSummary;
         var generation = new Grid { RowDefinitions = new("Auto,*") };
         generation.Children.Add(DesktopInformationPages.Help("settings-detail-1"));
         var templates = BuildTemplatePages();
@@ -405,7 +425,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             ("vitals.sectionSeed", Before(vitals, RateSeed)), ("manual.section", ManualVitals));
         TrackVitalSections(SectionPages[5]);
         var advancedGroups = new List<(string Title, Control Content)>
-        { ("generation.ecg", _advancedEcg), ("generation.respiration", _advancedRespiration), ("generation.ejection", _advancedEjection) };
+        { ("generation.ecg", _advancedEcg), ("generation.respiration", _advancedRespiration) };
         var appliedParameters = new StackPanel { Spacing = 20 };
         appliedParameters.Children.Add(LocalizedText("advanced.appliedIntro"));
         appliedParameters.Children.Add(AppliedEcgParameters);
@@ -416,7 +436,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         advancedGroups.Add(("skin.defibrillator", Defibrillator));
         advancedGroups.Add(("pressureRange.title", PressureTransducers));
         if (ProductIdentity.DevelopmentFeatures) { advancedGroups.Add(("advanced.sectionTools", _advancedTools)); }
-        var advancedHeaders = new Dictionary<int, string> { [0] = "advanced.headerWaveform", [3] = ProductIdentity.DevelopmentFeatures ? "advanced.headerOverviewTools" : "advanced.headerOverview" };
+        var advancedHeaders = new Dictionary<int, string> { [0] = "advanced.headerWaveform", [2] = ProductIdentity.DevelopmentFeatures ? "advanced.headerOverviewTools" : "advanced.headerOverview" };
         SectionPages[6] = new SettingsSections(Localization, "settings.advanced", advancedHeaders, advancedGroups.ToArray());
         RespirationGroups.ItemsSource = new[] { ("advanced.respSignal", _respSignal), ("advanced.co2Shape", _co2Shape), ("advanced.co2Response", _co2Response) }
             .Select(page =>
@@ -717,14 +737,14 @@ internal sealed partial class DesignPreviewSettings : UserControl
     }
     internal void OpenAdvanced(int channel)
     {
-        if (channel == 2)
+        if (channel is 2 or 3)
         {
             Tabs.SelectedIndex = 5;
-            SectionPages[5].SelectedSection = 2;
+            SectionPages[5].SelectedSection = channel == 2 ? 2 : 3;
             return;
         }
         Tabs.SelectedIndex = 6;
-        SectionPages[6].SelectedSection = channel switch { 0 => 0, 1 or 4 => 1, _ => 2 };
+        SectionPages[6].SelectedSection = channel == 0 ? 0 : 1;
         if (channel == 4) { RespirationGroups.SelectedIndex = 1; }
     }
     private void ResetRespirationDraft()
@@ -759,19 +779,14 @@ internal sealed partial class DesignPreviewSettings : UserControl
     private void RefreshAdvanced(Button developer)
     {
         _advancedEcg.Children.Clear(); _advancedRespiration.Children.Clear();
-        _advancedEjection.Children.Clear(); _advancedTools.Children.Clear();
+        _advancedTools.Children.Clear();
         _respSignal.Children.Clear(); _co2Shape.Children.Clear(); _co2Response.Children.Clear();
         _advancedEcg.Children.Add(DesktopInformationPages.Help("topic-8"));
-        var config = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         RefreshShapeSummary();
-        if (config.Ecg.TContour is not null) { _advancedEcg.Children.Add(TContourParameters); }
-        if (config.Ecg.Infarction is not null) { _advancedEcg.Children.Add(InfarctionParameters); }
-        if (ElectricalConversion.IsVisible) { _advancedEcg.Children.Add(ElectricalConversion); }
-        if (AedConversion.IsVisible) { _advancedEcg.Children.Add(AedConversion); }
-        _advancedEcg.Children.Add(EcgInterference);
-        _advancedEcg.Children.Add(PacingPermissions);
-        SectionPages[6].SetDetail(0, null, null);
+        _advancedEcg.Children.Add(_currentEcgTemplate);
         _advancedEcg.Children.Add(ShapeEditStatus);
+        _advancedEcg.Children.Add(EcgParameters);
+        SectionPages[6].SetDetail(0, null, null);
         int respirationTemplate = RespirationSelection;
         Localization.Bind(RespirationGroups, ToolTip.TipProperty, text => text.Format("advanced.currentRespiration", text.GetString(RespirationTemplateKey(respirationTemplate))));
         _respSignal.Children.Add(LocalizedText("advanced.respAmplitude"));
@@ -808,28 +823,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _co2Response.Children.Add(DesktopInformationPages.Help("settings-detail-6"));
         _advancedRespiration.Children.Add(RespirationGroups);
         _advancedRespiration.Children.Add(ResetRespirationPage);
-        try
-        {
-            var selected = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, EjectionSelection).Physiology;
-            bool noEjection = selected.Pacing is PacingIllustration.VentricularNoncapture or PacingIllustration.VentricularOutputFailure || !selected.VentricularMechanicalEnabled || selected.CardiacActivity is
-                Monitor.Simulation.Physiology.CardiacActivity.Absent or Monitor.Simulation.Physiology.CardiacActivity.AtrialOnly ||
-                Monitor.Simulation.Physiology.VentricularDisorganizationReference.IsPattern(selected.ConductionPattern);
-            _advancedEjection.Children.Add(LocalizedText(noEjection ? "advanced.ejectionNone" : "advanced.ejectionConstrained"));
-            SectionPages[6].SetDetail(2, "advanced.noParameters", "advanced.noParametersName");
-        }
-        catch (ArgumentException error)
-        {
-            var incompatible = Text("");
-            string reason = error.Message switch
-            {
-                "Preview.EjectionRequiresPvc" => "advanced.ejectionRequiresPvc",
-                "Preview.EjectionRequiresSinus" => "advanced.ejectionRequiresSinus",
-                _ => "advanced.ejectionInvalidStyle"
-            };
-            Localization.Bind(incompatible, TextBlock.TextProperty, text => text.Format("advanced.ejectionIncompatible", text.GetString(reason)));
-            _advancedEjection.Children.Add(incompatible);
-            SectionPages[6].SetDetail(2, "advanced.incompatible", "advanced.incompatibleName");
-        }
         _advancedTools.Children.Add(LocalizedText("advanced.toolsNote"));
         _advancedTools.Children.Add(developer);
     }

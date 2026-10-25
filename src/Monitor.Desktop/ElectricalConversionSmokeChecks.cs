@@ -50,6 +50,8 @@ internal static class ElectricalConversionSmokeChecks
             Require(settings.AedConversion.Biphasic.Value == 180 && settings.AedConversion.PostShockPause.Value == 1.5m,
                 "switching templates retains the AED draft independently of manual settings");
             settings.OpenAdvanced(0);
+            settings.EcgParameters.SelectedItem = settings.EcgParameters.Items.Cast<TabItem>()
+                .Single(page => ReferenceEquals(page.Content, settings.ElectricalConversion));
             window.SelectPage(2);
             DesktopViewportSmokeChecks.Layout(window);
             Require(settings.ElectricalConversion.Bounds.Height > 0 && settings.ElectricalConversion.Monophasic.Value == 271 && settings.ElectricalConversion.Biphasic.Value == 121,

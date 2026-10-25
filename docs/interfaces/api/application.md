@@ -1763,6 +1763,18 @@ public sealed class MonitorSweepRanges(MonitorDisplayConfiguration configuration
 }
 ```
 
+## Presentation/EcgAdvancedPreferences.cs
+
+源码：[EcgAdvancedPreferences.cs](../../../src/Monitor.Application/Presentation/EcgAdvancedPreferences.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record EcgAdvancedPreferences(IReadOnlyDictionary<string, decimal?> Numbers,
+    IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, int> Choices)
+{
+    public void Validate();
+}
+```
+
 ## Presentation/MonitorGeneratorPreferences.cs
 
 源码：[MonitorGeneratorPreferences.cs](../../../src/Monitor.Application/Presentation/MonitorGeneratorPreferences.cs) · 命名空间：`Monitor.Application.Presentation`
@@ -1778,6 +1790,7 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     public IReadOnlyDictionary<string, bool> PacingPermissions { get; init; }
     public decimal ApplyDelaySeconds { get; init; }
     public OxygenationEditorPreferences? Oxygenation { get; init; }
+    public EcgAdvancedPreferences? EcgAdvanced { get; init; }
     public void Validate();
 }
 ```

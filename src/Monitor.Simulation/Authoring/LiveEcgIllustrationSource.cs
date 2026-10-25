@@ -9,7 +9,7 @@ public static class LiveEcgIllustrationSource
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var plan = configuration.ResolvePlan();
-        var electrodes = configuration.Dextrocardia ? DextrocardiaReference.CreateElectrodes()
+        var electrodes = configuration.EcgDefinition?.Electrodes ?? (configuration.Dextrocardia ? DextrocardiaReference.CreateElectrodes()
             : configuration.Pacing is { } pacing ? PacingReference.CreateElectrodes(pacing, configuration.PacingOutput)
             : configuration.ConductionPattern == AvConductionPattern.SinusArrestIllustration ? SinusArrestReference.CreateElectrodes()
             : configuration.ConductionPattern == AvConductionPattern.SinusArrhythmiaIllustration ? SinusArrhythmiaReference.CreateElectrodes()
@@ -57,7 +57,7 @@ public static class LiveEcgIllustrationSource
             ? CompleteAvBlockJunctionalReference.CreateElectrodes()
             : TextbookElectrodeReference.CreateElectrodes(timing: configuration.SeededRate?.Timing,
                 infarction: configuration.Infarction, zones: configuration.Zones, atrial: configuration.AtrialShape,
-                ventricular: configuration.VentricularShape, tContour: configuration.TContour);
+                ventricular: configuration.VentricularShape, tContour: configuration.TContour));
         if (AtrialFibrillationReference.IsPattern(plan.ConductionPattern))
         {
             electrodes = Array.AsReadOnly(electrodes.Select(electrode => electrode with

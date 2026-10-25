@@ -27,6 +27,14 @@ internal sealed partial class DesignPreviewSettings
     internal CardiacRateAdjustment? ReadCardiacRate(bool validateSources = true)
     {
         var pair = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
+        if (validateSources)
+        {
+            var edited = ReadEcgParameters(pair.Ecg);
+            var physiology = EcgParameters.ReadPhysiology(pair.Physiology, edited) with
+            { Infarction = edited.Infarction, Zones = edited.Zones, TContour = edited.TContour };
+            if (edited != pair.Ecg) { physiology = WithAuthoredEcg(physiology, edited); }
+            pair = (physiology, edited);
+        }
         var rhythm = ReadRhythm(pair.Physiology.ConductionPattern);
         pair = (pair.Physiology with { RhythmSchedule = rhythm }, pair.Ecg with { RhythmSchedule = rhythm });
         var plan = pair.Physiology.ResolvePlan();
@@ -37,7 +45,7 @@ internal sealed partial class DesignPreviewSettings
         adjustment.Validate(plan);
         // Keep the established sinus timing adaptation; all other templates
         // retain their morphology and must fit their source support bounds.
-        if (validateSources && (EcgSelection != 0 || adjustment.Rate.HeartRateBpm is < 30 or > 180))
+        if (validateSources && (EcgSelection != 0 || pair.Physiology.EcgDefinition is not null || adjustment.Rate.HeartRateBpm is < 30 or > 180))
         {
             try
             {

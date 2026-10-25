@@ -181,8 +181,9 @@ internal static class SettingsNavigationSmokeChecks
         Require(headers.Length == 2 && headers[0] == "当前波形" && headers[1] is "概览" or "概览与工具",
             "advanced navigation separates waveform parameters from overview pages");
         Require(advanced.DetailFor(0) is null && settings.PacingPermissions.Parent is not null &&
-            advanced.DetailFor(1) is null && advanced.DetailFor(2) == "无参数",
-            "all ECG templates expose pacing permission while genuinely empty groups retain their marker");
+            advanced.DetailFor(1) is null && advanced.Sections.Items.Cast<ListBoxItem>().All(item =>
+                AutomationProperties.GetName(item) != "射血"),
+            "ECG and respiration remain available without a redundant ejection parameter page");
         Capture(window, "ui-preview-advanced-groups.png");
         settings.EcgSelection = 148;
         settings.Tabs.SelectedIndex = 1;
@@ -190,7 +191,8 @@ internal static class SettingsNavigationSmokeChecks
         Require(advanced.SelectedSection == 0 && advanced.DetailFor(0) is null && settings.InfarctionParameters.Parent is not null,
             "editable ECG template clears the empty marker");
         settings.OpenAdvanced(3);
-        Require(advanced.SelectedSection == 2, "ejection entry still opens its group with headers present");
+        Require(settings.Tabs.SelectedIndex == 5 && settings.SectionPages[5].SelectedSection == 3,
+            "ejection entry opens the existing pressure controls");
         settings.EcgSelection = 0;
         settings.Tabs.SelectedIndex = 1;
     }
@@ -228,19 +230,16 @@ internal static class SettingsNavigationSmokeChecks
     private static void VerifyEnglishNavigation(DesignPreviewWindow window)
     {
         var settings = window.Settings;
-        settings.OpenAdvanced(3);
+        settings.OpenAdvanced(0);
         foreach (int width in new[] { 1440, 1200, 960 })
         {
             DesktopViewportSmokeChecks.Layout(window, width, 720);
             var sections = settings.SectionPages[6];
             Control navigation = sections.Compact ? Selector(window, "Advanced parameters parameter groups") : sections.Sections;
             var texts = navigation.GetVisualDescendants().OfType<TextBlock>().Where(text => text.IsEffectivelyVisible).ToArray();
-            var title = texts.Single(text => text.Text == "Ejection");
-            var detail = texts.Single(text => text.Text == "No parameters");
-            Require(title.TextLayout.TextLines.Count == 1 && detail.TextLayout.TextLines.Count == 1,
-                "English navigation title and state retain complete words at " + width);
-            Require(detail.TranslatePoint(default, navigation)!.Value.Y >= title.TranslatePoint(default, navigation)!.Value.Y + title.Bounds.Height,
-                "navigation state has its own line without squeezing the title");
+            var title = texts.Single(text => text.Text == "ECG");
+            Require(title.TextLayout.TextLines.Count == 1 && texts.All(text => text.Text != "Ejection"),
+                "English navigation retains the ECG title and omits retired ejection at " + width);
             Capture(window, $"ui-preview-navigation-en-{width}.png");
         }
         DesktopViewportSmokeChecks.Layout(window);

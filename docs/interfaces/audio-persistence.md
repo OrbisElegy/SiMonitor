@@ -388,6 +388,9 @@ PauseSeconds（1–3600）、Timing；Timing 周期单位 ms，Info 5000–12000
 Warning 3500–60000、Critical 250–2000，另有 InfoTone。
 Generator 保存 Ecg/EcgName、Respiration/Ejection、Seed、Numbers/Flags/Choices、ApplyDelaySeconds、Oxygenation；
 ApplyDelaySeconds 为 0–60、0.1 s 步进，三个字典上限分别 64/32/16。它不是仿真 checkpoint。
+可选 `Generator.EcgAdvanced` 保存当前模板的高级 ECG Numbers/Flags/Choices，字典上限分别为
+48/16/4。旧文件缺省或为 null 时恢复模板默认值；桌面恢复时进一步核对完整字段集合、
+数值范围和选项索引，应用前验证实际波形。模板支持边界见[高级 ECG 参数](desktop-tools.md#ecg-高级参数)。
 
 Load 找不到文件/目录：返回 `MonitorDisplayConfiguration.Default(MonitorSkin.FourRows)`、PaperLayout=0，rejected=false。
 IO、权限、JSON 或参数校验失败：返回相同默认值，rejected=true，不改写坏文件。

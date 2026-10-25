@@ -14,6 +14,11 @@ internal sealed class InfarctionParameterEditor : StackPanel
     internal CheckBox ComponentsEnabled { get; } = new();
     internal ComboBox Necrosis { get; } = new() { MinWidth = 220 };
     internal NumericUpDown QrsWeight { get; } = Field(0, 100, 100, 1);
+    internal CheckBox ContributionLoss { get; } = new();
+    internal NumericUpDown ContributionAmplitude { get; } = Field(0, 2000, 1200, 10);
+    internal NumericUpDown ContributionDuration { get; } = Field(10, 100, 75, 1);
+    internal NumericUpDown ContributionAmount { get; } = Field(0, 100, 100, 1);
+    private readonly StackPanel _contribution = new() { Spacing = 8 };
     internal CheckBox ReferenceT { get; } = new() { IsChecked = true };
     internal NumericUpDown TPeak { get; } = Field(-4000, 4000, 300, 10);
     internal NumericUpDown JPoint { get; } = Field(-4000, 4000, 0, 10);
@@ -84,6 +89,12 @@ internal sealed class InfarctionParameterEditor : StackPanel
         Add(injuryPage, "infarction.stArch", StArch);
         Add(necrosisPage, "infarction.qrsShape", Necrosis);
         Add(necrosisPage, "infarction.qrsWeight", QrsWeight);
+        _localization.Bind(ContributionLoss, ContentControl.ContentProperty, "ecgAdvanced.contributionLoss");
+        necrosisPage.Children.Add(ContributionLoss);
+        Add(_contribution, "ecgAdvanced.contributionAmplitude", ContributionAmplitude);
+        Add(_contribution, "ecgAdvanced.contributionDuration", ContributionDuration);
+        Add(_contribution, "ecgAdvanced.contributionAmount", ContributionAmount);
+        necrosisPage.Children.Add(_contribution);
         Groups.ItemsSource = new[]
         {
             Page("infarction.pageRegion", regionPage), Page("infarction.pageRepolarization", repolarizationPage),
@@ -96,7 +107,9 @@ internal sealed class InfarctionParameterEditor : StackPanel
         ComponentsEnabled.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         ReferenceT.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
         Necrosis.SelectionChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
-        foreach (var field in new[] { QrsWeight, TPeak, JPoint, StEnd, StArch }) { field.ValueChanged += (_, _) => Changed?.Invoke(); }
+        ContributionLoss.IsCheckedChanged += (_, _) => { RefreshComponents(); Changed?.Invoke(); };
+        foreach (var field in new[] { QrsWeight, TPeak, JPoint, StEnd, StArch, ContributionAmplitude, ContributionDuration, ContributionAmount })
+        { field.ValueChanged += (_, _) => Changed?.Invoke(); }
         RefreshComponents();
         TabItem Page(string key, Control content)
         {
@@ -145,6 +158,10 @@ internal sealed class InfarctionParameterEditor : StackPanel
         int region = preset.Territory switch { InfarctionTerritory.Inferior => 10, InfarctionTerritory.Lateral => 11, InfarctionTerritory.Anteroseptal => 7, InfarctionTerritory.Anterior => 8, _ => 9 };
         IschemiaRegion.SelectedIndex = InjuryRegion.SelectedIndex = NecrosisRegion.SelectedIndex = region;
         Necrosis.SelectedIndex = 0; QrsWeight.Value = 100;
+        ContributionLoss.IsChecked = false;
+        ContributionAmplitude.Value = 1200;
+        ContributionDuration.Value = 75;
+        ContributionAmount.Value = 100;
         ReferenceT.IsChecked = true; TPeak.Value = 300; JPoint.Value = StEnd.Value = StArch.Value = 0;
         RefreshComponents();
         _localization.Bind(_region, TextBlock.TextProperty, _chest.IsVisible ? "infarction.chestNote" : "infarction.territoryNote");
@@ -165,7 +182,9 @@ internal sealed class InfarctionParameterEditor : StackPanel
             components = new((NecrosisIllustrationShape)necrosis,
                 !RegionActive(IschemiaRegion) || ReferenceT.IsChecked == true ? null : Integer(TPeak),
                 injury ? Integer(JPoint) : 0, injury ? Integer(StEnd) : 0, injury ? Integer(StArch) : 0,
-                necrosis == 0 ? 1000 : Integer(QrsWeight) * 10);
+                necrosis == 0 ? 1000 : Integer(QrsWeight) * 10,
+                necrosis == 0 && RegionActive(NecrosisRegion) && ContributionLoss.IsChecked == true
+                    ? new EcgQrsContributionLoss(Integer(ContributionAmplitude), Integer(ContributionDuration) * 10, Integer(ContributionAmount) * 10) : null);
         }
         var edited = preset with { RepolarizationDelayNs = (long)delay * 1_000_000, Components = components };
         if (!_chest.IsVisible) { return edited; }
@@ -192,15 +211,17 @@ internal sealed class InfarctionParameterEditor : StackPanel
         var pages = Groups.Items.OfType<TabItem>().ToArray();
         if (pages.Length == 4)
         {
-            pages[1].IsEnabled = RegionActive(IschemiaRegion);
-            pages[2].IsEnabled = components && RegionActive(InjuryRegion);
-            pages[3].IsEnabled = components && RegionActive(NecrosisRegion);
-            if (Groups.SelectedIndex >= 0 && !pages[Groups.SelectedIndex].IsEnabled) { Groups.SelectedIndex = 0; }
+            pages[1].IsVisible = pages[1].IsEnabled = RegionActive(IschemiaRegion);
+            pages[2].IsVisible = pages[2].IsEnabled = components && RegionActive(InjuryRegion);
+            pages[3].IsVisible = pages[3].IsEnabled = components && RegionActive(NecrosisRegion);
+            if (Groups.SelectedIndex >= 0 && !pages[Groups.SelectedIndex].IsVisible) { Groups.SelectedIndex = 0; }
         }
         _chest.IsVisible = !_zones.IsVisible && _preset?.Territory is InfarctionTerritory.Anteroseptal or InfarctionTerritory.Anterior or InfarctionTerritory.ExtensiveAnterior;
         _region.IsVisible = !_zones.IsVisible;
         TPeak.IsEnabled = ReferenceT.IsChecked != true;
         QrsWeight.IsEnabled = Necrosis.SelectedIndex > 0;
+        ContributionLoss.IsVisible = Necrosis.SelectedIndex == 0;
+        _contribution.IsVisible = ContributionLoss.IsVisible && ContributionLoss.IsChecked == true;
     }
     private static NumericUpDown Field(decimal minimum, decimal maximum, decimal value, decimal increment) =>
         new() { Minimum = minimum, Maximum = maximum, Value = value, Increment = increment, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };

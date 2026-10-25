@@ -47,6 +47,9 @@ internal sealed partial class DesignPreviewSettings
         ["TContourParameters.Crossing"] = TContourParameters.Crossing,
         ["InfarctionParameters.Delay"] = InfarctionParameters.Delay,
         ["InfarctionParameters.QrsWeight"] = InfarctionParameters.QrsWeight,
+        ["InfarctionParameters.ContributionAmplitude"] = InfarctionParameters.ContributionAmplitude,
+        ["InfarctionParameters.ContributionDuration"] = InfarctionParameters.ContributionDuration,
+        ["InfarctionParameters.ContributionAmount"] = InfarctionParameters.ContributionAmount,
         ["InfarctionParameters.TPeak"] = InfarctionParameters.TPeak,
         ["InfarctionParameters.JPoint"] = InfarctionParameters.JPoint,
         ["InfarctionParameters.StEnd"] = InfarctionParameters.StEnd,
@@ -72,6 +75,7 @@ internal sealed partial class DesignPreviewSettings
             ["PaTargetEnabled"] = PaTargetEnabled,
             ["Co2CustomPlateau"] = Co2CustomPlateau,
             ["InfarctionParameters.ComponentsEnabled"] = InfarctionParameters.ComponentsEnabled,
+            ["InfarctionParameters.ContributionLoss"] = InfarctionParameters.ContributionLoss,
             ["InfarctionParameters.ReferenceT"] = InfarctionParameters.ReferenceT,
             ["InfarctionParameters.SeparateRegions"] = InfarctionParameters.SeparateRegions,
         };
@@ -88,6 +92,7 @@ internal sealed partial class DesignPreviewSettings
     private static readonly HashSet<string> LaterGeneratorFields = new(StringComparer.Ordinal)
     {
         "EcgSpikeAmplitude", "EcgSpikeProbability", "EcgBaselineAmplitude", "EcgBaselineKnotSeconds",
+        "InfarctionParameters.ContributionAmplitude", "InfarctionParameters.ContributionDuration", "InfarctionParameters.ContributionAmount", "InfarctionParameters.ContributionLoss",
         "AtrialRate", "PauseDuration", "ConductionPercent", "AbpSystolic", "AbpDiastolic", "PaSystolic", "PaDiastolic", "AbpTargetEnabled", "PaTargetEnabled", "AbpVariation", "PaVariation"
     };
     private static bool FieldsMatch(IEnumerable<string> expected, IEnumerable<string> saved)
@@ -105,6 +110,7 @@ internal sealed partial class DesignPreviewSettings
             GeneratorFlags().ToDictionary(p => p.Key, p => p.Value.IsChecked == true),
             GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex))
         { Pleth = PlethSelection, Capnogram = CapnogramSelection, ElectricalConversions = ElectricalConversion.Capture(), AedElectricalConversions = AedConversion.Capture(), PacingPermissions = PacingPermissions.Capture(), ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true), PressureTransducers = PressureTransducers.Read() };
+        result = result with { EcgAdvanced = EcgParameters.Capture() };
         result.Validate();
         return result;
     }
@@ -139,6 +145,7 @@ internal sealed partial class DesignPreviewSettings
         EjectionSelection = saved.Ejection;
         PlethSelection = saved.Pleth;
         CapnogramSelection = saved.Capnogram;
+        EcgParameters.Restore(saved.EcgAdvanced);
         foreach (var (key, field) in numbers)
         {
             if (saved.Numbers.TryGetValue(key, out decimal? value)) { field.Value = value; }
@@ -150,6 +157,7 @@ internal sealed partial class DesignPreviewSettings
         }
         if (!saved.Flags.ContainsKey("AbpTargetEnabled")) { AbpTargetEnabled.IsChecked = false; }
         if (!saved.Flags.ContainsKey("PaTargetEnabled")) { PaTargetEnabled.IsChecked = false; }
+        if (!saved.Flags.ContainsKey("InfarctionParameters.ContributionLoss")) { InfarctionParameters.ContributionLoss.IsChecked = false; }
         Oxygenation.Restore(saved.Oxygenation);
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }

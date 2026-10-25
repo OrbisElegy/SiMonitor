@@ -720,11 +720,11 @@ internal sealed partial class DesignPreviewWindow : Window
             config = config with { RhythmSchedule = rhythm };
             ecgConfig = ecgConfig with { RhythmSchedule = rhythm };
         }
-        var zones = Settings.InfarctionParameters.ReadZones(ecgConfig.Infarction);
-        var infarction = zones is null ? Settings.InfarctionParameters.Read(ecgConfig.Infarction) : null;
-        config = config with { Infarction = infarction, Zones = zones }; ecgConfig = ecgConfig with { Infarction = infarction, Zones = zones };
-        var contour = Settings.TContourParameters.Read(ecgConfig.TContour);
-        config = config with { TContour = contour }; ecgConfig = ecgConfig with { TContour = contour };
+        var preset = ecgConfig;
+        ecgConfig = Settings.ReadEcgParameters(ecgConfig);
+        config = Settings.EcgParameters.ReadPhysiology(config, ecgConfig) with
+        { Infarction = ecgConfig.Infarction, Zones = ecgConfig.Zones, TContour = ecgConfig.TContour };
+        if (ecgConfig != preset) { config = DesignPreviewSettings.WithAuthoredEcg(config, ecgConfig); }
         var (breathPeriod, inspiration) = Settings.ReadBreathingTiming();
         var (respAmplitude, respArtifact) = Settings.ReadRespirationSignal();
         var (co2DelayMilliseconds, co2DispersionMilliseconds) = Settings.ReadCo2Response();
@@ -757,7 +757,7 @@ internal sealed partial class DesignPreviewWindow : Window
             var adjustment = Settings.ReadCardiacRate(validateSources: false);
             if (adjustment is not null)
             {
-                if (Settings.EcgSelection == 0 && Settings.EjectionSelection != 2 && adjustment.Rate.HeartRateBpm is >= 30 and <= 180)
+                if (Settings.EcgSelection == 0 && Settings.EjectionSelection != 2 && config.EcgDefinition is null && adjustment.Rate.HeartRateBpm is >= 30 and <= 180)
                 {
                     var rate = new SeededCardiacRate(adjustment.Rate.HeartRateBpm, adjustment.Rate.SeedHex, adjustment.Rate.VariationPermille);
                     config = config with { SeededRate = rate };
@@ -955,6 +955,8 @@ internal sealed partial class DesignPreviewWindow : Window
         { SetStatus("validation.co2Response"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidRespirationSignal")
         { SetStatus("validation.respirationSignal"); }
+        catch (ArgumentException exception) when (DesignPreviewSettings.IsEcgAdvancedError(exception))
+        { SetStatus(DesignPreviewSettings.EcgAdvancedErrorKey(exception)); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InvalidInfarctionComponents")
         { SetStatus("validation.qrs"); }
         catch (ArgumentException exception) when (exception.Message == "Preview.InfarctionChestRequired")

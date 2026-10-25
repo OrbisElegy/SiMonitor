@@ -65,6 +65,7 @@ public sealed record PhysiologyIllustrationConfiguration(
     public EcgChestInfarctionPlan? Infarction { get; init; }
     public EcgInfarctionZones? Zones { get; init; }
     public EcgTContourPlan? TContour { get; init; }
+    public AuthoredEcgDefinition? EcgDefinition { get; init; }
     public EcgVentricularIllustration VentricularShape { get; init; }
     public EcgAtrialIllustration AtrialShape { get; init; }
     public QuinidineIllustration Quinidine { get; init; }
@@ -234,6 +235,17 @@ public sealed record PhysiologyIllustrationConfiguration(
             var adjusted = (this with { RateAdjustment = null }).ResolvePlan() with { RateAdjustment = adjustment };
             _ = RegularPhysiologyTimeline.Start(adjusted);
             return adjusted;
+        }
+        if (EcgDefinition is { } definition)
+        {
+            var authored = (this with { EcgDefinition = null }).ResolvePlan() with
+            {
+                HeartPeriodNs = definition.AtrialPeriodNs,
+                VentricularElectricalOffsetNs = definition.VentricularElectricalOffsetNs,
+                VentricularMechanicalOffsetNs = definition.VentricularElectricalOffsetNs + 80_000_000
+            };
+            _ = RegularPhysiologyTimeline.Start(authored);
+            return authored;
         }
         if (Infarction is not null || Zones is not null)
         {

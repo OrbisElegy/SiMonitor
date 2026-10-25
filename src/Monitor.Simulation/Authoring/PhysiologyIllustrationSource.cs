@@ -123,6 +123,8 @@ public static class PhysiologyIllustrationSource
                  new(0, 120_000_000, 200), new(0, 120_000_000, 80),
                  new(60_000_000, 240_000_000, 100), new(160_000_000, 320_000_000, 250),
                  new(400_000_000, 160_000_000, 120), -100, MaximumComponentOverlap: shortCoupled || configuration.SeededRate is not null || plan.RateAdjustment is not null ? 2 : 1), plan) with { BaselineCentiMmHg = configuration.CvpBaselineCentiMmHg }).CreateChannel(plan, ChannelId(6), 0)];
+        if (configuration.EcgDefinition is { } definition)
+        { channels[0] = channels[0] with { Bands = definition.CreateLeadIIBands() }; }
         if (fibrillation)
         { channels[0] = channels[0] with { Bands = Array.AsReadOnly(channels[0].Bands.Select(b => b.AfBeatSelection is null ? b : b with { AfTiming = plan }).ToArray()) }; }
         if (plan.RateAdjustment is { } adjustment)

@@ -526,6 +526,22 @@ public static class AuthoredConductionSelection
 }
 ```
 
+## Authoring/AuthoredEcgDefinition.cs
+
+源码：[AuthoredEcgDefinition.cs](../../../src/Monitor.Simulation/Authoring/AuthoredEcgDefinition.cs) · 命名空间：`Monitor.Simulation.Authoring`
+
+```csharp
+public sealed class AuthoredEcgDefinition
+{
+    public long AtrialPeriodNs { get; }
+    public long VentricularElectricalOffsetNs { get; }
+    public IReadOnlyList<ElectrodeWaveformPlan> Electrodes { get; }
+    public AuthoredEcgDefinition(long atrialPeriodNs, long ventricularElectricalOffsetNs,
+        IReadOnlyList<ElectrodeWaveformPlan> electrodes, EcgLimbPlacement placement);
+    public IReadOnlyList<EventWaveformBand> CreateLeadIIBands();
+}
+```
+
 ## Authoring/IllustrationVentricularTiming.cs
 
 源码：[IllustrationVentricularTiming.cs](../../../src/Monitor.Simulation/Authoring/IllustrationVentricularTiming.cs) · 命名空间：`Monitor.Simulation.Authoring`
@@ -562,6 +578,7 @@ public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMillise
     public EcgChestInfarctionPlan? Infarction { get; init; }
     public EcgInfarctionZones? Zones { get; init; }
     public EcgTContourPlan? TContour { get; init; }
+    public AuthoredEcgDefinition? EcgDefinition { get; init; }
     public EcgVentricularIllustration VentricularShape { get; init; }
     public EcgAtrialIllustration AtrialShape { get; init; }
     public QuinidineIllustration Quinidine { get; init; }

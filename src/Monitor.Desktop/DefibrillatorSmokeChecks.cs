@@ -155,7 +155,7 @@ internal static class DefibrillatorSmokeChecks
             window.SelectPage(2);
             Require(window.Defibrillator.State.Energy == EnergyState.Idle, "leaving the monitor cancels pending therapy");
             window.Settings.Tabs.SelectedIndex = 6;
-            window.Settings.SectionPages[6].SelectedSection = 4;
+            window.Settings.SectionPages[6].SelectedSection = 3;
             Capture(window, "defibrillator-configuration.png");
             var editor = window.Settings.Defibrillator;
             editor.UseSkinEnergySteps.IsChecked = false;

@@ -74,8 +74,32 @@
   {
     "Id": "topic-8",
     "Category": "Waveforms and display",
-    "Text": "Click “Advanced parameters of this waveform” on the waveform selection page, or open Settings → Advanced parameters, to see the parameters compatible with the current template. Values such as heart rate listed in a template description are defaults and may differ from the adjusted running values. Change the heart rate, breathing rate, inspiration share and EtCO₂ target on the Vital signs page; incompatible timing edits are not offered for fixed pathological templates. Perfusion waveforms of fast and slow rhythms follow the actual beat intervals and atrioventricular timing. Atrial fibrillation lacks normal coordinated atrial kick, atrial flutter keeps a reduced part of atrial function, and slow rhythms keep their stroke strength when filling is sufficient. Blood pressure is not a fixed value assigned by rhythm name. These are approximate teaching cases and cannot predict a patient's blood pressure.",
+    "Text": "Click “Advanced parameters of this waveform” on the waveform selection page, or open Settings → Advanced parameters, to see the parameters compatible with the current template. Values such as heart rate listed in a template description are defaults and may differ from the adjusted running values. Change the heart rate, breathing rate, inspiration share and EtCO₂ target on the Vital signs page; incompatible timing edits are not offered for fixed pathological templates. Perfusion waveforms of fast and slow rhythms follow the actual beat intervals and atrioventricular timing. Atrial fibrillation lacks normal coordinated atrial kick, atrial flutter keeps a reduced part of atrial function, and slow rhythms keep their stroke strength when filling is sufficient. Blood pressure is not a fixed value assigned by rhythm name. These are approximate teaching cases and cannot predict a patient's blood pressure. The advanced-parameters entry for Ejection opens Vital signs → Pressure, where pressure parameters are configured.",
     "Title": "Advanced parameters and template defaults"
+  },
+  {
+    "Id": "ecg-advanced-timing",
+    "Category": "Advanced parameters",
+    "Text": "Open Settings → Advanced parameters → ECG. Only function tabs supported by the selected template appear. Switching tabs keeps unapplied edits; resetting a waveform parameter page restores only that page. Timing offers template defaults, Bazett and Fridericia. Custom QTc is converted to QT using the template reference cycle; P, PR, QRS and T use milliseconds. Fixed pathological templates retain their authored timing. Atrial-only activity exposes P duration alone. Heart rate and variation remain on the Vital signs page; custom waveforms must fit the requested cycle.",
+    "Title": "ECG timing and QTc"
+  },
+  {
+    "Id": "ecg-advanced-components",
+    "Category": "Advanced parameters",
+    "Text": "Chest P editing changes the early and late V1 components. ST offsets affect unfused chest leads. Each chest T wave has its own scale, with an optional peak position. ST–T fusion requires at least one lead; fused leads do not use separate ST/T inputs. U follows T and must end before the next cycle; increase its delay for extended regional repolarization. Independent infarction QRS editing can remove an explicit contribution from reference QRS; amplitude, duration and removed proportion are morphology inputs.",
+    "Title": "ECG components and fusion"
+  },
+  {
+    "Id": "ecg-advanced-rhythm",
+    "Category": "Advanced parameters",
+    "Text": "Complete AV block exposes escape period and phase. An enabled independent ventricular rate on the Vital signs page overrides the escape interval. AF exposes Ashman-like aberrancy and systemic pulse deficit. Supported templates also expose limb electrode swaps. Changes apply consistently to monitoring, the measured II channel and twelve-lead output.",
+    "Title": "ECG escape, AF and wiring"
+  },
+  {
+    "Id": "ecg-advanced-apply",
+    "Category": "Advanced parameters",
+    "Text": "Edits affect the draft until Apply switches the source after the configured delay. Invalid inputs preserve the running waveform. Changing templates restores template defaults. Applied parameters are saved with settings; older files use defaults for missing additions. Developer tools remain a separate window.",
+    "Title": "Applying and saving ECG parameters"
   },
   {
     "Id": "topic-9",

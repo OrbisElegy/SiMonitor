@@ -43,6 +43,8 @@ internal static class PacingPermissionSmokeChecks
             settings.EcgSelection = 0;
             Require(settings.PacingPermissions.Allowed.IsChecked == true, "switching selections preserves each draft");
             settings.OpenAdvanced(0);
+            settings.EcgParameters.SelectedItem = settings.EcgParameters.Items.Cast<TabItem>()
+                .Single(page => ReferenceEquals(page.Content, settings.PacingPermissions));
             window.SelectPage(2);
             DesktopViewportSmokeChecks.Layout(window);
             Require(settings.PacingPermissions.Bounds.Height > 0, "every template exposes the permission in ECG advanced settings");

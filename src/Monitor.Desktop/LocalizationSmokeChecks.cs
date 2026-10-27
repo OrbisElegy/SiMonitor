@@ -434,8 +434,9 @@ internal static class LocalizationSmokeChecks
                 var search = window.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "搜尋說明");
                 search.Text = "即時氧合";
                 Dispatcher.UIThread.RunJobs();
-                Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "找到 6 條說明"),
-                    "Traditional Chinese help searches its independent translated topics");
+                Require(window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "找到 7 條說明") &&
+                    window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "設定患者變化事件"),
+                    "Traditional Chinese help searches its independent translated topics, including oxygenation timeline events");
                 window.SelectPage(2);
                 window.Settings.Tabs.SelectedIndex = 0;
                 Capture(window, "i18n-general-tw.png");

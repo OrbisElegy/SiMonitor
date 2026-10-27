@@ -34,6 +34,7 @@ establish Windows device behavior or release acceptance.
 
 ## Technical documentation
 
+- [Patient timeline](../interfaces/desktop-tools.md#患者时间线) describes initial patient states, session-relative events, continuous vital targets, waveform template changes, switching between direct SpO₂ targets and modeled ventilation, treatment permissions, treatment-relative branches that preserve patient history, complete timeline file import/export, and disabling execution until a fresh restart.
 - [Interface reference](../interfaces/README.md) (Chinese) covers current module
   contracts, data formats, native audio ABI, command-line entry points, and
   complete C# public declarations, with links to their implementation.

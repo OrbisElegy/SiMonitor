@@ -975,6 +975,14 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(VerifyCo2LevelEditing);
         NativeSmokePartition.Run(VerifyRespirationPageReset);
         NativeSmokePartition.Run(ManualVitalSmokeChecks.Verify);
+        NativeSmokePartition.Run(PatientTimelineSettingsSmokeChecks.Verify);
+        NativeSmokePartition.Run(PatientTimelineSettingsSmokeChecks.VerifySession);
+        NativeSmokePartition.Run(PatientTimelineTherapySmokeChecks.Verify);
+        NativeSmokePartition.Run(PatientTimelineTherapySmokeChecks.VerifyManualEntry);
+        NativeSmokePartition.Run(PatientTimelineGraphSmokeChecks.Verify);
+        NativeSmokePartition.Run(PatientTimelineFileSmokeChecks.VerifyFiles);
+        NativeSmokePartition.Run(PatientTimelineFileSmokeChecks.VerifyExecution);
+        NativeSmokePartition.Run(PatientTimelineEntrySmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyVitalInputPrecision);
         NativeSmokePartition.Run(VerifyVariationRejectionMessages);
         NativeSmokePartition.Run(VerifyIntegratedWindow);
@@ -1312,7 +1320,8 @@ internal static class DesignPreviewSmokeChecks
             window.Settings.SectionPages[6].SelectedSection = 2;
             Capture(window, "ui-preview-advanced.png");
             Require(window.Settings.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("窦性参考", StringComparison.Ordinal) == true), "applied parameter page shows the active style");
-            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 7, "general preferences and all six simulation categories remain available");
+            Require(window.Settings.Parent is not null && window.Settings.Tabs.ItemCount == 8,
+                "general preferences and all seven simulation categories, including the patient timeline, remain available");
             var source = window.Session;
             window.Settings.Slots[0].Minimum.Text = "NaN";
             window.RestartSettings();

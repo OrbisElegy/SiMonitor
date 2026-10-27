@@ -17,7 +17,7 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin, IMonitorDeviceP
     private readonly DesktopLocalization _localization;
     private readonly Action<MonitorTherapyPreferences>? _save;
     private readonly Action<MonitorTherapyPreferences, bool>? _pacing;
-    private (bool Running, bool Pending, bool Allowed, bool AedEnabled)? _shownPacing;
+    private (bool Running, bool Pending, bool Allowed, bool AedEnabled, bool TimelineAllowed)? _shownPacing;
     private string? _pacingError;
     private Grid? _body;
     private Control? _monitorArea;
@@ -182,15 +182,17 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin, IMonitorDeviceP
         SetPacingState(false, false, false);
     }
 
-    internal void SetPacingState(bool running, bool pending, bool allowed, bool aedEnabled = false)
+    internal void SetPacingState(bool running, bool pending, bool allowed, bool aedEnabled = false, bool timelineAllowed = true)
     {
-        if (_shownPacing == (running, pending, allowed, aedEnabled)) { return; }
-        _shownPacing = (running, pending, allowed, aedEnabled);
+        if (_shownPacing == (running, pending, allowed, aedEnabled, timelineAllowed)) { return; }
+        _shownPacing = (running, pending, allowed, aedEnabled, timelineAllowed);
         ApplyPacing.IsEnabled = _pacing is not null && !pending && allowed && !aedEnabled;
         StopPacing.IsEnabled = _pacing is not null && running && !pending;
         _localization.Bind(PacingStatus, TextBlock.TextProperty,
-            _pacingError ?? (aedEnabled ? "aed.pacingUnavailable" : pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState"));
-        _localization.Bind(PacingStatus, ToolTip.TipProperty, text => aedEnabled ? text.GetString("aed.pacingUnavailable") : allowed ? "" : text.GetString("skin.pacingDisabled"));
+            _pacingError ?? (aedEnabled ? "aed.pacingUnavailable" : pending ? "skin.pacingWaiting" : running ? "skin.pacingRunning" :
+                !timelineAllowed ? "timeline.pacingDenied" : allowed ? "skin.pacingStopped" : "skin.pacingDisallowedState"));
+        _localization.Bind(PacingStatus, ToolTip.TipProperty, text => !timelineAllowed ? text.GetString("timeline.pacingDenied") :
+            aedEnabled ? text.GetString("aed.pacingUnavailable") : allowed ? "" : text.GetString("skin.pacingDisabled"));
         _localization.Bind(ApplyPacing, ContentControl.ContentProperty, running ? "skin.pacingApply" : "skin.pacingStart");
     }
 

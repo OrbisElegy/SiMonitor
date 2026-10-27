@@ -115,15 +115,18 @@ internal sealed partial class DesignPreviewWindow : Window
         var defaults = BuildConfiguredSources();
         _session = defaults.Session;
         DiscardSteadyStartup(_session);
+        SetTimelinePresentation(CaptureTimelineInitializer()(_session, defaults.Configuration));
         _ecg = defaults.Paper;
         Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
-        if (preferences.Generator is { } generator)
+        if (preferences.Generator is not null || preferences.PatientTimelines is not null)
         {
             try
             {
-                Settings.RestoreGenerator(generator);
+                if (preferences.Generator is { } generator) { Settings.RestoreGenerator(generator); }
+                if (preferences.PatientTimelines is { } files) { Settings.Timeline.RestoreLibrary(files); }
                 var restored = BuildConfiguredSources();
                 DiscardSteadyStartup(restored.Session);
+                SetTimelinePresentation(CaptureTimelineInitializer()(restored.Session, restored.Configuration));
                 Settings.MarkParametersApplied(restored.Configuration, restored.Physiology);
                 _session = restored.Session; _ecg = restored.Paper;
             }
@@ -133,6 +136,15 @@ internal sealed partial class DesignPreviewWindow : Window
                 Settings.RestoreMonitorAppearance(_skinPackage);
                 Settings.RestoreDisplay(preferences.Display, preferences.PaperLayout, preferences.MeasurementMillimeters);
                 Settings.MarkParametersApplied(defaults.Configuration, defaults.Physiology);
+                if (preferences.PatientTimelines is { } files)
+                {
+                    try
+                    {
+                        Settings.Timeline.RestoreLibrary(files);
+                        Settings.Timeline.TimelineEnabled.IsChecked = false;
+                    }
+                    catch (ArgumentException) { }
+                }
                 rejected = true;
             }
         }
@@ -194,7 +206,7 @@ internal sealed partial class DesignPreviewWindow : Window
             if (_startAudioOutput) { Settings.Sound.StartOutput(); }
             Start();
         };
-        Closed += (_, _) => { _closed = true; Pause(); Settings.Sound.Close(); };
+        Closed += (_, _) => { SaveTimelineFiles(); _timelineSaveTimer.Stop(); _closed = true; Pause(); Settings.Sound.Close(); };
         Deactivated += (_, _) =>
         {
             ReleaseDeviceMomentaryInputs();
@@ -308,10 +320,12 @@ internal sealed partial class DesignPreviewWindow : Window
         _displayPreferences = _displayPreferences with
         {
             UnlockedSkinDisplay = _unlockedSkinDisplay,
-            CustomDefibrillatorEnergySteps = _customDefibrillatorEnergySteps
+            CustomDefibrillatorEnergySteps = _customDefibrillatorEnergySteps,
+            PatientTimelines = Settings.Timeline.ReadLastValidLibrary()
         };
         if (_preferences is null) { return; }
         bool saved = _preferences.Save(_displayPreferences);
+        if (saved) { _timelineFilesDirty = false; }
         PreferenceNotice.IsVisible = !saved;
         Localization.Bind(PreferenceNotice, TextBlock.TextProperty, "settings.preferenceSaveFailed");
         if (!saved) { SetStatus("settings.preferenceSaveWarning"); }
@@ -324,7 +338,7 @@ internal sealed partial class DesignPreviewWindow : Window
             AedSettings = Settings.AedConversion.Profile(EcgElectricalTherapy.SinusTemplateId).Settings
         };
 
-    private bool DefibrillatorAvailable => !_closed && !_applying && _timer is not null && Page == 0 &&
+    private bool DefibrillatorAvailable => !_closed && !_applying && _timer is not null && Page == 0 && _session.ShockAllowed &&
         (!HasDevicePanel || _deviceOperatingMode is DeviceOperatingMode.Manual or DeviceOperatingMode.Aed) &&
         !_stopPacingOnPowerOn &&
         _session.PendingSourceTimeNs is null && _pendingPresentation is null && _pendingPacingPaper is null;
@@ -332,13 +346,18 @@ internal sealed partial class DesignPreviewWindow : Window
     private void RefreshDefibrillator(GenericMonitorSkin? skin = null)
     {
         skin ??= _monitor?.Skin as GenericMonitorSkin;
+        if (!_session.ShockAllowed)
+        {
+            _deviceAedStartPending = false;
+            _aed.Suspend(_safetyClock());
+        }
         if (_deviceAedStartPending && DefibrillatorAvailable && _session.ActivePacing is null)
         {
             _deviceAedStartPending = false;
             _aed.Enable(_safetyClock(), _session.SimulationTimeNs);
         }
         skin?.Defibrillator.Refresh(_defibrillator, _safetyClock(), DefibrillatorAvailable, _aed,
-            _session.ActivePacing is null && _monitor?.MonitoredChannels.HasFlag(MonitorChannels.Ecg) == true);
+            _session.ActivePacing is null && _monitor?.MonitoredChannels.HasFlag(MonitorChannels.Ecg) == true, _session.ShockAllowed);
         skin?.DevicePanel?.SetAlarmState(MonitorView?.HighestNotice);
         if (_skinPackage.DeviceProfile is not null)
         {
@@ -411,7 +430,7 @@ internal sealed partial class DesignPreviewWindow : Window
         // A delivered shock can schedule its own quiet interval/sinus transition.
         // That transition must not cancel the newly started CPR cycle.
         bool recovering = _aed.Phase == AedPhase.Cpr && _pendingShockConversion &&
-            !_closed && !_applying && _timer is not null && Page == 0;
+            !_closed && !_applying && _timer is not null && Page == 0 && _session.ShockAllowed;
         if (!DefibrillatorAvailable && !recovering)
         {
             bool awaitingPacingStop = _deviceAedStartPending && _deviceOperatingMode == DeviceOperatingMode.Aed && _timer is not null && Page == 0;
@@ -447,7 +466,7 @@ internal sealed partial class DesignPreviewWindow : Window
         skin ??= _monitor.Skin as GenericMonitorSkin;
         skin?.SetPacingState(_beforePacingPaper is not null && _session.ActivePacing is not null,
             _applying || _pendingPresentation is not null || _pendingPacingPaper is not null || _session.PendingSourceTimeNs is not null,
-            _session.PacingAllowed, _aed.Enabled);
+            _session.PacingAllowed, _aed.Enabled, _session.CurrentTimelineTreatment?.AllowPacing != false);
     }
 
     private void SaveTherapy(MonitorTherapyPreferences preferences)
@@ -528,6 +547,8 @@ internal sealed partial class DesignPreviewWindow : Window
         Settings.Restart.Click += async (_, _) => await ApplySettingsAsync(restart: true);
         Settings.ResetAll.Click += async (_, _) => await ConfirmResetAllSettings();
         Settings.Oxygenation.UpdateVentilation.Click += (_, _) => UpdateOxygenationVentilation();
+        Settings.Timeline.TriggerManual.Click += (_, _) => EnterManualPatientTimelineNode();
+        ConnectTimelineFiles();
     }
     private void SelectLanguage(string locale)
     {
@@ -834,13 +855,19 @@ internal sealed partial class DesignPreviewWindow : Window
             }).Snapshot();
             var sinusTherapy = CaptureSinusTherapy();
             var build = CaptureSourceBuilder();
+            var initializeTimeline = restart ? CaptureTimelineInitializer() : null;
+            PreparedTimelinePresentation? timelinePresentation = null;
             var generator = _preferences is null ? null : Settings.CaptureGenerator();
             long delayNs = Settings.ReadApplyDelayNs();
             var selection = (Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection);
             var prepared = background ? await Task.Run(() =>
             {
                 var result = build();
-                if (restart) { DiscardSteadyStartup(result.Session); }
+                if (restart)
+                {
+                    DiscardSteadyStartup(result.Session);
+                    timelinePresentation = initializeTimeline!(result.Session, result.Configuration);
+                }
                 return result;
             }) : build();
             if (_closed || !ReferenceEquals(editor, Settings)) { return; }
@@ -848,9 +875,14 @@ internal sealed partial class DesignPreviewWindow : Window
             long? effective = null;
             if (restart)
             {
-                if (!background) { DiscardSteadyStartup(next); }
+                if (!background)
+                {
+                    DiscardSteadyStartup(next);
+                    timelinePresentation = initializeTimeline!(next, ecgConfig);
+                }
                 Pause();
                 _session = next;
+                SetTimelinePresentation(timelinePresentation!);
                 _trendHistory.Clear();
                 _pendingPresentation = null;
                 _ecg = ecg;
@@ -912,6 +944,10 @@ internal sealed partial class DesignPreviewWindow : Window
         }
         catch (ArgumentException exception) when (exception.Message == "Preview.OxygenationBaselineRequiresRestart")
         { SetStatus("validation.baselineRestart"); }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("PatientTimeline.", StringComparison.Ordinal) ||
+            exception.Message.StartsWith("PhysiologyRateClock.", StringComparison.Ordinal) ||
+            exception.Message.StartsWith("VitalCurve.", StringComparison.Ordinal))
+        { SetStatus(TimelineErrorKey(exception)); }
         catch (ArgumentException exception) when (exception.Message == "EcgInterference.InvalidConfiguration")
         { SetStatus("ecgInterference.invalid"); }
         catch (ArgumentException exception) when (exception.Message == "Defibrillator.InvalidConfiguration")
@@ -1063,6 +1099,8 @@ internal sealed partial class DesignPreviewWindow : Window
                 _session.DetectedPulses, _session.Measurements, MonitorView.ActiveNotices, _session.BeatEvidence);
             UpdateState();
         }
+        catch (ArgumentException exception) when (exception.Message.StartsWith("PatientTimeline.", StringComparison.Ordinal))
+        { Pause(); SetStatus(TimelineErrorKey(exception)); }
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         { Pause(); SetStatus("settings.generationFailed"); }
     }
@@ -1073,6 +1111,7 @@ internal sealed partial class DesignPreviewWindow : Window
     }
     private void UpdateState()
     {
+        RefreshPatientTimeline();
         RefreshNibp();
         RefreshPacingState();
         RefreshDefibrillator();

@@ -90,6 +90,29 @@ internal sealed class ManualVitalSettings : StackPanel
         TemperatureEnabled.IsChecked == true ? DesignPreviewSettings.ReadVitalValue(Temperature, 10, "manual.celsius") : null,
         ReadCustom(0), ReadCustom(1));
 
+    internal void Restore(ManualVitalSigns saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        NibpEnabled.IsChecked = saved.Nibp is not null;
+        if (saved.Nibp is { } nibp)
+        {
+            Systolic.Value = nibp.SystolicMmHg;
+            Diastolic.Value = nibp.DiastolicMmHg;
+            Mean.Value = nibp.MeanMmHg;
+        }
+        TemperatureEnabled.IsChecked = saved.TemperatureDeciCelsius is not null;
+        if (saved.TemperatureDeciCelsius is { } temperature) { Temperature.Value = temperature / 10m; }
+        ManualCustomVital?[] custom = [saved.Custom1, saved.Custom2];
+        for (int index = 0; index < custom.Length; index++)
+        {
+            CustomEnabled[index].IsChecked = custom[index] is not null;
+            if (custom[index] is not { } value) { continue; }
+            Names[index].Text = value.Name;
+            Values[index].Value = value.Value;
+            Units[index].Text = value.Unit;
+        }
+    }
+
     private ManualCustomVital? ReadCustom(int slot) => CustomEnabled[slot].IsChecked == true
         ? new(Names[slot].Text ?? "", DesignPreviewSettings.ReadVitalValue(Values[slot], 100, "manual.value") / 100m,
             Units[slot].Text ?? "") : null;

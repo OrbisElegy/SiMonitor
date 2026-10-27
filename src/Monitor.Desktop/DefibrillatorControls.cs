@@ -203,7 +203,7 @@ internal sealed class DefibrillatorControls : StackPanel
     }
 
     internal void Refresh(ManualDefibrillator device, long safetyTimeNs, bool available,
-        AutomatedExternalDefibrillator? aed = null, bool aedAvailable = true)
+        AutomatedExternalDefibrillator? aed = null, bool aedAvailable = true, bool treatmentAllowed = true)
     {
         bool automated = aed?.Enabled == true;
         CurrentAedPhase = automated ? aed!.Phase : null;
@@ -246,7 +246,7 @@ internal sealed class DefibrillatorControls : StackPanel
         AedLit = automated && (aed!.Phase is AedPhase.Cpr or AedPhase.Suspended || safetyTimeNs / 400_000_000 % 2 == 0);
         _aedLamp.Background = Brush.Parse(!AedLit ? "#39434B" : aed!.Phase == AedPhase.ShockAdvised ? "#F25B65" :
             aed.Phase is AedPhase.WaitingForSignal or AedPhase.Suspended ? "#EDB64D" : "#53F28C");
-        string key = automated ? aed!.Phase == AedPhase.Cpr ? "aed.cpr." + aed.Advice : "aed.phase." + aed.Phase :
+        string key = !treatmentAllowed ? "timeline.shockDenied" : automated ? aed!.Phase == AedPhase.Cpr ? "aed.cpr." + aed.Advice : "aed.phase." + aed.Phase :
             !available ? "defib.unavailable" : "defib.state." + state.Attempt;
         int seconds = aed?.RemainingSeconds ?? 0;
         string statusIdentity = key + ":" + seconds;

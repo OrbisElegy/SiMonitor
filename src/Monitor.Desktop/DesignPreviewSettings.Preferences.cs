@@ -110,7 +110,14 @@ internal sealed partial class DesignPreviewSettings
             GeneratorFlags().ToDictionary(p => p.Key, p => p.Value.IsChecked == true),
             GeneratorChoices().ToDictionary(p => p.Key, p => p.Value.SelectedIndex))
         { Pleth = PlethSelection, Capnogram = CapnogramSelection, ElectricalConversions = ElectricalConversion.Capture(), AedElectricalConversions = AedConversion.Capture(), PacingPermissions = PacingPermissions.Capture(), ApplyDelaySeconds = ReadApplyDelayNs() / 1_000_000_000m, Oxygenation = Oxygenation.Capture(OpticalEnabled.IsChecked == true), PressureTransducers = PressureTransducers.Read() };
-        result = result with { EcgAdvanced = EcgParameters.Capture() };
+        var timeline = Timeline.ReadProgramForRestart();
+        result = result with
+        {
+            EcgAdvanced = EcgParameters.Capture(),
+            PatientTimeline = timeline.Timelines.Single(line => line.Id == timeline.InitialTimelineId).Events,
+            TimelineProgram = timeline,
+            ManualVitals = ManualVitals.Read()
+        };
         result.Validate();
         return result;
     }
@@ -159,6 +166,9 @@ internal sealed partial class DesignPreviewSettings
         if (!saved.Flags.ContainsKey("PaTargetEnabled")) { PaTargetEnabled.IsChecked = false; }
         if (!saved.Flags.ContainsKey("InfarctionParameters.ContributionLoss")) { InfarctionParameters.ContributionLoss.IsChecked = false; }
         Oxygenation.Restore(saved.Oxygenation);
+        if (saved.TimelineProgram is { } program) { Timeline.RestoreProgram(program); }
+        else { Timeline.Restore(saved.PatientTimeline); }
+        if (saved.ManualVitals is { } manualVitals) { ManualVitals.Restore(manualVitals); }
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }
     }

@@ -248,6 +248,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal OxygenationSettingsPanel Oxygenation { get; }
     internal CheckBox CardiacRateEnabled { get; } = new() { IsChecked = false };
     internal ManualVitalSettings ManualVitals { get; private set; } = null!;
+    internal PatientTimelineSettings Timeline { get; }
     internal NumericUpDown HeartRate { get; } = new() { Minimum = 20, Maximum = 600, Value = 75, Increment = 1, Width = 180 };
     internal NumericUpDown RateVariation { get; } = new() { Minimum = 0, Maximum = 5, Value = 0, Increment = .5m, Width = 180 };
     internal Button GenerateSeed { get; } = new() { MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -314,6 +315,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Sound = new SoundSettingsPanel(localization: Localization);
         Alerts = new MonitorAlertSettings(Localization);
         Oxygenation = new OxygenationSettingsPanel(Localization);
+        Timeline = new PatientTimelineSettings(Localization);
         TContourParameters = new TContourParameterEditor(Localization);
         InfarctionParameters = new InfarctionParameterEditor(Localization);
         TContourParameters.Reset(null);
@@ -457,8 +459,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Localization.Bind(ResetRespirationPage, ContentControl.ContentProperty, "advanced.resetPage");
         Localization.LocaleChanged += RefreshBreathingTiming;
         Co2CustomPlateau.IsCheckedChanged += (_, _) => Co2PlateauStart.IsEnabled = Co2CustomPlateau.IsChecked == true;
-        string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced"];
-        Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6]];
+        string[] categories = ["settings.general", "settings.generation", "settings.display", "settings.sound", "settings.alarms", "settings.vitals", "settings.advanced", "settings.timeline"];
+        Control[] pages = [BuildGeneralPage(), generation, SectionPages[2], SectionPages[3], SectionPages[4], SectionPages[5], SectionPages[6], Timeline];
         var detail = new ContentControl();
         var navigation = new Grid { ColumnDefinitions = new("160,*"), Margin = new Thickness(12, 0) };
         SettingsSections.StyleNavigation(Tabs);
@@ -476,6 +478,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
             if (selected == 6) { RefreshAdvanced(more); }
             detail.Content = pages[selected];
             controls.IsVisible = selected != 0;
+            Apply.IsVisible = selected != 7;
+            if (ApplyDelaySeconds.Parent is Control delayRow) { delayRow.IsVisible = selected != 7; }
             Status.IsVisible = selected != 0;
         };
         _compactCategory.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compactCategory) && _compactCategory.SelectedIndex >= 0) { Tabs.SelectedIndex = _compactCategory.SelectedIndex; } };

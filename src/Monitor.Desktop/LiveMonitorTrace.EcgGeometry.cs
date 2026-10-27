@@ -26,22 +26,40 @@ internal sealed partial class LiveMonitorTrace
             _ecgPoints[row, age] = previous.Points;
             return;
         }
-        var points = new Point[samples.Length];
+        Point[] points = BuildEcgPoints(fromNs, durationNs, range, samples);
         var path = new StreamGeometry();
         using (var geometry = path.Open())
         {
-            for (int index = 0; index < samples.Length; index++)
+            for (int index = 0; index < points.Length; index++)
             {
-                var sample = samples[index];
-                Point point = new((sample.TimeNs - fromNs) / (double)durationNs, 1 - range.Normalize(sample.Value));
-                points[index] = point;
+                Point point = points[index];
                 if (index == 0) { geometry.BeginFigure(point, false); }
                 else { geometry.LineTo(point); }
             }
-            if (samples.Length > 0) { geometry.EndFigure(false); }
+            if (points.Length > 0) { geometry.EndFigure(false); }
         }
         _ecgGeometrySnapshots[row, age] = new(fromNs, durationNs, range, samples, points, path);
         _paths[row, age] = path;
         _ecgPoints[row, age] = points;
+    }
+
+    internal static Point[] BuildEcgPoints(long fromNs, long durationNs,
+        MonitorAmplitudeRange range, (long TimeNs, double Value)[] samples)
+    {
+        var points = new Point[samples.Length];
+        int count = 0;
+        foreach (var sample in samples)
+        {
+            Point point = new((sample.TimeNs - fromNs) / (double)durationNs, 1 - range.Normalize(sample.Value));
+            // Keep only the endpoints of an exactly horizontal run. Dense collinear
+            // vertices can produce uneven GPU stroke coverage as a flat ECG grows.
+            // No tolerance or resampling: all non-flat details and raw samples remain intact.
+            if (count >= 2 && points[count - 2].Y == point.Y && points[count - 1].Y == point.Y &&
+                points[count - 2].X < points[count - 1].X && points[count - 1].X < point.X)
+            { points[count - 1] = point; }
+            else { points[count++] = point; }
+        }
+        if (count != points.Length) { Array.Resize(ref points, count); }
+        return points;
     }
 }

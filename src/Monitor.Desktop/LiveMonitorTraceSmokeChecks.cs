@@ -14,6 +14,7 @@ internal static class LiveMonitorTraceSmokeChecks
 {
     internal static void Verify()
     {
+        VerifyFlatEcgBrightness();
         MonitorDisplaySlot[] slots = MonitorDisplayConfiguration.Default(MonitorSkin.SevenRows).Slots
             .Select(slot => slot with { Automatic = false, SpeedTenthsMmPerSecond = 125 }).ToArray();
         var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default,
@@ -58,6 +59,85 @@ internal static class LiveMonitorTraceSmokeChecks
         VerifyCacheInvalidation();
         VerifyRasterReuse();
         trace.ClearWaveformCache();
+    }
+
+    private static void VerifyFlatEcgBrightness()
+    {
+        var range = new MonitorAmplitudeRange(-1200, 1200);
+        var samples = Enumerable.Range(0, 2500).Select(index => ((long)index * 4_000_000, 0d)).ToArray();
+        Point[] flat = LiveMonitorTrace.BuildEcgPoints(0, 10_000_000_000, range, samples);
+        Require(flat.Length == 2 && flat[0] == new Point(0, .5) && flat[1] == new Point(.9996, .5),
+            "long flat ECG runs retain exact endpoints without dense coincident stroke joins");
+        samples[1250].Item2 = .001;
+        Point[] detail = LiveMonitorTrace.BuildEcgPoints(0, 10_000_000_000, range, samples);
+        Require(detail.Length == 5 && detail[1].X == .4996 && detail[2].X == .5 && detail[2].Y < .5 && detail[3].X == .5004,
+            "even a tiny single-sample ECG detail retains both adjacent segments and its peak");
+        Require(LiveMonitorTrace.BuildEcgPoints(0, 10_000_000_000, range, []).Length == 0 &&
+            LiveMonitorTrace.BuildEcgPoints(0, 10_000_000_000, range, [(0, 0)]).Length == 1,
+            "empty and first-sample ECG sweeps remain safe");
+
+        MonitorDisplaySlot[] slots = [new(0, false, range, 125), new(0, false, range, 250), new(0, false, range, 500)];
+        var session = new LocalMonitorPreviewSession(PhysiologyIllustrationConfiguration.Default with
+        { CardiacActivity = Monitor.Simulation.Physiology.CardiacActivity.Absent }, new(MonitorSkin.ThreeRows, slots));
+        var trace = new LiveMonitorTrace(session) { Skin = new CacheTestSkin { CompactWaveformLabels = true } };
+        byte[] reference = Raster(new FlatEcgReference(), 1900, 600);
+        try
+        {
+            foreach (long timeNs in new[] { 2_500_000_000L, 5_000_000_000, 9_000_000_000, 12_500_000_000, 19_000_000_000, 25_000_000_000 })
+            {
+                while (session.SimulationTimeNs < timeNs) { session.Advance(Math.Min(250_000_000, timeNs - session.SimulationTimeNs)); }
+                foreach (bool cache in new[] { true, false })
+                {
+                    trace.CacheWaveformTiles = cache;
+                    byte[] pixels = Raster(trace, 1900, 600);
+                    for (int row = 0; row < slots.Length; row++)
+                    {
+                        long durationNs = slots[row].DurationNs;
+                        double phase = (timeNs % durationNs) / (double)durationNs;
+                        double frontier = 12 + 1870 * phase;
+                        double previousStart = 12 + 1870 * Math.Min(1, phase + .012);
+                        double calibration = 12 + 1870 * 200_000_000d / durationNs;
+                        for (int x = 16; x < 1878; x++)
+                        {
+                            if (Math.Abs(x - calibration) < 3 || Math.Abs(x - frontier) < 4 || Math.Abs(x - previousStart) < 3)
+                            { continue; }
+                            bool visible = x < frontier || (timeNs >= durationNs && x > previousStart);
+                            for (int y = row * 200 + 108; y < row * 200 + 115; y++)
+                            {
+                                int offset = (y * 1900 + x) * 4 + 1;
+                                int expected = visible ? reference[offset] : 0;
+                                if (Math.Abs(pixels[offset] - expected) > 1)
+                                {
+                                    Require(false, $"flat ECG differs from a single stroke or clear sweep gap at {timeNs}, row {row}, " +
+                                        $"cache {cache}, ({x}, {y}): {pixels[offset]} versus {expected}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        finally { trace.ClearWaveformCache(); }
+    }
+
+    private sealed class FlatEcgReference : Control
+    {
+        public override void Render(DrawingContext context)
+        {
+            context.FillRectangle(Brushes.Black, new Rect(Bounds.Size));
+            for (int row = 0; row < 3; row++)
+            {
+                var path = new StreamGeometry();
+                using (var geometry = path.Open())
+                {
+                    geometry.BeginFigure(new(0, .5), false);
+                    geometry.LineTo(new(1, .5));
+                    geometry.EndFigure(false);
+                }
+                path.Transform = new MatrixTransform(new Matrix(1870, 0, 0, 154, 12, row * 200 + 34));
+                context.DrawGeometry(null, new Pen(Brushes.Lime, 1.2), path);
+            }
+        }
     }
 
     private static void VerifyCacheInvalidation()

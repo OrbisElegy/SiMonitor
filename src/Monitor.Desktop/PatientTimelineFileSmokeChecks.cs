@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Text.Json;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Monitor.Application.Presentation;
 using Monitor.Infrastructure.Preferences;
 
@@ -13,12 +15,16 @@ internal static class PatientTimelineFileSmokeChecks
     internal static void VerifyFiles()
     {
         var localization = new DesktopLocalization("zh-CN");
+        VerifySeedMigration(localization);
         var settings = new PatientTimelineSettings(localization) { Background = DesktopFluentStyle.Surface };
         var window = new Window { Width = 1000, Height = 760, Content = settings };
         window.Show();
         try
         {
-            settings.RestoreProgram(Program("Original", 380));
+            string initialSeed = settings.Seed.Text!;
+            Require(DesignPreviewSettings.IsSeedFormatValid(initialSeed) && settings.ReadProgram().SeedHex == initialSeed,
+                "the initial timeline file receives a valid generated seed");
+            settings.RestoreProgram(Program("Original", 380) with { SeedHex = initialSeed });
             string originalId = settings.SelectedFileId;
             settings.SelectTimeline("branch");
             Require(settings.Files.SelectedIndex == 0 && settings.Files.ItemCount == 1,
@@ -26,18 +32,41 @@ internal static class PatientTimelineFileSmokeChecks
             settings.CreateFile();
             Require(settings.Files.ItemCount == 2 && settings.ReadProgram().Timelines.Count == 1 && settings.Read().Count == 0,
                 "new files contain an independent empty patient graph");
+            Require(DesignPreviewSettings.IsSeedFormatValid(settings.Seed.Text) && settings.Seed.Text != initialSeed,
+                "each new timeline file receives its own generated seed");
             settings.RestoreProgram(Program("Second", 390));
+            string editedSeed = new('a', 64);
+            settings.Seed.Text = editedSeed;
+            Dispatcher.UIThread.RunJobs();
+            Require(settings.Status.IsVisible && settings.ReadProgram().SeedHex == editedSeed,
+                "a manually edited seed is part of the unapplied file draft");
             string secondId = settings.SelectedFileId;
             settings.Files.SelectedIndex = 0;
-            Require(settings.SelectedFileId == originalId && settings.Read()[0].Name == "Original" && settings.ReadProgram().Timelines.Count == 2,
+            Require(settings.SelectedFileId == originalId && settings.Read()[0].Name == "Original" && settings.ReadProgram().Timelines.Count == 2 &&
+                settings.Seed.Text == initialSeed,
                 "switching files restores the complete graph and its treatment branches");
             settings.Files.SelectedIndex = 1;
-            Require(settings.SelectedFileId == secondId && settings.Read()[0].Name == "Second", "other files retain their edits");
+            Require(settings.SelectedFileId == secondId && settings.Read()[0].Name == "Second" && settings.Seed.Text == editedSeed,
+                "other files retain their graph and edited seed");
 
             using var bytes = new MemoryStream(PatientTimelineFileFormat.Write(settings.ReadFile()));
             settings.Import(PatientTimelineFileFormat.Read(bytes));
-            Require(settings.Files.ItemCount == 3 && settings.SelectedFileId != secondId && settings.Read()[0].Name == "Second",
+            Require(settings.Files.ItemCount == 3 && settings.SelectedFileId != secondId && settings.Read()[0].Name == "Second" &&
+                settings.Seed.Text == editedSeed,
                 "importing an existing ID creates a separate file instead of overwriting another draft");
+            settings.Seed.Text = new string('A', 64);
+            DesktopViewportSmokeChecks.Layout(window, 1000, 760);
+            Require(settings.SeedError.IsEffectivelyVisible && settings.SeedDetails.IsExpanded &&
+                AutomationProperties.GetHelpText(settings.Seed) == localization.Get("timeline.invalidSeed"),
+                "an invalid edited seed exposes an actionable inline and accessible error");
+            int seedSelection = settings.Files.SelectedIndex;
+            settings.Files.SelectedIndex = 0;
+            Require(settings.Files.SelectedIndex == seedSelection && settings.FileStatus.IsVisible &&
+                settings.ReadLastValidLibrary().Files.Single(file => file.Id == settings.SelectedFileId).Program.SeedHex == editedSeed,
+                "an invalid seed blocks file switching and preserves the last valid saved seed");
+            settings.Seed.Text = editedSeed;
+            Dispatcher.UIThread.RunJobs();
+            Require(!settings.SeedError.IsVisible, "correcting the seed clears its inline error");
             string before = JsonSerializer.Serialize(settings.ReadLibrary());
             bool rejected = false;
             try
@@ -83,6 +112,42 @@ internal static class PatientTimelineFileSmokeChecks
         finally { window.Close(); }
     }
 
+    private static void VerifySeedMigration(DesktopLocalization localization)
+    {
+        string preservedSeed = new('c', 64);
+        var legacy = new PatientTimelineLibrary("missing", true,
+        [
+            new("missing", "Missing seed", Program("Missing", 380)),
+            new("empty", "Empty seed", Program("Empty", 380) with { SeedHex = "" }),
+            new("authored", "Authored seed", Program("Authored", 380) with { SeedHex = preservedSeed })
+        ]);
+        var editor = new PatientTimelineSettings(localization);
+        editor.RestoreLibrary(legacy);
+        var upgraded = editor.ReadLibrary();
+        Require(editor.RequiresMigrationSave && upgraded.Files.All(file => DesignPreviewSettings.IsSeedFormatValid(file.Program.SeedHex)) &&
+            upgraded.Files[0].Program.SeedHex != upgraded.Files[1].Program.SeedHex &&
+            upgraded.Files[2].Program.SeedHex == preservedSeed,
+            "loading an old library fills each missing seed once and preserves already authored seeds");
+        editor.Files.SelectedIndex = 1;
+        editor.Files.SelectedIndex = 0;
+        Require(editor.Seed.Text == upgraded.Files[0].Program.SeedHex,
+            "switching migrated files does not generate another seed");
+        var reopened = new PatientTimelineSettings(localization);
+        reopened.RestoreLibrary(upgraded);
+        Require(!reopened.RequiresMigrationSave && JsonSerializer.Serialize(reopened.ReadLibrary()) == JsonSerializer.Serialize(upgraded),
+            "loading an upgraded library keeps every seed stable and requests no further migration save");
+        int changes = 0;
+        reopened.DraftChanged += () => changes++;
+        using var bytes = new MemoryStream(PatientTimelineFileFormat.Write(new("legacy", "Imported legacy", Program("Imported", 380))));
+        reopened.Import(PatientTimelineFileFormat.Read(bytes));
+        string? importedSeed = reopened.ReadFile().Program.SeedHex;
+        Require(DesignPreviewSettings.IsSeedFormatValid(importedSeed) && changes > 0,
+            "importing an old portable file fills its seed and schedules the normal library save");
+        using var exported = new MemoryStream(PatientTimelineFileFormat.Write(reopened.ReadFile()));
+        Require(PatientTimelineFileFormat.Read(exported).Program.SeedHex == importedSeed,
+            "exporting a migrated portable file retains its generated seed");
+    }
+
     internal static void VerifyExecution()
     {
         string directory = Path.Combine(Path.GetTempPath(), "monitor-timeline-desktop-" + Guid.NewGuid().ToString("N"));
@@ -94,7 +159,8 @@ internal static class PatientTimelineFileSmokeChecks
         try
         {
             var editor = window.Settings.Timeline;
-            editor.RestoreProgram(Program("Immediate fever", 390));
+            // This fixture exercises an already upgraded file; legacy migration has separate coverage.
+            editor.RestoreProgram(Program("Immediate fever", 390) with { SeedHex = new string('0', 63) + "1" });
             window.RestartSettings();
             window.Pause();
             window.Session.Advance(250_000_000);
@@ -136,7 +202,8 @@ internal static class PatientTimelineFileSmokeChecks
             try
             {
                 Require(restored.Settings.Timeline.Files.ItemCount == 2 && restored.Settings.Timeline.SelectedFileName == "Another patient" &&
-                    restored.Settings.Timeline.TimelineEnabled.IsChecked == false && restored.Session.CurrentTimelineId is null,
+                    restored.Settings.Timeline.TimelineEnabled.IsChecked == false && restored.Session.CurrentTimelineId is null &&
+                    !restored.Settings.Timeline.RequiresMigrationSave,
                     "reopening remembers the files, selected document and disabled state without starting it");
             }
             finally { restored.Close(); }

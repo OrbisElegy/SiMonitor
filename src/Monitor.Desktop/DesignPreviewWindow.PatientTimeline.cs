@@ -89,6 +89,12 @@ internal sealed partial class DesignPreviewWindow
                     capnogram = item.CapnogramTemplate ?? capnogram;
                     int referenceEcg = inheritedCardiacTemplate && ejection is 1 or 2 ? (ejection == 1 ? 2 : 0) : ecg;
                     var resolved = ResolveStyle(referenceEcg, respiration, ejection, pleth, capnogram);
+                    if (program.SeedHex is { } seed && resolved.Physiology.RhythmSchedule is { } rhythm)
+                    {
+                        var seededRhythm = new SeededRhythmSchedule(seed, rhythm.PauseDurationNs, rhythm.ConductionPercent);
+                        resolved = (resolved.Physiology with { RhythmSchedule = seededRhythm },
+                            resolved.Ecg with { RhythmSchedule = seededRhythm });
+                    }
                     var next = item.EcgTemplateId is null ? configuration : InheritTimelineVitals(resolved.Physiology, configuration);
                     if (item.EcgTemplateId is not null) { ecgConfiguration = resolved.Ecg; }
                     if (item.RespirationTemplate is not null)
@@ -263,6 +269,7 @@ internal sealed partial class DesignPreviewWindow
         "PatientTimeline.InvalidDefinition" => "timeline.invalidDefinition",
         "PatientTimeline.InvalidBranch" => "timeline.invalidBranch",
         "PatientTimeline.InvalidProgram" => "timeline.invalidProgram",
+        "PatientTimeline.InvalidSeed" => "timeline.invalidSeed",
         "Physiology.PressureTargetUnreachable" => "timeline.errorPressureUnreachable",
         "Preview.EjectionRequiresPvc" or "Preview.EjectionRequiresSinus" => "timeline.errorEjection",
         "PatientTimeline.InvalidName" => "timeline.invalidName",

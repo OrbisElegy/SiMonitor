@@ -361,6 +361,11 @@ Name 和 Program；重复 ID、缺失选择或无效图均拒绝。旧偏好适�
 独立 `.simtimeline` 文件使用 `PatientTimelineFileFormat`，Format 为 `simonitor.patient-timeline`、
 Version 为 1，Timeline 为完整文件；最大 1048576 bytes，最大深度 16，未知属性和版本拒绝。
 只交换作者数据，导入不会恢复运行状态或自动启用时间线。
+`Program.SeedHex` 是作者随机种子，非空种子必须为 64 个小写十六进制字符；
+文件导入、导出与偏好保存、读取均校验并保留有效值，非法非空值以 `PatientTimeline.InvalidSeed` 拒绝。
+纯模型兼容旧文件中缺失、`null` 或空字符串的种子，并在快照中将空字符串规范为 `null`，不生成随机数。
+桌面在持久化加载或导入边界为这些旧计划生成一次 256 位种子，并标记保存；后续恢复复用该值，已有种子不变。
+此兼容更新不改变偏好或 `.simtimeline` 版本；桌面编辑器中的空种子输入仍是待修正的无效草稿。
 版本 19 增加 `Generator.TimelineProgram`，保存初始时间线 ID、命名时间线、治疗权限与分支目标，
 每条时间线的事件包括名称、相对时间、变化时长、体征目标、模板选择和通气状态。
 时间线的可选 `InitialState` 保存起点体征、模板与通气状态；缺少该字段的旧文件继续继承生成设置或分支进入前状态。

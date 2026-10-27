@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
@@ -57,9 +58,46 @@ internal static class BedsideNumericSmokeChecks
                     }
                 }
             }
+            VerifyAccessibleReadings(window);
         }
         finally { window.Close(); }
         Console.WriteLine("ok: bedside numeric glyphs and cuff values fit their text bounds and clipping ancestors across all row counts and viewports");
+    }
+
+    private static void VerifyAccessibleReadings(DesignPreviewWindow window)
+    {
+        var view = window.MonitorView;
+        view.RefreshDisplay();
+        TextBlock Reading(string key) => view.NumericBlocks.Single(text =>
+            AutomationProperties.GetName(text) == window.Localization.Get(key));
+        var spo2 = Reading("monitor.labelSpo2");
+        var pulse = Reading("monitor.secondaryPr");
+        string? previous = AutomationProperties.GetHelpText(spo2);
+        window.Start();
+        for (int frame = 0; frame < 160; frame++) { window.Pulse(window.ActiveTimer, 50_000_000); }
+        window.Pause();
+        var row = spo2.GetVisualAncestors().OfType<Grid>().First(grid => grid.ClipToBounds);
+        var details = (StackPanel)ToolTip.GetTip(row)!;
+        var pi = details.Children.OfType<TextBlock>().Single();
+        string help = AutomationProperties.GetHelpText(spo2) ?? "";
+        Require(help != previous && help.StartsWith(spo2.Text!, StringComparison.Ordinal) &&
+            help.Contains(pulse.Text!, StringComparison.Ordinal) && help.Contains(pi.Text!, StringComparison.Ordinal),
+            "the existing primary value exposes current SpO2, pulse rate and PI as acquisition advances");
+        Require(!row.Focusable && !spo2.Focusable && !ToolTip.GetIsOpen(row),
+            "accessible auxiliary readings add no keyboard stops or visible tooltip");
+        var co2 = Reading("monitor.labelEtco2");
+        string preference = window.Localization.Preference;
+        try
+        {
+            window.Localization.Select("en");
+            Require(ReferenceEquals(co2, Reading("monitor.labelEtco2")) &&
+                AutomationProperties.GetHelpText(co2)!.EndsWith("/min", StringComparison.Ordinal),
+                "the same primary value follows the English auxiliary respiration units while paused");
+            window.Localization.Select("zh-TW");
+            Require(AutomationProperties.GetHelpText(co2)!.EndsWith("次/分", StringComparison.Ordinal),
+                "auxiliary automation text follows a subsequent language change without reacquisition");
+        }
+        finally { window.Localization.Select(preference); }
     }
 
     private static void VerifyInk(TextBlock text, string context, int lines = 1)

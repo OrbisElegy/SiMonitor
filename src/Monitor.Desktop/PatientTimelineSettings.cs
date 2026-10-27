@@ -238,11 +238,13 @@ internal sealed partial class PatientTimelineSettings : UserControl
 
     internal PatientTimelineProgram ReadProgram()
     {
+        if (!SeedDraftValid()) { throw new ArgumentException("PatientTimeline.InvalidSeed"); }
         var program = new PatientTimelineProgram(_initialTimelineId, _timelines.Select(draft =>
             new PatientTimelineDefinition(draft.Id, draft.Name.Text?.Trim() ?? "", draft.Events.Read(),
                 new PatientTimelineTreatmentPolicy(draft.AllowShock.IsChecked == true, draft.AllowPacing.IsChecked == true,
                     RouteId(draft, 0), RouteId(draft, 1), RouteId(draft, 2)))
-            { InitialState = draft.InitialState.ReadInitialState() }).ToArray());
+            { InitialState = draft.InitialState.ReadInitialState() }).ToArray())
+        { SeedHex = string.IsNullOrEmpty(Seed.Text) ? null : Seed.Text };
         return program.Snapshot();
     }
 
@@ -253,6 +255,9 @@ internal sealed partial class PatientTimelineSettings : UserControl
     {
         var owned = program.Snapshot();
         _restoring = true;
+        _restoredUnsetSeed = owned.SeedHex is null;
+        Seed.Text = owned.SeedHex ?? "";
+        RefreshSeedValidation();
         _entrySelected = true;
         _detailOpen = false;
         _initialTimelineId = owned.InitialTimelineId;
@@ -500,6 +505,8 @@ internal sealed partial class PatientTimelineSettings : UserControl
     {
         bool sideBySide = _workspace.Bounds.Width >= SideBySideWidth;
         bool graph = sideBySide || !_detailOpen;
+        bool focusInspector = !graph && _graphWorkspace.IsKeyboardFocusWithin;
+        bool focusGraph = graph && !sideBySide && _inspector.IsKeyboardFocusWithin;
         if (_workspace.ColumnDefinitions.Count != (sideBySide ? 2 : 1))
         { _workspace.ColumnDefinitions = new(sideBySide ? "*,380" : "*"); }
         Graph.IsVisible = graph;
@@ -520,6 +527,25 @@ internal sealed partial class PatientTimelineSettings : UserControl
         Grid.SetColumn(_inspector, sideBySide ? 1 : 0);
         _inspector.Margin = sideBySide ? new Thickness(12, 0, 0, 0) : default;
         BackToGraph.IsVisible = !sideBySide;
+        if (focusInspector)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                Control? target = ShowsLine ? Active.Name : SelectedEditor?.EventName;
+                if (target?.IsEffectivelyVisible == true)
+                {
+                    target.Focus();
+                    target.BringIntoView();
+                }
+            }, DispatcherPriority.Loaded);
+        }
+        else if (focusGraph)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (Graph.IsEffectivelyVisible) { Graph.FocusSelection(); }
+            }, DispatcherPriority.Loaded);
+        }
     }
 
     private void RefreshActions()
@@ -645,6 +671,7 @@ internal sealed partial class PatientTimelineSettings : UserControl
                 "PatientTimeline.InvalidDefinition" => "timeline.invalidDefinition",
                 "PatientTimeline.InvalidBranch" => "timeline.invalidBranch",
                 "PatientTimeline.InvalidProgram" => "timeline.invalidProgram",
+                "PatientTimeline.InvalidSeed" => "timeline.invalidSeed",
                 "PatientTimeline.InvalidEvent" or "PatientTimeline.InvalidTime" => "timeline.invalidTime",
                 _ => null
             };
@@ -659,7 +686,7 @@ internal sealed partial class PatientTimelineSettings : UserControl
     }
 
     private static bool Equivalent(PatientTimelineProgram first, PatientTimelineProgram second) =>
-        first.InitialTimelineId == second.InitialTimelineId && first.Timelines.Count == second.Timelines.Count &&
+        first.InitialTimelineId == second.InitialTimelineId && first.SeedHex == second.SeedHex && first.Timelines.Count == second.Timelines.Count &&
         first.Timelines.Zip(second.Timelines).All(pair => pair.First.Id == pair.Second.Id && pair.First.Name == pair.Second.Name &&
             pair.First.Treatment == pair.Second.Treatment && pair.First.InitialState == pair.Second.InitialState &&
             pair.First.Events.SequenceEqual(pair.Second.Events));

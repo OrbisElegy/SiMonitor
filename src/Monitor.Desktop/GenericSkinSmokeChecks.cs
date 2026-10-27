@@ -57,6 +57,9 @@ internal static class GenericSkinSmokeChecks
             Require(buttons.Length == 0, "generic toolbar has no remaining placeholder actions");
             var skin = (GenericMonitorSkin)window.MonitorTrace.Skin!;
             Require(skin.AlarmsButton.MinHeight >= 44 && skin.SilenceButton.MinHeight >= 44, "alarm actions retain keyboard and pointer targets");
+            Require(AutomationProperties.GetName(skin.PrintButton) == window.Localization.Get("skin.print") &&
+                ToolTip.GetTip(skin.PrintButton)?.ToString() == window.Localization.Get("skin.print"),
+                "monitor actions expose a localized accessible name and full caption hint");
             skin.AlarmsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Require(session.SimulationTimeNs == time && session.ManualVitals == manual && window.ActiveTimer is null &&

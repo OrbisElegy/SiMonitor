@@ -20,6 +20,8 @@ internal static class SettingsNavigationSmokeChecks
         {
             var session = window.Session;
             window.SelectPage(2);
+            VerifyDisplayLayout(window);
+            VerifyResponsiveFocus(window);
             VerifyAlarmNavigation(window);
             VerifyVitalNavigation(window);
             VerifyAdvancedNavigation(window);
@@ -27,6 +29,114 @@ internal static class SettingsNavigationSmokeChecks
             Require(ReferenceEquals(session, window.Session), "navigation and state summaries never replace the running session");
         }
         finally { window.Close(); }
+    }
+
+    private static void VerifyDisplayLayout(DesignPreviewWindow window)
+    {
+        var settings = window.Settings;
+        settings.Tabs.SelectedIndex = 2;
+        settings.SectionPages[2].SelectedSection = 0;
+        DesktopViewportSmokeChecks.Layout(window);
+        var table = settings.GetVisualDescendants().OfType<SettingsDisplayTable>().Single();
+        var first = settings.Slots[0];
+        string? minimum = first.Minimum.Text;
+        string? maximum = first.Maximum.Text;
+        bool? automatic = first.Auto.IsChecked;
+        int language = settings.Language.SelectedIndex;
+        try
+        {
+            settings.Language.SelectedIndex = 0;
+            first.Auto.IsChecked = false;
+            first.Minimum.Text = "-2.5";
+            first.Maximum.Text = "90";
+            foreach (int width in new[] { 1440, 1200, 1000, 960 })
+            {
+                DesktopViewportSmokeChecks.Layout(window, width, 720);
+                foreach (var slot in settings.Slots)
+                {
+                    Control[] controls = [slot.Channel, slot.Auto, slot.Minimum, slot.Maximum, slot.Speed];
+                    foreach (var control in controls)
+                    {
+                        Point position = control.TranslatePoint(default, table)!.Value;
+                        Require(position.X >= 0 && position.X + control.Bounds.Width <= table.Bounds.Width + 1,
+                            "display controls stay inside their content viewport at " + width);
+                    }
+                    Point lower = slot.Minimum.TranslatePoint(default, table)!.Value;
+                    Point upper = slot.Maximum.TranslatePoint(default, table)!.Value;
+                    Require(lower.Y == upper.Y && lower.X + slot.Minimum.Bounds.Width + 8 <= upper.X,
+                        "display range fields remain separate and aligned at " + width);
+                }
+                Require(ReferenceEquals(first, settings.Slots[0]) && first.Minimum.Text == "-2.5" && first.Maximum.Text == "90",
+                    "display reflow preserves the same controls and draft values at " + width);
+            }
+            first.Minimum.Text = "NaN";
+            DesktopViewportSmokeChecks.Layout(window, 960, 720);
+            Require(AutomationProperties.GetHelpText(first.Minimum) == window.Localization.Get("display.invalidRange") &&
+                table.GetVisualDescendants().OfType<TextBlock>().Any(text => text.IsEffectivelyVisible && text.Text == window.Localization.Get("display.invalidRange")),
+                "non-finite range errors are visible and associated with the editable fields before apply");
+            first.Auto.IsChecked = true;
+            Require(AutomationProperties.GetHelpText(first.Minimum) == window.Localization.Get("display.invalidAutomaticRange"),
+                "invalid disabled ranges explain how to make the fields editable");
+            settings.Language.SelectedIndex = 2;
+            Require(AutomationProperties.GetHelpText(first.Minimum) == window.Localization.Get("display.invalidAutomaticRange"),
+                "range correction instructions follow the selected language");
+            first.Auto.IsChecked = false;
+            first.Minimum.Text = "90";
+            Dispatcher.UIThread.RunJobs();
+            Require(AutomationProperties.GetHelpText(first.Minimum) == window.Localization.Get("display.invalidRange"),
+                "equal range bounds remain invalid");
+            first.Minimum.Text = "-2.5";
+            DesktopViewportSmokeChecks.Layout(window, 960, 720);
+            Require(AutomationProperties.GetHelpText(first.Minimum) == "" &&
+                !table.GetVisualDescendants().OfType<TextBlock>().Any(text => text.IsEffectivelyVisible && text.Text == window.Localization.Get("display.invalidRange")),
+                "correcting the range clears visible and accessible error text");
+        }
+        finally
+        {
+            first.Minimum.Text = minimum;
+            first.Maximum.Text = maximum;
+            first.Auto.IsChecked = automatic;
+            settings.Language.SelectedIndex = language;
+            DesktopViewportSmokeChecks.Layout(window);
+        }
+    }
+
+    private static void VerifyResponsiveFocus(DesignPreviewWindow window)
+    {
+        var settings = window.Settings;
+        settings.Tabs.SelectedIndex = 5;
+        var sections = settings.SectionPages[5];
+        sections.SelectedSection = 3;
+        DesktopViewportSmokeChecks.Layout(window);
+        var selected = (ListBoxItem)sections.Sections.SelectedItem!;
+        Require(selected.Focus(NavigationMethod.Tab), "wide section navigation accepts keyboard focus");
+        // Test the component breakpoint independently of the main shell's compact rail.
+        settings.Width = 740;
+        DesktopViewportSmokeChecks.Layout(window, 1000, 720);
+        Dispatcher.UIThread.RunJobs();
+        var compact = Selector(window, "生命体征参数组");
+        Require(compact.IsKeyboardFocusWithin && sections.SelectedSection == 3,
+            "constraining the settings viewport moves section focus to the visible selector without changing selection");
+        settings.Width = double.NaN;
+        DesktopViewportSmokeChecks.Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Require(selected.IsKeyboardFocusWithin && sections.SelectedSection == 3,
+            "widening the window returns focus to the selected section row");
+        settings.Tabs.SelectedIndex = 1;
+        var page = settings.TemplatePages[0];
+        DesktopViewportSmokeChecks.Layout(window);
+        var group = (ListBoxItem)page.Groups.SelectedItem!;
+        Require(group.Focus(NavigationMethod.Tab), "wide template groups accept keyboard focus");
+        settings.Width = 740;
+        DesktopViewportSmokeChecks.Layout(window, 1000, 720);
+        Dispatcher.UIThread.RunJobs();
+        Require(page.CompactGroups.IsKeyboardFocusWithin,
+            "narrowing the template browser moves focus to its visible group selector");
+        settings.Width = double.NaN;
+        DesktopViewportSmokeChecks.Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Require(page.Groups.IsKeyboardFocusWithin,
+            "widening the template browser restores group keyboard navigation");
     }
 
     private static void VerifyAlarmNavigation(DesignPreviewWindow window)
@@ -49,6 +159,7 @@ internal static class SettingsNavigationSmokeChecks
         Press(rows[1], Key.Up);
         Require(alarms.SelectedSection == 0 && alarms.Sections.SelectedIndex == 1, "Up from the first measurement never selects the group header");
 
+        settings.Width = 740;
         DesktopViewportSmokeChecks.Layout(window, 1000, 720);
         Capture(window, "ui-preview-alarm-compact-navigation.png");
         var compact = Selector(window, "报警参数组");
@@ -101,6 +212,7 @@ internal static class SettingsNavigationSmokeChecks
         RequireCaption(compact, "ECG 心率", "部分");
         settings.Language.SelectedIndex = 1;
         settings.Alerts.HeartRateEnabled.IsChecked = false;
+        settings.Width = double.NaN;
         DesktopViewportSmokeChecks.Layout(window);
     }
 
@@ -118,10 +230,13 @@ internal static class SettingsNavigationSmokeChecks
         settings.RateSeed.Text = new string('A', 64);
         vitals.SelectedSection = 4;
         Capture(window, "ui-preview-vitals-seed-error.png");
-        Require(vitals.DetailFor(4) == "待修正" && settings.SeedError.IsEffectivelyVisible, "invalid seed is flagged before apply");
+        Require(vitals.DetailFor(4) == "待修正" && settings.SeedError.IsEffectivelyVisible &&
+            AutomationProperties.GetHelpText(settings.RateSeed) == window.Localization.Get("vitals.seedError"),
+            "invalid seed is flagged before apply and its correction is associated with the input");
         settings.RateSeed.Text = seed;
         Dispatcher.UIThread.RunJobs();
-        Require(vitals.DetailFor(4) is null && !settings.SeedError.IsVisible, "corrected seed clears the inline error");
+        Require(vitals.DetailFor(4) is null && !settings.SeedError.IsVisible && AutomationProperties.GetHelpText(settings.RateSeed) == "",
+            "corrected seed clears the inline and accessible error");
         settings.InspirationPercent.Value = null;
         settings.CvpBaseline.Value = null;
         Require(vitals.DetailFor(1) == "待修正" && vitals.DetailFor(3) == "待修正", "missing breathing and pressure inputs are flagged");

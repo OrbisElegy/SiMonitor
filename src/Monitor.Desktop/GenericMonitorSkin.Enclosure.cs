@@ -6,11 +6,13 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using Monitor.Application.Presentation;
 using Monitor.Application.Therapy;
 
@@ -29,6 +31,7 @@ internal sealed partial class GenericMonitorSkin
     private readonly List<Control> _poweredControls = [];
     private Border? _powerOffOverlay;
     private Border? _screenOverlay;
+    private Control? _overlayReturnFocus;
     private Panel? _waveformLayer;
     private Image? _frozenWaveformImage;
     private RenderTargetBitmap? _frozenWaveformBitmap;
@@ -591,14 +594,18 @@ internal sealed partial class GenericMonitorSkin
     private void OpenScreenOverlay(string titleKey, Control content, bool preserveChoices = false)
     {
         if (!preserveChoices) { _menuChoices.Clear(); }
-        var panel = new Grid { RowDefinitions = new("36,*") };
-        var heading = new Grid { ColumnDefinitions = new("*,44") };
+        if (_screenOverlay!.IsVisible == false)
+        {
+            _overlayReturnFocus = TopLevel.GetTopLevel(_screenOverlay)?.FocusManager?.GetFocusedElement() as Control;
+        }
+        var panel = new Grid { RowDefinitions = new("Auto,*"), RowSpacing = 8 };
+        var heading = new Grid { ColumnDefinitions = new("*,44"), ColumnSpacing = 8 };
         var caption = CreatePanelCaption(titleKey, 18, Brushes.White);
         caption.HorizontalAlignment = HorizontalAlignment.Left;
         heading.Children.Add(caption);
         var close = ToolbarButton("devicePanel.close");
         close.Content = "×";
-        close.MinHeight = 30;
+        close.MinHeight = 44;
         close.Padding = new Thickness(2);
         close.Click += (_, _) => CloseScreenOverlay();
         Grid.SetColumn(close, 1);
@@ -610,11 +617,21 @@ internal sealed partial class GenericMonitorSkin
         _screenOverlay!.Child = panel;
         _screenOverlay.IsVisible = true;
         _navigationIndex = 0;
+        panel.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape) { return; }
+            CloseScreenOverlay();
+            args.Handled = true;
+        };
+        var first = content.GetVisualDescendants().OfType<Control>()
+            .FirstOrDefault(control => control.Focusable && control.IsEffectivelyEnabled && control.IsEffectivelyVisible);
+        if (first?.Focus() != true) { close.Focus(); }
     }
 
     private void CloseScreenOverlay()
     {
         if (_screenOverlay is null) { return; }
+        bool restoreFocus = _screenOverlay.IsKeyboardFocusWithin;
         HighlightNavigationTarget(null);
         // Unparent shared trend / pacing controls so the next open can reuse them.
         if (_screenOverlay.Child is Grid grid && grid.Children.OfType<ScrollViewer>().FirstOrDefault() is { } scroll)
@@ -636,6 +653,11 @@ internal sealed partial class GenericMonitorSkin
         _menuChoices.Clear();
         _navigationIndex = 0;
         _editingPacingParameter = false;
+        if (restoreFocus && _overlayReturnFocus is { IsEffectivelyEnabled: true, IsEffectivelyVisible: true } previous)
+        {
+            previous.Focus();
+        }
+        _overlayReturnFocus = null;
     }
 
     private void AddMenuChoice(Panel panel, string key, Action<Button> action)

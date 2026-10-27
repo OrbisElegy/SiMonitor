@@ -2451,6 +2451,7 @@ public sealed record PatientTimelineProgram(string InitialTimelineId, IReadOnlyL
 {
     public const int MaximumTimelines = 16;
     public const int MaximumEvents = 256;
+    public string? SeedHex { get; init; }
     public void Validate();
     public PatientTimelineProgram Snapshot();
 }
@@ -2531,7 +2532,10 @@ public sealed partial class LocalMonitorPreviewSession
 主线从会话开始计时；治疗分支从实际生效时刻按 T+ 计时。分叉继承当前患者状态与会话历史，
 替换原时间线后续事件。`CurrentTimelineTreatment` 返回进入时间线的初始策略或最近已执行节点的 `Treatment`，
 不会读取尚未执行节点的规则；节点的空 `Treatment` 继承当前策略，非空策略在该节点开始时整体替换。
-`PatientTimelineProgram.Snapshot()` 同时校验时间线初始路线与全部节点路线引用。
+`PatientTimelineProgram.Snapshot()` 同时校验时间线初始路线、全部节点路线引用与可选 `SeedHex`，并保留已设置的有效种子。
+模型兼容缺失、`null` 与空字符串种子；`Snapshot()` 将空字符串规范为 `null`，自身不生成随机数。
+非空种子必须为 64 个小写十六进制字符，非法值抛出 `PatientTimeline.InvalidSeed`。
+桌面在持久化加载或导入旧文件时，为未设置种子的计划生成一次 256 位种子并标记保存；后续恢复复用该值，已有种子不变。
 `InitialState` 可选，使用事件的体征、模板和通气字段，但要求开始与持续时间均为零、
 触发方式为 `TimelineTime` 且 `Treatment` 为空；治疗规则仍使用时间线的 `Treatment`。
 主线起点在配置时生效，分支起点在实际进入时生效；未指定的项目继承当前状态。

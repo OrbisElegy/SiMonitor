@@ -48,6 +48,8 @@ internal static class DesktopSmokeChecks
         if (valid) { NativeSmokePartition.Run(DefibrillatorSmokeChecks.VerifyAed); }
         if (valid) { NativeSmokePartition.Run(PressureTransducerSmokeChecks.Verify); }
         if (valid) { NativeSmokePartition.Run(ScreenWatermarkSmokeChecks.Verify); }
+        if (valid) { NativeSmokePartition.Run(DesktopShellSmokeChecks.Verify); }
+        if (valid) { NativeSmokePartition.Run(InformationPagesSmokeChecks.Verify); }
         if (valid) { DesignPreviewSmokeChecks.Verify(); }
         if (valid) { WaveformDemoSmokeChecks.Verify(); }
         if (valid) { NativeSmokePartition.Run(() => ProjectedEcgDemoSmokeChecks.Verify()); }

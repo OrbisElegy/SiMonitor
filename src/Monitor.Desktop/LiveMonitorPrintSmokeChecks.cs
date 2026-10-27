@@ -32,6 +32,7 @@ internal static class LiveMonitorPrintSmokeChecks
             var dialog = window.LivePrintWindow ?? throw new InvalidOperationException("Live Print did not open.");
             try
             {
+                PrintPreviewLayoutSmokeChecks.Verify(dialog, window.Localization, dialog.SavePdf, dialog.OpenPdf);
                 Require(dialog.Document.Options.Lead == EcgLead.V1 && !dialog.Document.Options.TwelveLead &&
                     dialog.Document.Options.StartTimeNs == 2_000_000_000 && dialog.Document.EndTimeNs == 12_000_000_000,
                     "ordinary monitor captures the selected lead and the preceding ten seconds");

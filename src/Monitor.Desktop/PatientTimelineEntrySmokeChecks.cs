@@ -28,7 +28,8 @@ internal static class PatientTimelineEntrySmokeChecks
             window.Settings.AbpTargetEnabled.IsChecked = false;
             window.Settings.PaTargetEnabled.IsChecked = false;
             var timeline = window.Settings.Timeline;
-            timeline.RestoreProgram(ExampleProgram());
+            // Preserve a current-format fixture so reopening tests viewing, not seed migration.
+            timeline.RestoreProgram(ExampleProgram() with { SeedHex = new string('0', 63) + "1" });
             timeline.SelectTimeline("main");
             var entry = timeline.EntryState;
             entry.Targets["Temperature"].Enabled.IsChecked = true;
@@ -81,7 +82,8 @@ internal static class PatientTimelineEntrySmokeChecks
                 var timeline = restored.Settings.Timeline;
                 Require(timeline.Files.ItemCount == 2 && timeline.ReadProgram().Timelines[0].InitialState?.Targets.TemperatureDeciCelsius == 385 &&
                     timeline.ReadProgram().Timelines[1].InitialState?.Targets.TemperatureDeciCelsius == 370 &&
-                    restored.Session.ManualVitals.TemperatureDeciCelsius == 385 && restored.Session.ElectricalTherapy?.TemplateId == "ecgTemplate.t023",
+                    restored.Session.ManualVitals.TemperatureDeciCelsius == 385 && restored.Session.ElectricalTherapy?.TemplateId == "ecgTemplate.t023" &&
+                    !timeline.RequiresMigrationSave,
                     "reopening restores the selected file's initial state and applies it to the new patient");
             }
             finally { restored.Close(); }

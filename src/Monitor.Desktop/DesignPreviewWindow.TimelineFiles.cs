@@ -18,6 +18,9 @@ internal sealed partial class DesignPreviewWindow
     private void ConnectTimelineFiles()
     {
         var editor = Settings.Timeline;
+        // Persist a new default file or upgraded legacy library through the normal save path.
+        if (!PreferenceNotice.IsVisible && (editor.RequiresMigrationSave || _displayPreferences.PatientTimelines is null))
+        { _timelineFilesDirty = true; }
         editor.ImportFile.Click += async (_, _) => await ImportPatientTimeline();
         editor.ExportFile.Click += async (_, _) => await ExportPatientTimeline();
         editor.EnabledChanged += () =>
@@ -54,6 +57,7 @@ internal sealed partial class DesignPreviewWindow
             _timelineTimerConnected = true;
             _timelineSaveTimer.Tick += (_, _) => { _timelineSaveTimer.Stop(); SaveTimelineFiles(); };
         }
+        if (_timelineFilesDirty) { _timelineSaveTimer.Start(); }
     }
 
     private void SaveTimelineFiles()

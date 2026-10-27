@@ -29,6 +29,10 @@ internal sealed partial class PatientTimelineSettings
     internal Button RemoveFile { get; } = Button();
     internal ToggleSwitch TimelineEnabled { get; } = new() { IsChecked = true, VerticalAlignment = VerticalAlignment.Center };
     internal TextBlock FileStatus { get; } = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap, IsVisible = false };
+    internal TextBox Seed { get; } = new() { MinHeight = 40, HorizontalAlignment = HorizontalAlignment.Stretch };
+    internal Button GenerateSeed { get; } = Button();
+    internal Expander SeedDetails { get; } = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
+    internal TextBlock SeedError { get; } = new() { Foreground = CriticalText, TextWrapping = TextWrapping.Wrap, IsVisible = false };
     internal string SelectedFileId => _selectedFileId;
     internal string SelectedFileName => _files.FirstOrDefault(file => file.Id == _selectedFileId)?.Name ?? "";
     internal event Action? EnabledChanged;
@@ -64,6 +68,7 @@ internal sealed partial class PatientTimelineSettings
         _localization.Bind(FileActions, ContentControl.ContentProperty, text => text.GetString("timeline.fileActions") + "  ▾");
         _localization.Bind(FileActions, AutomationProperties.NameProperty, "timeline.fileActions");
         panel.Children.Add(commands);
+        panel.Children.Add(BuildSeedEditor());
         panel.Children.Add(FileStatus);
         _localization.Bind(Files, AutomationProperties.NameProperty, "timeline.files");
         Caption(NewFile, "timeline.newFile");
@@ -107,6 +112,7 @@ internal sealed partial class PatientTimelineSettings
 
     private void InitializeFiles()
     {
+        Seed.Text = NewSeed();
         var file = new PatientTimelineFile(Guid.NewGuid().ToString("N"), _localization.Format("timeline.fileName", 1), ReadProgram());
         _files.Add(file);
         _selectedFileId = file.Id;
@@ -143,17 +149,22 @@ internal sealed partial class PatientTimelineSettings
     {
         var owned = library.Snapshot();
         foreach (var file in owned.Files) { ValidateTemplates(file.Program); }
+        bool migrated = owned.Files.Any(file => file.Program.SeedHex is null);
+        var files = owned.Files.Select(file => file with { Program = MigrateSeed(file.Program, out _) }).ToArray();
         _files.Clear();
-        _files.AddRange(owned.Files);
+        _files.AddRange(files);
         _loadingFile = true;
         try { TimelineEnabled.IsChecked = owned.Enabled; }
         finally { _loadingFile = false; }
         LoadFile(owned.SelectedFileId);
+        // The library supersedes the legacy program embedded in generator preferences.
+        RequiresMigrationSave = migrated;
     }
 
     internal void Import(PatientTimelineFile file)
     {
         var owned = file.Snapshot();
+        owned = owned with { Program = MigrateSeed(owned.Program, out _) };
         ValidateTemplates(owned.Program);
         if (_files.Count >= PatientTimelineLibrary.MaximumFiles) { throw new ArgumentException("PatientTimeline.TooManyFiles"); }
         StoreCurrentFile();
@@ -178,7 +189,7 @@ internal sealed partial class PatientTimelineSettings
         try
         {
             Import(new("new", UniqueFileName(_localization.Format("timeline.fileName", _files.Count + 1)),
-                new("main", [new("main", _localization.Get("timeline.main"), [], new())])));
+                new("main", [new("main", _localization.Get("timeline.main"), [], new())]) { SeedHex = NewSeed() }));
             FileStatus.IsVisible = false;
         }
         catch (ArgumentException) { ReportFileStatus("timeline.fixBeforeFileChange", true); }

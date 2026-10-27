@@ -136,7 +136,8 @@ internal sealed class SettingsSections : UserControl
         RefreshHeaders();
         _adaptNavigation = width =>
         {
-            bool compact = width < 760; Sections.IsVisible = !compact; _compact.IsVisible = compact;
+            bool compact = width < 760;
+            SettingsNavigation.Adapt(Sections, _compact, compact);
             _columns.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 170);
         };
         SelectedSection = 0;

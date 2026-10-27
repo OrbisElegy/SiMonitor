@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Diagnostics;
 using Avalonia;
-using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -22,10 +21,12 @@ namespace Monitor.Desktop;
 // Local preview with sample-derived numerics; alarm/audio scheduling remains separate.
 internal sealed partial class DesignPreviewWindow : Window
 {
-    internal static FontFamily PreviewFont { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
+    internal static FontFamily PreviewFont => DesktopFluentStyle.FontFamily;
     private readonly ContentControl _workspace = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private readonly TextBlock _state = Text("", 12);
-    private readonly ListBox _navigation = new();
+    internal DesktopShell Shell { get; }
+    private Control? _helpPage;
+    private Control? _aboutPage;
     private WaveformEnvelope[] _ecg;
     private (ProjectedEcgDemoConfiguration Ecg, PhysiologyDemoConfiguration Physiology,
         WaveformEnvelope[] Paper, long EffectiveNs, int EcgSelection, int RespirationSelection, int EjectionSelection)? _pendingPresentation;
@@ -72,7 +73,6 @@ internal sealed partial class DesignPreviewWindow : Window
     private (WaveformEnvelope[] Paper, long EffectiveNs)? _pendingPacingPaper;
     internal DesktopLocalization Localization { get; }
     internal TextBlock LanguageNotice { get; } = Text("", 12);
-    private static readonly string[] PageKeys = ["shell.monitor", "shell.ecg", "navigation.settings", "navigation.help", "navigation.about"];
     internal TextBlock PreferenceNotice { get; } = Text("", 12);
     internal DesignPreviewWindow(string? preferencesPath = null, Func<long>? safetyClock = null, bool startAudioOutput = true)
     {
@@ -164,43 +164,12 @@ internal sealed partial class DesignPreviewWindow : Window
         }
         ConnectSettings();
         if (skinRejected) { Localization.Bind(Settings.SkinStatus, TextBlock.TextProperty, "skin.loadFailed"); }
-        var root = new Grid { ColumnDefinitions = new("184,*"), Background = Background };
-        var sidebar = new DockPanel { Margin = new Thickness(16, 24) };
-        var brand = new StackPanel { Spacing = 5, Margin = new Thickness(12, 0, 0, 32) };
-        brand.Children.Add(Text(ProductIdentity.Name, 16, true)); brand.Children.Add(Text(ProductIdentity.Version + " · Standalone", 12));
-        DockPanel.SetDock(brand, Dock.Top); sidebar.Children.Add(brand);
-        var footer = new StackPanel { Spacing = 12, Margin = new Thickness(12, 20) };
-        footer.Children.Add(PreferenceNotice);
-        footer.Children.Add(LanguageNotice);
-        footer.Children.Add(_state);
-        var disclaimer = Text("", 12);
-        Localization.Bind(disclaimer, TextBlock.TextProperty, "shell.disclaimer");
-        footer.Children.Add(disclaimer);
-        DockPanel.SetDock(footer, Dock.Bottom); sidebar.Children.Add(footer);
-        SettingsSections.StyleNavigation(_navigation);
-        _navigation.ItemsSource = PageKeys.Select(key => SettingsSections.Item(key, showChevron: false, localization: Localization)).ToArray();
-        Localization.Bind(_navigation, AutomationProperties.NameProperty, "shell.navigation");
-        _navigation.SelectionChanged += (_, args) =>
+        Shell = new DesktopShell(_workspace, Localization, page =>
         {
-            if (ReferenceEquals(args.Source, _navigation) && _navigation.SelectedIndex >= 0 && _navigation.SelectedIndex != Page)
-            { SelectPage(_navigation.SelectedIndex); }
-        };
-        sidebar.Children.Add(_navigation);
-        root.Children.Add(new Border { Background = DesktopFluentStyle.Canvas, Child = sidebar });
-        var main = new Grid { Margin = new Thickness(24, 20) };
-        Grid.SetColumn(main, 1); root.Children.Add(main);
-        var card = new Border
-        {
-            Background = DesktopFluentStyle.Surface,
-            BorderBrush = DesktopFluentStyle.Stroke,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            ClipToBounds = true,
-            Child = _workspace
-        };
-        main.Children.Add(card);
-        ScreenWatermark.Attach(root);
-        Content = root;
+            if (page != Page) { SelectPage(page); }
+        }, PreferenceNotice, LanguageNotice, _state);
+        ScreenWatermark.Attach(Shell);
+        Content = Shell;
         Opened += (_, _) =>
         {
             if (_startAudioOutput) { Settings.Sound.StartOutput(); }
@@ -674,14 +643,14 @@ internal sealed partial class DesignPreviewWindow : Window
         if (page is < 0 or > 4) { throw new ArgumentOutOfRangeException(nameof(page)); }
         if (page != 0) { DisarmDefibrillator(); }
         Page = page;
-        _navigation.SelectedIndex = page;
+        Shell.SelectPage(page);
         _workspace.Content = page switch
         {
             0 => MonitorView,
             1 => CreateEcgPage(),
             2 => Settings,
-            3 => DesktopInformationPages.CreateHelp(Localization),
-            _ => DesktopInformationPages.CreateAbout(Localization)
+            3 => _helpPage ??= DesktopInformationPages.CreateHelp(Localization),
+            _ => _aboutPage ??= DesktopInformationPages.CreateAbout(Localization)
         };
     }
     private Ecg12PaperPage CreateEcgPage()
@@ -721,11 +690,13 @@ internal sealed partial class DesignPreviewWindow : Window
         { session.DiscardStartup(); }
     }
 
-    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources() => CaptureSourceBuilder()();
+    private (LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology) BuildConfiguredSources() =>
+        CaptureSourceBuilder(Settings.Timeline.ReadSeedForRestart())();
 
     // Capture controls on the dispatcher; the returned computation owns no UI objects.
-    private Func<(LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology)> CaptureSourceBuilder()
+    private Func<(LocalMonitorPreviewSession Session, ProjectedEcgDemoConfiguration Configuration, WaveformEnvelope[] Paper, PhysiologyDemoConfiguration Physiology)> CaptureSourceBuilder(string? seedHex = null)
     {
+        string rootSeed = seedHex ?? Settings.RateSeed.Text ?? "";
         if (Settings.EcgSelection < 0 || Settings.EcgSelection >= DesignPreviewSettings.EcgChoiceCount ||
             Settings.RespirationSelection < 0 || Settings.RespirationSelection >= DesignPreviewSettings.RespirationChoiceCount ||
             Settings.EjectionSelection < 0 || Settings.EjectionSelection >= DesignPreviewSettings.EjectionChoiceCount ||
@@ -737,7 +708,7 @@ internal sealed partial class DesignPreviewWindow : Window
         var (config, ecgConfig) = ResolveStyle(Settings.EcgSelection, Settings.RespirationSelection, Settings.EjectionSelection, Settings.PlethSelection, Settings.CapnogramSelection);
         if (SeededRhythmSchedule.Supports(config.ConductionPattern))
         {
-            var rhythm = Settings.ReadRhythm(config.ConductionPattern);
+            var rhythm = Settings.ReadRhythm(config.ConductionPattern, rootSeed);
             config = config with { RhythmSchedule = rhythm };
             ecgConfig = ecgConfig with { RhythmSchedule = rhythm };
         }
@@ -768,14 +739,14 @@ internal sealed partial class DesignPreviewWindow : Window
             PaPulsePermille = Settings.PaTargetEnabled.IsChecked == true ? 1000 : DesignPreviewSettings.ReadVitalValue(Settings.PaPulseGain, 1000, "vitals.paPulseGainField"),
             AbpTarget = Settings.ReadPressureTarget(arterial: true),
             PaTarget = Settings.ReadPressureTarget(arterial: false),
-            PressureVariation = Settings.ReadPressureVariation(),
-            EcgInterference = Settings.EcgInterference.Read(Settings.RateSeed.Text ?? ""),
+            PressureVariation = Settings.ReadPressureVariation(rootSeed),
+            EcgInterference = Settings.EcgInterference.Read(rootSeed),
             CvpBaselineCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.CvpBaseline, 100, "vitals.cvpBaselineField"),
             Co2EndExpiratoryMmHg = co2TargetMmHg
         };
         if (Settings.CardiacRateEnabled.IsChecked == true)
         {
-            var adjustment = Settings.ReadCardiacRate(validateSources: false);
+            var adjustment = Settings.ReadCardiacRate(validateSources: false, seedHex: rootSeed);
             if (adjustment is not null)
             {
                 if (Settings.EcgSelection == 0 && Settings.EjectionSelection != 2 && config.EcgDefinition is null && adjustment.Rate.HeartRateBpm is >= 30 and <= 180)
@@ -794,13 +765,13 @@ internal sealed partial class DesignPreviewWindow : Window
         int co2AmplitudeCentiMmHg = DesignPreviewSettings.ReadVitalValue(Settings.EtCo2Variation, 100, "vitals.etco2VariationField");
         if (co2AmplitudeCentiMmHg > 0 && co2BaselineMmHg != 0) { throw new ArgumentException("Preview.Co2BaselineVariationConflict"); }
         if (co2AmplitudeCentiMmHg > 0)
-        { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2AmplitudeCentiMmHg, Settings.RateSeed.Text ?? "") }; }
+        { config = config with { SeededCo2 = new(config.Co2EndExpiratoryMmHg, co2AmplitudeCentiMmHg, rootSeed) }; }
         int? opticalTarget = Settings.ReadOpticalTarget();
         SeededOpticalSaturation? opticalVariation = null;
         if (opticalTarget is { } target)
         {
             int amplitude = DesignPreviewSettings.ReadVitalValue(Settings.OpticalVariation, 1000, "vitals.opticalVariationField");
-            if (amplitude > 0) { opticalVariation = new(target, amplitude, Settings.RateSeed.Text ?? ""); }
+            if (amplitude > 0) { opticalVariation = new(target, amplitude, rootSeed); }
         }
         string templateId = DesignPreviewSettings.EcgTemplateKey(Settings.EcgSelection);
         var electricalTherapy = Settings.ElectricalConversion.Profile(templateId) with
@@ -854,7 +825,7 @@ internal sealed partial class DesignPreviewWindow : Window
                 EnergyStepsJoules = customEnergySteps ? defibrillator.EnergyStepsJoules : _editableDefibrillatorConfiguration.EnergyStepsJoules
             }).Snapshot();
             var sinusTherapy = CaptureSinusTherapy();
-            var build = CaptureSourceBuilder();
+            var build = CaptureSourceBuilder(restart ? Settings.Timeline.ReadSeedForRestart() : null);
             var initializeTimeline = restart ? CaptureTimelineInitializer() : null;
             PreparedTimelinePresentation? timelinePresentation = null;
             var generator = _preferences is null ? null : Settings.CaptureGenerator();

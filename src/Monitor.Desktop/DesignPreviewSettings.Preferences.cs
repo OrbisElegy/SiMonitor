@@ -166,8 +166,8 @@ internal sealed partial class DesignPreviewSettings
         if (!saved.Flags.ContainsKey("PaTargetEnabled")) { PaTargetEnabled.IsChecked = false; }
         if (!saved.Flags.ContainsKey("InfarctionParameters.ContributionLoss")) { InfarctionParameters.ContributionLoss.IsChecked = false; }
         Oxygenation.Restore(saved.Oxygenation);
-        if (saved.TimelineProgram is { } program) { Timeline.RestoreProgram(program); }
-        else { Timeline.Restore(saved.PatientTimeline); }
+        if (saved.TimelineProgram is { } program) { Timeline.RestorePersistedProgram(program); }
+        else { Timeline.RestorePersistedEvents(saved.PatientTimeline); }
         if (saved.ManualVitals is { } manualVitals) { ManualVitals.Restore(manualVitals); }
         RateSeed.Text = saved.Seed;
         foreach (var refresh in _refreshSignalRows) { refresh(); }

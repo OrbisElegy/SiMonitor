@@ -7,9 +7,15 @@ internal static class VentricularFibrillationLongRunSmokeChecks
 {
     internal static void Verify()
     {
-        var window = new DesignPreviewWindow("tests/Monitor.Specs/Fixtures/coarse-vf-seed1.json");
+        // Opening legacy preferences may upgrade them; keep the checked-in fixture immutable.
+        string directory = Path.Combine(Path.GetTempPath(), "monitor-vf-regression-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string preferences = Path.Combine(directory, "display.json");
+        File.Copy("tests/Monitor.Specs/Fixtures/coarse-vf-seed1.json", preferences);
+        DesignPreviewWindow? window = null;
         try
         {
+            window = new DesignPreviewWindow(preferences);
             window.Pause();
             if (window.PreferenceNotice.IsVisible || window.Settings.EcgSelection != 21)
             { throw new InvalidOperationException("VF regression configuration was rejected."); }
@@ -32,6 +38,10 @@ internal static class VentricularFibrillationLongRunSmokeChecks
             }
             if (missing != 0) { throw new InvalidOperationException($"Coarse VF seed 1 dropped for {missing} acquisition frames."); }
         }
-        finally { window.Close(); }
+        finally
+        {
+            window?.Close();
+            Directory.Delete(directory, recursive: true);
+        }
     }
 }

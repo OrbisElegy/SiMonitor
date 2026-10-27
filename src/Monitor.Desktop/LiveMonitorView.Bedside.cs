@@ -120,6 +120,7 @@ internal sealed partial class LiveMonitorView
         row.Children.Add(digits);
         // Additional measurements remain available without changing the device's main numeric layout.
         var details = new StackPanel { Spacing = 4 };
+        var accessibleReadings = new List<TextBlock> { primary, secondary };
         secondary.Foreground = color;
         details.Children.Add(HighlightHost(secondary));
         if (channel == 2)
@@ -131,9 +132,26 @@ internal sealed partial class LiveMonitorView
             var pi = new TextBlock { Foreground = color, FontSize = 13 };
             _localization.Bind(pi, AutomationProperties.NameProperty, "monitor.piName");
             details.Children.Add(pi);
+            accessibleReadings.Add(pi);
             _opticalRows.Add((pi, bar));
         }
         ToolTip.SetTip(row, details);
+        // Tooltip content is outside the visible automation tree until opened.
+        // Publish its current readings on the existing primary value as well.
+        void RefreshAccessibleReadings() => AutomationProperties.SetHelpText(primary,
+            string.Join(" · ", accessibleReadings.Where(text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text))
+                .Select(text => text.Text)));
+        foreach (var text in accessibleReadings)
+        {
+            text.PropertyChanged += (_, change) =>
+            {
+                if (change.Property == TextBlock.TextProperty || change.Property == IsVisibleProperty)
+                {
+                    RefreshAccessibleReadings();
+                }
+            };
+        }
+        RefreshAccessibleReadings();
         return row;
     }
 

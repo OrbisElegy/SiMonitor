@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -79,6 +80,19 @@ internal static class EnclosureSkinSmokeChecks
             Require(skin.WaveformsFrozen && session.SimulationTimeNs > freezeAt, "freezing the waveform keeps acquisition advancing");
             Click(skin.SoftKeys[0]);
             Require(!skin.WaveformsFrozen, "unfreeze returns to the live trace");
+            Require(skin.MenuButton.Focus(), "the device menu accepts keyboard focus");
+            Click(skin.MenuButton);
+            DesktopViewportSmokeChecks.Layout(window, 1440, 940);
+            var screen = skin.Screen!;
+            var overlayClose = screen.GetVisualDescendants().OfType<Button>().Single(button => button.Content as string == "×");
+            var overlay = overlayClose.GetVisualAncestors().OfType<Border>().First(border => border.Child is Grid);
+            Require(AutomationProperties.GetName(overlayClose) == window.Localization.Get("devicePanel.close") &&
+                window.FocusManager!.GetFocusedElement() is Control focused && focused.GetVisualAncestors().Contains(overlay),
+                "opening a device overlay moves focus inside and names its icon-only close action");
+            overlayClose.Focus();
+            overlayClose.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape });
+            Require(skin.MenuButton.IsFocused && !screen.GetVisualDescendants().OfType<Button>().Any(button => button.Content as string == "×"),
+                "Escape dismisses the device overlay and restores its trigger focus");
             Click(skin.SoftKeys[1]);
             DesktopViewportSmokeChecks.Layout(window, 1440, 940);
             Click(skin.MenuButton);

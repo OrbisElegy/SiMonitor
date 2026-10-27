@@ -14,8 +14,8 @@ internal sealed partial class DesignPreviewSettings
     internal TextBlock PauseDurationLabel { get; } = Text("");
     internal TextBlock ConductionPercentLabel { get; } = Text("");
 
-    internal SeededRhythmSchedule? ReadRhythm(AvConductionPattern pattern) => SeededRhythmSchedule.Supports(pattern)
-        ? new(RateSeed.Text ?? "", pattern == AvConductionPattern.SinusArrestIllustration
+    internal SeededRhythmSchedule? ReadRhythm(AvConductionPattern pattern, string? seedHex = null) => SeededRhythmSchedule.Supports(pattern)
+        ? new(seedHex ?? RateSeed.Text ?? "", pattern == AvConductionPattern.SinusArrestIllustration
             ? ReadVitalValue(PauseDuration, 1, "vitals.pauseDuration") * 1_000_000L : 2_000_000_000,
             pattern == AvConductionPattern.VariableAtrialFlutterIllustration
                 ? ReadVitalValue(ConductionPercent, 1, "vitals.conductionPercent") : 33) : null;
@@ -24,7 +24,7 @@ internal sealed partial class DesignPreviewSettings
     internal TextBlock AtrialRateLabel { get; } = Text("");
     internal TextBlock CardiacRateStatus { get; } = Text("");
 
-    internal CardiacRateAdjustment? ReadCardiacRate(bool validateSources = true)
+    internal CardiacRateAdjustment? ReadCardiacRate(bool validateSources = true, string? seedHex = null)
     {
         var pair = DesignPreviewWindow.ResolveStyle(EcgSelection, RespirationSelection, 0);
         if (validateSources)
@@ -35,13 +35,13 @@ internal sealed partial class DesignPreviewSettings
             if (edited != pair.Ecg) { physiology = WithAuthoredEcg(physiology, edited); }
             pair = (physiology, edited);
         }
-        var rhythm = ReadRhythm(pair.Physiology.ConductionPattern);
+        var rhythm = ReadRhythm(pair.Physiology.ConductionPattern, seedHex);
         pair = (pair.Physiology with { RhythmSchedule = rhythm }, pair.Ecg with { RhythmSchedule = rhythm });
         var plan = pair.Physiology.ResolvePlan();
         if (CardiacRateEnabled.IsChecked != true || !CardiacRateAdjustment.Supports(plan)) { return null; }
         var adjustment = new CardiacRateAdjustment(ReadVitalValue(HeartRate, 1, "vitals.heartRateField"),
             plan.IndependentVentricularPeriodNs is not null ? ReadVitalValue(AtrialRate, 1, "vitals.atrialRateField") : null,
-            RateSeed.Text ?? "", ReadVitalValue(RateVariation, 10, "vitals.rateVariationField"));
+            seedHex ?? RateSeed.Text ?? "", ReadVitalValue(RateVariation, 10, "vitals.rateVariationField"));
         adjustment.Validate(plan);
         // Keep the established sinus timing adaptation; all other templates
         // retain their morphology and must fit their source support bounds.

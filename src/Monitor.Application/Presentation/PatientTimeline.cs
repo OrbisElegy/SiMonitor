@@ -47,11 +47,16 @@ public sealed record PatientTimelineProgram(string InitialTimelineId, IReadOnlyL
 {
     public const int MaximumTimelines = 16;
     public const int MaximumEvents = 256;
+    public string? SeedHex { get; init; }
 
     public void Validate() => _ = Snapshot();
 
     public PatientTimelineProgram Snapshot()
     {
+        string? seed = string.IsNullOrEmpty(SeedHex) ? null : SeedHex;
+        if (seed is not null && (seed.Length != 64 ||
+            seed.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f'))))
+        { throw new ArgumentException("PatientTimeline.InvalidSeed"); }
         ArgumentNullException.ThrowIfNull(Timelines);
         if (Timelines.Count is < 1 or > MaximumTimelines)
         { throw new ArgumentException("PatientTimeline.InvalidProgram"); }
@@ -77,7 +82,7 @@ public sealed record PatientTimelineProgram(string InitialTimelineId, IReadOnlyL
                 }
             }
         }
-        return this with { Timelines = Array.AsReadOnly(owned) };
+        return this with { SeedHex = seed, Timelines = Array.AsReadOnly(owned) };
     }
 }
 

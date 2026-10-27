@@ -255,7 +255,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal TextBox RateSeed { get; } = new() { Text = new string('0', 63) + "1", MaxWidth = 650 };
     internal TextBlock SeedError { get; } = new()
     {
-        Foreground = Brushes.OrangeRed,
+        Foreground = Brush.Parse("#B42318"),
         TextWrapping = TextWrapping.Wrap,
         IsVisible = false
     };
@@ -279,10 +279,9 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal NumericUpDown OpticalTarget { get; } = new() { Minimum = 0, Maximum = 100, Value = 98, Increment = .1m, FormatString = "0.#", IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal NumericUpDown OpticalModulation { get; } = new() { Minimum = .1m, Maximum = 2, Value = 1, Increment = .1m, IsEnabled = false, Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
     internal TextBlock Status { get; } = Text("");
-    private const string DisplayColumns = "40,165,80,*,*,115";
     internal sealed record SlotEditor(ComboBox Channel, CheckBox Auto, TextBox Minimum, TextBox Maximum, ComboBox Speed);
     internal List<SlotEditor> Slots { get; } = [];
-    private readonly StackPanel _slotRows = new() { Spacing = 12 };
+    private readonly SettingsDisplayTable _slotRows;
     internal const long RespirationPreviewDurationNs = 41_250_000_000;
     private readonly Dictionary<int, (long TimeNs, double Value)[]> _respirationPreviews = [];
     private readonly Func<int, (long TimeNs, double Value)[]> _respirationPreview;
@@ -312,6 +311,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
     internal DesignPreviewSettings(Func<int, int, int, StylePreviewData> preview, Func<int, (long TimeNs, double Value)[]> respirationPreview, Action apply, Action run, Action advanced, DesktopLocalization? localization = null)
     {
         Localization = localization ?? new DesktopLocalization();
+        _slotRows = new SettingsDisplayTable(Localization);
         Sound = new SoundSettingsPanel(localization: Localization);
         Alerts = new MonitorAlertSettings(Localization);
         Oxygenation = new OxygenationSettingsPanel(Localization);
@@ -353,16 +353,6 @@ internal sealed partial class DesignPreviewSettings : UserControl
         display.Children.Add(Skin);
         display.Children.Add(LocalizedText("display.paperLayout")); display.Children.Add(PaperLayout);
         display.Children.Add(DesktopInformationPages.Help("topic-1"));
-        // Headings share the row columns and right margins so translated labels stay aligned.
-        var headings = new Grid { ColumnDefinitions = new(DisplayColumns) };
-        string[] labels = ["display.row", "display.channel", "display.range", "display.minimum", "display.maximum", "display.speed"];
-        for (int column = 0; column < labels.Length; column++)
-        {
-            var label = LocalizedText(labels[column]);
-            label.Margin = new Thickness(0, 0, 10, 0);
-            Grid.SetColumn(label, column); headings.Children.Add(label);
-        }
-        display.Children.Add(headings);
         display.Children.Add(_slotRows);
         display.Children.Add(DesktopInformationPages.Help("topic-2"));
         display.Children.Add(DesktopInformationPages.Help("settings-detail-3"));
@@ -485,7 +475,8 @@ internal sealed partial class DesignPreviewSettings : UserControl
         _compactCategory.SelectionChanged += (_, args) => { if (ReferenceEquals(args.Source, _compactCategory) && _compactCategory.SelectedIndex >= 0) { Tabs.SelectedIndex = _compactCategory.SelectedIndex; } };
         _adaptNavigation = width =>
         {
-            bool compact = width < 1040; Tabs.IsVisible = !compact; _compactCategory.IsVisible = compact;
+            bool compact = width < 1040;
+            SettingsNavigation.Adapt(Tabs, _compactCategory, compact);
             navigation.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 160);
         };
         Tabs.SelectedIndex = 1;
@@ -636,7 +627,14 @@ internal sealed partial class DesignPreviewSettings : UserControl
         panel.Children.Add(SeedError);
         panel.Children.Add(GenerateSeed);
         GenerateSeed.Click += (_, _) => RateSeed.Text = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-        RateSeed.TextChanged += (_, _) => SeedError.IsVisible = !IsSeedFormatValid(RateSeed.Text);
+        void RefreshSeedValidation()
+        {
+            bool valid = IsSeedFormatValid(RateSeed.Text);
+            SeedError.IsVisible = !valid;
+            Localization.Bind(RateSeed, AutomationProperties.HelpTextProperty, text => valid ? "" : text.GetString("vitals.seedError"));
+        }
+        RateSeed.TextChanged += (_, _) => RefreshSeedValidation();
+        RefreshSeedValidation();
         panel.Children.Add(DesktopInformationPages.Help("settings-detail-4"));
         panel.Children.Add(ManualVitals);
         return panel;
@@ -719,11 +717,11 @@ internal sealed partial class DesignPreviewSettings : UserControl
         Width = 180
     };
     // A seeded drift for ABP and PA, or null when both amplitudes are zero.
-    internal VascularPressureVariation? ReadPressureVariation()
+    internal VascularPressureVariation? ReadPressureVariation(string? seedHex = null)
     {
         int arterial = ReadVitalValue(AbpVariation, 100, "vitals.abpVariationField");
         int pulmonary = ReadVitalValue(PaVariation, 100, "vitals.paVariationField");
-        return arterial == 0 && pulmonary == 0 ? null : new(arterial, pulmonary, RateSeed.Text ?? "");
+        return arterial == 0 && pulmonary == 0 ? null : new(arterial, pulmonary, seedHex ?? RateSeed.Text ?? "");
     }
     private static bool PressureTargetValid(NumericUpDown systolic, NumericUpDown diastolic) =>
         systolic.Value is { } high && diastolic.Value is { } low && high - low >= VascularPressureTarget.MinimumPulseCentiMmHg / 100m;
@@ -848,7 +846,7 @@ internal sealed partial class DesignPreviewSettings : UserControl
             return;
         }
         var defaults = MonitorDisplayConfiguration.Default((MonitorSkin)Skin.SelectedIndex);
-        Slots.Clear(); _slotRows.Children.Clear();
+        Slots.Clear(); _slotRows.ClearRows();
         for (int i = 0; i < defaults.Slots.Count; i++)
         {
             var slot = defaults.Slots[i];
@@ -871,15 +869,12 @@ internal sealed partial class DesignPreviewSettings : UserControl
             Localization.Bind(channel, AutomationProperties.NameProperty, "display.rowChannel", i + 1);
             Localization.Bind(minimum, AutomationProperties.NameProperty, "display.rowMinimum", i + 1);
             Localization.Bind(maximum, AutomationProperties.NameProperty, "display.rowMaximum", i + 1);
-            var row = new Grid { ColumnDefinitions = new(DisplayColumns) };
             var speed = new ComboBox { ItemsSource = new[] { "12.5", "25", "50" }, SelectedIndex = 1 };
             Localization.Bind(automatic, AutomationProperties.NameProperty, "display.rowAutomatic", i + 1);
             Localization.Bind(speed, AutomationProperties.NameProperty, "display.rowSpeed", i + 1);
-            var number = Text((i + 1).ToString(CultureInfo.InvariantCulture));
-            number.VerticalAlignment = VerticalAlignment.Center;
-            Control[] children = [number, channel, automatic, minimum, maximum, speed];
-            for (int column = 0; column < children.Length; column++) { children[column].Margin = new Thickness(0, 0, 10, 0); Grid.SetColumn(children[column], column); row.Children.Add(children[column]); }
-            _slotRows.Children.Add(row); Slots.Add(new(channel, automatic, minimum, maximum, speed));
+            var editor = new SlotEditor(channel, automatic, minimum, maximum, speed);
+            _slotRows.AddRow(i + 1, editor);
+            Slots.Add(editor);
         }
     }
     internal void RestoreDisplay(MonitorDisplayConfiguration display, int paperLayout, bool measurementMillimeters = false)

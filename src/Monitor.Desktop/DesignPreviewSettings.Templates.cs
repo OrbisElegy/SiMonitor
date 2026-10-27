@@ -194,8 +194,10 @@ internal sealed partial class DesignPreviewSettings
             bool compact = Browsable && availableSize.Width < 760;
             if (compact != CompactGroups.IsVisible)
             {
-                CompactGroups.IsVisible = compact;
+                SettingsNavigation.Adapt(Groups, CompactGroups, compact);
                 _groupScroll!.IsVisible = !compact;
+                _body.ColumnDefinitions[0].Width = new GridLength(compact ? 0 : 200);
+                _body.ColumnDefinitions[1].Width = new GridLength(compact ? 0 : 16);
                 _tools.ColumnDefinitions[0].Width = compact ? GridLength.Star : new GridLength(0);
                 _tools.ColumnDefinitions[1].Width = new GridLength(compact ? 12 : 0);
                 Grid.SetColumnSpan(_tools, compact ? 3 : 1);

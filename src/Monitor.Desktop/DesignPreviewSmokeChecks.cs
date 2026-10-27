@@ -71,7 +71,13 @@ internal static class DesignPreviewSmokeChecks
                 : ProductIdentity.WindowTitle), "formal product name used in title");
             void Click(Button button) => button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             var ecg = window.Settings.TemplatePages[0];
-            Require(window.Settings.TemplateSignals.SelectedIndex == 0 && ecg.ActiveGroup == "窦性心律" && ecg.Compact &&
+            Require(window.Settings.TemplateSignals.SelectedIndex == 0 && ecg.ActiveGroup == "窦性心律" &&
+                window.Settings.CompactNavigation && !ecg.Compact && ecg.Groups.IsEffectivelyVisible && ecg.Bounds.Width >= 760,
+                "the compact main rail gives a 1000-pixel window enough space for inline waveform groups");
+            // Exercise the selector at its own content breakpoint, independent of the outer shell's rail width.
+            window.Settings.Width = 740;
+            Capture(window, "ui-refine-home-constrained.png");
+            Require(ecg.Bounds.Width < 760 && ecg.Compact &&
                 ecg.CompactGroups.IsEffectivelyVisible &&
                 !(ecg.Groups.GetVisualAncestors().Contains(window.Settings) && ecg.Groups.GetVisualAncestors().All(ancestor => ancestor.IsVisible)),
                 "generation opens on the ECG tab at the current group; narrow pages use the group selector");
@@ -103,6 +109,7 @@ internal static class DesignPreviewSmokeChecks
             Require(ecg.ActiveGroup == "室性早搏" && ecg.CardButtons.Count() == 10,
                 "reentering generation keeps the browsed group");
             window.Settings.Tabs.SelectedIndex = 6;
+            window.Settings.Width = double.NaN;
             window.Width = 1440; window.Height = 940; Capture(window, "ui-refine-resp-wide.png");
             string? initialEcg = window.Settings.AppliedEcgParameters.Text;
             string? initialRespiration = window.Settings.AppliedRespirationParameters.Text;
@@ -982,6 +989,7 @@ internal static class DesignPreviewSmokeChecks
         NativeSmokePartition.Run(PatientTimelineGraphSmokeChecks.Verify);
         NativeSmokePartition.Run(PatientTimelineFileSmokeChecks.VerifyFiles);
         NativeSmokePartition.Run(PatientTimelineFileSmokeChecks.VerifyExecution);
+        NativeSmokePartition.Run(PatientTimelineSeedSmokeChecks.Verify);
         NativeSmokePartition.Run(PatientTimelineEntrySmokeChecks.Verify);
         NativeSmokePartition.Run(VerifyVitalInputPrecision);
         NativeSmokePartition.Run(VerifyVariationRejectionMessages);
@@ -1307,9 +1315,21 @@ internal static class DesignPreviewSmokeChecks
             Require(soundGroups.Sections.SelectedIndex == 1 && window.Settings.Sound.HeartbeatVolume.Value == 62 && ReferenceEquals(settingsSession, window.Session), "navigation preserves section, edits and running simulation");
             DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Capture(window, "ui-preview-settings-hierarchy-compact.png");
-            Require(window.Settings.CompactNavigation && soundGroups.Compact, "narrow windows collapse navigation columns instead of squeezing parameter cards");
-            Require(soundGroups.Bounds.Width > 680 && window.Settings.Sound.HeartbeatVolume.TranslatePoint(default, window.Settings)!.Value.X < 100, "compact details reclaim both hidden navigation columns");
-            Require(window.Settings.Sound.HeartbeatVolume.Bounds.Width > 0 && window.Settings.Apply.Bounds.Height >= 44, "compact layout retains parameter access and apply action");
+            Require(window.Settings.CompactNavigation && !soundGroups.Compact && soundGroups.Sections.IsEffectivelyVisible &&
+                soundGroups.Bounds.Width >= 760,
+                "the 1000-pixel shell retains inline parameter groups when the compact main rail frees enough space");
+            Require(window.Settings.Sound.HeartbeatVolume.Bounds.Width > 0 && window.Settings.Apply.Bounds.Height >= 44,
+                "inline parameter groups retain usable inputs and the apply action");
+            window.Settings.Width = 740;
+            Capture(window, "ui-preview-settings-hierarchy-constrained.png");
+            Require(window.Settings.CompactNavigation && soundGroups.Compact && soundGroups.Bounds.Width < 760,
+                "both settings navigation levels use selectors when their content viewport is constrained");
+            Require(window.Settings.Sound.HeartbeatVolume.TranslatePoint(default, window.Settings)!.Value.X < 100 &&
+                window.Settings.Sound.HeartbeatVolume.Bounds.Width > 0 && window.Settings.Apply.Bounds.Height >= 44,
+                "constrained details reclaim both navigation columns while keeping inputs and apply usable");
+            Require(soundGroups.SelectedSection == 1 && window.Settings.Sound.HeartbeatVolume.Value == 62 &&
+                ReferenceEquals(settingsSession, window.Session), "reflow preserves the selected group, draft and running session");
+            window.Settings.Width = double.NaN;
             DesktopViewportSmokeChecks.Layout(window);
             window.Settings.Sound.HeartbeatVolume.Value = 100;
             soundGroups.Sections.SelectedIndex = 0;

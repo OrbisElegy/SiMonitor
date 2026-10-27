@@ -11,33 +11,82 @@ namespace Monitor.Specs;
 
 internal static class PatientTimelineFileSpecifications
 {
+    private const string SeedHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
     public static Specification[] All =>
     [
         new(nameof(TimelineFilesRoundTripCompleteGraphs), TimelineFilesRoundTripCompleteGraphs),
+        new(nameof(TimelineFileSeedsPreserveLegacyCompatibility), TimelineFileSeedsPreserveLegacyCompatibility),
+        new(nameof(TimelineFileSeedsRejectInvalidValues), TimelineFileSeedsRejectInvalidValues),
         new(nameof(TimelineFilesRejectInvalidAndOversizedDocuments), TimelineFilesRejectInvalidAndOversizedDocuments),
         new(nameof(TimelineLibrariesPersistSelectionAndDisabledState), TimelineLibrariesPersistSelectionAndDisabledState),
         new(nameof(DisablingTimelineStopsPreparedCurvesAndManualNodes), DisablingTimelineStopsPreparedCurvesAndManualNodes)
     ];
 
-    private static PatientTimelineFile File() => new("training", "电击后恢复", new("main",
+    private static PatientTimelineFile File(string? seedHex = null) => new("training", "电击后恢复", new("main",
     [
         new("main", "Main", [new("Wait for teacher", 0, 0, new()) { Trigger = PatientTimelineTrigger.Manual,
             Treatment = new(true, false, "recovery", "main", "recovery") }], new()),
         new("recovery", "Recovery", [new("Recovery rhythm", 1_000_000_000, 2_000_000_000,
             new() { HeartRateBpm = 90, SaturationMilliPercent = 97000 })
             { Trigger = PatientTimelineTrigger.AfterPrevious, EcgTemplateId = "ecgTemplate.t000" }], new(false, true))
-    ]));
+    ])
+    { SeedHex = seedHex });
 
     private static void TimelineFilesRoundTripCompleteGraphs()
     {
-        var file = File();
+        var file = File(SeedHex);
         byte[] serialized = PatientTimelineFileFormat.Write(file);
         using var stream = new MemoryStream(serialized);
         var restored = PatientTimelineFileFormat.Read(stream);
         Check.That(JsonSerializer.Serialize(restored) == JsonSerializer.Serialize(file),
-            "portable files preserve names, stable graph IDs, node triggers, targets, rhythm and treatment routes");
+            "portable files preserve names, stable graph IDs, node triggers, targets, rhythm, treatment routes and authored seed");
+        Check.That(restored.Program.SeedHex == SeedHex && file.Program.Snapshot().SeedHex == SeedHex,
+            "export, import and owned program snapshots preserve the exact authored seed");
         Check.That(!Encoding.UTF8.GetString(serialized).Contains("ChangesTemplate", StringComparison.Ordinal),
             "portable files omit computed and runtime values");
+    }
+
+    private static void TimelineFileSeedsPreserveLegacyCompatibility()
+    {
+        var document = JsonNode.Parse(PatientTimelineFileFormat.Write(File(SeedHex)))!;
+        Check.That(document["Version"]!.GetValue<int>() == 1,
+            "an optional authoring seed retains the existing portable document version");
+        (bool OmitSeed, string? Seed)[] legacyForms = [(true, null), (false, null), (false, "")];
+        foreach (var legacyForm in legacyForms)
+        {
+            var legacy = document.DeepClone();
+            var program = legacy["Timeline"]!["Program"]!.AsObject();
+            if (legacyForm.OmitSeed) { program.Remove("SeedHex"); }
+            else { program["SeedHex"] = legacyForm.Seed; }
+            using var input = new MemoryStream(Encoding.UTF8.GetBytes(legacy.ToJsonString()));
+            var restored = PatientTimelineFileFormat.Read(input);
+            Check.That(restored.Program.SeedHex is null && restored.Program.Snapshot().SeedHex is null,
+                "missing, null and empty legacy seeds normalize to an unset seed before desktop migration");
+        }
+        var emptySeed = File("").Program;
+        Check.That(emptySeed.Snapshot().SeedHex is null && emptySeed.SeedHex == "",
+            "snapshot normalization preserves the input and does not generate a random seed in the model");
+    }
+
+    private static void TimelineFileSeedsRejectInvalidValues()
+    {
+        foreach (string seed in new[] { new string('0', 63), new string('0', 65), SeedHex.ToUpperInvariant(),
+            new string('g', 64), new string(' ', 64), new string('０', 64) })
+        {
+            var file = File(seed);
+            var document = JsonNode.Parse(PatientTimelineFileFormat.Write(File(SeedHex)))!;
+            document["Timeline"]!["Program"]!["SeedHex"] = seed;
+            using var input = new MemoryStream(Encoding.UTF8.GetBytes(document.ToJsonString()));
+            foreach (Action validate in new Action[] { () => file.Program.Validate(), () => file.Program.Snapshot(),
+                () => PatientTimelineFileFormat.Write(file), () => PatientTimelineFileFormat.Read(input) })
+            {
+                bool rejected = false;
+                try { validate(); }
+                catch (ArgumentException error) { rejected = error.Message == "PatientTimeline.InvalidSeed"; }
+                Check.That(rejected, "malformed seeds are rejected before model, export or import state is published");
+            }
+        }
     }
 
     private static void TimelineFilesRejectInvalidAndOversizedDocuments()
@@ -73,14 +122,14 @@ internal static class PatientTimelineFileSpecifications
         Directory.CreateDirectory(directory);
         try
         {
-            var first = File();
-            var second = first with { Id = "other", Name = "Second patient" };
+            var first = File(SeedHex);
+            var second = File() with { Id = "other", Name = "Second patient" };
             var library = new PatientTimelineLibrary(second.Id, false, [first, second]);
             var store = new DisplayPreferenceStore(Path.Combine(directory, "display.json"));
             Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0) { PatientTimelines = library }), "library saves");
             var restored = store.Load(out bool rejected);
             Check.That(!rejected && JsonSerializer.Serialize(restored.PatientTimelines) == JsonSerializer.Serialize(library),
-                "independent file contents, selection and disabled setting persist even without generator preferences");
+                "independent file contents, authored and legacy unset seeds, selection and disabled setting persist even without generator preferences");
             bool invalid = false;
             try { _ = (library with { Files = [first, first] }).Snapshot(); }
             catch (ArgumentException) { invalid = true; }

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using Avalonia;
-using Avalonia.Automation;
 using Avalonia.Controls;
-using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -59,17 +57,8 @@ internal sealed class LiveMonitorPrintWindow : Window
         Start.Minimum = snapshot.AvailableFromNs / 1_000_000_000m;
         Start.Maximum = snapshot.CapturedAtNs / 1_000_000_000m;
         SelectRecentRange();
-        var form = new StackPanel { Spacing = 10, Margin = new Thickness(18) };
-        form.Children.Add(new TextBlock { Text = "A4 · 297 × 210 mm", FontSize = 18, FontWeight = FontWeight.SemiBold });
-        void Field(Control control, string key)
-        {
-            var label = new TextBlock();
-            localization.Bind(label, TextBlock.TextProperty, key);
-            localization.Bind(control, AutomationProperties.NameProperty, key);
-            control.HorizontalAlignment = HorizontalAlignment.Stretch;
-            form.Children.Add(label);
-            form.Children.Add(control);
-        }
+        var form = PrintPreviewLayout.CreateForm("A4 · 297 × 210 mm");
+        void Field(Control control, string key) => PrintPreviewLayout.AddField(form, control, localization, key);
         Field(RecordType, "livePrint.recordType");
         Field(Lead, "livePrint.lead");
         Field(Duration, "livePrint.duration");
@@ -79,35 +68,7 @@ internal sealed class LiveMonitorPrintWindow : Window
         Field(Color, "print.template");
         form.Children.Add(_interval);
         Field(Page, "livePrint.page");
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("280,*") };
-        body.Children.Add(new ScrollViewer { Content = form, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
-        var preview = new Border { Background = Brush.Parse("#DDE1E5"), Padding = new Thickness(16), Child = _preview };
-        Grid.SetColumn(preview, 1);
-        body.Children.Add(preview);
-        localization.Bind(_preview, AutomationProperties.NameProperty, "print.preview");
-        localization.Bind(SavePdf, ContentControl.ContentProperty, "print.save");
-        localization.Bind(OpenPdf, ContentControl.ContentProperty, "print.open");
-        var close = new Button();
-        localization.Bind(close, ContentControl.ContentProperty, "print.close");
-        close.Click += (_, _) => Close();
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right };
-        foreach (var button in new[] { close, SavePdf, OpenPdf })
-        {
-            button.MinHeight = 40;
-            actions.Children.Add(button);
-        }
-        var footer = new StackPanel { Spacing = 8, Margin = new Thickness(18, 10) };
-        var hint = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        localization.Bind(hint, TextBlock.TextProperty, "livePrint.scaleHint");
-        footer.Children.Add(hint);
-        footer.Children.Add(_status);
-        footer.Children.Add(actions);
-        var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Background = DesktopFluentStyle.Canvas };
-        root.Children.Add(body);
-        Grid.SetRow(footer, 1);
-        root.Children.Add(footer);
-        ScreenWatermark.Attach(root);
-        Content = root;
+        Content = PrintPreviewLayout.Compose(this, form, _preview, _status, SavePdf, OpenPdf, localization, "livePrint.scaleHint");
         foreach (var combo in new[] { RecordType, Lead, Speed, Gain, Color })
         { combo.SelectionChanged += (_, _) => ScheduleRefresh(); }
         Duration.SelectionChanged += (_, _) => { SelectRecentRange(); ScheduleRefresh(); };

@@ -12,12 +12,22 @@ namespace Monitor.Desktop;
 // All desktop entry points share Fluent templates and semantic resource tokens.
 internal static class DesktopFluentStyle
 {
+    internal static FontFamily FontFamily { get; } = new("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif");
     internal static readonly IBrush Accent = Brush.Parse("#0078D4");
     internal static readonly IBrush Canvas = Brush.Parse("#F3F3F3");
     internal static readonly IBrush Surface = Brushes.White;
     internal static readonly IBrush Stroke = Brush.Parse("#E5E5E5");
     internal static readonly IBrush Text = Brush.Parse("#1A1A1A");
     internal static readonly IBrush SecondaryText = Brush.Parse("#5C5C5C");
+
+    internal static Border SurfaceCard(Control content) => new()
+    {
+        Background = Surface,
+        BorderBrush = Stroke,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(8),
+        Child = content
+    };
     internal static void Install(Avalonia.Application app)
     {
         app.RequestedThemeVariant = ThemeVariant.Light;
@@ -41,7 +51,8 @@ internal static class DesktopFluentStyle
         buttons.Setters.Add(new Setter(Button.VerticalContentAlignmentProperty, VerticalAlignment.Center));
         app.Styles.Add(buttons);
         var windows = new Style(s => s.OfType<Window>());
-        windows.Setters.Add(new Setter(Window.FontFamilyProperty, new FontFamily("Segoe UI, Microsoft YaHei UI, WenQuanYi Zen Hei, sans-serif")));
+        windows.Setters.Add(new Setter(Window.FontFamilyProperty, FontFamily));
+        windows.Setters.Add(new Setter(Window.UseLayoutRoundingProperty, true));
         app.Styles.Add(windows);
         using var iconStream = AssetLoader.Open(new Uri("avares://Monitor.Desktop/Assets/app-icon.ico"));
         var icons = new Style(s => s.Is<Window>());

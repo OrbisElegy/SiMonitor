@@ -409,6 +409,8 @@ internal sealed partial class GenericMonitorSkin : IMonitorSkin, IMonitorDeviceP
             CornerRadius = new CornerRadius(5),
             FontSize = 14
         };
+        _localization.Bind(button, AutomationProperties.NameProperty, key);
+        button.Bind(ToolTip.TipProperty, button.GetObservable(AutomationProperties.NameProperty));
         return button;
     }
 

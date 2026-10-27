@@ -65,20 +65,12 @@ internal sealed class Ecg12PrintWindow : Window
         Start.Value = Math.Min(Start.Maximum, options.StartTimeNs / 1_000_000_000m);
         ShowMeasurements.IsChecked = options.ShowMeasurements;
         Diagnosis.Text = options.Diagnosis;
-        var form = new StackPanel { Spacing = 10, Margin = new Thickness(18) };
-        form.Children.Add(new TextBlock { Text = "A4 · 210 × 297 mm", FontWeight = FontWeight.SemiBold, FontSize = 18 });
-        void Field(Control control, string key)
-        {
-            var label = new TextBlock();
-            localization.Bind(label, TextBlock.TextProperty, key);
-            localization.Bind(control, AutomationProperties.NameProperty, key);
-            control.HorizontalAlignment = HorizontalAlignment.Stretch;
-            form.Children.Add(label);
-            form.Children.Add(control);
-        }
+        var form = PrintPreviewLayout.CreateForm("A4 · 210 × 297 mm");
+        void Field(Control control, string key) => PrintPreviewLayout.AddField(form, control, localization, key);
         Field(Heading, "print.title");
         Field(Subtitle, "print.subtitle");
         localization.Bind(ShowCandidate, ContentControl.ContentProperty, "print.showCandidate");
+        ShowCandidate.MinHeight = 44;
         form.Children.Add(ShowCandidate);
         localization.Bind(Candidate, AutomationProperties.NameProperty, "print.candidate");
         form.Children.Add(Candidate);
@@ -88,11 +80,12 @@ internal sealed class Ecg12PrintWindow : Window
         Field(Start, "print.start");
         form.Children.Add(_interval);
         localization.Bind(ShowMeasurements, ContentControl.ContentProperty, "print.showMeasurements");
+        ShowMeasurements.MinHeight = 44;
         form.Children.Add(ShowMeasurements);
-        var answers = new Avalonia.Controls.Primitives.UniformGrid { Columns = 2 };
+        var answers = new WrapPanel { Orientation = Orientation.Horizontal };
         foreach (var field in Enum.GetValues<Ecg12PrintAnswer>())
         {
-            var choice = new CheckBox { IsChecked = options.AnswerFields.Contains(field) };
+            var choice = new CheckBox { MinWidth = 130, MinHeight = 44, IsChecked = options.AnswerFields.Contains(field) };
             localization.Bind(choice, ContentControl.ContentProperty, Ecg12PrintDocument.AnswerKey(field));
             choice.IsCheckedChanged += (_, _) => ScheduleRefresh();
             AnswerChoices.Add(field, choice);
@@ -100,35 +93,7 @@ internal sealed class Ecg12PrintWindow : Window
         }
         form.Children.Add(answers);
         Field(Diagnosis, "print.diagnosis");
-        var scroller = new ScrollViewer { Content = form, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("300,*") };
-        body.Children.Add(scroller);
-        var preview = new Border { Background = Brush.Parse("#DDE1E5"), Padding = new Thickness(18), Child = _preview };
-        Grid.SetColumn(preview, 1);
-        body.Children.Add(preview);
-        localization.Bind(_preview, AutomationProperties.NameProperty, "print.preview");
-        localization.Bind(SavePdf, ContentControl.ContentProperty, "print.save");
-        localization.Bind(OpenPdf, ContentControl.ContentProperty, "print.open");
-        var close = new Button();
-        localization.Bind(close, ContentControl.ContentProperty, "print.close");
-        close.Click += (_, _) => Close();
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right };
-        foreach (var button in new[] { close, SavePdf, OpenPdf }) { button.MinHeight = 40; actions.Children.Add(button); }
-        var footer = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(18, 10) };
-        var hint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
-        localization.Bind(hint, TextBlock.TextProperty, "print.scaleHint");
-        footer.Children.Add(hint);
-        Grid.SetRow(actions, 1);
-        footer.Children.Add(actions);
-        _status.Margin = new Thickness(0, 0, 360, 0);
-        Grid.SetRow(_status, 1);
-        footer.Children.Add(_status);
-        var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Background = DesktopFluentStyle.Canvas };
-        root.Children.Add(body);
-        Grid.SetRow(footer, 1);
-        root.Children.Add(footer);
-        ScreenWatermark.Attach(root);
-        Content = root;
+        Content = PrintPreviewLayout.Compose(this, form, _preview, _status, SavePdf, OpenPdf, localization, "print.scaleHint");
         foreach (var text in new[] { Heading, Subtitle, Candidate, Diagnosis }) { text.TextChanged += (_, _) => ScheduleRefresh(); }
         foreach (var combo in new[] { PrintTemplate, Speed, Gain }) { combo.SelectionChanged += (_, _) => ScheduleRefresh(); }
         ShowCandidate.IsCheckedChanged += (_, _) => ScheduleRefresh();

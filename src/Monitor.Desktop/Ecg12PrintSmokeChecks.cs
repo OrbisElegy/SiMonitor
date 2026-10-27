@@ -23,6 +23,7 @@ internal static class Ecg12PrintSmokeChecks
             var dialog = window.PrintWindow ?? throw new InvalidOperationException("Print toolbar did not open its dialog.");
             try
             {
+                PrintPreviewLayoutSmokeChecks.Verify(dialog, window.Localization, dialog.SavePdf, dialog.OpenPdf);
                 dialog.Heading.Text = "心电图技能考核";
                 dialog.Subtitle.Text = "标准十二导联 · A4";
                 dialog.ShowCandidate.IsChecked = true;

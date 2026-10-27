@@ -275,6 +275,19 @@ internal static class PatientTimelineGraphSmokeChecks
             DesktopViewportSmokeChecks.Layout(window, 1000, 720);
             Require(settings.Graph.IsVisible && settings.Graph.Zoom == zoom && (settings.Graph.Scroller.Offset - offset).Length < 1,
                 "returning from narrow node details restores the existing graph view");
+            var focusedNode = Node(settings.Graph, "Shock window");
+            Require(focusedNode.Focus(NavigationMethod.Tab), "the narrow graph node accepts keyboard focus");
+            Click(focusedNode);
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
+            Dispatcher.UIThread.RunJobs();
+            Require(settings.SelectedEditor!.EventName.IsKeyboardFocusWithin,
+                "opening narrow node details moves keyboard focus from the hidden graph into the editor");
+            Require(settings.BackToGraph.Focus(NavigationMethod.Tab), "the graph return action accepts keyboard focus");
+            Click(settings.BackToGraph);
+            DesktopViewportSmokeChecks.Layout(window, 1000, 720);
+            Dispatcher.UIThread.RunJobs();
+            Require(Node(settings.Graph, "Shock window").IsKeyboardFocusWithin,
+                "returning to the narrow graph restores keyboard focus to the selected node");
             Click(Node(settings.Graph, "Shock window"));
             foreach (string locale in new[] { "zh-CN", "en" })
             {

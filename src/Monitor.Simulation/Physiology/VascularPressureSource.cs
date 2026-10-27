@@ -32,6 +32,7 @@ public sealed class VascularPressureSource
     private readonly bool _useLinearStrokeMorphology;
     private readonly bool _useEjectionBoundedMorphology;
     private readonly int _variationProbeGainPermille;
+    private readonly VascularPressureCurveSource? _targetCurves;
 
     private VascularPressureSource(RegularPhysiologyPlan physiology, VascularPressurePlan plan, int variationProbeGainPermille = 1000)
     {
@@ -47,8 +48,9 @@ public sealed class VascularPressureSource
         if (plan.UseCardiacFillingPerfusion && (plan.UsePrematureBeatPerfusion || plan.UseAtrialFibrillationPerfusion ||
             plan.UseConductedFlutterPerfusion || !CardiacFillingPerfusion.Supports(physiology))) { throw Invalid(); }
         Int128 ventricularPeriod = plan.UsePrematureBeatPerfusion ? (physiology.RateAdjustment?.MinimumEjectingIntervalNs(physiology) ?? PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern)) : physiology.VentricularPeriodNs;
+        if (physiology.CardiacRateClock is { } rateClock) { ventricularPeriod = rateClock.MinimumDuration(ventricularPeriod); }
         Int128 support = (Int128)plan.EjectionDurationNs + 64 * (Int128)plan.TimeConstantNs;
-        Int128 selectedPeriod = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
+        Int128 selectedPeriod = physiology.MinimumVentricularPeriodNs * physiology.MechanicalEveryCycles;
         if (plan.ModelId != VascularPressurePlan.EvidenceId ||
             plan.TransitDelayNs < 0 || plan.EjectionDurationNs <= 0 || plan.EjectionDurationNs > ventricularPeriod ||
             plan.TimeConstantNs is < MinimumTimeConstantNs or > MaximumTimeConstantNs ||
@@ -67,7 +69,7 @@ public sealed class VascularPressureSource
         _variationProbeGainPermille = variationProbeGainPermille;
         // Leave unit-gain reference schedules on their established startup
         // contour. Schedules with altered stroke strength need linear shaping.
-        var referencePhysiology = PacingReference.WithoutPulseDivision(physiology);
+        var referencePhysiology = PacingReference.WithoutPulseDivision(physiology with { CardiacRateClock = null });
         long atrialLeadNs = referencePhysiology.VentricularMechanicalOffsetNs - referencePhysiology.AtrialMechanicalOffsetNs;
         _useLinearStrokeMorphology = plan.UseAtrialFibrillationPerfusion || plan.UseConductedFlutterPerfusion ||
             plan.UseCardiacFillingPerfusion && (referencePhysiology.RateAdjustment is not null || referencePhysiology.SeededRate is not null ||
@@ -103,7 +105,9 @@ public sealed class VascularPressureSource
             // the reference volume per beat. Actual RC inputs still come only
             // from the sparse mechanical event stream.
             _morphologyPeriodNs = physiology.PacingOutput is { PulseDivision: 4 } output
-                ? output.PeriodNs / output.PulseDivision : (long)ventricularPeriod;
+                ? output.PeriodNs / output.PulseDivision : plan.UsePrematureBeatPerfusion
+                    ? referencePhysiology.RateAdjustment?.MinimumEjectingIntervalNs(referencePhysiology) ?? PrematureBeatPerfusion.MinimumEjectingIntervalNs(referencePhysiology.ConductionPattern)
+                    : (long)referencePhysiology.VentricularPeriodNs;
             _useEjectionBoundedMorphology = _useLinearStrokeMorphology &&
                 morphology.ModelId == VascularPressureMorphologyPlan.EvidenceId &&
                 morphology.DurationNs < _morphologyPeriodNs;
@@ -119,7 +123,15 @@ public sealed class VascularPressureSource
                 FixedPointMath.Q32One * Decay(physiology.VentricularMechanicalOffsetNs);
             Int128 firstOnsetAbove = (firstOnsetNumerator + FixedPointMath.Q62One - 1) / FixedPointMath.Q62One;
             int maximumGain = plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.MaximumGainPermille(physiology) : 1000;
-            Int128 maximumReference = ((Int128)_referenceOnsetQ32 * maximumGain + 999) / 1000;
+            long boundOnsetQ32 = _referenceOnsetQ32;
+            if (physiology.CardiacRateClock is not null)
+            {
+                long boundPeriodNs = (long)ventricularPeriod;
+                boundOnsetQ32 = Math.Max(boundOnsetQ32, (long)FixedPointMath.RoundDivideTiesToEven(
+                    (Int128)plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(boundPeriodNs) * FixedPointMath.Q32One,
+                    FixedPointMath.Q62One - Decay(boundPeriodNs)));
+            }
+            Int128 maximumReference = ((Int128)boundOnsetQ32 * maximumGain + 999) / 1000;
             var maximumAbove = Int128.Max(maximumReference, firstOnsetAbove);
             Int128 maximumShape = _referenceOnsetQ32 +
                 (Int128)morphology.PulseHeightCentiMmHg * FixedPointMath.Q32One *
@@ -166,6 +178,7 @@ public sealed class VascularPressureSource
             IReadOnlyList<long> seed = Contour(morphology);
             _morphologyTable = seed.Select(value => checked(value * morphology.PulseHeightCentiMmHg)).ToArray();
         }
+        if (plan.TargetCurves is not null) { _targetCurves = new(physiology, plan); }
     }
 
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan) =>
@@ -357,6 +370,8 @@ public sealed class VascularPressureSource
         cancellationToken.ThrowIfCancellationRequested();
         if (simTimeNs < _physiology.EpochAnchorSimTimeNs)
         { throw new EventWaveformException("VascularPressure.InvalidTime", nameof(simTimeNs)); }
+        if (_targetCurves is not null)
+        { return _targetCurves.EvaluateIntervalAt(simTimeNs, fromEventTimeNs, toExclusiveEventTimeNs, includeInitialPressure, cancellationToken); }
         long sourceTime = Math.Max(_physiology.EpochAnchorSimTimeNs, simTimeNs - _plan.TransitDelayNs);
         Int128 pressure = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q62One +
             (Int128)(includeInitialPressure ? _plan.InitialPressureCentiMmHg - _plan.AsymptoticPressureCentiMmHg : 0) *

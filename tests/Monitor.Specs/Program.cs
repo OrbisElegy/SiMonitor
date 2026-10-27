@@ -65,6 +65,7 @@ internal static class Program
             .. SignalSampleClockSpecifications.All,
             .. PeriodicSignalGeneratorSpecifications.All,
             .. RegularPhysiologyTimelineSpecifications.All,
+            .. PatientRateTimelineSpecifications.All,
             .. EventWaveformSpecifications.All,
             .. PhysiologySignalGeneratorSpecifications.All,
             .. PhysiologyWaveformGroupSpecifications.All,

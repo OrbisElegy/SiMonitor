@@ -18,14 +18,25 @@ public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDura
     SeededVascularVariation? Variation = null)
 {
     public const string EvidenceId = "VascularPressureRcIllustration@1";
+    public VascularPressureTargetCurves? TargetCurves { get; init; }
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,
         Guid channelId, uint qualityFlags)
     {
-        _ = VascularPressureSource.Create(physiology, this);
+        var prepared = this;
+        if (physiology.CardiacRateClock is { } clock && Morphology is { } morphology)
+        {
+            Int128 period = UsePrematureBeatPerfusion
+                ? clock.MinimumDuration(physiology.RateAdjustment?.MinimumEjectingIntervalNs(physiology) ??
+                    PrematureBeatPerfusion.MinimumEjectingIntervalNs(physiology.ConductionPattern))
+                : physiology.MinimumVentricularPeriodNs;
+            int overlaps = checked((int)(((Int128)morphology.DurationNs + period - 1) / period));
+            prepared = this with { Morphology = morphology with { MaximumPulseOverlap = Math.Max(morphology.MaximumPulseOverlap, overlaps) } };
+        }
+        _ = VascularPressureSource.Create(physiology, prepared);
         // Full physical pressure uses centi-mmHg counts. A fixed affine offset
         // must not stand in for the changing diastolic reservoir pressure.
         return new(physiology, new WaveformBlockPlaneConfiguration(channelId, "AcqPressure125@1",
-            1, 100, 0, 1), Array.Empty<EventWaveformBand>(), qualityFlags, this);
+            1, 100, 0, 1), Array.Empty<EventWaveformBand>(), qualityFlags, prepared);
     }
 }

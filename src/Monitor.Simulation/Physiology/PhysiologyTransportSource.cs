@@ -68,11 +68,14 @@ public sealed class PhysiologyTransportSource
         var ventilation = _state.Ventilation;
         if (fromSimTimeNs != toExclusiveSimTimeNs && ventilation.AirwayOpen)
         {
+            var respiratoryClock = physiology.RespiratoryRateClock;
+            long respiratoryFromNs = respiratoryClock?.ReferenceAt(fromSimTimeNs) ?? fromSimTimeNs;
+            long respiratoryToNs = respiratoryClock?.ReferenceAt(toExclusiveSimTimeNs) ?? toExclusiveSimTimeNs;
             bool spontaneous = physiology.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration;
-            ulong first = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, fromSimTimeNs) :
-                (ulong)((fromSimTimeNs - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
-            ulong last = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, toExclusiveSimTimeNs - 1) :
-                (ulong)((toExclusiveSimTimeNs - 1 - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
+            ulong first = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, respiratoryFromNs) :
+                (ulong)((respiratoryFromNs - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
+            ulong last = spontaneous ? SpontaneousRespirationSchedule.FindCycle(physiology, Math.Max(respiratoryFromNs, respiratoryToNs - 1)) :
+                (ulong)((Math.Max(respiratoryFromNs, respiratoryToNs - 1) - physiology.EpochAnchorSimTimeNs) / physiology.BreathPeriodNs);
             if (last - first >= (ulong)remaining) { throw new ArgumentException("Transport.EventBudgetExceeded", nameof(maximumEvents)); }
             for (ulong cycle = first; cycle <= last; cycle++)
             {
@@ -93,8 +96,8 @@ public sealed class PhysiologyTransportSource
                 long flowDurationNs = spontaneous ? SpontaneousRespirationSchedule.InspirationDurationNs(physiology, cycle) -
                     SpontaneousRespirationSchedule.InspiratoryPauseNs(physiology, cycle) :
                     physiology.InspirationDurationNs - physiology.InspiratoryPauseNs;
-                delivered = checked(delivered + Portion(tidalNanoliters, startNs, flowDurationNs));
-                alveolar = checked(alveolar + Portion(alveolarNanoliters, startNs, flowDurationNs));
+                delivered = checked(delivered + Portion(tidalNanoliters, startNs, flowDurationNs, respiratoryClock));
+                alveolar = checked(alveolar + Portion(alveolarNanoliters, startNs, flowDurationNs, respiratoryClock));
             }
         }
         if (fromSimTimeNs != toExclusiveSimTimeNs)
@@ -121,9 +124,10 @@ public sealed class PhysiologyTransportSource
         return new(fromSimTimeNs, toExclusiveSimTimeNs, delivered, alveolar, blood,
             ventilation.InspiredOxygenMillionths, ventilation.AirwayOpen);
 
-        long Portion(long volumeNanoliters, long startNs, long durationNs)
+        long Portion(long volumeNanoliters, long startNs, long durationNs, PhysiologyRateClock? phaseClock = null)
         {
-            Int128 Prefix(long timeNs) => (Int128)volumeNanoliters * Math.Clamp(timeNs - startNs, 0, durationNs) / durationNs;
+            Int128 Prefix(long timeNs) => (Int128)volumeNanoliters *
+                Math.Clamp((phaseClock?.ReferenceAt(timeNs) ?? timeNs) - startNs, 0, durationNs) / durationNs;
             return (long)(Prefix(toExclusiveSimTimeNs) - Prefix(fromSimTimeNs));
         }
     }

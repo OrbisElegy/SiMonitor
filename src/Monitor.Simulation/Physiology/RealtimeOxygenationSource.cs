@@ -117,9 +117,15 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         ArgumentNullException.ThrowIfNull(transport);
         ValidateVentilation(transport.CaptureState().Ventilation);
         OxygenReservoirModel.ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
-        ArgumentOutOfRangeException.ThrowIfNotEqual(atSimTimeNs, SourceSimTimeNs);
-        var trial = new RealtimeOxygenationSource(transport, _parameters, oxygenDemandMultiplier, atSimTimeNs);
-        _pendingChanges = [new(atSimTimeNs, trial._transport, oxygenDemandMultiplier)];
+        if (atSimTimeNs < SourceSimTimeNs || atSimTimeNs - SourceSimTimeNs >= OxygenReservoirModel.StepNs)
+        { throw new ArgumentOutOfRangeException(nameof(atSimTimeNs)); }
+        // Treatment events retain their actual session time. Only transport
+        // integration waits for the next unstarted fixed-grid interval, just
+        // like a live ventilation edit; no reservoirs or samples are reset.
+        long effectiveNs = checked(SourceSimTimeNs + (atSimTimeNs == SourceSimTimeNs ? 0 : OxygenReservoirModel.StepNs));
+        var trial = new RealtimeOxygenationSource(transport, _parameters, oxygenDemandMultiplier, effectiveNs);
+        _pendingChanges = _pendingChanges.Where(change => change.AtSimTimeNs < effectiveNs)
+            .Append(new TransportChange(effectiveNs, trial._transport, oxygenDemandMultiplier)).ToArray();
     }
 
     public ArterialOxygenationSample ReadAt(long sourceSimTimeNs)

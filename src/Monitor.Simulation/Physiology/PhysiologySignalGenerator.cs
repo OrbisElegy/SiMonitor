@@ -87,9 +87,25 @@ public sealed class PhysiologySignalGenerator
             _composition = EventWaveformComposition.Restore(new(state.Bands, []));
             _bands = _composition.CaptureState().Bands;
             state.Timeline.Plan.RateAdjustment?.ValidateBands(state.Timeline.Plan, _bands);
+            if (state.Timeline.Plan.CardiacRateClock is not null)
+            {
+                var plan = state.Timeline.Plan;
+                var reference = plan with { CardiacRateClock = null };
+                foreach (var band in _bands.Where(band => band.Trigger is PhysiologyCycleEventKind.AtrialElectrical or
+                    PhysiologyCycleEventKind.VentricularElectrical or PhysiologyCycleEventKind.PrematureAtrialElectrical or
+                    PhysiologyCycleEventKind.RetrogradeAtrialElectrical))
+                {
+                    bool ventricular = band.Trigger == PhysiologyCycleEventKind.VentricularElectrical;
+                    Int128 support = (Int128)band.DelayNs + band.DurationNs;
+                    Int128 referencePeriod = ventricular ? reference.VentricularPeriodNs : reference.AtrialPeriodNs;
+                    Int128 minimum = ventricular ? plan.MinimumVentricularPeriodNs : plan.MinimumAtrialPeriodNs;
+                    if (support > minimum * ((support + referencePeriod - 1) / referencePeriod))
+                    { throw new ArgumentException("PhysiologyRateClock.WaveformSupport"); }
+                }
+            }
             if (_bands.Any(b => b.EjectionIllustration is { } mode && mode != state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
             if (_bands.Any(b => b.AfBeatSelection is not null) && !AtrialFibrillationReference.IsPattern(state.Timeline.Plan.ConductionPattern)) { throw Invalid(); }
-            _lookbackNs = _bands.Max(band => checked(band.DelayNs + band.DurationNs));
+            _lookbackNs = _bands.Max(band => band.MaximumSupportNs);
         }
         if (state.History is null || state.History.Count > 512) { throw Invalid(); }
         _history = state.History.Select(s => new PhysiologySignalContinuation(s)).ToArray();
@@ -165,7 +181,17 @@ public sealed class PhysiologySignalGenerator
             .Select(s => s.Segment).ToList();
         if (boundary > from)
         {
-            history.Add(new(current.Timeline.Plan, _bands, _vascularPressurePlan, _plethRunoffPlan,
+            var pressure = _vascularPressurePlan;
+            if (pressure?.TargetCurves is { } targets)
+            {
+                VitalValueCurve Freeze(VitalValueCurve curve) => new(curve.InitialValue,
+                    curve.Changes.Where(change => change.StartSimTimeNs < boundary)
+                        .Append(new(boundary, 0, curve.At(boundary))).ToArray());
+                // Retired mechanical events keep their reservoir tails, but
+                // must not follow a future target belonging to the old source.
+                pressure = pressure with { TargetCurves = new(Freeze(targets.SystolicCentiMmHg), Freeze(targets.DiastolicCentiMmHg)) };
+            }
+            history.Add(new(current.Timeline.Plan, _bands, pressure, _plethRunoffPlan,
                 from, boundary, _active is null, _pressureBaselineCentiMmHg));
         }
         return Restore(definition with

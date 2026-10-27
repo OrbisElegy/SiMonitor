@@ -107,14 +107,14 @@ public static class PhysiologyIllustrationSource
                 flutter ? AtrialFlutterReference.CreateLeadIIBands(plan.VentricularConductionRatio) :
                 plan.ConductionPattern == AvConductionPattern.CompleteAvBlockVentricularIllustration
                     ? CompleteAvBlockVentricularReference.CreateLeadIIBands() : TextbookEcgReference.CreateBands(configuration.SeededRate?.Timing), 0),
-             configuration.ResolveRespiration().CreateChannel(plan, ChannelId(1), 0),
+             configuration.ResolveRespiration().CreateChannel(plan with { RespiratoryRateClock = null }, ChannelId(1), 0),
              new(plan, new(ChannelId(2), "AcqPleth125@1", 1, 1, 0, 1),
                 Array.Empty<EventWaveformBand>(), 0, PlethRunoff: fixedPerfusion?.Pleth ?? new(80_000_000, variablePerfusion ? 512_000_000 : PulseDuration(512_000_000), variablePerfusion ? 1250 : 1000, UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling)),
              fixedPerfusion?.Arterial.CreateChannel(plan, ChannelId(3), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(80_000_000, 240_000_000, 2_900_000_000, 8000, 1000, 30000,
                     Morphology: new(VascularPressureMorphologyKind.Arterial, variablePerfusion ? 600_000_000 : PulseDuration(600_000_000), 4000, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, IllustrateAfSystemicPulseDeficit: configuration.IllustrateAfSystemicPulseDeficit, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling).CreateChannel(plan, ChannelId(3), 0)
                 : new ArterialPulsePlan(80_000_000, PulseDuration(600_000_000), 80, 40).CreateChannel(plan, ChannelId(3), 0)),
-             configuration.ResolveCapnogram().CreateChannel(plan, ChannelId(4), 0),
+             configuration.ResolveCapnogram().CreateChannel(plan with { RespiratoryRateClock = null }, ChannelId(4), 0),
              fixedPerfusion?.Pulmonary.CreateChannel(plan, ChannelId(5), 0) ?? (configuration.UseVascularReservoir
                 ? new VascularPressurePlan(40_000_000, 200_000_000, 700_000_000, 1000, 500, 5000,
                     Morphology: new(VascularPressureMorphologyKind.PulmonaryArtery, variablePerfusion ? 640_000_000 : PulseDuration(640_000_000), 1500, MaximumPulseOverlap: variablePerfusion ? 2 : 1), UsePrematureBeatPerfusion: beatPerfusion, UseAtrialFibrillationPerfusion: fibrillation, UseConductedFlutterPerfusion: conductedFlutter, UseCardiacFillingPerfusion: cardiacFilling).CreateChannel(plan, ChannelId(5), 0)
@@ -157,11 +157,23 @@ public static class PhysiologyIllustrationSource
             channels[5] = ApplyVariation(channels[5], variation.PaAmplitudeCentiMmHg,
                 variation.SeedHex, "physiology.pressure.pulmonary", plan, ChannelId(5));
         }
+        PhysiologyScalarCurves.Apply(channels, configuration, plan);
         foreach (var (row, offset) in new[] { (3, abpZeroOffsetCentiMmHg), (5, paZeroOffsetCentiMmHg), (6, cvpZeroOffsetCentiMmHg) })
         { channels[row] = channels[row] with { PressureZeroOffsetCentiMmHg = offset }; }
         channels[0] = channels[0] with { EcgInterference = configuration.EcgInterference };
         channels[3] = channels[3] with { PressureMeasurement = configuration.PressureMeasurement };
         channels[2] = channels[2] with { PlethShape = configuration.PlethShape };
+        foreach (int row in new[] { 1, 4, 6 })
+        {
+            channels[row] = channels[row] with
+            {
+                Physiology = plan,
+                Bands = Array.AsReadOnly(channels[row].Bands.Select(band =>
+                    band.Trigger is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart
+                        ? band with { PhaseClock = plan.RespiratoryRateClock, PhaseClockFixedDelayNs = row == 4 && plan.RespiratoryRateClock is not null ? band.DelayNs : 0 }
+                        : band).ToArray())
+            };
+        }
         return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
     }
     private static PhysiologyWaveformChannelPlan ApplyVariation(PhysiologyWaveformChannelPlan channel, int amplitudeCentiMmHg,
@@ -170,7 +182,7 @@ public static class PhysiologyIllustrationSource
         if (amplitudeCentiMmHg == 0) { return channel; }
         if (!HasVentricularEjections(plan)) { return channel; }
         var pressure = channel.VascularPressure ?? throw new ArgumentException("Physiology.PressureVariationRequiresReservoir");
-        int permille = VascularPressureSource.SolveVariationAmplitude(plan, pressure, amplitudeCentiMmHg)
+        int permille = VascularPressureSource.SolveVariationAmplitude(plan with { CardiacRateClock = null }, pressure, amplitudeCentiMmHg)
             ?? throw new ArgumentException("Physiology.PressureVariationTooLarge");
         var varied = pressure with { Variation = new SeededVascularVariation(permille, seedHex, streamName) };
         try { return varied.CreateChannel(plan, channelId, channel.QualityFlags); }
@@ -187,7 +199,7 @@ public static class PhysiologyIllustrationSource
         var pressure = channel.VascularPressure;
         if (pressure?.Morphology is not { } morphology)
         { throw new ArgumentException("Physiology.PressureTargetRequiresReservoirMorphology"); }
-        var calibrationPlan = PacingReference.WithoutPulseDivision(plan);
+        var calibrationPlan = PacingReference.WithoutPulseDivision(plan with { CardiacRateClock = null });
         var solved = VascularPressureSource.SolveTarget(calibrationPlan, pressure, target.SystolicCentiMmHg, target.DiastolicCentiMmHg) ??
             throw new ArgumentException("Physiology.PressureTargetUnreachable");
         // Start at the diastolic target so the startup transient does not mask it.

@@ -46,7 +46,7 @@ internal sealed class PhysiologySignalContinuation
             var owned = _composition.CaptureState().Bands;
             segment = segment with { Bands = owned };
             _hasContinuousActivity = owned.Any(b => IsContinuousActivity(b.Trigger));
-            SupportNs = owned.Max(b => checked(b.DelayNs + b.DurationNs));
+            SupportNs = owned.Max(b => b.MaximumSupportNs);
         }
         Segment = segment;
     }

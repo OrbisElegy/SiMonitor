@@ -92,8 +92,14 @@ public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long Heart
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }
+    public PhysiologyRateClock? CardiacRateClock { get; init; }
+    public PhysiologyRateClock? RespiratoryRateClock { get; init; }
     // Irregular sources expose a conservative interval for pulse support and
     // indexed pressure bounds. Their event times come from their own visitor.
+    internal Int128 MinimumAtrialPeriodNs => CardiacRateClock is { } clock
+        ? clock.MinimumDuration(AtrialPeriodNs) : AtrialPeriodNs;
+    internal Int128 MinimumVentricularPeriodNs => CardiacRateClock is { } clock
+        ? clock.MinimumDuration(VentricularPeriodNs) : VentricularPeriodNs;
     internal Int128 AtrialPeriodNs => RateAdjustment is { } adjustment
         ? adjustment.MinimumPeriodNs(this, true) : ReferenceAtrialPeriodNs;
     internal Int128 VentricularPeriodNs => RateAdjustment is { } adjustment
@@ -229,6 +235,19 @@ public sealed class RegularPhysiologyTimeline
         { throw new PhysiologyTimelineException("SeededRhythm.UnsupportedPattern", nameof(state)); }
         PacingReference.Validate(plan);
         plan.RateAdjustment?.Validate(plan);
+        if (plan.CardiacRateClock is { } cardiacClock)
+        {
+            if (plan.EpochAnchorSimTimeNs != 0 || !CardiacRateAdjustment.Supports(plan) ||
+                plan.IndependentVentricularPeriodNs is not null ||
+                AtrialFlutterReference.IsPattern(plan.ConductionPattern) ||
+                cardiacClock.ReferencePeriodNs != (plan.RateAdjustment?.Rate.PeriodNs ?? plan.SeededRate?.PeriodNs ?? plan.HeartPeriodNs) ||
+                cardiacClock.RatePerMinute.MinimumValue < 30 || cardiacClock.RatePerMinute.MaximumValue > 180)
+            { throw new ArgumentException("PhysiologyRateClock.UnsupportedCardiacPlan", nameof(state)); }
+        }
+        if (plan.RespiratoryRateClock is { } respiratoryClock &&
+            (plan.EpochAnchorSimTimeNs != 0 || respiratoryClock.ReferencePeriodNs != plan.BreathPeriodNs ||
+             respiratoryClock.RatePerMinute.MinimumValue < 4 || respiratoryClock.RatePerMinute.MaximumValue > 60))
+        { throw new ArgumentException("PhysiologyRateClock.UnsupportedRespiratoryPlan", nameof(state)); }
         if (plan.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration)
         { SpontaneousRespirationSchedule.Validate(plan); }
         _plan = plan;
@@ -322,6 +341,19 @@ public sealed class RegularPhysiologyTimeline
         Action<PhysiologyCycleEvent> visitor, CancellationToken cancellationToken,
         ulong? cycleLimit = null, ulong? cycleResume = null, int cycleStride = 1)
     {
+        if (plan.RespiratoryRateClock is { } respiratoryClock &&
+            kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart)
+        {
+            respiratoryClock.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents,
+                visitor, cycleLimit, cycleResume, cycleStride, respiratory: true, cancellationToken);
+            return;
+        }
+        if (plan.CardiacRateClock is { } cardiacClock && CardiacRateAdjustment.IsTimedEvent(kind))
+        {
+            cardiacClock.Visit(plan, kind, offset, inclusiveSimTimeNs, exclusiveSimTimeNs, maximumEvents,
+                visitor, cycleLimit, cycleResume, cycleStride, respiratory: false, cancellationToken);
+            return;
+        }
         if (plan.RespiratoryPattern == RespiratoryPattern.SpontaneousIllustration &&
             kind is PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart)
         {

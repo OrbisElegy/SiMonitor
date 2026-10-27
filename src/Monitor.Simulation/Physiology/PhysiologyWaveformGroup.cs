@@ -15,6 +15,7 @@ public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiol
     WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags,
     VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
+    public WaveformAmplitudeCurve? AmplitudeCurve { get; init; }
     public SeededEcgInterference? EcgInterference { get; init; }
     public PressureMeasurementIllustration PressureMeasurement { get; init; }
     public PlethIllustration PlethShape { get; init; }
@@ -23,6 +24,7 @@ public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySi
     uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)
 {
     public IReadOnlyList<SensorWaveformIllustration> SensorIllustrations { get; init; } = [];
+    public IReadOnlyList<WaveformAmplitudeCurveSegment> AmplitudeCurves { get; init; } = [];
 }
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels,
     WaveformBlockAssemblerState Assembler);
@@ -32,14 +34,15 @@ public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long Sour
 public sealed class PhysiologyWaveformGroup
 {
     private readonly record struct Channel(Guid Id, PhysiologySignalGenerator Generator,
-        uint QualityFlags, int PressureZeroOffsetCentiMmHg, IReadOnlyList<SensorWaveformIllustration> SensorIllustrations);
+        uint QualityFlags, int PressureZeroOffsetCentiMmHg, IReadOnlyList<SensorWaveformIllustration> SensorIllustrations,
+        IReadOnlyList<WaveformAmplitudeCurveSegment> AmplitudeCurves);
     private Channel[] _channels;
     private WaveformBlockAssembler _assembler;
 
     private PhysiologyWaveformGroup(PhysiologyWaveformGroup source)
     {
         _channels = source._channels.Select(channel => new Channel(channel.Id, channel.Generator.Fork(),
-            channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg, channel.SensorIllustrations)).ToArray();
+            channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg, channel.SensorIllustrations, channel.AmplitudeCurves)).ToArray();
         _assembler = WaveformBlockAssembler.Restore(source._assembler.CaptureState());
     }
 
@@ -70,6 +73,9 @@ public sealed class PhysiologyWaveformGroup
             SensorWaveformIllustrations.Validate(item.SensorIllustrations, source.Clock.ProfileId,
                 source.Clock.EpochAnchorSimTimeNs, source.Clock.CursorSimTimeNs);
             var sensorIllustrations = Array.AsReadOnly(item.SensorIllustrations.ToArray());
+            WaveformAmplitudeCurves.Validate(item.AmplitudeCurves, source.Clock.ProfileId,
+                source.Clock.EpochAnchorSimTimeNs, source.Clock.CursorSimTimeNs);
+            var amplitudeCurves = Array.AsReadOnly(item.AmplitudeCurves.ToArray());
             WaveformBlockPlaneState? plane = assembly.Planes.SingleOrDefault(candidate => candidate.Configuration.ChannelId == item.ChannelId);
             if (plane is null || plane.Configuration.ProfileId != source.Clock.ProfileId ||
                 assembly.StreamEpoch != source.Clock.StreamEpoch || assembly.EpochAnchorSimTimeNs != source.Clock.EpochAnchorSimTimeNs ||
@@ -108,6 +114,7 @@ public sealed class PhysiologyWaveformGroup
                     : generator.PlethRunoff is { } runoff ? runoff.EvaluateAt(sample.SourceSimTimeNs)
                     : checked(composition!.EvaluateAt(sample.SourceSimTimeNs) +
                         (long)source.PressureBaselineCentiMmHg * FixedPointMath.Q32One);
+                value = WaveformAmplitudeCurves.At(amplitudeCurves, sample.SourceSimTimeNs)?.Apply(value, sample.SourceSimTimeNs) ?? value;
                 var illustration = SensorWaveformIllustrations.At(sensorIllustrations, sample.SourceSimTimeNs);
                 value = SensorWaveformIllustrations.Apply(value, sample.SourceSimTimeNs,
                     source.Clock.EpochAnchorSimTimeNs, illustration, generator);
@@ -115,7 +122,7 @@ public sealed class PhysiologyWaveformGroup
                 if (sample.NormalizedValue != expected || sample.QualityFlags != SensorWaveformIllustrations.Quality(item.QualityFlags, illustration, sample.SourceSimTimeNs))
                 { throw InvalidCheckpoint(); }
             }
-            _channels[index] = new(item.ChannelId, generator, item.QualityFlags, item.PressureZeroOffsetCentiMmHg, sensorIllustrations);
+            _channels[index] = new(item.ChannelId, generator, item.QualityFlags, item.PressureZeroOffsetCentiMmHg, sensorIllustrations, amplitudeCurves);
         }
     }
 
@@ -138,6 +145,7 @@ public sealed class PhysiologyWaveformGroup
             PhysiologySignalGenerator.Start(plan.Physiology, plan.Plane.ProfileId, streamEpoch, plan.Bands, plan.VascularPressure, plan.PlethRunoff, plan.PressureBaselineCentiMmHg).CaptureState(),
             plan.QualityFlags, plan.PressureZeroOffsetCentiMmHg)
         {
+            AmplitudeCurves = plan.AmplitudeCurve is null ? [] : [new(plan.Physiology.EpochAnchorSimTimeNs, plan.AmplitudeCurve)],
             SensorIllustrations = plan.PressureMeasurement == PressureMeasurementIllustration.Reference && plan.PlethShape == PlethIllustration.Reference && plan.EcgInterference is null
                 ? [] : [new(plan.Physiology.EpochAnchorSimTimeNs, plan.PressureMeasurement, plan.PlethShape) { EcgInterference = plan.EcgInterference }]
         }).ToArray();
@@ -160,6 +168,9 @@ public sealed class PhysiologyWaveformGroup
         var channels = _channels.Select((channel, index) => channel with
         {
             Generator = channel.Generator.ContinueWith(definition._channels[index].Generator.CaptureState()),
+            AmplitudeCurves = WaveformAmplitudeCurves.ContinueWith(channel.AmplitudeCurves,
+                WaveformAmplitudeCurves.At(definition._channels[index].AmplitudeCurves, long.MaxValue),
+                channel.Generator.CaptureState().Clock.CursorSimTimeNs, _assembler.NextBlockStartSimTimeNs),
             SensorIllustrations = SensorWaveformIllustrations.ContinueWith(channel.SensorIllustrations,
                 SensorWaveformIllustrations.At(definition._channels[index].SensorIllustrations, long.MaxValue),
                 channel.Generator.CaptureState().Clock.CursorSimTimeNs, _assembler.NextBlockStartSimTimeNs)
@@ -169,7 +180,7 @@ public sealed class PhysiologyWaveformGroup
 
     public PhysiologyWaveformGroupState CaptureState() => new(Array.AsReadOnly(_channels.Select(channel =>
         new PhysiologyWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)
-        { SensorIllustrations = channel.SensorIllustrations }).ToArray()),
+        { SensorIllustrations = channel.SensorIllustrations, AmplitudeCurves = channel.AmplitudeCurves }).ToArray()),
         _assembler.CaptureState());
 
     public static PhysiologyWaveformGroup Restore(PhysiologyWaveformGroupState state)
@@ -213,7 +224,9 @@ public sealed class PhysiologyWaveformGroup
                 // Apply sensor zero error after the true source, before wire quantization.
                 // Overflow rejects the whole trial; never silently clip pressure.
                 var illustration = SensorWaveformIllustrations.At(channel.SensorIllustrations, sample.Tick.SimTimeNs);
-                long valueQ32 = SensorWaveformIllustrations.Apply(sample.ValueQ32, sample.Tick.SimTimeNs,
+                long sourceValueQ32 = WaveformAmplitudeCurves.At(channel.AmplitudeCurves, sample.Tick.SimTimeNs)?.Apply(
+                    sample.ValueQ32, sample.Tick.SimTimeNs) ?? sample.ValueQ32;
+                long valueQ32 = SensorWaveformIllustrations.Apply(sourceValueQ32, sample.Tick.SimTimeNs,
                     epochAnchorSimTimeNs, illustration, channel.Generator, cancellationToken);
                 long measuredValue = (long)FixedPointMath.RoundDivideTiesToEven(
                     checked(valueQ32 + (long)channel.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), FixedPointMath.Q32One);

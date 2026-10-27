@@ -571,6 +571,14 @@ public static class LiveEcgIllustrationSource
 ```csharp
 public sealed record PhysiologyIllustrationConfiguration(int BreathPeriodMilliseconds, int InspirationMilliseconds, int RespAmplitudeCounts, int? Co2PlateauStartCentiMmHg = null, int Co2BaselineMmHg = 0, int Co2EndExpiratoryMmHg = 40, int Co2DeadSpaceMilliseconds = 125, int Co2RiseMilliseconds = 250, int Co2FallMilliseconds = 200, int Co2TransportDelayMilliseconds = 0, int Co2DispersionStepMilliseconds = 0, int InspiratoryPauseMilliseconds = 0, int ExpiratoryPauseMilliseconds = 0, int RespCardiacArtifactCounts = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, int? ActivityAfterBreaths = null, int? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, int? MechanicalAfterCycles = null, int? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, bool UseVascularReservoir = false, int? IndependentVentricularPeriodMilliseconds = null, int? IndependentVentricularOffsetMilliseconds = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr, EcgBundleBlockIllustration BundleBlock = EcgBundleBlockIllustration.Reference, bool IllustrateAfSystemicPulseDeficit = false, bool IllustrateAfAberrancy = false, bool Wpw = false, bool WpwNegativeV1 = false, bool ShortPr = false, bool NormalPrDelta = false, bool WpwSmallerDelta = false, bool ProlongedPrDelta = false, bool Svt = false, bool Vt = false, bool VtFusion = false, bool VtCapture = false, bool VtBidirectional = false, bool VtTwisting = false, bool Aivr = false, bool Ajr = false, bool Aar = false, bool SvtRbbb = false, bool SvtLbbb = false, bool AivrFusion = false, bool AivrCapture = false, bool AtrialEscape = false)
 {
+    public PhysiologyRateClock? CardiacRateClock { get; init; }
+    public PhysiologyRateClock? RespiratoryRateClock { get; init; }
+    public VitalValueCurve? AbpSystolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? AbpDiastolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? PaSystolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? PaDiastolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? CvpBaselineCentiMmHgCurve { get; init; }
+    public VitalValueCurve? Co2EndExpiratoryCentiMmHgCurve { get; init; }
     public SeededEcgInterference? EcgInterference { get; init; }
     public bool Dextrocardia { get; init; }
     public PacingIllustration? Pacing { get; init; }
@@ -1655,6 +1663,8 @@ public readonly record struct VentricularCyclePattern(int Length, ulong Included
 }
 public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long DelayNs, long DurationNs, IReadOnlyList<long> TableQ32, IReadOnlyList<EventWaveformPhasePoint>? PhasePoints = null, ulong? TriggerCycleLimit = null, ulong? TriggerCycleResume = null, RespiratoryPattern DepthPattern = RespiratoryPattern.Regular, IReadOnlyList<int>? ExpirationCycleGainsPermille = null, VentricularCyclePattern? VentricularCycles = null, AvConductionPattern? EjectionIllustration = null, AtrialFibrillationBeatSelection? AfBeatSelection = null)
 {
+    public PhysiologyRateClock? PhaseClock { get; init; }
+    public long PhaseClockFixedDelayNs { get; init; }
     public RegularPhysiologyPlan? AfTiming { get; init; }
     public SeededCardiacRate? CycleDurationRate { get; init; }
     public IReadOnlyList<int>? InspirationCycleGainsPermille { get; init; }
@@ -2029,12 +2039,14 @@ public sealed class PhysiologyWaveformGroupException(string reasonCode, string p
 }
 public sealed record PhysiologyWaveformChannelPlan(RegularPhysiologyPlan Physiology, WaveformBlockPlaneConfiguration Plane, IReadOnlyList<EventWaveformBand> Bands, uint QualityFlags, VascularPressurePlan? VascularPressure = null, PlethRunoffPlan? PlethRunoff = null, int PressureZeroOffsetCentiMmHg = 0, int PressureBaselineCentiMmHg = 0)
 {
+    public WaveformAmplitudeCurve? AmplitudeCurve { get; init; }
     public SeededEcgInterference? EcgInterference { get; init; }
     public PressureMeasurementIllustration PressureMeasurement { get; init; }
     public PlethIllustration PlethShape { get; init; }
 }
 public sealed record PhysiologyWaveformChannelState(Guid ChannelId, PhysiologySignalState Generator, uint QualityFlags, int PressureZeroOffsetCentiMmHg = 0)
 {
+    public IReadOnlyList<WaveformAmplitudeCurveSegment> AmplitudeCurves { get; init; }
     public IReadOnlyList<SensorWaveformIllustration> SensorIllustrations { get; init; }
 }
 public sealed record PhysiologyWaveformGroupState(IReadOnlyList<PhysiologyWaveformChannelState> Channels, WaveformBlockAssemblerState Assembler)
@@ -2301,6 +2313,8 @@ public enum AvConductionPattern
 }
 public sealed record RegularPhysiologyPlan(long EpochAnchorSimTimeNs, long HeartPeriodNs, long VentricularElectricalOffsetNs, long AtrialMechanicalOffsetNs, long VentricularMechanicalOffsetNs, long BreathPeriodNs, long InspirationDurationNs, long InspiratoryPauseNs = 0, long ExpiratoryPauseNs = 0, RespiratoryActivity RespiratoryActivity = RespiratoryActivity.Breathing, ulong? ActivityAfterBreaths = null, ulong? ActivityDurationBreaths = null, int VentricularConductionRatio = 1, CardiacActivity CardiacActivity = CardiacActivity.AtrialAndVentricular, bool VentricularMechanicalEnabled = true, ulong? MechanicalAfterCycles = null, ulong? MechanicalDurationCycles = null, int MechanicalEveryCycles = 1, long? IndependentVentricularPeriodNs = null, RespiratoryPattern RespiratoryPattern = RespiratoryPattern.Regular, int ConductedBeatsPerGroup = 1, AvConductionPattern ConductionPattern = AvConductionPattern.FixedPr)
 {
+    public PhysiologyRateClock? CardiacRateClock { get; init; }
+    public PhysiologyRateClock? RespiratoryRateClock { get; init; }
     public PacingIllustration? Pacing { get; init; }
     public PacingOutputSettings? PacingOutput { get; init; }
     public SeededCardiacRate? SeededRate { get; init; }
@@ -2593,6 +2607,7 @@ public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKi
 ```csharp
 public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs, long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg, int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1", VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false, SeededVascularVariation? Variation = null)
 {
+    public VascularPressureTargetCurves? TargetCurves { get; init; }
     public const string EvidenceId = "VascularPressureRcIllustration@1";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
@@ -2860,4 +2875,57 @@ public sealed class SeededEcgInterference : IEquatable<SeededEcgInterference>
     public override bool Equals(object? obj);
     public override int GetHashCode();
 }
+```
+
+
+## Physiology/VitalValueCurve.cs
+
+源码：[VitalValueCurve.cs](../../../src/Monitor.Simulation/Physiology/VitalValueCurve.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record VitalValueChange(long StartSimTimeNs, long DurationNs, int TargetValue);
+public sealed class VitalValueCurve
+{
+    public int InitialValue { get; }
+    public IReadOnlyList<VitalValueChange> Changes { get; }
+    public int MinimumValue { get; }
+    public int MaximumValue { get; }
+    public VitalValueCurve(int initialValue, IReadOnlyList<VitalValueChange> changes);
+    public int At(long sourceTimeNs);
+}
+```
+
+
+## Physiology/PhysiologyRateClock.cs
+
+源码：[PhysiologyRateClock.cs](../../../src/Monitor.Simulation/Physiology/PhysiologyRateClock.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed class PhysiologyRateClock
+{
+    public long ReferencePeriodNs { get; }
+    public VitalValueCurve RatePerMinute { get; }
+    public PhysiologyRateClock(long referencePeriodNs, VitalValueCurve ratePerMinute);
+    public long ReferenceAt(long sourceTimeNs);
+    public long SourceAt(long referenceTimeNs);
+}
+```
+
+
+## Physiology/VascularPressureTargetCurves.cs
+
+源码：[VascularPressureTargetCurves.cs](../../../src/Monitor.Simulation/Physiology/VascularPressureTargetCurves.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record VascularPressureTargetCurves(VitalValueCurve SystolicCentiMmHg, VitalValueCurve DiastolicCentiMmHg);
+```
+
+
+## Physiology/WaveformAmplitudeCurve.cs
+
+源码：[WaveformAmplitudeCurve.cs](../../../src/Monitor.Simulation/Physiology/WaveformAmplitudeCurve.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public sealed record WaveformAmplitudeCurve(VitalValueCurve Values, int ReferenceCentiMmHg, bool ShiftBaseline, int BaselineCentiMmHg = 0);
+public sealed record WaveformAmplitudeCurveSegment(long FromSimTimeNs, WaveformAmplitudeCurve? Curve);
 ```

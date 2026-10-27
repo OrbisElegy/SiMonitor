@@ -42,7 +42,7 @@ public sealed class PlethRunoffSource
         _joinIndex = plan.IncludeNotch ? 72 : 88;
         Int128 join = (Int128)plan.PulseDurationNs * _joinIndex / 128;
         Int128 support = join + 64 * (Int128)plan.TailTimeConstantNs;
-        Int128 interval = physiology.VentricularPeriodNs * physiology.MechanicalEveryCycles;
+        Int128 interval = physiology.MinimumVentricularPeriodNs * physiology.MechanicalEveryCycles;
         if (join <= 0 || plan.UsePrematureBeatPerfusion && (Int128)plan.PulseDurationNs * 3 / 4 * _joinIndex / 128 <= 0 || support + plan.TransitDelayNs > long.MaxValue ||
             (support + interval - 1) / interval > MaximumEventCount) { throw Invalid(); }
         SupportNs = (long)support;

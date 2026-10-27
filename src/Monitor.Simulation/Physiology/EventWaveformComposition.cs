@@ -34,6 +34,11 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
     // It never creates expired gas when the respiratory contribution is zero.
     public long CardiogenicRippleDurationNs { get; init; }
     public int CardiogenicRipplePermille { get; init; }
+    public PhysiologyRateClock? PhaseClock { get; init; }
+    public long PhaseClockFixedDelayNs { get; init; }
+    internal long MaximumSupportNs => PhaseClock is { } clock
+        ? checked(PhaseClockFixedDelayNs + clock.MaximumDuration(DelayNs - PhaseClockFixedDelayNs + DurationNs))
+        : checked(DelayNs + DurationNs);
 }
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
     IReadOnlyList<PhysiologyCycleEvent> Events);
@@ -77,6 +82,10 @@ public sealed class EventWaveformComposition
                 (band.TriggerCycleResume is { } resume && (band.TriggerCycleLimit is null || resume <= band.TriggerCycleLimit.Value)) ||
                 band.TableQ32 is null || band.TableQ32.Count is < 4 or > 65_536 ||
                 !BitOperations.IsPow2((uint)band.TableQ32.Count)) { throw Invalid(); }
+            if (band.PhaseClockFixedDelayNs < 0 || band.PhaseClockFixedDelayNs > band.DelayNs ||
+                band.PhaseClock is not null && band.Trigger is not (PhysiologyCycleEventKind.InspirationStart or PhysiologyCycleEventKind.ExpirationStart))
+            { throw Invalid(); }
+            _ = band.MaximumSupportNs;
             if (band.EjectionIllustration is { } perfusion &&
                 (band.Trigger != PhysiologyCycleEventKind.VentricularMechanical || band.ExpirationCycleGainsPermille is not null || !PrematureBeatPerfusion.IsPattern(perfusion))) { throw Invalid(); }
             if (band.AfBeatSelection is { } af && (!Enum.IsDefined(af) ||
@@ -232,6 +241,13 @@ public sealed class EventWaveformComposition
                 var shape = band.RespiratoryCycleShapes?[slot];
                 long delay = shape?.DelayNs ?? band.DelayNs;
                 long elapsed = simTimeNs - item.SimTimeNs - delay;
+                if (band.PhaseClock is { } phaseClock)
+                {
+                    long physical = simTimeNs - band.PhaseClockFixedDelayNs;
+                    if (physical < item.SimTimeNs) { continue; }
+                    elapsed = checked(phaseClock.ReferenceAt(physical) - phaseClock.ReferenceAt(item.SimTimeNs) -
+                        (delay - band.PhaseClockFixedDelayNs));
+                }
                 long duration = shape?.DurationNs ?? (band.CycleDurationRate is { } rate ? rate.FollowingIntervalNs(item.CycleIndex) :
                     band.EjectionIllustration is { } durationMode ? PrematureBeatPerfusion.DurationNs(durationMode, item.CycleIndex, band.DurationNs) : band.DurationNs);
                 if (elapsed < 0 || elapsed >= duration) { continue; }

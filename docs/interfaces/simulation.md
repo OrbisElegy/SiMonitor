@@ -484,7 +484,8 @@ response 必须适配 physiology。`Integrate` 最多 60 s / 4096 事件，返�
 历史最多 1024 点，覆盖 8.184 s；`ReadAt` 只读且可做显式线性插值，不能推进源或用最新状态代替缺失历史。
 `ChangeVentilation` 只接受 `[SourceSimTimeNs, SourceSimTimeNs + 8 ms)` 的时间，返回实际生效边界：
 当前网格点或下一个尚未开始的网格点。更晚修改保留较早尚未积分的修改；同一生效点以新定义替换。
-`ChangeTransport` 要求恰好当前源网格点，保留现有储库并排队替换 transport；`Fork()` 可用于上层整体事务。
+`ChangeTransport` 接受同样的时间区间与生效网格规则，保留现有储库和历史并排队替换 transport；
+治疗分支的 T 保持实际治疗时刻，仅输运积分按网格生效。`Fork()` 可用于上层整体事务。
 实时源目前没有公开完整 `CaptureState/Restore`，`Snapshot` 是观测值，不能据此恢复待生效修改和全部历史。
 
 [SampledArterialOxygenation](../../src/Monitor.Simulation/Physiology/ArterialOxygenationSource.cs)
@@ -598,3 +599,25 @@ SplitMix64 finalizer 按源时间索引控制点和毛刺窗口。基线使用�
 非 ECG 波形或生理事件。干扰不预先强制标为无效，检测器按真实采样判断。
 转复到窦性参考保留干扰设置。桌面数值写入既有生成器偏好；旧文件缺少这些
 字段时恢复关闭状态，随机种子沿用生命体征设置。
+
+
+## 时间线体征曲线
+
+`VitalValueCurve(initialValue, changes)` 复制并按开始时间稳定排序 `VitalValueChange`，
+其时间均为源时间 ns；`At(sourceTimeNs)` 用整数 ties-to-even 插值得到目标值。
+同一标量后来的变化接替前一变化，未到触发点保持之前的值。曲线独立于推进批大小和墙钟。
+桌面会话负责将患者相对时间加上启动预热偏移，不把源时间偏移暴露给作者。
+
+`PhysiologyRateClock(referencePeriodNs, ratePerMinute)` 将速率曲线积分为连续参考相位，
+再将原始事件时刻映射回实际源时间；采样时钟和事件序号保持原有语义。
+心电电／机械延迟与波形宽度仍使用作者时间，呼吸波形与通气体积使用相同的呼吸相位。
+`PhysiologyIllustrationConfiguration.CardiacRateClock` 与 `RespiratoryRateClock` 经
+`ResolvePlan()` 进入生成器；不接受的模板组合在建源阶段拒绝。
+
+压力曲线由配置的 `AbpSystolicCentiMmHgCurve`／`AbpDiastolicCentiMmHgCurve`、
+`PaSystolicCentiMmHgCurve`／`PaDiastolicCentiMmHgCurve` 成对提供，准备各端点的压力源参数，
+在采集时插值。既有缺失射血、机械活动中止、灌注变化和压力衰减继续生效；
+压力目标仍是名义节律下的作者输入，不覆盖根据样本得出的测量值。
+`CvpBaselineCentiMmHgCurve` 改变 CVP 源基线；`Co2EndExpiratoryCentiMmHgCurve`
+改变呼气气体波形的幅度，保留呼吸暂停及零气流时的原有语义。
+曲线与相位时钟属于内存源定义，尚无独立的网络或二进制 checkpoint 版本。

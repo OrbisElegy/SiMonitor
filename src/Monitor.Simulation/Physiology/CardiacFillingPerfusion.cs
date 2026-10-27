@@ -69,7 +69,7 @@ public static class CardiacFillingPerfusion
         if (!Supports(plan)) { throw new ArgumentException("CardiacFilling.UnsupportedPlan", nameof(plan)); }
         plan = PacingReference.WithoutPulseDivision(plan);
         long nonFillingNs = ResolveNonFillingDuration(plan);
-        if (plan.RateAdjustment is not null || plan.Pacing is not null)
+        if (plan.RateAdjustment is not null || plan.Pacing is not null || plan.CardiacRateClock is not null)
         {
             Int128 adjustedCurrentNs = MechanicalTimeNs(plan, cycleIndex);
             long adjustedIntervalNs = PrecedingIntervalNs(plan, cycleIndex);
@@ -155,6 +155,12 @@ public static class CardiacFillingPerfusion
             return (long)Int128.Min(ReferencePeriodNs, MechanicalTimeNs(plan, cycleIndex) - MechanicalTimeNs(plan, index));
         }
         if (cycleIndex > 0) { return ReferencePeriodNs; }
+        if (plan.CardiacRateClock is { } clock)
+        {
+            var reference = plan with { CardiacRateClock = null };
+            return (long)Int128.Min(ReferencePeriodNs,
+                clock.SourceAt(PrecedingIntervalNs(reference, cycleIndex)));
+        }
         if (plan.RateAdjustment is { } adjustment)
         { return (long)Int128.Min(ReferencePeriodNs, adjustment.Map(plan, false, plan.IndependentVentricularPeriodNs ?? plan.HeartPeriodNs)); }
         if (plan.SeededRate is { } seeded) { return seeded.PrecedingIntervalNs(cycleIndex); }
@@ -166,6 +172,11 @@ public static class CardiacFillingPerfusion
 
     internal static Int128 MechanicalTimeNs(RegularPhysiologyPlan plan, ulong index)
     {
+        if (plan.CardiacRateClock is { } clock)
+        {
+            Int128 reference = MechanicalTimeNs(plan with { CardiacRateClock = null }, index) - plan.VentricularMechanicalOffsetNs;
+            return (Int128)clock.SourceAt(checked((long)reference)) + plan.VentricularMechanicalOffsetNs;
+        }
         if (plan.Pacing is { } pacing)
         {
             Int128 cycle = pacing is PacingIllustration.VentricularOversensing or PacingIllustration.IntermittentVentricularNoncapture

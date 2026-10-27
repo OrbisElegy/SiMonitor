@@ -86,6 +86,12 @@ public sealed record PhysiologyIllustrationConfiguration(
     public PressureMeasurementIllustration PressureMeasurement { get; init; }
     public PlethIllustration PlethShape { get; init; }
     public int CvpBaselineCentiMmHg { get; init; } = 600;
+    public VitalValueCurve? AbpSystolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? AbpDiastolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? PaSystolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? PaDiastolicCentiMmHgCurve { get; init; }
+    public VitalValueCurve? CvpBaselineCentiMmHgCurve { get; init; }
+    public VitalValueCurve? Co2EndExpiratoryCentiMmHgCurve { get; init; }
     // Optional pressure targets replace the pulse factor of the same channel.
     public VascularPressureTarget? AbpTarget { get; init; }
     public VascularPressureTarget? PaTarget { get; init; }
@@ -95,6 +101,8 @@ public sealed record PhysiologyIllustrationConfiguration(
     public SeededCardiacRate? SeededRate { get; init; }
     public CardiacRateAdjustment? RateAdjustment { get; init; }
     public SeededRhythmSchedule? RhythmSchedule { get; init; }
+    public PhysiologyRateClock? CardiacRateClock { get; init; }
+    public PhysiologyRateClock? RespiratoryRateClock { get; init; }
     public static PhysiologyIllustrationConfiguration Default { get; } = new(3750, 1875, 1000, UseVascularReservoir: true);
 
     public static PhysiologyIllustrationConfiguration SinusArrhythmiaPreset { get; } = Default with { ConductionPattern = AvConductionPattern.SinusArrhythmiaIllustration };
@@ -159,7 +167,9 @@ public sealed record PhysiologyIllustrationConfiguration(
         if (Co2DispersionStepMilliseconds is < 0 or > 500)
         { throw new ArgumentException("PhysiologyDemo.InvalidCo2Dispersion"); }
         return new(Co2DeadSpaceMilliseconds * 1_000_000L, Co2RiseMilliseconds * 1_000_000L,
-            Co2FallMilliseconds * 1_000_000L, Co2BaselineMmHg, Co2EndExpiratoryMmHg, Co2PlateauStartCentiMmHg, Co2TransportDelayMilliseconds * 1_000_000L, Co2DispersionStepMilliseconds * 1_000_000L)
+            Co2FallMilliseconds * 1_000_000L, Co2BaselineMmHg,
+            Co2EndExpiratoryCentiMmHgCurve is not null && Co2EndExpiratoryMmHg == Co2BaselineMmHg
+                ? Co2BaselineMmHg + 1 : Co2EndExpiratoryMmHg, Co2PlateauStartCentiMmHg, Co2TransportDelayMilliseconds * 1_000_000L, Co2DispersionStepMilliseconds * 1_000_000L)
         { SeededPressure = SeededCo2, Illustration = CapnogramIllustration };
     }
 
@@ -179,6 +189,16 @@ public sealed record PhysiologyIllustrationConfiguration(
 
     public RegularPhysiologyPlan ResolvePlan()
     {
+        if (CardiacRateClock is not null || RespiratoryRateClock is not null)
+        {
+            var dynamicPlan = (this with { CardiacRateClock = null, RespiratoryRateClock = null }).ResolvePlan() with
+            {
+                CardiacRateClock = CardiacRateClock,
+                RespiratoryRateClock = RespiratoryRateClock
+            };
+            _ = RegularPhysiologyTimeline.Start(dynamicPlan);
+            return dynamicPlan;
+        }
         if (!Enum.IsDefined(PressureMeasurement) || !Enum.IsDefined(PlethShape))
         { throw new ArgumentException("PhysiologyDemo.InvalidSensorIllustration"); }
         if (Dextrocardia && (Pacing is not null || PacingOutput is not null || ConductionPattern != AvConductionPattern.FixedPr || CardiacActivity != CardiacActivity.AtrialAndVentricular ||

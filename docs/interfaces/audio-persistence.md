@@ -332,7 +332,7 @@ path 为调用者指定路径，Save 规范化成绝对路径并创建父目录�
 存储只包含显示/报警/声音配置和可选生成器编辑输入，不保存波形状态、活动报警、测试 notice。
 Sound.HeartbeatEnabled 控制心搏音；输出随窗口启动，主音量与静音不关闭播放服务。
 
-文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；读写共用 65536 bytes 上限、最大深度 8。
+文件为 UTF-8 JSON，属性名大小写沿用 C# 名称，缩进输出；读写共用 8388608 bytes 上限、最大深度 16。
 未配置字符串枚举 converter，普通 enum 属性以整数表示；字典键按 System.Text.Json 的键表示规则。
 未知属性拒绝，构造器必需参数必须存在。顶层必需 Version/Skin/Slots/PaperLayout，slot 必需
 Channel/Automatic/Minimum/Maximum/Speed；Speed 为 0.1 mm/s，合法值 125/250/500。
@@ -346,14 +346,29 @@ PaperLayout 仅 0 或 1；它在基础设施层是索引，具体版式名称由
 | 3 | Alarms、Sound 必须非空 |
 | 4 | Alarms、Sound、Generator 必须非空 |
 | 5–15 | Alarms、Sound 必须非空；Generator 属性必须出现，值允许 null |
-| 16–18 | 延续 5–15 的规则，并要求非空 Defibrillator |
+| 16–20 | 延续 5–15 的规则，并要求非空 Defibrillator |
 
-Save 总是写 Version=18；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
+Save 总是写 Version=20；缺省 Alarms/Sound 用各自 Default，Generator=null 明确写入文件。
 可选 `MonitorEcgLead` 保存普通监护 ECG 行的显示导联（`EcgLead` 枚举，0–11），缺省为 II；
 非法枚举按无效偏好处理。工具栏选择仅保存此显示项，不应用或保存尚未生效的生成器草稿。
 Defibrillator 保存 EnergyStepsJoules、Waveform、ChargeDurationMilliseconds、AutoDisarmSeconds
 和 EcgRecoveryMilliseconds（后者缺省为 1000 ms），
 Load／Save 验证并复制档位；版本 1–15 缺少此项时采用 Generic 默认值。
+版本 20 增加顶层 `PatientTimelines`：`PatientTimelineLibrary` 保存最多 16 个完整文件、
+`SelectedFileId` 与 `Enabled`，不依赖是否已有 Generator。每个 `PatientTimelineFile` 保存稳定 Id、
+Name 和 Program；重复 ID、缺失选择或无效图均拒绝。旧偏好适配为单一文件并保持启用。
+此字段优先于 Generator 的旧时间线字段，其他生成器设置仍由 Generator 保存。
+独立 `.simtimeline` 文件使用 `PatientTimelineFileFormat`，Format 为 `simonitor.patient-timeline`、
+Version 为 1，Timeline 为完整文件；最大 1048576 bytes，最大深度 16，未知属性和版本拒绝。
+只交换作者数据，导入不会恢复运行状态或自动启用时间线。
+版本 19 增加 `Generator.TimelineProgram`，保存初始时间线 ID、命名时间线、治疗权限与分支目标，
+每条时间线的事件包括名称、相对时间、变化时长、体征目标、模板选择和通气状态。
+时间线的可选 `InitialState` 保存起点体征、模板与通气状态；缺少该字段的旧文件继续继承生成设置或分支进入前状态。
+最多 16 条时间线、总计 256 项事件。`Generator.PatientTimeline` 保留初始时间线的旧平面列表；
+缺少 TimelineProgram 的旧文件由桌面将平面列表适配为主时间线，已有 Program 时优先使用完整计划。
+只保存作者草稿，不保存当前分支、治疗状态、执行游标或活动渐变。
+`Generator.ManualVitals` 同时保存起始 NIBP、温度和自定义读数；旧文件省略时保留桌面默认值，
+避免重启后丢失手工体征渐变所需的起点。时间与参数校验见[患者时间线](desktop-tools.md#患者时间线)。
 版本 17 的逐模板 ElectricalConversions 增加 PostShockPauseMilliseconds；缺省或旧文件为 0，
 不额外模拟真实停顿。运行时伪迹、储能与待恢复序列均不持久化。
 所有提供的 Alarms/Sound/Generator 在 Load 和 Save 时调用 Validate，显示 slot/range 也通过配置构造校验。

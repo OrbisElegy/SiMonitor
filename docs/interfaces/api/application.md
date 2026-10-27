@@ -1792,6 +1792,9 @@ public sealed record MonitorGeneratorPreferences(int Ecg, string EcgName, int Re
     public OxygenationEditorPreferences? Oxygenation { get; init; }
     public EcgAdvancedPreferences? EcgAdvanced { get; init; }
     public void Validate();
+    public IReadOnlyList<PatientTimelineEvent> PatientTimeline { get; init; }
+    public PatientTimelineProgram? TimelineProgram { get; init; }
+    public ManualVitalSigns? ManualVitals { get; init; }
 }
 ```
 
@@ -1851,7 +1854,10 @@ public enum PreviewRecordEventKind
     NibpStarted,
     NibpCompleted,
     NibpCancelled,
-    OperatorMarked
+    OperatorMarked,
+    PatientTimelineEvent,
+    PatientTimelineBranchEntered,
+    PatientTimelineBranchRejected
 }
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);
 public sealed record MonitorPrintSample(long TimeNs, double Microvolts);
@@ -2277,7 +2283,8 @@ public enum ElectricalConversionOutcome
     WrongMode,
     EnergyTooLow,
     SourceChangePending,
-    DuplicateDelivery
+    DuplicateDelivery,
+    TimelineDisabled
 }
 public sealed record ElectricalConversionSettings(bool Enabled, int MonophasicThresholdJoules, int BiphasicThresholdJoules)
 {
@@ -2333,7 +2340,7 @@ public static class EcgPacingPermissions
 }
 ```
 
-`LocalMonitorPreviewSession.PacingAllowed` 来自当前生效模板的 `EcgElectricalTherapyProfile`，
+`LocalMonitorPreviewSession.PacingAllowed` 同时要求当前时间线允许起搏，以及当前生效模板的 `EcgElectricalTherapyProfile` 许可，
 缺少 profile／许可或模板未登记时为 false。`SchedulePacing` 在状态发布前拒绝，抛出
 `InvalidOperationException("Pacing.TemplateDisabled")`；已有起搏的 `StopPacing` 不检查启动许可。
 待生效源的许可在源切换边界一起发布。此许可只控制监护起搏命令，不阻止直接播放起搏教学模板。
@@ -2422,3 +2429,148 @@ public sealed record PressureTransducerLimits(int AbpMinimumCentiMmHg = -5000, i
     public LiveMeasurementSnapshot Apply(LiveMeasurementSnapshot snapshot);
 }
 ```
+
+
+## Presentation/PatientTimeline.cs
+
+源码：[PatientTimeline.cs](../../../src/Monitor.Application/Presentation/PatientTimeline.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record PatientTimelineTreatmentPolicy(bool AllowShock = true, bool AllowPacing = true,
+    string? ShockSuccessTimelineId = null, string? ShockFailureTimelineId = null, string? PacingTimelineId = null)
+{
+    public void Validate();
+}
+public sealed record PatientTimelineDefinition(string Id, string Name, IReadOnlyList<PatientTimelineEvent> Events,
+    PatientTimelineTreatmentPolicy Treatment)
+{
+    public PatientTimelineEvent? InitialState { get; init; }
+    public void Validate();
+}
+public sealed record PatientTimelineProgram(string InitialTimelineId, IReadOnlyList<PatientTimelineDefinition> Timelines)
+{
+    public const int MaximumTimelines = 16;
+    public const int MaximumEvents = 256;
+    public void Validate();
+    public PatientTimelineProgram Snapshot();
+}
+public sealed record PatientVitalTargets
+{
+    public int? HeartRateBpm { get; init; }
+    public int? RespiratoryRatePerMinute { get; init; }
+    public int? SaturationMilliPercent { get; init; }
+    public int? EtCo2MmHg { get; init; }
+    public VascularPressureTarget? Abp { get; init; }
+    public VascularPressureTarget? Pa { get; init; }
+    public int? CvpCentiMmHg { get; init; }
+    public ManualNibp? Nibp { get; init; }
+    public int? TemperatureDeciCelsius { get; init; }
+    public bool IsEmpty { get; }
+    public void Validate();
+}
+public sealed record PatientTimelineSource(PhysiologyIllustrationConfiguration Configuration, EcgElectricalTherapyProfile? ElectricalTherapy);
+public enum PatientTimelineTrigger { TimelineTime, AfterPrevious, Manual }
+public sealed record PatientTimelineEvent(string Name, long StartTimeNs, long DurationNs, PatientVitalTargets Targets)
+{
+    public const long TimeStepNs = 200_000_000;
+    public const long MaximumTimeNs = 3_600_000_000_000;
+    public const int MaximumEvents = 64;
+    public string? EcgTemplateId { get; init; }
+    public int? RespirationTemplate { get; init; }
+    public int? EjectionTemplate { get; init; }
+    public int? PlethTemplate { get; init; }
+    public int? CapnogramTemplate { get; init; }
+    public VentilationTransportPlan? Ventilation { get; init; }
+    public PatientTimelineTreatmentPolicy? Treatment { get; init; }
+    public PatientTimelineTrigger Trigger { get; init; }
+    public bool ChangesTemplate { get; }
+    public void Validate();
+    public static IReadOnlyList<PatientTimelineEvent> Snapshot(IReadOnlyList<PatientTimelineEvent> events);
+}
+```
+
+
+## Presentation/LocalMonitorPreviewSession.PatientTimeline.cs
+
+源码：[LocalMonitorPreviewSession.PatientTimeline.cs](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.PatientTimeline.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed partial class LocalMonitorPreviewSession
+{
+    public IReadOnlyList<PatientTimelineEvent> PatientTimeline { get; }
+    public int PatientTimelineTriggeredCount { get; }
+    public bool PatientTimelineStopped { get; }
+    public void StopPatientTimeline();
+    public bool PatientTimelineCompleted { get; }
+    public void ConfigurePatientTimeline(IReadOnlyList<PatientTimelineEvent> events, IReadOnlyList<PatientTimelineSource?>? templateSources = null, RealtimeOxygenationConfiguration? oxygenationModel = null);
+}
+```
+
+## Presentation/LocalMonitorPreviewSession.TimelineProgram.cs
+
+源码：[LocalMonitorPreviewSession.TimelineProgram.cs](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.TimelineProgram.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed partial class LocalMonitorPreviewSession
+{
+    public string? CurrentTimelineId { get; }
+    public string? CurrentTimelineName { get; }
+    public ulong TimelineGeneration { get; }
+    public long TimelineOriginTimeNs { get; }
+    public string? TimelineBranchError { get; }
+    public string? TimelineBranchErrorTimelineName { get; }
+    public PatientTimelineTreatmentPolicy? CurrentTimelineTreatment { get; }
+    public bool ShockAllowed { get; }
+    public void ConfigurePatientTimelineProgram(PatientTimelineProgram program,
+        IReadOnlyDictionary<string, IReadOnlyList<PatientTimelineSource?>>? templateSources = null,
+        RealtimeOxygenationConfiguration? oxygenationModel = null,
+        IReadOnlyDictionary<string, PatientTimelineSource?>? initialSources = null);
+}
+```
+
+主线从会话开始计时；治疗分支从实际生效时刻按 T+ 计时。分叉继承当前患者状态与会话历史，
+替换原时间线后续事件。`CurrentTimelineTreatment` 返回进入时间线的初始策略或最近已执行节点的 `Treatment`，
+不会读取尚未执行节点的规则；节点的空 `Treatment` 继承当前策略，非空策略在该节点开始时整体替换。
+`PatientTimelineProgram.Snapshot()` 同时校验时间线初始路线与全部节点路线引用。
+`InitialState` 可选，使用事件的体征、模板和通气字段，但要求开始与持续时间均为零、
+触发方式为 `TimelineTime` 且 `Treatment` 为空；治疗规则仍使用时间线的 `Treatment`。
+主线起点在配置时生效，分支起点在实际进入时生效；未指定的项目继承当前状态。
+起点不进入 `Events`，不占用触发计数或手动节点索引；模板源通过 `initialSources` 按时间线 ID 单独传入。
+治疗许可与三类分支规则见[患者时间线](../desktop-tools.md#患者时间线)。
+
+## Presentation/LocalMonitorPreviewSession.TimelineNodes.cs
+
+源码：[LocalMonitorPreviewSession.TimelineNodes.cs](../../../src/Monitor.Application/Presentation/LocalMonitorPreviewSession.TimelineNodes.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed partial class LocalMonitorPreviewSession
+{
+    public int? WaitingPatientTimelineEventIndex { get; }
+    public PatientTimelineEvent? WaitingPatientTimelineEvent { get; }
+    public bool TriggerPatientTimelineManualEvent(ulong expectedTimelineGeneration, int expectedEventIndex);
+}
+```
+
+手动节点进入保留会话时间、历史与时间线代次，并把 `TimelineOriginTimeNs` 更新为进入时刻。
+调用方传入展示等待点时捕获的代次和索引；目标已离开或重复请求返回 `false`，不会触发其他节点。
+准备不兼容的后续片段时抛出校验异常，原等待点及源状态保持不变。
+
+## Presentation/PatientTimelineFile.cs
+
+源码：[PatientTimelineFile.cs](../../../src/Monitor.Application/Presentation/PatientTimelineFile.cs) · 命名空间：`Monitor.Application.Presentation`
+
+```csharp
+public sealed record PatientTimelineFile(string Id, string Name, PatientTimelineProgram Program)
+{
+    public PatientTimelineFile Snapshot();
+}
+public sealed record PatientTimelineLibrary(string SelectedFileId, bool Enabled, IReadOnlyList<PatientTimelineFile> Files)
+{
+    public const int MaximumFiles = 16;
+    public PatientTimelineLibrary Snapshot();
+}
+```
+
+快照验证完整计划、文件身份与当前选择并复制集合。`StopPatientTimeline()` 不推进会话时间，
+冻结已编译的体征变化、停止后续节点与治疗分支，并使旧的手动进入令牌失效；再次调用无额外效果。
+恢复运行需新会话重新配置。

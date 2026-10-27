@@ -17,7 +17,8 @@ public enum ElectricalConversionOutcome
     WrongMode,
     EnergyTooLow,
     SourceChangePending,
-    DuplicateDelivery
+    DuplicateDelivery,
+    TimelineDisabled
 }
 
 // Authored deterministic teaching response, not a clinical energy recommendation.

@@ -56,7 +56,7 @@ internal static class DisplayPreferenceSpecifications
         {
             Generator = preferences.Generator! with
             {
-                Numbers = new Dictionary<string, decimal?> { [new string('x', 65536)] = 1 }
+                Numbers = new Dictionary<string, decimal?> { [new string('x', 8_388_608)] = 1 }
             }
         };
         oversized.Generator.Validate();
@@ -73,7 +73,7 @@ internal static class DisplayPreferenceSpecifications
         var store = new DisplayPreferenceStore(path);
         Check.That(store.Save(new(MonitorDisplayConfiguration.Default(), 0)), "boundary fixture saves");
         byte[] original = File.ReadAllBytes(path);
-        byte[] atLimit = Enumerable.Repeat((byte)' ', 65536).ToArray();
+        byte[] atLimit = Enumerable.Repeat((byte)' ', 8_388_608).ToArray();
         original.CopyTo(atLimit, 0);
         File.WriteAllBytes(path, atLimit);
         _ = store.Load(out bool rejected);

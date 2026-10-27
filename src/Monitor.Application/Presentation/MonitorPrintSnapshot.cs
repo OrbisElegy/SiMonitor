@@ -15,7 +15,10 @@ public enum PreviewRecordEventKind
     NibpStarted,
     NibpCompleted,
     NibpCancelled,
-    OperatorMarked
+    OperatorMarked,
+    PatientTimelineEvent,
+    PatientTimelineBranchEntered,
+    PatientTimelineBranchRejected
 }
 
 public sealed record PreviewRecordEvent(long TimeNs, PreviewRecordEventKind Kind, string Detail);

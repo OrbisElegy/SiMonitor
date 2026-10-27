@@ -21,9 +21,10 @@ public sealed partial class LocalMonitorPreviewSession
     private RealtimeOxygenationConfiguration? _realtimeConfiguration;
     private PhysiologyIllustrationConfiguration? _beforePacing;
     public PacingIllustration? ActivePacing => _beforePacing is null ? null : _configuration.Pacing;
-    public bool PacingAllowed => ElectricalTherapy is { PacingAllowed: true } profile &&
+    public bool PacingAllowed => CurrentTimelineTreatment?.AllowPacing != false && ElectricalTherapy is { PacingAllowed: true } profile &&
         EcgPacingPermissions.TemplateIds.Contains(profile.TemplateId, StringComparer.Ordinal);
     private LocalMonitorPreviewSession? _pendingSource;
+    private bool _pendingStopsPatientTimeline;
     private (LocalMonitorPreviewSession Definition, long EffectiveNs)? _postShockSinus;
     private readonly List<DefibrillationEcgArtifact> _shockArtifacts = [];
     public IReadOnlyList<DefibrillationEcgArtifact> ShockArtifacts => _shockArtifacts.AsReadOnly();
@@ -123,6 +124,7 @@ public sealed partial class LocalMonitorPreviewSession
             _ => PreviewRecordEventKind.NibpCancelled
         }, item.Reading is { } reading ? $"{reading.SystolicMmHg} / {reading.DiastolicMmHg} ({reading.MeanMmHg}) mmHg" : ""));
         _configuration = configuration;
+        _authoredOpticalSaturationMilliPercent = opticalSaturationMilliPercent;
         _realtimeConfiguration = realtimeOxygenation;
         _source = PhysiologyIllustrationSource.Create(configuration, ventilation: realtimeOxygenation?.Ventilation);
         _ecgSource = enableTwelveLead ? LiveEcgIllustrationSource.Create(configuration) : null;
@@ -228,6 +230,8 @@ public sealed partial class LocalMonitorPreviewSession
         ValidateSourceDefinition(definition);
         if (delayNs is < 0 or > 60_000_000_000) { throw new ArgumentOutOfRangeException(nameof(delayNs)); }
         long effective = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
+        _pendingStopsPatientTimeline = true;
+        _pendingTreatmentBranch = null;
         // Explicit source changes replace the entire pending post-shock sequence.
         _beforePacing = null;
         _postShockSinus = null;
@@ -242,9 +246,12 @@ public sealed partial class LocalMonitorPreviewSession
         if (!PacingAllowed) { throw new InvalidOperationException("Pacing.TemplateDisabled"); }
         if (_pendingSource is not null || _pendingVentilationSource is not null)
         { throw new InvalidOperationException("Pacing.SourceChangePending"); }
+        bool starting = ActivePacing is null;
+        string? branchId = starting ? CurrentTimelineTreatment?.PacingTimelineId : null;
         var configuration = PacingIllustrationConfiguration.Apply(_configuration, mode, output);
         long effective = ScheduleCardiacConfiguration(configuration);
-        _beforePacing ??= _configuration;
+        _beforePacing ??= _timelineProgram is not null && !PatientTimelineStopped ? _configuration : FreezePatientConfiguration(_configuration);
+        if (branchId is not null) { _pendingTreatmentBranch = (_pendingSource!, branchId); }
         return effective;
     }
 
@@ -263,6 +270,7 @@ public sealed partial class LocalMonitorPreviewSession
         var definition = CreateCardiacDefinition(configuration, ElectricalTherapy);
         var previous = _beforePacing;
         long effective = ScheduleSource(definition, 0);
+        if (_timelineProgram is not null && !PatientTimelineStopped) { _pendingStopsPatientTimeline = false; }
         _beforePacing = previous;
         return effective;
     }
@@ -278,6 +286,8 @@ public sealed partial class LocalMonitorPreviewSession
     private LocalMonitorPreviewSession CreateCardiacDefinition(PhysiologyIllustrationConfiguration configuration,
         EcgElectricalTherapyProfile? profile)
     {
+        configuration = _timelineProgram is not null && !PatientTimelineStopped
+            ? ContinuePatientConfiguration(configuration) : FreezePatientConfiguration(configuration);
         var realtime = _realtimeConfiguration is null ? null : _realtimeConfiguration with
         {
             Ventilation = _realtimeOxygenation!.Ventilation,
@@ -288,6 +298,8 @@ public sealed partial class LocalMonitorPreviewSession
             enableTwelveLead: _ecgSource is not null)
         {
             _opticalSource = _opticalSource,
+            _timelineOpticalCurve = _timelineProgram is not null && !PatientTimelineStopped ? _timelineOpticalCurve : FreezePatientCurve(_timelineOpticalCurve),
+            _authoredOpticalSaturationMilliPercent = _authoredOpticalSaturationMilliPercent,
             _opticalModulationPermille = _opticalModulationPermille,
             _usesOxygenation = _usesOxygenation
         };
@@ -295,6 +307,7 @@ public sealed partial class LocalMonitorPreviewSession
 
     public ElectricalConversionResult EvaluateElectricalShock(DefibrillationWaveformKind waveform, DefibrillationMode mode, int deliveredEnergyJoules, bool automated = false)
     {
+        if (!ShockAllowed) { return new(ElectricalConversionOutcome.TimelineDisabled); }
         var result = EcgElectricalTherapy.Evaluate(ElectricalTherapy, _configuration, waveform, mode, deliveredEnergyJoules, automated);
         return _pendingSource is not null ? new(ElectricalConversionOutcome.SourceChangePending) : result;
     }
@@ -308,17 +321,27 @@ public sealed partial class LocalMonitorPreviewSession
         ArgumentNullException.ThrowIfNull(delivery);
         if (delivery.DeliverySequence == 0 || delivery.DeliveredAtSimTimeNs != SimulationTimeNs)
         { throw new ArgumentException("ElectricalConversion.InvalidDelivery", nameof(delivery)); }
+        if (!ShockAllowed) { return new(ElectricalConversionOutcome.TimelineDisabled); }
         var result = EvaluateElectricalShock(delivery.Waveform, delivery.Mode, delivery.EnergyJoules, delivery.Automated);
         if (delivery.DeliverySequence <= _lastElectricalDeliverySequence) { return new(ElectricalConversionOutcome.DuplicateDelivery); }
         var artifact = new DefibrillationEcgArtifact(delivery.Waveform, delivery.DeliveredAtSimTimeNs, ecgRecoveryMilliseconds);
         if (_shockArtifacts.Count >= 128) { throw new InvalidOperationException("Defibrillation.TooManyRetainedShocks"); }
         if (result.Outcome != ElectricalConversionOutcome.Eligible)
         {
+            string? failureId = CurrentTimelineTreatment?.ShockFailureTimelineId;
+            string? branchError = null;
+            var branch = failureId is null ? null : TryPrepareTreatmentBranch(failureId, out branchError);
             RecordEvent(PreviewRecordEventKind.ShockDelivered, $"{delivery.EnergyJoules} J · {delivery.Mode}");
             _shockArtifacts.Add(artifact);
             WithdrawShockBeatCues();
             _lastElectricalDeliverySequence = delivery.DeliverySequence;
             DataRevision++;
+            if (branch is not null)
+            {
+                PublishTimelineBranch(branch);
+                AdvancePatientTimeline();
+            }
+            else if (branchError is not null) { RecordTreatmentBranchError(failureId!, branchError); }
             return result;
         }
         ArgumentNullException.ThrowIfNull(sinusDefinition);
@@ -334,6 +357,7 @@ public sealed partial class LocalMonitorPreviewSession
         int pauseMilliseconds = (delivery.Automated ? ElectricalTherapy!.AedSettings : ElectricalTherapy!.Settings).PostShockPauseMilliseconds;
         long quietAt = checked((SimulationTimeNs + delayNs + 199_999_999) / 200_000_000 * 200_000_000);
         long effective = checked((quietAt + pauseMilliseconds * 1_000_000L + 199_999_999) / 200_000_000 * 200_000_000);
+        string? successBranch = CurrentTimelineTreatment?.ShockSuccessTimelineId;
         if (pauseMilliseconds == 0) { ScheduleSource(sinusDefinition, delayNs); }
         else
         {
@@ -341,6 +365,8 @@ public sealed partial class LocalMonitorPreviewSession
             ScheduleSource(quiet, delayNs);
             _postShockSinus = (sinusDefinition, effective);
         }
+        if (_timelineProgram is not null && !PatientTimelineStopped) { _pendingStopsPatientTimeline = false; }
+        if (successBranch is not null) { _pendingTreatmentBranch = (sinusDefinition, successBranch); }
         RecordEvent(PreviewRecordEventKind.ShockDelivered, $"{delivery.EnergyJoules} J · {delivery.Mode}");
         _shockArtifacts.Add(artifact);
         WithdrawShockBeatCues();
@@ -371,9 +397,29 @@ public sealed partial class LocalMonitorPreviewSession
         {
             var transport = PhysiologyIllustrationSource.CreateTransport(definition._configuration,
                 config.Ventilation, config.ReferenceStrokeVolumeMicroliters);
-            oxygenation = _realtimeOxygenation?.Fork() ?? new(transport, config.Parameters, config.OxygenDemandMultiplier, sourceTime);
+            long oxygenGridTime = sourceTime - sourceTime % OxygenReservoirModel.StepNs;
+            oxygenation = _realtimeOxygenation?.Fork() ?? new(transport, config.Parameters, config.OxygenDemandMultiplier, oxygenGridTime);
             oxygenation.ChangeTransport(transport, sourceTime, config.OxygenDemandMultiplier);
         }
+        LocalMonitorPreviewSession? branch = null;
+        string? branchError = null;
+        string? branchId = null;
+        if (_pendingTreatmentBranch is { } intent && ReferenceEquals(intent.Source, definition))
+        {
+            var context = (LocalMonitorPreviewSession)MemberwiseClone();
+            context._source = source;
+            context._ecgSource = ecgSource;
+            context._configuration = definition._configuration;
+            context._realtimeConfiguration = definition._realtimeConfiguration;
+            context._realtimeOxygenation = oxygenation;
+            context.ElectricalTherapy = definition.ElectricalTherapy;
+            context._opticalSource = definition._opticalSource;
+            context._authoredOpticalSaturationMilliPercent = definition._authoredOpticalSaturationMilliPercent;
+            branchId = intent.TimelineId;
+            branch = context.TryPrepareTreatmentBranch(intent.TimelineId, out branchError);
+        }
+        if (_timelineProgram is not null && !_pendingStopsPatientTimeline) { definition.ManualVitals = ManualVitals; }
+        if (_pendingStopsPatientTimeline) { StopPatientTimelineForSourceChange(); }
         _source = source;
         _ecgSource = ecgSource;
         _realtimeOxygenation = oxygenation;
@@ -389,6 +435,7 @@ public sealed partial class LocalMonitorPreviewSession
         }
         _pendingSourceDescription = "";
         _configuration = definition._configuration;
+        _authoredOpticalSaturationMilliPercent = definition._authoredOpticalSaturationMilliPercent;
         _realtimeConfiguration = definition._realtimeConfiguration;
         ElectricalTherapy = definition.ElectricalTherapy;
         PressureTransducers = definition.PressureTransducers;
@@ -396,16 +443,28 @@ public sealed partial class LocalMonitorPreviewSession
         Nibp.Advance(SimulationTimeNs, ManualVitals.Nibp);
         _pendingVentilationSource = null;
         _opticalSource = definition._opticalSource;
+        if (_pendingStopsPatientTimeline) { _timelineOpticalCurve = definition._timelineOpticalCurve; }
         _opticalModulationPermille = definition._opticalModulationPermille;
         _usesOxygenation = definition._usesOxygenation;
         OxygenationParameters = definition.OxygenationParameters;
         _pendingSource = null;
+        _pendingStopsPatientTimeline = false;
         PendingSourceTimeNs = null;
         if (_postShockSinus is { } sinus)
         {
             _pendingSource = sinus.Definition;
             PendingSourceTimeNs = sinus.EffectiveNs;
             _postShockSinus = null;
+        }
+        if (branch is not null)
+        {
+            _pendingTreatmentBranch = null;
+            PublishTimelineBranch(branch);
+        }
+        else if (branchError is not null)
+        {
+            _pendingTreatmentBranch = null;
+            RecordTreatmentBranchError(branchId!, branchError);
         }
     }
 
@@ -444,16 +503,21 @@ public sealed partial class LocalMonitorPreviewSession
         while (deltaNs > 0)
         {
             if (PendingSourceTimeNs is { } effective && SimulationTimeNs >= effective) { ActivatePendingSource(); }
+            AdvancePatientTimeline();
             long sourceTime = checked(SimulationTimeNs + _sourceTimeOffsetNs);
             if (_pendingVentilationSource is not null && sourceTime >= _pendingVentilationTimeNs) { ActivatePendingVentilation(); }
             long chunk = Math.Min(deltaNs, 50_000_000);
             if (PendingSourceTimeNs is { } pending) { chunk = Math.Min(chunk, pending - SimulationTimeNs); }
+            if (NextPatientTimelineTimeNs is { } timelineTime) { chunk = Math.Min(chunk, timelineTime - SimulationTimeNs); }
             if (_pendingVentilationSource is not null) { chunk = Math.Min(chunk, _pendingVentilationTimeNs - sourceTime); }
             long next = checked(SimulationTimeNs + chunk);
             var oxygenation = _realtimeOxygenation?.Fork();
             long sourceNext = checked(next + _sourceTimeOffsetNs);
             oxygenation?.AdvanceTo(sourceNext);
-            var optics = oxygenation is null ? _opticalSource : new PulseOximeterIllustrationSource(
+            var optics = _timelineOpticalCurve is { } opticalCurve ? new PulseOximeterIllustrationSource(
+                PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
+                _opticalInstanceId, new TimelineOxygenation(opticalCurve), _opticalModulationPermille) :
+                oxygenation is null ? _opticalSource : new PulseOximeterIllustrationSource(
                 PhysiologyIllustrationSource.ChannelId(2), PhysiologyIllustrationSource.ChannelId(2),
                 _opticalInstanceId, oxygenation, _opticalModulationPermille);
             // Prepare sampling, optical conversion and all measurements before
@@ -531,10 +595,17 @@ public sealed partial class LocalMonitorPreviewSession
             _shockArtifacts.RemoveAll(artifact => artifact.RecoveryEndSimTimeNs <= oldestTimeNs);
             if (samples.Count > 0) { DataRevision++; }
             SimulationTimeNs = next;
+            if (_timelineProgram is not null) { UpdatePatientTimelineManualValues(); }
+            if ((_patientTimeline.Count > 0 && _pendingStopsPatientTimeline || _timelineProgram is not null && !PatientTimelineStopped) &&
+                PendingSourceTimeNs is { } dueSource && dueSource <= next)
+            { ActivatePendingSource(); }
+            UpdatePatientTimelineManualValues();
             Nibp.Advance(next, ManualVitals.Nibp);
             Ranges.Advance(_ => SimulationTimeNs, (channel, from, to) => ReadDisplaySamples(channel, from, to, usableOnly: true).Select(s => s.Value));
             deltaNs -= chunk;
         }
+        if (PendingSourceTimeNs is not { } pendingAtEnd || pendingAtEnd > SimulationTimeNs)
+        { AdvancePatientTimeline(); }
         foreach (var item in rhythmEvents)
         { _recordEvents.Add(new(item.ConfirmedAtNs, PreviewRecordEventKind.RhythmChanged, $"{item.Kind} · {item.Transition}")); }
         foreach (var item in monitoringEvents)

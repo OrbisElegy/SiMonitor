@@ -654,6 +654,7 @@ public sealed class EncryptedSqliteBackupService
 ```csharp
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
+    public PatientTimelineLibrary? PatientTimelines { get; init; }
     public bool TherapyControlsVisible { get; init; }
     public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
     public MonitorDisplayConfiguration? UnlockedSkinDisplay { get; init; }
@@ -891,3 +892,19 @@ public static class SelectedTherapySounds
 ```
 
 治疗声音状态、撤回、重连、CPR 相位及固定录音来源见[音频接口](../audio-persistence.md#治疗声音)。
+
+## Preferences/PatientTimelineFileFormat.cs
+
+源码：[PatientTimelineFileFormat.cs](../../../src/Monitor.Infrastructure/Preferences/PatientTimelineFileFormat.cs) · 命名空间：`Monitor.Infrastructure.Preferences`
+
+```csharp
+public static class PatientTimelineFileFormat
+{
+    public const int MaximumBytes = 1_048_576;
+    public static PatientTimelineFile Read(Stream stream);
+    public static byte[] Write(PatientTimelineFile file);
+}
+```
+
+完整验证后才返回作者文件或编码字节；不关闭调用方的输入流，不恢复会话状态。
+文件契约见[偏好与文件持久化](../audio-persistence.md)。

@@ -9,6 +9,7 @@ namespace Monitor.Infrastructure.Preferences;
 
 public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int PaperLayout, MonitorAlarmPreferences? Alarms = null, MonitorSoundPreferences? Sound = null, MonitorGeneratorPreferences? Generator = null, bool MeasurementMillimeters = false, DefibrillatorConfiguration? Defibrillator = null)
 {
+    public PatientTimelineLibrary? PatientTimelines { get; init; }
     public bool TherapyControlsVisible { get; init; }
     public EcgLead MonitorEcgLead { get; init; } = EcgLead.II;
     public MonitorDisplayConfiguration? UnlockedSkinDisplay { get; init; }
@@ -18,15 +19,16 @@ public sealed record DisplayPreferences(MonitorDisplayConfiguration Display, int
 // Local preferences and generator inputs; no runtime waveform or playback state.
 public sealed class DisplayPreferenceStore(string path)
 {
-    private const int MaximumBytes = 65536;
+    private const int MaximumBytes = 8_388_608;
     private static readonly JsonSerializerOptions Options = new()
-    { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 8, WriteIndented = true, RespectRequiredConstructorParameters = true };
+    { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, MaxDepth = 16, WriteIndented = true, RespectRequiredConstructorParameters = true };
     private sealed record Slot([property: JsonRequired] int Channel, [property: JsonRequired] bool Automatic,
         [property: JsonRequired] double Minimum, [property: JsonRequired] double Maximum, [property: JsonRequired] int Speed);
     private sealed record Layout([property: JsonRequired] MonitorSkin Skin, [property: JsonRequired] Slot[] Slots);
     private sealed class Document
     {
         public required int Version { get; init; }
+        public PatientTimelineLibrary? PatientTimelines { get; init; }
         public required MonitorSkin Skin { get; init; }
         public required Slot[] Slots { get; init; }
         public required int PaperLayout { get; init; }
@@ -65,7 +67,7 @@ public sealed class DisplayPreferenceStore(string path)
             while (count < bytes.Length && (read = stream.Read(bytes, count, bytes.Length - count)) != 0) { count += read; }
             if (count > MaximumBytes) { throw new ArgumentException("Preferences.TooLarge"); }
             var data = JsonSerializer.Deserialize<Document>(bytes.AsSpan(0, count), Options);
-            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
+            if (data is null || data.Version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 20) || data.PaperLayout is < 0 or > 1 || data.Slots is null || data.Slots.Any(s => s is null))
             { throw new ArgumentException("Preferences.InvalidDocument"); }
             if (!Enum.IsDefined(data.MonitorEcgLead)) { throw new ArgumentException("Preferences.InvalidEcgLead"); }
             if (data.Version >= 2 && data.Alarms is null) { throw new ArgumentException("Preferences.MissingAlarms"); }
@@ -97,6 +99,7 @@ public sealed class DisplayPreferenceStore(string path)
             var unlocked = data.UnlockedSkinDisplay is { } layout ? RestoreLayout(layout) : null;
             return new(display, data.PaperLayout, alarms, data.Sound, generator, data.MeasurementMillimeters, defibrillator)
             {
+                PatientTimelines = data.PatientTimelines?.Snapshot(),
                 TherapyControlsVisible = data.TherapyControlsVisible,
                 MonitorEcgLead = data.MonitorEcgLead,
                 UnlockedSkinDisplay = unlocked,
@@ -122,7 +125,8 @@ public sealed class DisplayPreferenceStore(string path)
         var unlocked = preferences.UnlockedSkinDisplay is { } layout ? CaptureLayout(layout) : null;
         var data = new Document
         {
-            Version = 18,
+            Version = 20,
+            PatientTimelines = preferences.PatientTimelines?.Snapshot(),
             TherapyControlsVisible = preferences.TherapyControlsVisible,
             MonitorEcgLead = preferences.MonitorEcgLead,
             UnlockedSkinDisplay = unlocked,

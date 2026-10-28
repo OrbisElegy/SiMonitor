@@ -712,8 +712,12 @@ internal static class DesignPreviewSmokeChecks
                 "respiration subpages retain selection and all signal/shape/response drafts without applying");
             window.Settings.RespirationGroups.SelectedIndex = 0;
             Capture(window, "ui-preview-resp-signal-editor.png");
-            window.Width = 960; Capture(window, "ui-preview-resp-signal-editor-compact.png");
-            Require(window.Settings.SectionPages[6].Compact, "advanced groups use existing compact Fluent navigation");
+            // Exercise the content breakpoint independently of the main navigation rail.
+            window.Settings.Width = 740;
+            window.Width = 960;
+            Capture(window, "ui-preview-resp-signal-editor-compact.png");
+            Require(window.Settings.SectionPages[6].Bounds.Width < 760 && window.Settings.SectionPages[6].Compact,
+                "advanced groups use existing compact Fluent navigation");
         }
         finally { window.Close(); }
     }

@@ -33,6 +33,9 @@ internal static class LiveMonitorPrintSmokeChecks
             try
             {
                 PrintPreviewLayoutSmokeChecks.Verify(dialog, window.Localization, dialog.SavePdf, dialog.OpenPdf);
+                // The layout check restores the locale, which queues a debounced refresh.
+                // Compare two documents rendered in that same locale, regardless of timer timing.
+                dialog.RefreshPreview();
                 Require(dialog.Document.Options.Lead == EcgLead.V1 && !dialog.Document.Options.TwelveLead &&
                     dialog.Document.Options.StartTimeNs == 2_000_000_000 && dialog.Document.EndTimeNs == 12_000_000_000,
                     "ordinary monitor captures the selected lead and the preceding ten seconds");
@@ -46,9 +49,12 @@ internal static class LiveMonitorPrintSmokeChecks
                 window.Pulse(window.ActiveTimer, 50_000_000);
                 window.Session.SelectDisplayEcgLead(EcgLead.V6);
                 dialog.RefreshPreview();
-                Require(before.SequenceEqual(dialog.Document.PreviewPng(0)) &&
-                    frozen.SequenceEqual(dialog.Snapshot.Leads[(int)EcgLead.II]) && window.Session.SimulationTimeNs > dialog.Snapshot.CapturedAtNs,
-                    "live advancement and lead edits cannot mutate the captured data or output");
+                Require(window.Session.SimulationTimeNs > dialog.Snapshot.CapturedAtNs,
+                    "the live session advances beyond capture time");
+                Require(frozen.SequenceEqual(dialog.Snapshot.Leads[(int)EcgLead.II]),
+                    "live advancement and lead edits cannot mutate the captured samples");
+                Require(before.SequenceEqual(dialog.Document.PreviewPng(0)),
+                    "live advancement and lead edits cannot mutate output rendered in the same language");
                 dialog.RecordType.SelectedIndex = 1;
                 dialog.Speed.SelectedIndex = 1;
                 dialog.Gain.SelectedIndex = 0;

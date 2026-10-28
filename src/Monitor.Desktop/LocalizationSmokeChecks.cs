@@ -178,7 +178,12 @@ internal static class LocalizationSmokeChecks
                     "messages, accessibility names and navigation refresh through bindings");
                 Capture(window, "i18n-settings-en-wide.png");
                 window.Width = 1000;
+                // The compact main rail leaves enough room for inline parameter groups.
+                // Constrain the settings content to exercise its own compact breakpoint.
+                settings.Width = 740;
                 Capture(window, "i18n-settings-en-compact.png");
+                Require(settings.SectionPages[2].Bounds.Width < 760 && settings.SectionPages[2].Compact,
+                    "the constrained display page exposes its compact parameter selector");
                 var category = window.GetVisualDescendants().OfType<ComboBox>().Single(combo =>
                     AutomationProperties.GetName(combo) == "Settings categories");
                 RequireCaption(category, "Display");
@@ -213,6 +218,7 @@ internal static class LocalizationSmokeChecks
                 settings.Language.SelectedIndex = 1;
                 Capture(window, "i18n-general-cn-compact.png");
                 RequireCaption(category, "通用");
+                settings.Width = double.NaN;
                 window.Width = 1440;
                 Capture(window, "i18n-general-cn-wide.png");
                 settings.Tabs.SelectedIndex = 2;
@@ -456,13 +462,10 @@ internal static class LocalizationSmokeChecks
 
     private static void Capture(Window window, string name)
     {
-        Dispatcher.UIThread.RunJobs();
+        DesktopViewportSmokeChecks.Layout(window, window.Width, window.Height);
         Directory.CreateDirectory("artifacts");
         using var image = new RenderTargetBitmap(new PixelSize((int)window.Width, (int)window.Height), new Vector(96, 96));
         var root = (Control)window.Content!;
-        root.InvalidateMeasure();
-        root.Measure(new Size(window.Width, window.Height));
-        root.Arrange(new Rect(0, 0, window.Width, window.Height));
         image.Render(root);
         image.Save(Path.Combine("artifacts", name), PngBitmapEncoderOptions.Default);
     }

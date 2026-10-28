@@ -233,7 +233,9 @@ jobs:
 
       - name: Run desktop checks (Windows)
         if: runner.os == 'Windows'
-        run: python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 4
+        # Native windows share the runner's input desktop. Concurrent processes
+        # steal focus and dismiss each other's popups during interaction checks.
+        run: python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 1
 
       - name: Check product candidate (Linux / Xvfb)
         if: runner.os == 'Linux'

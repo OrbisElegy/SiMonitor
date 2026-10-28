@@ -266,7 +266,12 @@ internal static class DesktopShellSmokeChecks
         return hit is not null && (ReferenceEquals(hit, shell.Navigation) || hit.GetVisualAncestors().Contains(shell.Navigation));
     }
 
-    private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    private static void Click(Button button)
+    {
+        // Raising Click alone bypasses the focus transfer performed by a pointer press.
+        Require(button.Focus(NavigationMethod.Pointer), "the clicked menu action accepts focus");
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    }
 
     private static void ClickAt(Window window, Control root, Point point)
     {

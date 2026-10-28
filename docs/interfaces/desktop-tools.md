@@ -544,6 +544,9 @@ CPU 内核按目标 RID、显式 PlatformTarget、SDK 架构的顺序选择，x6
 
 CI 在 Windows 图形会话和 Linux Xvfb 显示环境中运行 `--desktop-only`，两者均使用 `Monitor.Desktop` 的原生窗口入口。没有单独的无头桌面运行器；`--specs-only` 保留用于不依赖窗口的核心规格。桌面检查的启动截图输出到 `artifacts/desktop-startup.png`，CI 失败时与分片日志一起保留。
 
+Windows CI 使用 `--jobs 1` 运行桌面检查，避免不同进程在同一个原生桌面争夺焦点、关闭彼此的弹出控件。
+本地 Windows 交互检查也应使用该参数；核心规格仍可并行。Linux CI 在 Xvfb 中使用桌面分片并行检查。
+
 `tests/Monitor.Specs/Program.cs` 是开发用可执行规格与夹具入口：
 
 ```sh

@@ -134,10 +134,15 @@ internal static class GenericSkinSmokeChecks
         foreach (int width in new[] { 960, 1200, 1440, 1920 })
         {
             int height = width == 1440 ? 940 : 720;
-            // Crossing the shell breakpoint changes SplitView mode during arrange.
-            // Finish that follow-up layout before comparing two captions at one viewport.
+            // Crossing the shell breakpoint animates the content width on native frames.
+            // Compare captions only after the workspace reaches its final width.
             DesktopViewportSmokeChecks.Layout(window, width, height);
-            ((Control)window.Content!).UpdateLayout();
+            var split = window.Shell.GetVisualDescendants().OfType<SplitView>().Single();
+            var workspace = (Control)split.Content!;
+            double paneWidth = width >= 1280 ? split.OpenPaneLength : split.CompactPaneLength;
+            double expectedWidth = width - paneWidth - workspace.Margin.Left - workspace.Margin.Right;
+            DesktopViewportSmokeChecks.WaitFor(() => Math.Abs(workspace.Bounds.Width - expectedWidth) < .01,
+                $"Generic toolbar: the workspace reaches width {expectedWidth} before measuring captions at {width}");
             skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             DesktopViewportSmokeChecks.Layout(window, width, height);
             var beforePause = skin.SilenceButton.Bounds.Size;

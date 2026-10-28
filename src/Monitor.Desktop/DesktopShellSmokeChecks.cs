@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -285,22 +284,8 @@ internal static class DesktopShellSmokeChecks
         pointer.Capture(null);
     }
 
-    private static void WaitFor(Func<bool> completed)
-    {
-        if (completed()) { return; }
-        // Fluent pane transitions and compositor hit testing advance on native frames.
-        var elapsed = Stopwatch.StartNew();
-        var frame = new DispatcherFrame();
-        var poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
-        poll.Tick += (_, _) =>
-        {
-            if (completed() || elapsed.Elapsed > TimeSpan.FromSeconds(3)) { frame.Continue = false; }
-        };
-        poll.Start();
-        try { Dispatcher.UIThread.PushFrame(frame); }
-        finally { poll.Stop(); }
-        Require(completed(), "the navigation pane finishes its native layout transition");
-    }
+    private static void WaitFor(Func<bool> completed) => DesktopViewportSmokeChecks.WaitFor(completed,
+        "Desktop shell: the navigation pane finishes its native layout transition");
 
     private static void Capture(Control root, string name)
     {

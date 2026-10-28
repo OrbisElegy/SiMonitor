@@ -98,7 +98,7 @@
   "settings.resetAction": "Restore defaults…",
   "settings.resetTitle": "Restore defaults",
   "settings.resetQuestion": "Restore all defaults?",
-  "settings.resetWarning": "Waveform, display, sound, alarm, vital sign and language settings will return to their defaults. Unapplied edits and sweep history will be cleared, and monitor sound will be disabled. This cannot be undone.",
+  "settings.resetWarning": "Waveform, display, sound, alarm, vital sign and language settings will return to their defaults. Unapplied edits and sweep history will be cleared; sound will return to its default volume and be unmuted. This cannot be undone.",
   "settings.resetDone": "All defaults restored and simulation restarted.",
   "settings.delay": "Apply delay",
   "settings.delayUnit": "s · 0–60",

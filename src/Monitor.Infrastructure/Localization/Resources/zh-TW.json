@@ -98,7 +98,7 @@
   "settings.resetAction": "恢復預設設定…",
   "settings.resetTitle": "恢復預設設定",
   "settings.resetQuestion": "還原所有預設設定？",
-  "settings.resetWarning": "波形、顯示、聲音、警報、生命體徵及語言設定將恢復預設值。未套用的編輯和目前掃描歷史會被清除，監測聲音將關閉。此操作無法復原。",
+  "settings.resetWarning": "波形、顯示、聲音、警報、生命體徵及語言設定將恢復預設值。未套用的編輯和目前掃描歷史會被清除；聲音會恢復預設音量並解除靜音。此操作無法復原。",
   "settings.resetDone": "已還原所有預設設定並從頭開始。",
   "settings.delay": "接續延遲",
   "settings.delayUnit": "秒 · 0–60",

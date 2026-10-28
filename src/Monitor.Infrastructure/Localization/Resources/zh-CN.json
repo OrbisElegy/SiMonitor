@@ -98,7 +98,7 @@
   "settings.resetAction": "恢复默认设置…",
   "settings.resetTitle": "恢复默认设置",
   "settings.resetQuestion": "恢复全部默认设置？",
-  "settings.resetWarning": "波形、显示、声音、报警、生命体征及语言设置将恢复默认值。未应用的编辑和当前扫描历史会被清除，监护声音将关闭。此操作无法撤销。",
+  "settings.resetWarning": "波形、显示、声音、报警、生命体征及语言设置将恢复默认值。未应用的编辑和当前扫描历史会被清除；声音会恢复默认音量并解除静音。此操作无法撤销。",
   "settings.resetDone": "已恢复全部默认设置并从头开始。",
   "settings.delay": "接续延迟",
   "settings.delayUnit": "秒 · 0–60",

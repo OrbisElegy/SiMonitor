@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Buffers.Binary;
+using System.Numerics;
 using System.Security.Cryptography;
 
 namespace Monitor.Simulation.Acquisition;
@@ -503,13 +504,15 @@ public static class WaveformEnvelopeCodec
 
     private static uint UpdateCrc32C(uint crc, ReadOnlySpan<byte> bytes)
     {
+        while (bytes.Length >= sizeof(ulong))
+        {
+            crc = BitOperations.Crc32C(crc, BinaryPrimitives.ReadUInt64LittleEndian(bytes));
+            bytes = bytes[sizeof(ulong)..];
+        }
+
         foreach (byte value in bytes)
         {
-            crc ^= value;
-            for (int bit = 0; bit < 8; bit++)
-            {
-                crc = (crc >> 1) ^ (0x82F63B78U & (uint)-(int)(crc & 1));
-            }
+            crc = BitOperations.Crc32C(crc, value);
         }
 
         return crc;

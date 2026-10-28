@@ -20,8 +20,18 @@ public static class FixedPointMath
         bool negative = (numerator < 0) != (denominator < 0);
         UInt128 dividend = Magnitude(numerator);
         UInt128 divisor = Magnitude(denominator);
-        UInt128 quotient = dividend / divisor;
-        UInt128 remainder = dividend % divisor;
+        UInt128 quotient;
+        UInt128 remainder;
+        if ((divisor & (divisor - 1)) == 0)
+        {
+            quotient = dividend >> (int)UInt128.TrailingZeroCount(divisor);
+            remainder = dividend & (divisor - 1);
+        }
+        else
+        {
+            (quotient, remainder) = UInt128.DivRem(dividend, divisor);
+        }
+
         int halfComparison = remainder.CompareTo(divisor - remainder);
         if (halfComparison > 0 || (halfComparison == 0 && (quotient & 1) != 0))
         {

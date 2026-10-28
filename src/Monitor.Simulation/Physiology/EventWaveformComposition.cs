@@ -37,7 +37,11 @@ public sealed record EventWaveformBand(PhysiologyCycleEventKind Trigger, long De
     public PhysiologyRateClock? PhaseClock { get; init; }
     public long PhaseClockFixedDelayNs { get; init; }
     internal long MaximumSupportNs => PhaseClock is { } clock
-        ? checked(PhaseClockFixedDelayNs + clock.MaximumDuration(DelayNs - PhaseClockFixedDelayNs + DurationNs))
+        ? Math.Max(checked(PhaseClockFixedDelayNs + clock.MaximumDuration(DelayNs - PhaseClockFixedDelayNs + DurationNs)),
+            // Respiratory phase can accelerate while cardiogenic attenuation
+            // still uses real-time mechanical ages. Retain that history too;
+            // otherwise its presence would depend on the requested batch size.
+            CardiogenicRippleDurationNs > 0 ? checked(DelayNs + DurationNs) : 0)
         : checked(DelayNs + DurationNs);
 }
 public sealed record EventWaveformState(IReadOnlyList<EventWaveformBand> Bands,
@@ -48,7 +52,7 @@ public sealed class EventWaveformException(string reason, string parameter) : Ar
 }
 
 // One immutable, bounded event window. Zero outside each band's support.
-public sealed class EventWaveformComposition
+public sealed partial class EventWaveformComposition
 {
     public const int MaximumBandCount = 32;
     public const int MaximumEventCount = 4096;

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Reflection;
+
 namespace Monitor.Desktop;
 
 internal static class ProductIdentity
@@ -22,12 +24,15 @@ internal static class ProductIdentity
         You should have received a copy of the GNU Affero General Public License
         along with this program. If not, see <https://www.gnu.org/licenses/>.
         """;
-    internal const string Version = "V0.6.0";
+    // The SDK generates this attribute from Monitor.Desktop.csproj's Version.
+    // Build metadata (including the source revision) belongs on the About build line.
+    internal static readonly string Version = "V" + typeof(ProductIdentity).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
 #if SIMONITOR_RELEASE
     internal static bool DevelopmentFeatures => false;
 #else
     internal static bool DevelopmentFeatures => true;
 #endif
     // Development builds bind the localized shell.developmentTitle instead.
-    internal const string WindowTitle = Name + " · " + Version + " Standalone";
+    internal static readonly string WindowTitle = Name + " · " + Version + " Standalone";
 }

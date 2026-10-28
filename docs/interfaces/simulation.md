@@ -49,6 +49,7 @@ DeterminismCheckpoint Restore(ReadOnlySpan<byte> bytes);
 ```
 
 定点除法使用 ties-to-even；除零抛 `DeterminismArithmeticException`。
+二次幂分母用移位与掩码求商余，其余使用 `UInt128.DivRem`；符号、舍入和溢出约定不变。
 `Add`、`Subtract`、`MultiplyQ32`、`DivideQ32`、`MultiplyCoefficientQ62` 返回
 `SaturatingInt64(Value, Saturated)`；调用方需要保留饱和信息。
 `FixedBiquadDf2T.Step` 消费 Q62 系数、Q32 输入和 `FixedBiquadState`，返回输出、下一状态和饱和标志。
@@ -177,6 +178,7 @@ UUID 使用 `Guid.TryWriteBytes(..., bigEndian: true, ...)` 的规范 16 字节�
 这些生产流约束由组块器、ring 或 archive 进一步验证。
 
 CRC32C 使用 Castagnoli 反射多项式 `0x82f63b78`，初值全 1，结果按位取反。
+实现按小端 64 位块调用 `BitOperations.Crc32C` 并处理剩余字节，由 .NET 选择硬件指令或软件退化；线上字节和校验约定不变。
 header CRC 覆盖 prelude（两个 CRC 字段偏移 20–27 均清零）和整个 header；payload CRC 覆盖传输 payload。
 content SHA-256 覆盖 header（hash 位置清零）与 raw payload，不包含 prelude。
 当前只实现 raw codec 0；codec 1 通过基础 header 格式检查后仍以 `BINARY_CODEC_VECTOR_UNSUPPORTED` 拒绝。
@@ -320,6 +322,9 @@ R-on-T 保留 500/200 ms 联律间期；房扑通过 `EventWaveformBand.CycleDur
 [EventWaveformComposition](../../src/Monitor.Simulation/Physiology/EventWaveformComposition.cs)
 通过 `Restore(EventWaveformState)`、`CaptureState()`、`EvaluateAt(long simTimeNs, CancellationToken = default)`
 组合有限事件窗口，输出 Q32 值。每个 `EventWaveformBand` 定义 trigger、延迟、持续时间、LUT 和可选相位点/周期门控。
+生成器内部按事件和相位段批量求值，从绝对时间初始化整数商余推进；分块／恢复不累积相位漂移。
+复杂时变呼吸和心源纹波保留精确时间函数，动态呼吸加速时也保留心源纹波所需的真实时间历史。
+算法与适用范围见 [CPU 与计算优化说明](../research/performance/cpu-kernels.md)。
 最多 32 个 band、4096 个事件；LUT 长度 4–65536 且为二次幂、首项为零；事件身份唯一并按时间/种类排序。
 `TriggerCycleLimit` 为排除端点，只阻止新触发，已触发尾部仍完成；`TriggerCycleResume` 沿原周期索引恢复。
 超出 band 支撑区间贡献为零，叠加超出 Int16 对应 Q32 范围会抛 `EventWaveform.AmplitudeOverflow`。

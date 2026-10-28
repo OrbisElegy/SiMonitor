@@ -58,6 +58,9 @@ Renderer 最多 32 个待播/活动 voice；Schedule 返回 Accepted/Expired/Dup
 expiryFrame 是 **exclusive 最晚开始时刻**，不是声音截断时刻；`expiry <= Position` 为 Expired。
 仍有效的迟到命令从 Position 开始。key 仅对仍占据 slot 的 voice 去重，全局去重和 epoch 策略不在这里。
 混音完成后整体限幅到 [-1,1]；Render 使 Position 前进 destination.Length。
+预录 PCM 增益、混合和限幅使用按可执行指令集分派的 SSE2／AVX2／AVX-512F 或 ARM64 AdvSimd 内核，
+不支持时使用标量。x64 与 ARM64 专用源文件在编译时隔离；voice 叠加顺序、取消淡出、
+分块与恢复结果保持一致。架构选择和诊断见 [CPU 内核说明](../research/performance/cpu-kernels.md)。
 Cancel 清除尚未开始的 cue，已开始的使用淡出；已提交给设备的 PCM 无法收回。
 DiscardForDiscontinuity 只接受不倒退的新位置，丢弃所有旧命令；调用者还必须退役排队 PCM。
 

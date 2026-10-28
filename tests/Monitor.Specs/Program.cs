@@ -5,6 +5,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        if (args is ["--cpu-kernels"]) { return CpuKernelCommand.Execute(); }
         int shard = 0, shards = 1;
         if (args.Length > 0 && args[0] == "--shard")
         {
@@ -36,6 +37,9 @@ internal static class Program
         }
         Specification[] specifications =
         [
+            .. AudioKernelPolicySpecifications.All,
+            .. FixedPointOptimizationSpecifications.All,
+            .. WaveformCrcOptimizationSpecifications.All,
             .. LocalizationSpecifications.All,
             .. MonitorPrintSnapshotSpecifications.All,
             .. NibpSpecifications.All,

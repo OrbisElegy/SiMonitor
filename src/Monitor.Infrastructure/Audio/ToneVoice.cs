@@ -30,14 +30,17 @@ public sealed class ToneVoice
     public const int SampleRate = 48_000;
     private const long PhaseDenominator = SampleRate * 1000L;
     private readonly TonePreset _preset;
+    private readonly int _totalFrames;
     private int _frame;
     private int? _cancelFrame;
-    private int EndFrame => _cancelFrame is { } start ? (start == 0 ? 0 : Math.Min(_preset.TotalFrames, start + 240)) : _preset.TotalFrames;
+    private int EndFrame => _cancelFrame is { } start ? (start == 0 ? 0 : Math.Min(_totalFrames, start + 240)) : _totalFrames;
 
     public ToneVoice(TonePreset preset)
     {
         ArgumentNullException.ThrowIfNull(preset);
         preset.Validate(); _preset = preset;
+        _totalFrames = preset.TotalFrames;
+        AudioKernels.Prepare();
         _ = SineTable.Quarter[0]; // Prepare table storage outside Render/callback.
         if (preset.Sample != MonitorToneSample.None) { _ = SelectedMonitorTones.Get(preset.Sample, preset.BeatPitchPercent)[0]; }
     }
@@ -60,35 +63,67 @@ public sealed class ToneVoice
 
     public int Render(Span<float> destination)
     {
-        int count = Math.Min(destination.Length, EndFrame - _frame);
-        for (int i = 0; i < count; i++, _frame++)
+        int endFrame = EndFrame;
+        int count = Math.Min(destination.Length, endFrame - _frame);
+        if (_preset.GainQ15 == 0)
         {
-            if (_preset.Sample != MonitorToneSample.None)
+            destination.Clear();
+        }
+        else if (_preset.Sample != MonitorToneSample.None)
+        {
+            ReadOnlySpan<short> source = SelectedMonitorTones.Get(_preset.Sample, _preset.BeatPitchPercent).Slice(_frame, count);
+            if (_cancelFrame is not { } stop)
             {
-                long sample = SelectedMonitorTones.Get(_preset.Sample, _preset.BeatPitchPercent)[_frame];
-                long selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)sample * 65536 * _preset.GainQ15, 16384);
-                if (_cancelFrame is { } stop)
-                { selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)selected * (EndFrame - 1 - _frame), EndFrame - stop); }
-                destination[i] = selected / 2147483648f;
-                continue;
+                AudioKernels.ConvertPcm(source, destination[..count], _preset.GainQ15);
             }
-            long phase = (long)_frame * _preset.FrequencyMilliHz % PhaseDenominator * 1024;
+            else
+            {
+                // PCM16 * 65536 * GainQ15 / 16384 is exactly PCM16 * (4 * GainQ15).
+                // Keep cancellation's integer ties-to-even rounding before float conversion.
+                int gain = 4 * _preset.GainQ15;
+                for (int i = 0; i < count; i++)
+                {
+                    long selected = source[i] * gain;
+                    selected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)selected * (endFrame - 1 - _frame - i), endFrame - stop);
+                    destination[i] = selected / 2147483648f;
+                }
+            }
+        }
+        else
+        {
+            RenderSynthesized(destination[..count], endFrame);
+        }
+        _frame += count;
+        destination[count..].Clear();
+        return count;
+    }
+
+    private void RenderSynthesized(Span<float> destination, int endFrame)
+    {
+        // Derive the initial phase from the absolute frame, then advance exactly.
+        // FrequencyMilliHz < PhaseDenominator, so one subtraction replaces each
+        // sample's multiplication and remainder without introducing phase drift.
+        long cyclePhase = (long)_frame * _preset.FrequencyMilliHz % PhaseDenominator;
+        for (int i = 0; i < destination.Length; i++)
+        {
+            int frame = _frame + i;
+            long phase = cyclePhase * 1024;
             int index = (int)(phase / PhaseDenominator);
             long fraction = phase % PhaseDenominator;
             long first = Lookup(index), next = Lookup((index + 1) & 1023);
             long sine = first + (long)FixedPointMath.RoundDivideTiesToEven((Int128)(next - first) * fraction, PhaseDenominator);
             long numerator = 1, denominator = 1;
-            int envelopeFrame = _cancelFrame ?? _frame;
+            int envelopeFrame = _cancelFrame ?? frame;
             if (envelopeFrame < _preset.AttackFrames) { numerator = envelopeFrame; denominator = _preset.AttackFrames; }
             else if (envelopeFrame >= _preset.AttackFrames + _preset.HoldFrames)
-            { numerator = _preset.TotalFrames - 1 - envelopeFrame; denominator = _preset.ReleaseFrames; }
+            { numerator = _totalFrames - 1 - envelopeFrame; denominator = _preset.ReleaseFrames; }
             long q31 = (long)FixedPointMath.RoundDivideTiesToEven((Int128)sine * _preset.GainQ15 * numerator, 32768L * denominator);
             if (_cancelFrame is { } cancelled)
-            { q31 = (long)FixedPointMath.RoundDivideTiesToEven((Int128)q31 * (EndFrame - 1 - _frame), EndFrame - cancelled); }
+            { q31 = (long)FixedPointMath.RoundDivideTiesToEven((Int128)q31 * (endFrame - 1 - frame), endFrame - cancelled); }
             destination[i] = q31 / 2147483648f;
+            cyclePhase += _preset.FrequencyMilliHz;
+            if (cyclePhase >= PhaseDenominator) { cyclePhase -= PhaseDenominator; }
         }
-        destination[count..].Clear();
-        return count;
     }
 
     private static long Lookup(int index)

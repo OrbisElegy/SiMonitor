@@ -12,6 +12,7 @@ internal static class ToneVoiceSpecifications
         new(nameof(ToneChunksAndRestorationAreBitIdenticalWithoutRenderAllocation), ToneChunksAndRestorationAreBitIdenticalWithoutRenderAllocation),
         new(nameof(ToneCancellationFadesAndInvalidStatesReject), ToneCancellationFadesAndInvalidStatesReject),
         new(nameof(AuditionWaveHasExactFramesAndCommandFailureSemantics), AuditionWaveHasExactFramesAndCommandFailureSemantics),
+        .. AudioKernelSpecifications.All,
     ];
 
     private static void ToneUsesSampleClockAndBoundedEnvelope()

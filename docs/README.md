@@ -34,6 +34,7 @@
 
 ## 技术调研
 
+- [CPU 分派、架构隔离与计算优化范围](research/performance/cpu-kernels.md)
 - [起搏与除颤波形依据](research/physiology/pacing-defibrillation.md)
 - [ECG 监护检测依据与能力边界](research/physiology/ecg-monitoring.md)
 - [短／长警报声音语义与实现映射](research/alarms/alarm-sound-duration-research.md)

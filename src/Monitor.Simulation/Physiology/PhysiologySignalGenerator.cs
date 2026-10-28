@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Buffers;
 using Monitor.Simulation.Acquisition;
 using Monitor.Simulation.Determinism;
 
@@ -282,17 +283,58 @@ public sealed class PhysiologySignalGenerator
         var trialClock = SignalSampleClock.Restore(_clock.CaptureState());
         IReadOnlyList<SignalSampleTick> ticks = trialClock.DrainBefore(exclusiveSimTimeNs);
         var output = new PhysiologySignalSample[ticks.Count];
-        for (int index = 0; index < ticks.Count; index++)
+        long[] values = ArrayPool<long>.Shared.Rent(ticks.Count);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            long value = _active is not null ? EvaluateAt(ticks[index].SimTimeNs, cancellationToken) : _vascularPressure is { } pressure
-                ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
-                : PlethRunoff is { } runoff ? runoff.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
-                : checked(composition!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken) +
-                    (long)_pressureBaselineCentiMmHg * FixedPointMath.Q32One);
-            short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
-            output[index] = new(ticks[index], value, normalized);
+            Span<long> batch = values.AsSpan(0, ticks.Count);
+            if (ticks.Count > 0)
+            {
+                long firstSimTimeNs = ticks[0].SimTimeNs;
+                if (_active is not null)
+                {
+                    _active.EvaluateUniform(firstSimTimeNs, _clock.SamplePeriodNs, batch, true, cancellationToken);
+                    long[] previousValues = ArrayPool<long>.Shared.Rent(ticks.Count);
+                    try
+                    {
+                        foreach (var previous in _history)
+                        {
+                            previous.EvaluateUniform(firstSimTimeNs, _clock.SamplePeriodNs,
+                                previousValues.AsSpan(0, ticks.Count), false, cancellationToken);
+                            for (int index = 0; index < ticks.Count; index++)
+                            { batch[index] = checked(batch[index] + previousValues[index]); }
+                        }
+                    }
+                    finally { ArrayPool<long>.Shared.Return(previousValues); }
+                }
+                else if (composition is not null)
+                {
+                    composition.EvaluateUniform(firstSimTimeNs, _clock.SamplePeriodNs, batch, cancellationToken);
+                    long baseline = (long)_pressureBaselineCentiMmHg * FixedPointMath.Q32One;
+                    if (baseline != 0)
+                    {
+                        for (int index = 0; index < ticks.Count; index++)
+                        { batch[index] = checked(batch[index] + baseline); }
+                    }
+                }
+                else
+                {
+                    for (int index = 0; index < ticks.Count; index++)
+                    {
+                        batch[index] = _vascularPressure is { } pressure
+                            ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
+                            : PlethRunoff!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
+                    }
+                }
+            }
+            for (int index = 0; index < ticks.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                long value = batch[index];
+                short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+                output[index] = new(ticks[index], value, normalized);
+            }
         }
+        finally { ArrayPool<long>.Shared.Return(values); }
         cancellationToken.ThrowIfCancellationRequested();
         _timeline = trialTimeline;
         _clock = trialClock;

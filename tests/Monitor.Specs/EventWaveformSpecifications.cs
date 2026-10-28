@@ -16,6 +16,7 @@ internal static class EventWaveformSpecifications
         RegularPhysiologyTimeline.Start(Plan).AdvanceBefore(4_000_000_000, 100)));
     public static Specification[] All =>
     [
+        .. EventWaveformBatchSpecifications.All,
         new(nameof(ElectricalEventsAnchorSeparateWaveBands), ElectricalEventsAnchorSeparateWaveBands),
         new(nameof(RespirationOccupiesTheWholeBreath), RespirationOccupiesTheWholeBreath),
         new(nameof(EventWaveformsOwnInputsAndRejectInvalidComposition), EventWaveformsOwnInputsAndRejectInvalidComposition),

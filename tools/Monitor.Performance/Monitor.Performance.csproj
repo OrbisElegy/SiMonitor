@@ -1,0 +1,13 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Monitor.Simulation/Monitor.Simulation.csproj" />
+  </ItemGroup>
+</Project>

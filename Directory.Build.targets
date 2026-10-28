@@ -1,0 +1,26 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<Project>
+  <!-- A RID always wins over the build host. No-RID development builds use the
+       SDK architecture; scalar is available for portable IL and diagnostics. -->
+  <PropertyGroup>
+    <_MonitorArchitectureRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_MonitorArchitectureRid>
+    <_MonitorArchitectureRid Condition="'$(_MonitorArchitectureRid)' == '' And '$(PlatformTarget)' != '' And '$(PlatformTarget)' != 'AnyCPU'">target-$([System.String]::Copy('$(PlatformTarget)').ToLowerInvariant())</_MonitorArchitectureRid>
+    <_MonitorArchitectureRid Condition="'$(_MonitorArchitectureRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_MonitorArchitectureRid>
+    <_MonitorDetectedArchitecture>scalar</_MonitorDetectedArchitecture>
+    <_MonitorDetectedArchitecture Condition="$([System.String]::Copy('$(_MonitorArchitectureRid)').EndsWith('-x64'))">x64</_MonitorDetectedArchitecture>
+    <_MonitorDetectedArchitecture Condition="$([System.String]::Copy('$(_MonitorArchitectureRid)').EndsWith('-arm64'))">arm64</_MonitorDetectedArchitecture>
+    <MonitorKernelArchitecture Condition="'$(MonitorKernelArchitecture)' == ''">$(_MonitorDetectedArchitecture)</MonitorKernelArchitecture>
+    <DefineConstants Condition="'$(MonitorKernelArchitecture)' == 'x64'">$(DefineConstants);MONITOR_X64</DefineConstants>
+    <DefineConstants Condition="'$(MonitorKernelArchitecture)' == 'arm64'">$(DefineConstants);MONITOR_ARM64</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="**/*.X64.cs" Condition="'$(MonitorKernelArchitecture)' != 'x64'" />
+    <Compile Remove="**/*.Arm64.cs" Condition="'$(MonitorKernelArchitecture)' != 'arm64'" />
+  </ItemGroup>
+  <Target Name="ValidateMonitorKernelArchitecture" BeforeTargets="CoreCompile">
+    <Error Condition="'$(MonitorKernelArchitecture)' != 'x64' And '$(MonitorKernelArchitecture)' != 'arm64' And '$(MonitorKernelArchitecture)' != 'scalar'"
+           Text="MonitorKernelArchitecture must be x64, arm64, or scalar." />
+    <Error Condition="'$(MonitorKernelArchitecture)' != 'scalar' And '$(MonitorKernelArchitecture)' != '$(_MonitorDetectedArchitecture)'"
+           Text="MonitorKernelArchitecture conflicts with the target RID/platform. Use the matching RID, or scalar for portable IL." />
+  </Target>
+</Project>

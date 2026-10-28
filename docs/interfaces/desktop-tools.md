@@ -8,6 +8,10 @@
 
 源码：[Program.cs](../../src/Monitor.Desktop/Program.cs)、[MonitorApp.cs](../../src/Monitor.Desktop/MonitorApp.cs)、[项目配置](../../src/Monitor.Desktop/Monitor.Desktop.csproj)。
 
+全局产品版本仅在[项目配置](../../src/Monitor.Desktop/Monitor.Desktop.csproj)的 `<Version>` 中维护。
+窗口标题、侧栏和关于页通过 `ProductIdentity` 读取构建生成的程序集版本信息，显示时添加 `V` 前缀并去除 `+` 后的构建元数据，保留预发布后缀。
+关于页的构建版本行保留简短提交标识，分发说明也读取同一项目配置；修改版本后需重新构建。
+
 ```sh
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 ```
@@ -506,6 +510,10 @@ RESP 的“自然自主呼吸”追加为索引 6，原有 0–5 索引及保存
 
 ## 构建、依赖及发布命令
 
+CPU 内核按目标 RID、显式 PlatformTarget、SDK 架构的顺序选择，x64／ARM64 源文件互相排除。
+`-p:MonitorKernelArchitecture=scalar` 用于只包含标量内核的构建；其他显式值必须匹配目标。
+运行时依指令能力选内核，不按具体处理器型号调优，详见 [CPU 分派](../research/performance/cpu-kernels.md)。
+
 | 脚本 | 参数 | 输出与限制 |
 |---|---|---|
 | [build.py](../../tools/build.py) | `--configuration Debug\|Release`（默认 Release）、`--jobs N`、`--offline`、`--managed-only`、`--cache-dir PATH`、`--product-release` | 准备锁定依赖、核对清单、构建；jobs 为 1–32，默认 CPU 数与 32 的较小值。`--managed-only` 跳过原生编译但仍准备依赖。产品模式只允许 Release |
@@ -546,6 +554,7 @@ dotnet run --project tests/Monitor.Specs/Monitor.Specs.csproj --no-build --confi
 |---|---|
 | 无参数 | 执行全部已注册规格；逐条输出 `ok N - 名称` 或 `not ok N - 名称`，异常写入标准错误；任一失败时全部执行完再以 1 退出 |
 | `--shard INDEX COUNT` | 选择规格分片；`0 <= INDEX < COUNT <= 32` |
+| `--cpu-kernels` | 输出 JSON：运行时／编译架构、可执行指令能力、PCM／混音内核及当前可用内核；不运行性能测量 |
 | `--list-svg-fixtures` | 标准输出列出 SVG 场景名 |
 | `--svg-fixture NAME` | 标准输出合成三角波 SVG；支持 live、nodata、frozen、frozen-nodata、review、review-nodata、paused、paused-nodata、stopped、stopped-nodata、frozen-return、review-return |
 | `--audio-tone-fixture` | 标准输出二进制 WAV；重定向到文件，不能将文本日志混入此流 |

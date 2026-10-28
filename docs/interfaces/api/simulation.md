@@ -1681,7 +1681,7 @@ public sealed class EventWaveformException(string reason, string parameter) : Ar
 {
     public string ReasonCode { get; }
 }
-public sealed class EventWaveformComposition
+public sealed partial class EventWaveformComposition
 {
     public const int MaximumBandCount = 32;
     public const int MaximumEventCount = 4096;

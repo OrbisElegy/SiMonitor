@@ -14,6 +14,7 @@ public sealed class SampleToneRenderer
     public SampleToneRenderer(long initialFrame = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(initialFrame);
+        AudioKernels.Prepare();
         Position = initialFrame;
     }
 
@@ -77,13 +78,13 @@ public sealed class SampleToneRenderer
             {
                 int count = Math.Min(scratch.Length, destination.Length - offset);
                 int rendered = slot.Voice.Render(scratch[..count]);
-                for (int j = 0; j < rendered; j++) { destination[offset + j] += scratch[j]; }
+                AudioKernels.AddInPlace(destination.Slice(offset, rendered), scratch[..rendered]);
                 offset += count;
             }
             if (slot.Voice.Finished) { _slots[i] = null; }
         }
         // Saturate once after summing, rather than clipping each contribution.
-        for (int i = 0; i < destination.Length; i++) { destination[i] = Math.Clamp(destination[i], -1, 1); }
+        AudioKernels.Clamp(destination);
         Position = end;
     }
 

@@ -49,6 +49,10 @@ Unless otherwise noted, run commands from the repository root. Use `python3` on 
 
 ## Build and run
 
+CPU kernels are compiled separately for x64 and ARM64, then selected by usable
+instruction features at runtime. Cross-publish RID selection overrides the host;
+see [CPU dispatch and performance tools](../research/performance/cpu-kernels.md).
+
 Build a development version for the current platform:
 
 ```sh

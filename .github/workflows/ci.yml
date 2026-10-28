@@ -229,7 +229,8 @@ jobs:
 
       - name: Run desktop checks (Linux / Xvfb)
         if: runner.os == 'Linux'
-        run: xvfb-run -a python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 4
+        # One Xvfb display also shares native focus and compositor hit testing.
+        run: xvfb-run -a python tools/run_parallel_checks.py --desktop-only --configuration Release --jobs 1
 
       - name: Run desktop checks (Windows)
         if: runner.os == 'Windows'

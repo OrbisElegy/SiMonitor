@@ -134,6 +134,10 @@ internal static class GenericSkinSmokeChecks
         foreach (int width in new[] { 960, 1200, 1440, 1920 })
         {
             int height = width == 1440 ? 940 : 720;
+            // Crossing the shell breakpoint changes SplitView mode during arrange.
+            // Finish that follow-up layout before comparing two captions at one viewport.
+            DesktopViewportSmokeChecks.Layout(window, width, height);
+            ((Control)window.Content!).UpdateLayout();
             skin.SilenceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             DesktopViewportSmokeChecks.Layout(window, width, height);
             var beforePause = skin.SilenceButton.Bounds.Size;
@@ -142,7 +146,8 @@ internal static class GenericSkinSmokeChecks
             var resumeCaption = (TextBlock)skin.SilenceButton.Content!;
             Require(resumeCaption.Text == "Resume Alarm" && resumeCaption.TextLayout.TextLines.Count == 1 &&
                 skin.SilenceButton.Bounds.Size == beforePause,
-                "Silence and Resume Alarm keep the same button size with a single-line caption at " + width);
+                $"Silence and Resume Alarm keep the same button size with a single-line caption at {width}: " +
+                $"before {beforePause}, after {skin.SilenceButton.Bounds.Size}, caption {resumeCaption.Text}, lines {resumeCaption.TextLayout.TextLines.Count}");
             foreach (var button in buttons)
             {
                 var caption = (TextBlock)button.Content!;

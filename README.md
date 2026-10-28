@@ -8,14 +8,6 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 
 仓库包含 .NET 桌面应用、确定性仿真库、原生音频适配器、构建工具、可执行规格检查、锁定的依赖和许可证资料。
 
-ECG 检测能力与皮肤集成边界见 [ECG 增强监测接口](docs/interfaces/alarms/ecg-monitoring.md)。
-
-在“设置 → 显示”切换 Generic、ePM 12C 或 D3 整机参考皮肤，也可导入／导出含材质资源的 `.simskin` 包；
-D3 参考皮肤固定三行，其他皮肤可独立配置波形行数。通用机壳布局与可信设备参数档案分别配置，
-操作接口不以型号命名，详见[桌面皮肤接口](docs/interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤)。
-
-“设置 → 患者时间线”可编排体征渐变、波形模板与通气变化，设置治疗权限与治疗后的 T+ 分支；支持切换、导入和导出完整时间线文件，关闭立即停止，重新启用后从头开始执行。
-
 技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
 ## 运行截图
@@ -47,6 +39,8 @@ D3 参考皮肤固定三行，其他皮肤可独立配置波形行数。通用�
 
 ## 构建与运行
 
+x64 和 ARM64 的 CPU 内核分别编译，运行时根据可用指令集选择。详见 [CPU 分派与性能工具](docs/research/performance/cpu-kernels.md)。
+
 构建当前平台的开发版本：
 
 ```sh
@@ -59,7 +53,7 @@ python3 tools/build.py --jobs 32
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 ```
 
-运行清理后，Windows 下应先重新运行构建脚本以恢复原生音频 DLL。若使用默认 Debug 配置的 `dotnet run --project src/Monitor.Desktop/Monitor.Desktop.csproj`，将会报错找不到 WASAPI 音频库，请先执行 `python3 tools/build.py --configuration Debug`。重编译 WASAPI 音频库后，再运行不带 `--no-build` 参数的 `dotnet run`，才会将新 DLL 复制到对应输出目录；缺失 DLL 时启动检查会提示上述恢复命令。
+清理后，Windows 下应先重新运行构建脚本以恢复原生音频 DLL。若使用默认 Debug 配置的 `dotnet run --project src/Monitor.Desktop/Monitor.Desktop.csproj`，将会报错找不到 WASAPI 音频库，请先执行 `python3 tools/build.py --configuration Debug`。重编译 WASAPI 音频库后，再运行不带 `--no-build` 参数的 `dotnet run`，才会将新 DLL 复制到对应输出目录；缺失 DLL 时启动检查会提示上述恢复命令。
 
 也可以先准备依赖，再使用本地缓存构建：
 
@@ -76,7 +70,7 @@ python3 tools/build_release.py --jobs 32
 
 产品输出位于 `artifacts/release/`。Windows 声音默认使用 WASAPI 音频库，Linux 通过系统 ALSA 库（也覆盖 PipeWire、PulseAudio）出声，不需要原生音频包装库；macOS 暂无声音输出（因为我并没有相关设备）。
 
-**注意**：A平台上的构建或检查不能代替B平台设备的实际验证。
+**注意**：一个平台上的构建或检查不能代替其他平台设备的实际验证。
 
 `artifacts/` 中主要存放构建脚本创建的各种文件，Git 默认忽略此目录。项目的原生音频包装源码位于 `native/sim_audio_native/`；Windows 后端使用 WASAPI。依赖脚本将固定版本的 `vendor/miniaudio.h` 下载到该目录，核对其 SHA-256 后才用于构建。如需审阅这份上游头文件，请先通过命令准备依赖。源码位置、输出布局及原生诊断方法见 [原生音频指南](native/sim_audio_native/README.md)。
 
@@ -123,11 +117,11 @@ python3 tools/generate_selected_therapy_voices.py --offline
 
 `--tts-only` 会恢复 FastSpeech2-A（AISHELL-3 SSB0534）、PWGAN 声码器、英文 E1（VITS LJS）、词典、来源说明及独立的 CPU Python 环境，默认放在 `.cache/tts/`。需要 Python 3.11+ 和可用的 pip/venv；脚本不安装 Torch/CUDA。模型下载地址、大小上限及 SHA-256 见 [`eng/audio/tts-models.json`](eng/audio/tts-models.json)，Python 依赖库见 [`eng/audio/tts-requirements.txt`](eng/audio/tts-requirements.txt)。下载和解压均校验哈希，完成后删除临时压缩包；已有完整资源不会重复下载。
 
-`--tts-cache-dir PATH` 可指定恢复位置；记得在生成工具传入相同参数。`--check` 则只进行校验，`--offline` 则在资源缺失时只报告错误。普通构建无需 TTS 模型；如需要同时准备构建依赖和 TTS 则使用 `--tts`。在开发过程中考虑过的 Qwen、Kokoro、CosyVoice 等AED tts的候选语音模型、试听历史等都不会自动恢复。
+`--tts-cache-dir PATH` 可指定恢复位置；生成工具也需传入相同参数。`--check` 只进行校验，`--offline` 在资源缺失时只报告错误。普通构建无需 TTS 模型；如需同时准备构建依赖和 TTS，使用 `--tts`。开发过程中考虑过的 Qwen、Kokoro、CosyVoice 等 AED 候选语音模型及试听历史不会自动恢复。
 
-重新合成的语音覆盖中英文AED操作提示与CPR按压指导，输出目录为 `artifacts/therapy-selected-resynthesis/`，可使用 `--language zh-CN` 参数只生成中文语音。
+重新合成的语音覆盖中英文 AED 操作提示与 CPR 按压指导，输出目录为 `artifacts/therapy-selected-resynthesis/`，可使用 `--language zh-CN` 参数只生成中文语音。
 
-**注意**：推理存在随机性，新的输出需要重新试听发言，无法保证与目前采用的 WAV 完全一致。生成工具不会覆盖仓库中已确认的语音；这些位于 `eng/audio/voices/` 的受版本控制的语音资源也不会被清理命令删除。
+**注意**：推理存在随机性，新的输出需要重新试听，无法保证与目前采用的 WAV 完全一致。生成工具不会覆盖仓库中已确认的语音；这些位于 `eng/audio/voices/` 的受版本控制的语音资源也不会被清理命令删除。
 脚本只处理仓库内生成内容，不卸载系统工具链，也不清理供其他项目共用的全局 NuGet 缓存。
 
 ## 许可证与归属
@@ -135,8 +129,11 @@ python3 tools/generate_selected_therapy_voices.py --offline
 项目原创代码采用 AGPL-3.0-or-later，详见 [`LICENSE`](LICENSE) 和 [许可证范围说明](docs/legal/license-scope.md)。第三方代码及资源保留各自的许可证。依赖来源与对应哈希见 [`eng/dependencies.json`](eng/dependencies.json)，相关权利声明等见 [`eng/licenses/`](eng/licenses/) 和 [Infirmary 来源声明](docs/legal/infirmary-source-notice.md)。
 
 ## Todo
+
 - 正式图标设计（当前为临时图标）
-- 高级生命征参数，高级ECG参数的调整
+- 更完善的 UI 设计
 - 更完善的皮肤接口
 - 独立教师端、学生端
 - 教学与考试功能
+- macOS 与移动设备适配
+- 配套的模拟设备？

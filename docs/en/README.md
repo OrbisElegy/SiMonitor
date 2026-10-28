@@ -1,24 +1,14 @@
 # Seele's SiMonitor
 
-Settings → Display offers Generic, an ePM 12C inspired screen, and a D3 inspired full enclosure.
-Single-file `.simskin` v2 archives include button materials. D3 fixes three waveform rows;
-see the [desktop skin contract](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤).
-
 <img src="../../src/Monitor.Desktop/Assets/app-icon.png" alt="Temporary SiMonitor icon" width="128" height="128" />
 
 [简体中文](../../README.md) | **English**
 
 Seele's SiMonitor is a teaching simulator for ECG and other patient-monitor waveforms. **It is not a medical device and must not be used for clinical monitoring, diagnosis, or treatment.**
 
-The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records. 
+The repository contains a .NET desktop application, a deterministic simulation library, a native audio adapter, build tools, executable specifications, locked dependencies, and license records.
 
-For a shorter overview, see the [English summary](summary.md). Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
-
-See the [documentation index](../README.md) for the organized technical references.
-
-See the [interface reference](../interfaces/README.md) (Chinese) for current module contracts, data formats, native audio ABI, command-line entry points, and complete C# public declarations.
-
-ECG event integration and capability limits: [enhanced monitoring interface](../interfaces/alarms/ecg-monitoring.md) and [reference notes](../research/physiology/ecg-monitoring.md).
+See the [documentation index](../README.md) and [English summary](summary.md) for technical references. Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
 
 ## Screenshots
 
@@ -49,9 +39,7 @@ Unless otherwise noted, run commands from the repository root. Use `python3` on 
 
 ## Build and run
 
-CPU kernels are compiled separately for x64 and ARM64, then selected by usable
-instruction features at runtime. Cross-publish RID selection overrides the host;
-see [CPU dispatch and performance tools](../research/performance/cpu-kernels.md).
+CPU kernels are compiled separately for x64 and ARM64 and selected at runtime based on usable instruction features. See [CPU dispatch and performance tools](../research/performance/cpu-kernels.md).
 
 Build a development version for the current platform:
 
@@ -135,8 +123,9 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 ## To-Do
 
 - Final icon design (a temporary icon is in use)
-- Advanced vital-sign and ECG parameter controls
-- Further skin interface improvements (see the [composition contract](../interfaces/desktop-tools.md#皮肤装配接口与单文件皮肤))
-- Event-driven continuous vital sign changes
+- More complete UI design
+- Further skin interface improvements
 - Separate teacher and student interfaces
-- Teaching and Exam features
+- Teaching and exam features
+- macOS and mobile device support
+- A companion simulator device?

@@ -39,6 +39,9 @@ internal static class Program
         [
             .. AudioKernelPolicySpecifications.All,
             .. FixedPointOptimizationSpecifications.All,
+            .. OpticalOptimizationSpecifications.All,
+            .. AnchoredFlowSpecifications.All,
+            .. OxygenSolverOptimizationSpecifications.All,
             .. WaveformCrcOptimizationSpecifications.All,
             .. LocalizationSpecifications.All,
             .. MonitorPrintSnapshotSpecifications.All,

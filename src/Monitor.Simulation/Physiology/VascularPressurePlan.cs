@@ -11,13 +11,13 @@ namespace Monitor.Simulation.Physiology;
 // venous reservoir or whole circulation is implied.
 public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs,
     long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg,
-    int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1",
+    int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@2",
     VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false,
     bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false,
     bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false,
     SeededVascularVariation? Variation = null)
 {
-    public const string EvidenceId = "VascularPressureRcIllustration@1";
+    public const string EvidenceId = "VascularPressureRcIllustration@2";
     public VascularPressureTargetCurves? TargetCurves { get; init; }
 
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology,

@@ -8,7 +8,7 @@
     "PulmonaryArtery": "eng/physiology/infirmary-pulmonary-artery.json"
   },
   "model": {
-    "reservoir": "VascularPressureRcIllustration@1, unchanged input intensity, duration and decay kernel",
+    "reservoir": "VascularPressureRcIllustration@2; original input intensity and duration, anchored fixed-grid RC arithmetic",
     "nominal_period": "HeartPeriodNs * VentricularConductionRatio, excluding MechanicalEveryCycles",
     "reference_excess_at_onset": "S0 = E * (a(T-D) - a(T)) / (1 - a(T))",
     "reference_excess_within_cycle": "Sref(u) = max(S0, S0 * a(u) + E * g * k_D(u)); g is the selected beat gain (1 by default), D its ejection duration; premature illustration@4 fixes the previously unweighted reference input",

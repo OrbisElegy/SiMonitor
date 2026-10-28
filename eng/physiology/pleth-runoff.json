@@ -1,5 +1,5 @@
 {
-  "id": "PlethSmoothRunoff@1",
+  "id": "PlethSmoothRunoff@2",
   "source": "src/Monitor.Simulation/Physiology/PlethRunoffSource.cs",
   "status": "project-authored teaching model; not clinically calibrated",
   "references": [
@@ -26,6 +26,10 @@
   ],
   "horizonTau": 64,
   "decayArithmetic": "1us trapezoidal Q62 repeated squaring; fractional interpolation",
+  "recurrence": "Q32 base and age-weighted tails advance on an epoch-relative source-time 8ms grid; exact pulse joins split steps; ties-to-even at every transition",
+  "reconstruction": "Bounded historical tails rebuild every source-time second; queries between grid points advance only the remainder from the preceding canonical state",
+  "cache": "Four immutable one-second blocks; derived cache is excluded from checkpoints and cannot affect output",
+  "compatibility": "Explicit @1 plans reject; @2 changes Q32 rounding while preserving timing and smooth runoff",
   "maximumHistoryEvents": 4096,
   "investigation": "docs/research/physiology/pleth-runoff-research.md",
   "limitations": [

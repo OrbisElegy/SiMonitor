@@ -84,17 +84,29 @@ internal sealed class PhysiologySignalContinuation
         cancellationToken.ThrowIfCancellationRequested();
         output.Clear();
         if (output.IsEmpty) { return; }
-        if (_pressure is not null || _pleth is not null)
-        {
-            for (int sample = 0; sample < output.Length; sample++)
-            { output[sample] = EvaluateAt(checked(firstSimTimeNs + sample * samplePeriodNs), includeBaseline, cancellationToken); }
-            return;
-        }
         int first = EventWaveformComposition.FirstSampleAtOrAfter(Segment.FromEventTimeNs,
             firstSimTimeNs, samplePeriodNs, output.Length);
         int last = EventWaveformComposition.FirstSampleAtOrAfter((Int128)Segment.ToExclusiveEventTimeNs + SupportNs,
             firstSimTimeNs, samplePeriodNs, output.Length);
         if (first >= last) { return; }
+        if (_pressure is not null)
+        {
+            _pressure.EvaluateIntervalUniform(checked(firstSimTimeNs + first * samplePeriodNs), samplePeriodNs,
+                output[first..last], Segment.FromEventTimeNs, Segment.ToExclusiveEventTimeNs,
+                Segment.IncludeInitialPressure, cancellationToken);
+            if (!includeBaseline)
+            {
+                long baseline = (long)Segment.Pressure!.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One;
+                for (int sample = first; sample < last; sample++) { output[sample] = checked(output[sample] - baseline); }
+            }
+            return;
+        }
+        if (_pleth is not null)
+        {
+            _pleth.EvaluateIntervalUniform(checked(firstSimTimeNs + first * samplePeriodNs), samplePeriodNs,
+                output[first..last], Segment.FromEventTimeNs, Segment.ToExclusiveEventTimeNs, cancellationToken);
+            return;
+        }
         int continuousEnd = _hasContinuousActivity ? Math.Clamp(EventWaveformComposition.FirstSampleAtOrAfter(
             Segment.ToExclusiveEventTimeNs, firstSimTimeNs, samplePeriodNs, output.Length), first, last) : first;
         if (continuousEnd > first)

@@ -102,8 +102,8 @@ internal static class RegularRhythmPerfusionSpecifications
             var single = PlethRunoffSource.Create(singlePlan, singlePleth);
             long expected = (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(item.TailTimeNs) * item.FirstGainPermille, 1000) +
                 (long)FixedPointMath.RoundDivideTiesToEven((Int128)single.EvaluateAt(item.TailTimeNs - item.RrNs) * item.SecondGainPermille, 1000);
-            Check.That(Math.Abs(pleth.EvaluateAt(item.TailTimeNs) - expected) <= 3,
-                $"{item.Name}: overlapping optical pulses retain earlier tails and each beat's filling gain");
+            Check.That(Math.Abs(pleth.EvaluateAt(item.TailTimeNs) - expected) <= 16,
+                $"{item.Name}: overlapping optical pulses retain earlier tails and filling gain within 16 Q32 units of separately rounded inputs");
             var interrupted = VascularPressureSource.Create(singlePlan, preset.Arterial);
             Check.That(interrupted.EvaluateAt(800_000_000) > preset.Arterial.AsymptoticPressureCentiMmHg * Q,
                 $"{item.Name}: missing subsequent ejection retains pressure runoff");

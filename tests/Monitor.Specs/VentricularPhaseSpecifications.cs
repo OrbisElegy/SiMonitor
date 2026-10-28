@@ -56,7 +56,7 @@ internal static class VentricularPhaseSpecifications
         var reference = VascularPressureSource.Create(Plan(0), pressure);
         var shifted = VascularPressureSource.Create(Plan(900_000_000), pressure);
         for (long time = 900_000_000; time <= 4_000_000_000; time += 8_000_000)
-        { Check.That(shifted.EvaluateAt(time) == reference.EvaluateAt(time - 900_000_000), "pressure follows the same shifted ejection and transit with an equilibrium initial state"); }
+        { Check.That(Math.Abs(shifted.EvaluateAt(time) - reference.EvaluateAt(time - 900_000_000)) <= 32, "pressure follows shifted ejection and transit within 32 Q32 units across different anchor phases"); }
         Check.That(shifted.EvaluateAt(1_060_000_000) == shifted.EvaluateAt(0) && shifted.EvaluateAt(1_068_000_000) > shifted.EvaluateAt(0),
             "pressure stays at the declared baseline until mechanical onset plus transit");
     }

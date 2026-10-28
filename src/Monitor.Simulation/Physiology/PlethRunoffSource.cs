@@ -6,12 +6,12 @@ namespace Monitor.Simulation.Physiology;
 // Relative optical-pulse illustration, not oxygen saturation or arterial pressure.
 public sealed record PlethRunoffPlan(long TransitDelayNs, long PulseDurationNs, int AmplitudeCounts,
     long TailTimeConstantNs = 400_000_000, bool IncludeNotch = false, bool UsePrematureBeatPerfusion = false,
-    string ModelId = "PlethSmoothRunoff@1", bool UseAtrialFibrillationPerfusion = false,
+    string ModelId = "PlethSmoothRunoff@2", bool UseAtrialFibrillationPerfusion = false,
     bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false,
     bool UseCardiacFillingPerfusion = false);
 
-// Immutable bounded reconstruction: no accumulated integration and no epoch scan.
-public sealed class PlethRunoffSource
+// Canonical source-time recurrence with bounded reconstruction at one-second anchors.
+public sealed partial class PlethRunoffSource
 {
     public const int MaximumEventCount = 4096;
     private const long Q = FixedPointMath.Q32One;
@@ -26,7 +26,7 @@ public sealed class PlethRunoffSource
     private PlethRunoffSource(RegularPhysiologyPlan physiology, PlethRunoffPlan plan)
     {
         _ = RegularPhysiologyTimeline.Start(physiology);
-        if (plan is null || plan.ModelId != "PlethSmoothRunoff@1" || plan.TransitDelayNs < 0 ||
+        if (plan is null || plan.ModelId != "PlethSmoothRunoff@2" || plan.TransitDelayNs < 0 ||
             plan.PulseDurationNs <= 0 || plan.AmplitudeCounts is < 0 or > short.MaxValue ||
             plan.TailTimeConstantNs is < 100_000_000 or > 2_000_000_000 ||
             plan.UsePrematureBeatPerfusion && !PrematureBeatPerfusion.IsPattern(physiology.ConductionPattern)) { throw Invalid(); }
@@ -52,7 +52,7 @@ public sealed class PlethRunoffSource
             (2 * (Int128)plan.TailTimeConstantNs - 1000) * FixedPointMath.Q62One,
             2 * (Int128)plan.TailTimeConstantNs + 1000);
         for (int i = 1; i < _powers.Length; i++)
-        { _powers[i] = (long)FixedPointMath.RoundDivideTiesToEven((Int128)_powers[i - 1] * _powers[i - 1], FixedPointMath.Q62One); }
+        { _powers[i] = (long)FixedPointMath.RoundShiftTiesToEven((Int128)_powers[i - 1] * _powers[i - 1], 62); }
         if (Decay(64 * plan.TailTimeConstantNs) != 0) { throw Invalid(); }
         // Before join reserve full peaks; afterwards reserve the monotone tail
         // at the earliest possible age of each older event. One count per event
@@ -75,31 +75,19 @@ public sealed class PlethRunoffSource
         if (simTimeNs < _physiology.EpochAnchorSimTimeNs) { throw Invalid(); }
         Int128 source = (Int128)simTimeNs - _plan.TransitDelayNs;
         if (source < _physiology.EpochAnchorSimTimeNs) { return 0; }
-        long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, source - SupportNs + 1);
-        Int128 sum = 0;
-        long eventFrom = Math.Max(begin, fromEventTimeNs);
-        var eventTo = Int128.Min(source + 1, toExclusiveEventTimeNs);
-        if (eventTo > eventFrom)
-        {
-            RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo, MaximumHistoryEvents, beat =>
-            {
-                int gain = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
-                    _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
-                    _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
-                    _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
-                        _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
-                if (gain == 0) { return; }
-                long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, beat.CycleIndex, _plan.PulseDurationNs) : _plan.PulseDurationNs;
-                long join = (long)((Int128)duration * _joinIndex / 128);
-                long age = (long)(source - beat.SimTimeNs);
-                long value = age < join ? PeriodicLutLinear.Interpolate(_table, (ulong)(((UInt128)age << 64) / (ulong)duration)).Value :
-                    (long)FixedPointMath.RoundDivideTiesToEven((Int128)_table[_joinIndex] * Tail(age - join), FixedPointMath.Q62One);
-                sum += FixedPointMath.RoundDivideTiesToEven((Int128)value * gain, 1000);
-            }, cancellationToken);
-        }
-        if (sum < 0 || sum > short.MaxValue * Q) { throw new EventWaveformException("PlethRunoff.AmplitudeOverflow", nameof(simTimeNs)); }
-        return (long)sum;
+        var block = GetFlowBlock((long)source, fromEventTimeNs, toExclusiveEventTimeNs, cancellationToken);
+        long result = block.EvaluateAt((long)source, this);
+        if (result < 0 || result > short.MaxValue * Q)
+        { throw new EventWaveformException("PlethRunoff.AmplitudeOverflow", nameof(simTimeNs)); }
+        return result;
     }
+
+    private int GainPermille(PhysiologyCycleEvent beat) =>
+        _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.GainPermille(_physiology.ConductionPattern, beat.CycleIndex) :
+        _plan.UseAtrialFibrillationPerfusion ? AtrialFibrillationPerfusion.GainPermille(_physiology, beat.CycleIndex, _plan.IllustrateAfSystemicPulseDeficit) :
+        _plan.UseConductedFlutterPerfusion ? ConductedFlutterPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+        _plan.UseCardiacFillingPerfusion ? CardiacFillingPerfusion.GainPermille(_physiology, beat.CycleIndex) :
+            _physiology.SeededRate?.EjectionGainPermille(beat.CycleIndex) ?? 1000;
 
     // (1+u/tau)*exp(-u/tau): zero initial slope joins the rounded shoulder.
     // It is an authored smooth tail, not a fitted optical or vascular parameter.
@@ -111,6 +99,7 @@ public sealed class PlethRunoffSource
     }
     private long Decay(long age)
     {
+        if (age >= 64 * _plan.TailTimeConstantNs) { return 0; }
         long steps = age / 1000, fraction = age % 1000;
         long left = Whole(steps), right = fraction == 0 ? left : Whole(steps + 1);
         return left + (long)FixedPointMath.RoundDivideTiesToEven((Int128)(right - left) * fraction, 1000);
@@ -119,7 +108,7 @@ public sealed class PlethRunoffSource
     {
         long value = FixedPointMath.Q62One;
         for (int i = 0; steps > 0; i++, steps >>= 1)
-        { if ((steps & 1) != 0) { value = (long)FixedPointMath.RoundDivideTiesToEven((Int128)value * _powers[i], FixedPointMath.Q62One); } }
+        { if ((steps & 1) != 0) { value = (long)FixedPointMath.RoundShiftTiesToEven((Int128)value * _powers[i], 62); } }
         return value;
     }
     private static EventWaveformException Invalid() => new("PlethRunoff.InvalidPlan", "plan");

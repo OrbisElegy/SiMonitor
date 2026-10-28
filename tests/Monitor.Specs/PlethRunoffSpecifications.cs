@@ -59,7 +59,8 @@ internal static class PlethRunoffSpecifications
         {
             long expected = 0;
             for (long shift = 0; shift <= t; shift += 800_000_000) { expected += single.EvaluateAt(t - shift); }
-            Check.That(source.EvaluateAt(t) == expected, "old tails and new ejection superpose without resetting baseline");
+            Check.That(Math.Abs(source.EvaluateAt(t) - expected) <= 128,
+                "old tails and new ejection superpose within 128 Q32 units of independent rounded trajectories");
         }
         var none = PlethRunoffSource.Create(Plan with { VentricularMechanicalEnabled = false }, Pulse);
         Check.That(none.EvaluateAt(4_000_000_000) == 0, "electrical activity alone cannot synthesize Pleth");
@@ -127,7 +128,8 @@ internal static class PlethRunoffSpecifications
             {
                 long t = origin + i * 8_000_000L;
                 long samePhase = 40_000_000_000 + t % 800_000_000;
-                Check.That(source.EvaluateAt(t) == source.EvaluateAt(samePhase), "late indexed query equals bounded steady-state phase");
+                Check.That(Math.Abs(source.EvaluateAt(t) - source.EvaluateAt(samePhase)) <= 128,
+                    "late bounded reconstruction retains steady-state phase within 128 Q32 units across different anchor phases");
             }
             Console.WriteLine($"Pleth bounded replay: origin={origin}ns, 2000 evaluations={watch.Elapsed.TotalMilliseconds:F1}ms, max events={source.MaximumHistoryEvents}");
         }

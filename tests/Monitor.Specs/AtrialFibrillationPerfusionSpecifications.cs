@@ -55,7 +55,7 @@ internal static class AtrialFibrillationPerfusionSpecifications
                         (1 - Math.Exp(-(double)Pressure.EjectionDurationNs / Pressure.TimeConstantNs)) * Math.Exp(-(elapsed - Pressure.EjectionDurationNs) / Pressure.TimeConstantNs);
                     expectedPressure += 30000 * gains[i] / 1000.0 * input;
                 }
-                Check.That(source.EvaluateAt(t) == expectedPleth, "weighted Pleth pulses superpose with old runoff and full nominal duration");
+                Check.That(Math.Abs(source.EvaluateAt(t) - expectedPleth) <= 128, "weighted Pleth pulses retain runoff and duration within 128 Q32 units of independently rounded pulses");
                 Check.That(Math.Abs(pressure.EvaluateAt(t) / (double)FixedPointMath.Q32One - expectedPressure) < 0.00001,
                     "independent weighted RC inputs agree without resetting residual pressure");
             }

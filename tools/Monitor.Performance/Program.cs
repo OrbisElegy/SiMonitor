@@ -22,6 +22,11 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--data-paths")
+        {
+            return DataPathBenchmarks.Execute(args[1..]);
+        }
+
         bool verifyOnly = false;
         string label = "current";
         string? expectedPath = null;

@@ -118,7 +118,7 @@ public sealed class PhysiologyWaveformGroup
                 var illustration = SensorWaveformIllustrations.At(sensorIllustrations, sample.SourceSimTimeNs);
                 value = SensorWaveformIllustrations.Apply(value, sample.SourceSimTimeNs,
                     source.Clock.EpochAnchorSimTimeNs, illustration, generator);
-                short expected = checked((short)FixedPointMath.RoundDivideTiesToEven(checked(value + (long)item.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), FixedPointMath.Q32One));
+                short expected = checked((short)FixedPointMath.RoundShiftTiesToEven(checked(value + (long)item.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), 32));
                 if (sample.NormalizedValue != expected || sample.QualityFlags != SensorWaveformIllustrations.Quality(item.QualityFlags, illustration, sample.SourceSimTimeNs))
                 { throw InvalidCheckpoint(); }
             }
@@ -228,8 +228,8 @@ public sealed class PhysiologyWaveformGroup
                     sample.ValueQ32, sample.Tick.SimTimeNs) ?? sample.ValueQ32;
                 long valueQ32 = SensorWaveformIllustrations.Apply(sourceValueQ32, sample.Tick.SimTimeNs,
                     epochAnchorSimTimeNs, illustration, channel.Generator, cancellationToken);
-                long measuredValue = (long)FixedPointMath.RoundDivideTiesToEven(
-                    checked(valueQ32 + (long)channel.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), FixedPointMath.Q32One);
+                long measuredValue = (long)FixedPointMath.RoundShiftTiesToEven(
+                    checked(valueQ32 + (long)channel.PressureZeroOffsetCentiMmHg * FixedPointMath.Q32One), 32);
                 if (measuredValue is < short.MinValue or > short.MaxValue)
                 { throw new PhysiologyWaveformGroupException("PhysiologyGroup.MeasuredPressureOutOfRange", nameof(simTimeNs)); }
                 short measured = (short)measuredValue;

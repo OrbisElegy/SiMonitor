@@ -58,11 +58,22 @@ public sealed class OpticalSaturationAcquisition
         next.Samples = samples.TakeLast(OpticalSaturationMeasurement.WindowSamples).ToArray();
         next.Identity = identity; next.NextTime = end; next.NextIndex = nextIndex; next.Sequence = block.BlockSequence;
         var reading = _measurement.Estimate(next.Samples, next.Samples[^1].SampleTimeNs);
+        next.Reading = reading;
         _state = next;
         return reading;
     }
 
-    public OpticalSaturationReading Read(long asOfSampleTimeNs) => _measurement.Estimate(_state.Samples, asOfSampleTimeNs);
+    public OpticalSaturationReading Read(long asOfSampleTimeNs)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(asOfSampleTimeNs);
+        if (_state.Reading is not { } reading) { return _measurement.Estimate(_state.Samples, asOfSampleTimeNs); }
+        long last = _state.Samples[^1].SampleTimeNs;
+        // Earlier reads retain the estimator's complete timestamp validation.
+        // Only sample age can change a reading after its immutable window ends.
+        if (asOfSampleTimeNs < last) { return _measurement.Estimate(_state.Samples, asOfSampleTimeNs); }
+        return asOfSampleTimeNs - last > OpticalSaturationMeasurement.MaximumSampleAgeNs
+            ? new(WaveformMeasurementStatus.NoData, null, null, last) : reading;
+    }
     public Checkpoint Capture() => new(_redChannel, _infraredChannel, _measurement, _state with { });
     public static OpticalSaturationAcquisition Restore(Checkpoint checkpoint)
     {
@@ -94,5 +105,6 @@ public sealed class OpticalSaturationAcquisition
         // Immutable records in an array replaced on every consume; checkpoints
         // share only immutable material, never a mutable ring exposed to callers.
         internal OpticalSample[] Samples = [];
+        internal OpticalSaturationReading? Reading;
     }
 }

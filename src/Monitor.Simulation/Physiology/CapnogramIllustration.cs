@@ -92,7 +92,7 @@ internal static class CapnogramMorphology
             {
                 mixed.Add(band with { ExpirationCycleGainsPermille = CombineGains(band.ExpirationCycleGainsPermille, [1000, 0, 0, 0]) });
                 // Preserve the dispersion path's share when replacing its shape.
-                long pathPeak = checked((long)FixedPointMath.RoundDivideTiesToEven(band.TableQ32[480], FixedPointMath.Q32One));
+                long pathPeak = checked((long)FixedPointMath.RoundShiftTiesToEven(band.TableQ32[480], 32));
                 long[] spontaneous = Create(CapnogramIllustration.SpontaneousVentilation, pathPeak, band.PhasePoints!);
                 mixed.Add(band with
                 {

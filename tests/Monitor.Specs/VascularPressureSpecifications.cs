@@ -264,7 +264,7 @@ internal static class VascularPressureSpecifications
             Arterial with { InitialPressureCentiMmHg = -1 }, Arterial with { InitialPressureCentiMmHg = 32768 },
             Arterial with { InitialPressureCentiMmHg = 1199 }, Arterial with { AsymptoticPressureCentiMmHg = -1 },
             Arterial with { EjectionEquilibriumCentiMmHg = -1 }, Arterial with { EjectionEquilibriumCentiMmHg = 31568 },
-            Arterial with { ModelId = "VascularPressureRcIllustration@2" }, Arterial with { ModelId = null! },
+            Arterial with { ModelId = "VascularPressureRcIllustration@1" }, Arterial with { ModelId = null! },
         })
         {
             RejectPlan(() => invalid.CreateChannel(Physiology, Abp, 0), "VascularPressure.InvalidPlan");

@@ -1,5 +1,5 @@
 {
-  "id": "VascularPressureRcIllustration@1",
+  "id": "VascularPressureRcIllustration@2",
   "source": "Project-authored finite-ejection RC illustration; no paper waveform points or source code copied",
   "research": "docs/research/physiology/vascular-pressure-runoff-research.md",
   "qualification": "Unqualified teaching source; no valve notch, reflections, CVP mean response, independent right-heart source or pressure numerics",
@@ -10,11 +10,15 @@
     "ejection_equilibrium": "R*Q pressure increment during constant finite ejection, not full pressure or stroke volume"
   },
   "kernel": {
+    "id": "VascularPressureRcAnchored8MsQ62@2",
     "mesh_step_ns": 1000,
     "coefficient": "Q2.62 nearest-ties-to-even of (2*tau-h)/(2*tau+h)",
     "integer_power": "cached coefficient squares; nearest-ties-to-even after each Q62 product",
     "fractional_step": "linear interpolation of independently evaluated adjacent whole-step powers at integer-ns position",
-    "sum": "initial response and all accepted finite-ejection responses in Int128/Q62; one final Q32 rounding",
+    "anchor_sum": "Every source-time second: initial response and bounded accepted finite-ejection responses in Int128/Q62; one final Q32 rounding",
+    "recurrence": "Epoch-relative source-time 8ms grid, split at exact ejection start/end edges; Pnext = input + round_even((P-input)*decay,62)",
+    "random_queries": "Index one of four immutable canonical blocks, then advance the remainder from the preceding grid state; acquisition frequency and query order do not affect output",
+    "compatibility": "Explicit @1 plans reject; @2 changes Q32 rounding; cache is derived and absent from checkpoints",
     "decay_horizon": "64*tau; reject unless computed whole-step decay is already zero in Q62",
     "maximum_candidate_ejections": 4096,
     "clock": "model-owned kernel, independent of acquisition, presentation and call boundaries"

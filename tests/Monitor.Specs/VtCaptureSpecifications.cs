@@ -108,8 +108,8 @@ internal static class VtCaptureSpecifications
             long Weighted(PlethRunoffSource source, int gain) => (long)FixedPointMath.RoundDivideTiesToEven((Int128)source.EvaluateAt(t) * gain, 1000);
             long replacement = Weighted(early, 137) - Weighted(old, 286) +
                 (t >= 4_500_000_000 ? Weighted(next, 394) - Weighted(next, 286) : 0);
-            Check.That(Math.Abs(pleth.EvaluateAt(t) - ordinary.EvaluateAt(t) - replacement) <= 4,
-                "capture replaces one pulse and changes the next beat's filling without adding an ejection");
+            Check.That(Math.Abs(pleth.EvaluateAt(t) - ordinary.EvaluateAt(t) - replacement) <= 32,
+                "capture replaces one pulse and changes the next beat's filling within 32 Q32 units of separate recurrences");
         }
         Check.That(pleth.MaximumHistoryEvents < 100, "finite optical history at330ms minimum RR");
         foreach (var pressure in new[] { VtPerfusionReference.Arterial, VtPerfusionReference.Pulmonary })

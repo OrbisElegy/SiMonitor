@@ -3,12 +3,12 @@ using Monitor.Simulation.Determinism;
 
 namespace Monitor.Simulation.Physiology;
 
-// Immutable indexed reconstruction from the declared epoch. The model owns its
-// 1 microsecond RC kernel; acquisition rates and call/checkpoint boundaries never integrate
-// pressure. Only accepted ventricular mechanical events contribute flow.
-public sealed class VascularPressureSource
+// The RC kernel advances on a canonical source-time grid with bounded one-second
+// reconstruction anchors. Acquisition and checkpoint boundaries never change the
+// trajectory. Only accepted ventricular mechanical events contribute flow.
+public sealed partial class VascularPressureSource
 {
-    public const string KernelId = "VascularPressureRcTrapezoidal1UsQ62@1";
+    public const string KernelId = "VascularPressureRcAnchored8MsQ62@2";
     public const long MeshStepNs = 1_000;
     public const int MaximumEjectionCount = 4096;
     private const long MinimumTimeConstantNs = 100_000_000;
@@ -372,51 +372,40 @@ public sealed class VascularPressureSource
         { throw new EventWaveformException("VascularPressure.InvalidTime", nameof(simTimeNs)); }
         if (_targetCurves is not null)
         { return _targetCurves.EvaluateIntervalAt(simTimeNs, fromEventTimeNs, toExclusiveEventTimeNs, includeInitialPressure, cancellationToken); }
-        long sourceTime = Math.Max(_physiology.EpochAnchorSimTimeNs, simTimeNs - _plan.TransitDelayNs);
-        Int128 pressure = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q62One +
-            (Int128)(includeInitialPressure ? _plan.InitialPressureCentiMmHg - _plan.AsymptoticPressureCentiMmHg : 0) *
-            Decay(sourceTime - _physiology.EpochAnchorSimTimeNs);
-        // Age == support has zero weight; the remaining integer-ns interval is
-        // exactly support wide, so ceil(support/selectedPeriod) bounds its events.
-        long begin = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)sourceTime - _supportNs + 1);
+        long sourceTime = (long)Int128.Max(_physiology.EpochAnchorSimTimeNs, (Int128)simTimeNs - _plan.TransitDelayNs);
+        var block = GetFlowBlock(sourceTime, fromEventTimeNs, toExclusiveEventTimeNs, includeInitialPressure, cancellationToken);
+        long reservoir = block.ReservoirAt(sourceTime, this);
+        return ApplyMorphology(sourceTime, reservoir, block.Beats, cancellationToken);
+    }
+
+    private long ApplyMorphology(long sourceTimeNs, long reservoirQ32, FlowBeat[] beats, CancellationToken cancellationToken)
+    {
         long? morphologyAge = null;
         int morphologyGain = 1000;
-        long pulse = 0;
         long morphologyEjectionDuration = _plan.EjectionDurationNs;
-        long eventFrom = Math.Max(begin, fromEventTimeNs);
-        var eventTo = Int128.Min((Int128)sourceTime + 1, toExclusiveEventTimeNs);
-        if (eventTo > eventFrom)
+        long pulse = 0;
+        if (_morphologyTable is not null)
         {
-            RegularPhysiologyTimeline.VisitVentricularMechanical(_physiology, eventFrom, eventTo,
-                MaximumEjectionCount, item =>
+            foreach (var beat in beats)
+            {
+                long age = sourceTimeNs - beat.TimeNs;
+                if (age < 0) { break; }
+                if (age < beat.MorphologyDurationNs)
                 {
-                    int gain = GainPermille(item);
-                    if (gain == 0) { return; }
-                    long age = sourceTime - item.SimTimeNs;
-                    long duration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.EjectionDurationNs) : _plan.EjectionDurationNs;
-                    long coefficient = EjectionCoefficient(age, duration);
-                    pressure += FixedPointMath.RoundDivideTiesToEven((Int128)_plan.EjectionEquilibriumCentiMmHg * coefficient * gain, 1000);
-                    if (_morphologyTable is not null)
-                    {
-                        long morphologyDuration = _plan.UsePrematureBeatPerfusion ? PrematureBeatPerfusion.DurationNs(_physiology.ConductionPattern, item.CycleIndex, _plan.Morphology!.DurationNs) : _plan.Morphology!.DurationNs;
-                        if (age < morphologyDuration)
-                        {
-                            long contribution = PeriodicLutLinear.Interpolate(_morphologyTable,
-                                (ulong)(((UInt128)age << 64) / (ulong)morphologyDuration)).Value;
-                            pulse += (long)FixedPointMath.RoundDivideTiesToEven((Int128)contribution * gain, 1000);
-                        }
-                    }
-                    if (_morphologyTable is not null && age < _morphologyPeriodNs)
-                    {
-                        morphologyAge = age; morphologyGain = gain;
-                        morphologyEjectionDuration = duration;
-                    }
-                }, cancellationToken);
+                    long contribution = PeriodicLutLinear.Interpolate(_morphologyTable,
+                        (ulong)(((UInt128)age << 64) / (ulong)beat.MorphologyDurationNs)).Value;
+                    pulse += (long)FixedPointMath.RoundDivideTiesToEven((Int128)contribution * beat.GainPermille, 1000);
+                }
+                if (age < _morphologyPeriodNs)
+                {
+                    morphologyAge = age;
+                    morphologyGain = beat.GainPermille;
+                    morphologyEjectionDuration = beat.EjectionDurationNs;
+                }
+            }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        // Retain all weighted contributions in Int128/Q62, then round once to
-        // Q32. Nonoverlapping inputs and nonnegative decay bound the full source.
-        Int128 result = FixedPointMath.RoundDivideTiesToEven(pressure, 1L << 30);
+        Int128 result = reservoirQ32;
         if (_useLinearStrokeMorphology && _morphologyTable is not null)
         {
             // Replace this beat's reference RC excursion with its weighted
@@ -442,8 +431,8 @@ public sealed class VascularPressureSource
                     Int128 onset = FixedPointMath.RoundDivideTiesToEven((Int128)_referenceOnsetQ32 * morphologyGain, 1000);
                     Int128 residual = result - pulse - asymptote - onset;
                     long referenceAge = EjectionBoundedReferenceAge(age, morphologyEjectionDuration);
-                    result = asymptote + onset + pulse + FixedPointMath.RoundDivideTiesToEven(
-                        residual * Decay(referenceAge - age), FixedPointMath.Q62One);
+                    result = asymptote + onset + pulse + FixedPointMath.RoundShiftTiesToEven(
+                        residual * Decay(referenceAge - age), 62);
                 }
             }
         }
@@ -454,10 +443,9 @@ public sealed class VascularPressureSource
             // An unweighted reference artificially suppresses a weak beat.
             Int128 referenceInput = FixedPointMath.RoundDivideTiesToEven(
                 (Int128)_plan.EjectionEquilibriumCentiMmHg * EjectionCoefficient(elapsed, morphologyEjectionDuration) * morphologyGain, 1000);
-            long reference = (long)FixedPointMath.RoundDivideTiesToEven(
+            long reference = (long)FixedPointMath.RoundShiftTiesToEven(
                 (Int128)_referenceOnsetQ32 * Decay(elapsed) +
-                referenceInput * FixedPointMath.Q32One,
-                FixedPointMath.Q62One);
+                referenceInput * FixedPointMath.Q32One, 62);
             // Enforce the nominal minimum against sub-Q32 endpoint rounding.
             reference = Math.Max(_referenceOnsetQ32, reference);
             Int128 asymptote = (Int128)_plan.AsymptoticPressureCentiMmHg * FixedPointMath.Q32One;
@@ -465,7 +453,7 @@ public sealed class VascularPressureSource
                 (result - asymptote) * (_referenceOnsetQ32 + pulse), reference);
         }
         if (result < 0 || result > short.MaxValue * FixedPointMath.Q32One)
-        { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(simTimeNs)); }
+        { throw new EventWaveformException("VascularPressure.AmplitudeOverflow", nameof(sourceTimeNs)); }
         return (long)result;
     }
 
@@ -476,11 +464,11 @@ public sealed class VascularPressureSource
     {
         if (ageNs >= ejectionDurationNs) { return _morphologyPeriodNs; }
         long position = (long)FixedPointMath.RoundDivideTiesToEven((Int128)ageNs * FixedPointMath.Q32One, ejectionDurationNs);
-        long square = (long)FixedPointMath.RoundDivideTiesToEven((Int128)position * position, FixedPointMath.Q32One);
-        long cube = (long)FixedPointMath.RoundDivideTiesToEven((Int128)square * position, FixedPointMath.Q32One);
-        long mappedAge = (long)FixedPointMath.RoundDivideTiesToEven(
+        long square = (long)FixedPointMath.RoundShiftTiesToEven((Int128)position * position, 32);
+        long cube = (long)FixedPointMath.RoundShiftTiesToEven((Int128)square * position, 32);
+        long mappedAge = (long)FixedPointMath.RoundShiftTiesToEven(
             (Int128)(3 * square - 2 * cube) * _morphologyPeriodNs +
-            (Int128)(position - 2 * square + cube) * ejectionDurationNs, FixedPointMath.Q32One);
+            (Int128)(position - 2 * square + cube) * ejectionDurationNs, 32);
         return Math.Clamp(mappedAge, ageNs, _morphologyPeriodNs);
     }
 
@@ -529,7 +517,7 @@ public sealed class VascularPressureSource
     }
 
     private static long Multiply(long left, long right) =>
-        (long)FixedPointMath.RoundDivideTiesToEven((Int128)left * right, FixedPointMath.Q62One);
+        (long)FixedPointMath.RoundShiftTiesToEven((Int128)left * right, 62);
 
     private static EventWaveformException Invalid() => new("VascularPressure.InvalidPlan", "plan");
 }

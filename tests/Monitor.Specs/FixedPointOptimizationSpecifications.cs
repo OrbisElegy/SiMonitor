@@ -9,10 +9,53 @@ internal static class FixedPointOptimizationSpecifications
     public static Specification[] All =>
     [
         new(nameof(PowerOfTwoDivisionMatchesUnboundedRounding), PowerOfTwoDivisionMatchesUnboundedRounding),
+        new(nameof(RoundedShiftsMatchUnboundedRounding), RoundedShiftsMatchUnboundedRounding),
+        new(nameof(RoundedShiftsRejectInvalidBitCounts), RoundedShiftsRejectInvalidBitCounts),
         new(nameof(GeneralDivisionMatchesUnboundedRounding), GeneralDivisionMatchesUnboundedRounding),
         new(nameof(FixedPointProductsAndQuotientsPreserveSaturation), FixedPointProductsAndQuotientsPreserveSaturation),
         new(nameof(DivisionFaultsPreserveTheirContracts), DivisionFaultsPreserveTheirContracts),
     ];
+
+    private static void RoundedShiftsMatchUnboundedRounding()
+    {
+        Int128[] boundaries = [Int128.MinValue, Int128.MinValue + 1, -1, 0, 1, Int128.MaxValue - 1, Int128.MaxValue];
+        ulong randomState = 0xA0761D6478BD642F;
+        for (int shift = 0; shift < 128; shift++)
+        {
+            BigInteger divisor = BigInteger.One << shift;
+            foreach (Int128 value in boundaries) { AssertRoundedShift(value, shift); }
+            for (int quotient = -4; quotient <= 4; quotient++)
+            {
+                for (int offset = -1; offset <= 1; offset++)
+                {
+                    BigInteger value = divisor * quotient + divisor / 2 + offset;
+                    if (value >= (BigInteger)Int128.MinValue && value <= (BigInteger)Int128.MaxValue)
+                    { AssertRoundedShift((Int128)value, shift); }
+                }
+            }
+            for (int index = 0; index < 64; index++)
+            { AssertRoundedShift(NextInt128(ref randomState), shift); }
+        }
+    }
+
+    private static void RoundedShiftsRejectInvalidBitCounts()
+    {
+        foreach (int shift in new[] { int.MinValue, -128, -1, 128, 129, int.MaxValue })
+        {
+            try
+            {
+                FixedPointMath.RoundShiftTiesToEven(0, shift);
+                throw new InvalidOperationException("out-of-range shifts must not wrap or silently succeed");
+            }
+            catch (ArgumentOutOfRangeException exception)
+            { Check.That(exception.ParamName == "shift", "invalid bit count identifies the shift parameter"); }
+        }
+    }
+
+    private static void AssertRoundedShift(Int128 value, int shift) =>
+        Check.That((BigInteger)FixedPointMath.RoundShiftTiesToEven(value, shift) ==
+            RoundUnbounded((BigInteger)value, BigInteger.One << shift),
+            $"rounded shift must match unbounded arithmetic: {value} / 2^{shift}");
 
     private static void PowerOfTwoDivisionMatchesUnboundedRounding()
     {

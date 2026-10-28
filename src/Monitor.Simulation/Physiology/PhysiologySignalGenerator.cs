@@ -318,19 +318,17 @@ public sealed class PhysiologySignalGenerator
                 }
                 else
                 {
-                    for (int index = 0; index < ticks.Count; index++)
-                    {
-                        batch[index] = _vascularPressure is { } pressure
-                            ? pressure.EvaluateAt(ticks[index].SimTimeNs, cancellationToken)
-                            : PlethRunoff!.EvaluateAt(ticks[index].SimTimeNs, cancellationToken);
-                    }
+                    if (_vascularPressure is { } pressure)
+                    { pressure.EvaluateUniform(firstSimTimeNs, _clock.SamplePeriodNs, batch, cancellationToken); }
+                    else
+                    { PlethRunoff!.EvaluateUniform(firstSimTimeNs, _clock.SamplePeriodNs, batch, cancellationToken); }
                 }
             }
             for (int index = 0; index < ticks.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 long value = batch[index];
-                short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+                short normalized = checked((short)FixedPointMath.RoundShiftTiesToEven(value, 32));
                 output[index] = new(ticks[index], value, normalized);
             }
         }

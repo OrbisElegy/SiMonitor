@@ -821,6 +821,7 @@ public static class FixedPointMath
     public const long Q32One = 1L << 32;
     public const long Q62One = 1L << 62;
     public static Int128 RoundDivideTiesToEven(Int128 numerator, Int128 denominator);
+    public static Int128 RoundShiftTiesToEven(Int128 value, int shift);
     public static SaturatingInt64 Saturate(Int128 value);
     public static SaturatingInt64 Add(long left, long right);
     public static SaturatingInt64 Subtract(long left, long right);
@@ -1881,6 +1882,16 @@ public static class NormalPrDeltaReference
 }
 ```
 
+## Physiology/OxygenReservoirAmount.cs
+
+源码：[OxygenReservoirAmount.cs](../../../src/Monitor.Simulation/Physiology/OxygenReservoirAmount.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public readonly record struct OxygenReservoirAmount(double HighMl, double LowMl = 0)
+{
+}
+```
+
 ## Physiology/OxygenReservoirModel.cs
 
 源码：[OxygenReservoirModel.cs](../../../src/Monitor.Simulation/Physiology/OxygenReservoirModel.cs) · 命名空间：`Monitor.Simulation.Physiology`
@@ -1892,15 +1903,11 @@ public sealed record OxygenReservoirParameters(decimal FrcMlBtps = 2200m, decima
     public decimal VenousVolumeMl { get; }
     public void Validate();
 }
-public readonly record struct OxygenReservoirState(decimal AlveolarOxygenMl, decimal AlveolarCarbonDioxideMl, decimal AlveolarInertGasMl, decimal ArterialOxygenMl, decimal VenousOxygenMl, decimal InspiredOxygenMl = 0, decimal ExpiredOxygenMl = 0, decimal ConsumedOxygenMl = 0, decimal UnmetOxygenDemandMl = 0)
-{
-    public decimal GasMlStpd { get; }
-    public decimal ConservedOxygenMl { get; }
-}
 public static class OxygenReservoirModel
 {
-    public const string ModelId = "OxygenTransportDecimal@2";
+    public const string ModelId = "OxygenTransportDoubleDouble@3";
     public const long StepNs = 8_000_000;
+    public const long IntegrationSubstepNs = 2_000_000;
     public const decimal DryPressureMmHg = 713m;
     public static decimal BtpsToStpd { get; }
     public static decimal SaturationFraction(decimal pressureMmHg);
@@ -1909,6 +1916,32 @@ public static class OxygenReservoirModel
     public static OxygenReservoirState Step(OxygenReservoirState state, OxygenReservoirParameters parameters, PhysiologyTransportInterval input, decimal oxygenDemandMultiplier = 1);
     public static void ValidateOxygenDemandMultiplier(decimal oxygenDemandMultiplier);
     public static void ValidateState(OxygenReservoirState state, OxygenReservoirParameters parameters);
+}
+```
+
+## Physiology/OxygenReservoirState.cs
+
+源码：[OxygenReservoirState.cs](../../../src/Monitor.Simulation/Physiology/OxygenReservoirState.cs) · 命名空间：`Monitor.Simulation.Physiology`
+
+```csharp
+public readonly record struct OxygenReservoirCheckpoint(string ModelId, OxygenReservoirAmount AlveolarOxygen, OxygenReservoirAmount AlveolarCarbonDioxide, OxygenReservoirAmount AlveolarInertGas, OxygenReservoirAmount ArterialOxygen, OxygenReservoirAmount VenousOxygen, OxygenReservoirAmount InspiredOxygen, OxygenReservoirAmount ExpiredOxygen, OxygenReservoirAmount ConsumedOxygen, OxygenReservoirAmount UnmetOxygenDemand)
+{
+}
+public readonly record struct OxygenReservoirState(decimal AlveolarOxygenMl, decimal AlveolarCarbonDioxideMl, decimal AlveolarInertGasMl, decimal ArterialOxygenMl, decimal VenousOxygenMl, decimal InspiredOxygenMl = 0, decimal ExpiredOxygenMl = 0, decimal ConsumedOxygenMl = 0, decimal UnmetOxygenDemandMl = 0)
+{
+    public decimal AlveolarOxygenMl { get; init; }
+    public decimal AlveolarCarbonDioxideMl { get; init; }
+    public decimal AlveolarInertGasMl { get; init; }
+    public decimal ArterialOxygenMl { get; init; }
+    public decimal VenousOxygenMl { get; init; }
+    public decimal InspiredOxygenMl { get; init; }
+    public decimal ExpiredOxygenMl { get; init; }
+    public decimal ConsumedOxygenMl { get; init; }
+    public decimal UnmetOxygenDemandMl { get; init; }
+    public OxygenReservoirCheckpoint Checkpoint { get; }
+    public OxygenReservoirState(OxygenReservoirCheckpoint checkpoint);
+    public decimal GasMlStpd { get; }
+    public decimal ConservedOxygenMl { get; }
 }
 ```
 
@@ -2084,10 +2117,10 @@ public sealed record PlethPulsePlan(long TransitDelayNs, long DurationNs, int Am
 源码：[PlethRunoffSource.cs](../../../src/Monitor.Simulation/Physiology/PlethRunoffSource.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed record PlethRunoffPlan(long TransitDelayNs, long PulseDurationNs, int AmplitudeCounts, long TailTimeConstantNs = 400_000_000, bool IncludeNotch = false, bool UsePrematureBeatPerfusion = false, string ModelId = "PlethSmoothRunoff@1", bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false)
+public sealed record PlethRunoffPlan(long TransitDelayNs, long PulseDurationNs, int AmplitudeCounts, long TailTimeConstantNs = 400_000_000, bool IncludeNotch = false, bool UsePrematureBeatPerfusion = false, string ModelId = "PlethSmoothRunoff@2", bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false)
 {
 }
-public sealed class PlethRunoffSource
+public sealed partial class PlethRunoffSource
 {
     public const int MaximumEventCount = 4096;
     public long SupportNs { get; }
@@ -2605,10 +2638,10 @@ public sealed record VascularPressureMorphologyPlan(VascularPressureMorphologyKi
 源码：[VascularPressurePlan.cs](../../../src/Monitor.Simulation/Physiology/VascularPressurePlan.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs, long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg, int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@1", VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false, SeededVascularVariation? Variation = null)
+public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDurationNs, long TimeConstantNs, int InitialPressureCentiMmHg, int AsymptoticPressureCentiMmHg, int EjectionEquilibriumCentiMmHg, string ModelId = "VascularPressureRcIllustration@2", VascularPressureMorphologyPlan? Morphology = null, bool UsePrematureBeatPerfusion = false, bool UseAtrialFibrillationPerfusion = false, bool IllustrateAfSystemicPulseDeficit = false, bool UseConductedFlutterPerfusion = false, bool UseCardiacFillingPerfusion = false, SeededVascularVariation? Variation = null)
 {
     public VascularPressureTargetCurves? TargetCurves { get; init; }
-    public const string EvidenceId = "VascularPressureRcIllustration@1";
+    public const string EvidenceId = "VascularPressureRcIllustration@2";
     public PhysiologyWaveformChannelPlan CreateChannel(RegularPhysiologyPlan physiology, Guid channelId, uint qualityFlags);
 }
 ```
@@ -2618,9 +2651,9 @@ public sealed record VascularPressurePlan(long TransitDelayNs, long EjectionDura
 源码：[VascularPressureSource.cs](../../../src/Monitor.Simulation/Physiology/VascularPressureSource.cs) · 命名空间：`Monitor.Simulation.Physiology`
 
 ```csharp
-public sealed class VascularPressureSource
+public sealed partial class VascularPressureSource
 {
-    public const string KernelId = "VascularPressureRcTrapezoidal1UsQ62@1";
+    public const string KernelId = "VascularPressureRcAnchored8MsQ62@2";
     public const long MeshStepNs = 1_000;
     public const int MaximumEjectionCount = 4096;
     public static VascularPressureSource Create(RegularPhysiologyPlan physiology, VascularPressurePlan plan);

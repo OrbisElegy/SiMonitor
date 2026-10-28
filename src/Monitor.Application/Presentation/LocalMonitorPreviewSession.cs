@@ -717,10 +717,22 @@ public sealed partial class LocalMonitorPreviewSession
 
         IEnumerable<(long TimeNs, double Value)> ReadProjectedEcg()
         {
-            foreach (var sample in _ecgSamples)
+            int lower = 0, upper = _ecgSamples.Count;
+            while (lower < upper)
             {
-                if (sample.TimeNs < fromSimTimeNs || sample.TimeNs >= toExclusiveSimTimeNs) { continue; }
-                var artifact = _shockArtifacts.LastOrDefault(item => item.Contains(sample.TimeNs));
+                int middle = lower + (upper - lower) / 2;
+                if (_ecgSamples[middle].TimeNs < fromSimTimeNs) { lower = middle + 1; }
+                else { upper = middle; }
+            }
+            for (int index = lower; index < _ecgSamples.Count; index++)
+            {
+                var sample = _ecgSamples[index];
+                if (sample.TimeNs >= toExclusiveSimTimeNs) { break; }
+                DefibrillationEcgArtifact? artifact = null;
+                for (int shock = _shockArtifacts.Count - 1; shock >= 0; shock--)
+                {
+                    if (_shockArtifacts[shock].Contains(sample.TimeNs)) { artifact = _shockArtifacts[shock]; break; }
+                }
                 if (usableOnly && artifact is not null) { continue; }
                 yield return (sample.TimeNs, artifact?.EvaluateMicrovolts(sample.TimeNs) ?? sample.Values[(int)lead]);
             }

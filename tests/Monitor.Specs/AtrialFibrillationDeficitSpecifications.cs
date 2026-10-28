@@ -56,7 +56,7 @@ internal static class AtrialFibrillationDeficitSpecifications
                         (1 - Math.Exp(-(double)Pressure.EjectionDurationNs / Pressure.TimeConstantNs)) * Math.Exp(-(elapsed - Pressure.EjectionDurationNs) / Pressure.TimeConstantNs);
                     removedPressure += 30000 * gain / 1000.0 * input;
                 }
-                Check.That(original.EvaluateAt(t) - pulse.EvaluateAt(t) == removedPleth, "only omitted contributions are removed, including their later tails");
+                Check.That(Math.Abs(original.EvaluateAt(t) - pulse.EvaluateAt(t) - removedPleth) <= 64, "only omitted contributions and their tails are removed within 64 Q32 units of separate recurrences");
                 Check.That(Math.Abs((originalPressure.EvaluateAt(t) - pressure.EvaluateAt(t)) / (double)FixedPointMath.Q32One - removedPressure) < 0.00001,
                     "pressure loses only selected independent input, without deleting residual pressure");
             }

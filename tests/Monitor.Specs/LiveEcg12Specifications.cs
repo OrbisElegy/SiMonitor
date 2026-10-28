@@ -34,12 +34,14 @@ internal static class LiveEcg12Specifications
         session.DiscardStartup();
         foreach (var lead in Enum.GetValues<EcgLead>())
         { Check.That(!session.EcgSamples(lead, 0, long.MaxValue).Any(), "startup publishes no lead history"); }
+        AssertProjectedHistoryRanges(session);
         session.Advance(16_000_000);
         foreach (var lead in Enum.GetValues<EcgLead>())
         {
             Check.That(session.EcgSamples(lead, 0, long.MaxValue).Select(sample => sample.TimeNs)
                 .SequenceEqual(new long[] { 0, 4_000_000, 8_000_000, 12_000_000 }), "all leads publish before a recording packet closes");
         }
+        AssertProjectedHistoryRanges(session);
         Advance(session, 900_000_000);
         Check.That(session.EcgSamples(EcgLead.II, 0, long.MaxValue).SequenceEqual(session.Samples(0, 0, long.MaxValue)),
             "short and long II use the monitor samples exactly");
@@ -118,6 +120,7 @@ internal static class LiveEcg12Specifications
         partitioned.ScheduleSource(Session(changed), 200_000_000);
         Advance(session, 3_000_000_000);
         Advance(partitioned, 3_000_000_000, 16_000_000);
+        AssertProjectedHistoryRanges(session);
         Check.That(session.EcgSamples(EcgLead.V3, 0, 1_000_000_000).SequenceEqual(before), "source changes preserve old strips");
         foreach (var lead in Enum.GetValues<EcgLead>())
         {
@@ -130,6 +133,30 @@ internal static class LiveEcg12Specifications
         Advance(session, 42_000_000_000);
         Check.That(session.EcgSamples(EcgLead.V3, 0, long.MaxValue).First().TimeNs >=
             session.SimulationTimeNs - LocalMonitorPreviewSession.RetainedBlockCount * 200_000_000L, "lead history is bounded");
+        AssertProjectedHistoryRanges(session);
+    }
+
+    private static void AssertProjectedHistoryRanges(LocalMonitorPreviewSession session)
+    {
+        foreach (var lead in new[] { EcgLead.I, EcgLead.AVR, EcgLead.V3 })
+        {
+            var history = session.EcgSamples(lead, long.MinValue, long.MaxValue).ToArray();
+            Check.That(history.Zip(history.Skip(1)).All(pair => pair.First.TimeNs < pair.Second.TimeNs),
+                "projected sample times stay ordered across source transitions and retention");
+            long first = history.Length == 0 ? 0 : history[0].TimeNs;
+            long last = history.Length == 0 ? 0 : history[^1].TimeNs;
+            foreach (var (fromNs, toNs) in new (long, long)[]
+            {
+                (long.MinValue, first), (first, first), (first, first + 1), (first + 1, last),
+                (last, last + 1), (last + 1, long.MaxValue), (last + 1, first),
+                (first + 1, last - 1), (long.MinValue, long.MaxValue)
+            })
+            {
+                Check.That(session.EcgSamples(lead, fromNs, toNs).SequenceEqual(
+                    history.Where(sample => sample.TimeNs >= fromNs && sample.TimeNs < toNs)),
+                    "projected queries preserve inclusive start and exclusive end, including empty and unaligned ranges");
+            }
+        }
     }
 
     private static void TwelveLeadsFollowPacingAndShockRecovery()
@@ -151,6 +178,23 @@ internal static class LiveEcg12Specifications
         var reference = session.EcgSamples(EcgLead.II, 3_000_000_000, 3_016_000_000).ToArray();
         foreach (var lead in Enum.GetValues<EcgLead>())
         { Check.That(session.EcgSamples(lead, 3_000_000_000, 3_016_000_000).SequenceEqual(reference), "shock artifact appears on every lead immediately"); }
+        var secondShock = shock with
+        {
+            DeliverySequence = 2,
+            DeliveredAtSimTimeNs = session.SimulationTimeNs,
+            Waveform = DefibrillationWaveformKind.MonophasicTruncatedExponential
+        };
+        session.ApplyElectricalShock(secondShock, session.PrepareSinusAfterShock(therapy));
+        session.Advance(16_000_000);
+        var latest = session.ShockArtifacts[^1];
+        foreach (var lead in new[] { EcgLead.I, EcgLead.V4 })
+        {
+            Check.That(session.EcgSamples(lead, 3_000_000_000, 3_016_000_000).SequenceEqual(reference),
+                "a later overlapping shock preserves samples before its onset");
+            Check.That(session.EcgSamples(lead, 3_016_000_000, 3_032_000_000).All(sample =>
+                sample.Value == latest.EvaluateMicrovolts(sample.TimeNs)),
+                "the latest containing shock overrides earlier recovery on projected leads");
+        }
         Advance(session, 5_000_000_000);
         Check.That(session.ActivePacing is null && session.EcgSamples(EcgLead.V4, 4_000_000_000, 5_000_000_000)
             .Any(sample => sample.Value != 0), "live leads recover after therapy");

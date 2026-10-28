@@ -28,32 +28,13 @@ public sealed record OxygenReservoirParameters(
     }
 }
 
-public readonly record struct OxygenReservoirState(decimal AlveolarOxygenMl, decimal AlveolarCarbonDioxideMl,
-    decimal AlveolarInertGasMl, decimal ArterialOxygenMl, decimal VenousOxygenMl,
-    decimal InspiredOxygenMl = 0, decimal ExpiredOxygenMl = 0, decimal ConsumedOxygenMl = 0,
-    decimal UnmetOxygenDemandMl = 0)
-{
-    public decimal GasMlStpd => AlveolarOxygenMl + AlveolarCarbonDioxideMl + AlveolarInertGasMl;
-    public decimal ConservedOxygenMl => AlveolarOxygenMl + ArterialOxygenMl + VenousOxygenMl -
-        InspiredOxygenMl + ExpiredOxygenMl + ConsumedOxygenMl;
-    internal OxygenReservoirState AddScaled(OxygenReservoirState slope, decimal scale) => new(
-        AlveolarOxygenMl + slope.AlveolarOxygenMl * scale,
-        AlveolarCarbonDioxideMl + slope.AlveolarCarbonDioxideMl * scale,
-        AlveolarInertGasMl + slope.AlveolarInertGasMl * scale,
-        ArterialOxygenMl + slope.ArterialOxygenMl * scale,
-        VenousOxygenMl + slope.VenousOxygenMl * scale,
-        InspiredOxygenMl + slope.InspiredOxygenMl * scale,
-        ExpiredOxygenMl + slope.ExpiredOxygenMl * scale,
-        ConsumedOxygenMl + slope.ConsumedOxygenMl * scale,
-        UnmetOxygenDemandMl + slope.UnmetOxygenDemandMl * scale);
-}
-
-// Decimal port of tools/oxygenation_model.py. Fixed 8ms RK4 steps and bounded
-// inversion; no floating point, wall clock, UI, IO or implicit random state.
+// Oxygen transport with binary64 fluxes and double-double inventories.
+// Each 8ms transport interval has four deterministic 2ms RK4 substeps.
 public static class OxygenReservoirModel
 {
-    public const string ModelId = "OxygenTransportDecimal@2";
+    public const string ModelId = "OxygenTransportDoubleDouble@3";
     public const long StepNs = 8_000_000;
+    public const long IntegrationSubstepNs = 2_000_000;
     public const decimal DryPressureMmHg = 713m;
     public static decimal BtpsToStpd => (273.15m / 310.15m) * (713m / 760m);
 
@@ -67,18 +48,8 @@ public static class OxygenReservoirModel
     private static decimal ContentMlPerMl(decimal pressureMmHg, OxygenReservoirParameters parameters) =>
         (1.34m * parameters.HemoglobinGramsPerDl * SaturationFraction(pressureMmHg) + .0031m * pressureMmHg) / 100m;
 
-    public static int ArterialSaturationMilliPercent(OxygenReservoirState state, OxygenReservoirParameters parameters)
-    {
-        ValidateState(state, parameters);
-        decimal content = state.ArterialOxygenMl / parameters.ArterialVolumeMl;
-        decimal low = 0, high = 1000;
-        for (int iteration = 0; iteration < 48; iteration++)
-        {
-            decimal middle = (low + high) / 2;
-            if (ContentMlPerMl(middle, parameters) < content) { low = middle; } else { high = middle; }
-        }
-        return decimal.ToInt32(decimal.Round(SaturationFraction((low + high) / 2) * 100000, 0, MidpointRounding.ToEven));
-    }
+    public static int ArterialSaturationMilliPercent(OxygenReservoirState state, OxygenReservoirParameters parameters) =>
+        new OxygenReservoirSolver(parameters).ArterialSaturationMilliPercent(state);
 
     // Start each new scenario at the same ventilated reference state. Current
     // controls then act on these stores; zero VT/closed airway can start a run.
@@ -109,60 +80,8 @@ public static class OxygenReservoirModel
     }
 
     public static OxygenReservoirState Step(OxygenReservoirState state, OxygenReservoirParameters parameters,
-        PhysiologyTransportInterval input, decimal oxygenDemandMultiplier = 1)
-    {
-        ArgumentNullException.ThrowIfNull(parameters);
-        parameters.Validate();
-        ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
-        if (input.FromSimTimeNs < 0 || input.ToExclusiveSimTimeNs < input.FromSimTimeNs ||
-            input.ToExclusiveSimTimeNs - input.FromSimTimeNs != StepNs ||
-            input.DeliveredVolumeNanolitersBtps is < 0 or > 100_000_000 ||
-            input.AlveolarVentilationNanolitersBtps < 0 || input.AlveolarVentilationNanolitersBtps > input.DeliveredVolumeNanolitersBtps ||
-            input.EffectiveBloodVolumeNanoliters is < 0 or > 16_000_000 ||
-            input.InspiredOxygenMillionths is < 100_000 or > 1_000_000 || !input.AirwayOpen && input.DeliveredVolumeNanolitersBtps != 0)
-        { throw new ArgumentException("OxygenReservoir.InvalidTransport", nameof(input)); }
-        const decimal seconds = .008m;
-        decimal ventilation = input.AlveolarVentilationNanolitersBtps / 1_000_000m * BtpsToStpd / seconds;
-        decimal flow = input.EffectiveBloodVolumeNanoliters / 1_000_000m / seconds;
-        decimal inspiredFraction = input.InspiredOxygenMillionths / 1_000_000m;
-        var first = Derivative(state);
-        var second = Derivative(state.AddScaled(first, seconds / 2));
-        var third = Derivative(state.AddScaled(second, seconds / 2));
-        var fourth = Derivative(state.AddScaled(third, seconds));
-        var result = state.AddScaled(first.AddScaled(second, 2).AddScaled(third, 2).AddScaled(fourth, 1), seconds / 6);
-        ValidateState(result, parameters);
-        return result;
-
-        OxygenReservoirState Derivative(OxygenReservoirState value)
-        {
-            ValidateState(value, parameters);
-            decimal oxygenFraction = value.AlveolarOxygenMl / value.GasMlStpd;
-            decimal carbonFraction = value.AlveolarCarbonDioxideMl / value.GasMlStpd;
-            decimal inertFraction = value.AlveolarInertGasMl / value.GasMlStpd;
-            decimal arterial = value.ArterialOxygenMl / parameters.ArterialVolumeMl;
-            decimal venous = value.VenousOxygenMl / parameters.VenousVolumeMl;
-            decimal capillary = ContentMlPerMl(oxygenFraction * DryPressureMmHg, parameters);
-            decimal lungTransfer = flow * (1 - parameters.ShuntFraction) * (capillary - venous);
-            decimal systemicTransfer = flow * (arterial - venous);
-            decimal demand = parameters.OxygenDemandMlStpdPerMinute * oxygenDemandMultiplier / 60m;
-            decimal consumed = demand * Math.Min(1, venous / (parameters.ConsumptionFloorMlPerDl / 100m));
-            decimal carbon = parameters.RespiratoryQuotient * consumed;
-            decimal inspiredFlow = 0, expiredFlow = 0;
-            if (input.AirwayOpen)
-            {
-                decimal netUptake = lungTransfer - carbon;
-                decimal volumeError = (parameters.FrcMlBtps * BtpsToStpd - value.GasMlStpd) / parameters.VolumeRecoverySeconds;
-                inspiredFlow = ventilation + Math.Max(0, netUptake + volumeError);
-                expiredFlow = ventilation + Math.Max(0, -netUptake - volumeError);
-            }
-            decimal inspiredOxygen = inspiredFlow * inspiredFraction;
-            decimal expiredOxygen = expiredFlow * oxygenFraction;
-            return new(inspiredOxygen - expiredOxygen - lungTransfer, carbon - expiredFlow * carbonFraction,
-                inspiredFlow * (1 - inspiredFraction) - expiredFlow * inertFraction,
-                lungTransfer - systemicTransfer, systemicTransfer - consumed,
-                inspiredOxygen, expiredOxygen, consumed, demand - consumed);
-        }
-    }
+        PhysiologyTransportInterval input, decimal oxygenDemandMultiplier = 1) =>
+        new OxygenReservoirSolver(parameters).Step(state, input, oxygenDemandMultiplier);
 
     public static void ValidateOxygenDemandMultiplier(decimal oxygenDemandMultiplier)
     {
@@ -170,16 +89,6 @@ public static class OxygenReservoirModel
         { throw new ArgumentOutOfRangeException(nameof(oxygenDemandMultiplier), "Oxygenation.InvalidDemandMultiplier"); }
     }
 
-    public static void ValidateState(OxygenReservoirState state, OxygenReservoirParameters parameters)
-    {
-        ArgumentNullException.ThrowIfNull(parameters);
-        parameters.Validate();
-        if (state.AlveolarOxygenMl < 0 || state.AlveolarCarbonDioxideMl < 0 || state.AlveolarInertGasMl < 0 ||
-            state.ArterialOxygenMl < 0 || state.VenousOxygenMl < 0 || state.InspiredOxygenMl < 0 ||
-            state.ExpiredOxygenMl < 0 || state.ConsumedOxygenMl < 0 || state.UnmetOxygenDemandMl < 0 ||
-            state.GasMlStpd <= 1 || state.GasMlStpd >= 2 * parameters.FrcMlBtps * BtpsToStpd ||
-            state.ArterialOxygenMl > parameters.ArterialVolumeMl * ContentMlPerMl(1000, parameters) ||
-            state.VenousOxygenMl > parameters.VenousVolumeMl * ContentMlPerMl(1000, parameters))
-        { throw new ArgumentException("OxygenReservoir.InvalidState"); }
-    }
+    public static void ValidateState(OxygenReservoirState state, OxygenReservoirParameters parameters) =>
+        new OxygenReservoirSolver(parameters).ValidateState(state);
 }

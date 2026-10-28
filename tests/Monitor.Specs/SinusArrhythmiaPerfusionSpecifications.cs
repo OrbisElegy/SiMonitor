@@ -60,8 +60,8 @@ internal static class SinusArrhythmiaPerfusionSpecifications
             VentricularMechanicalEnabled: false, MechanicalAfterCycles: 1);
         var isolated = PlethRunoffSource.Create(isolatedPlan, FixedPerfusionPresets.FillingPulmonaryOverlap.Pleth);
         long time = 1_900_000_000;
-        Check.That(Math.Abs(pleth.EvaluateAt(time) - isolated.EvaluateAt(time) - isolated.EvaluateAt(time - 800_000_000)) <= 3,
-            "optical runoff preserves both irregularly spaced pulse tails");
+        Check.That(Math.Abs(pleth.EvaluateAt(time) - isolated.EvaluateAt(time) - isolated.EvaluateAt(time - 800_000_000)) <= 16,
+            "optical runoff preserves both irregularly spaced pulse tails within 16 Q32 units of separate recurrences");
         var pressureSource = VascularPressureSource.Create(plan, FixedPerfusionPresets.FillingPulmonaryOverlap.Arterial);
         Check.That(pressureSource.EvaluateAt(1_800_000_000) > pressureSource.EvaluateAt(2_000_000_000) &&
             pressureSource.EvaluateAt(2_000_000_000) > FixedPerfusionPresets.FillingPulmonaryOverlap.Arterial.AsymptoticPressureCentiMmHg * Q,

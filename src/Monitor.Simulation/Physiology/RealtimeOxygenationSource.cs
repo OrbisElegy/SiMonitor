@@ -19,6 +19,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
     private readonly record struct TransportChange(long AtSimTimeNs, PhysiologyTransportSource Transport, decimal OxygenDemandMultiplier);
     public const int HistoryCapacity = 1024; // 8.184s of source-time history for bounded optical lookups.
     private readonly OxygenReservoirParameters _parameters;
+    private readonly OxygenReservoirSolver _solver;
     private readonly decimal _initialOxygenMl;
     private PhysiologyTransportSource _transport;
     // At most the current unstarted interval and the next grid boundary.
@@ -40,6 +41,7 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         OxygenReservoirModel.ValidateOxygenDemandMultiplier(oxygenDemandMultiplier);
         _oxygenDemandMultiplier = oxygenDemandMultiplier;
         _parameters = parameters;
+        _solver = new(parameters);
         _transport = transport;
         ValidateVentilationFlow(transport.CaptureState().Ventilation);
         _reservoirs = OxygenReservoirModel.ReferenceState(parameters);
@@ -48,12 +50,13 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
         if (initialTime < transport.CaptureState().Physiology.EpochAnchorSimTimeNs || initialTime % OxygenReservoirModel.StepNs != 0)
         { throw new ArgumentOutOfRangeException(nameof(initialSimTimeNs)); }
         _history = [new(initialTime,
-            OxygenReservoirModel.ArterialSaturationMilliPercent(_reservoirs, parameters))];
+            _solver.ArterialSaturationMilliPercent(_reservoirs))];
     }
 
     private RealtimeOxygenationSource(RealtimeOxygenationSource source)
     {
         _parameters = source._parameters;
+        _solver = source._solver;
         _initialOxygenMl = source._initialOxygenMl;
         _transport = source._transport;
         _pendingChanges = source._pendingChanges;
@@ -83,8 +86,8 @@ public sealed class RealtimeOxygenationSource : IArterialOxygenationSource
                 multiplier = change.OxygenDemandMultiplier;
             }
             long next = checked(time + OxygenReservoirModel.StepNs);
-            reservoirs = OxygenReservoirModel.Step(reservoirs, _parameters, transport.Integrate(time, next), multiplier);
-            history.Add(new(next, OxygenReservoirModel.ArterialSaturationMilliPercent(reservoirs, _parameters)));
+            reservoirs = _solver.Step(reservoirs, transport.Integrate(time, next), multiplier);
+            history.Add(new(next, _solver.ArterialSaturationMilliPercent(reservoirs)));
             time = next;
         }
         if (history.Count > HistoryCapacity) { history.RemoveRange(0, history.Count - HistoryCapacity); }

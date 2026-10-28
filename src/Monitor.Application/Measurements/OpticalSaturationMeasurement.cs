@@ -25,6 +25,7 @@ public sealed class OpticalSaturationMeasurement
 {
     public const int WindowSamples = 500;
     public const long SampleStepNs = 8_000_000;
+    internal const long MaximumSampleAgeNs = 500_000_000;
     private readonly SaturationCalibrationPoint[] _calibration;
     private readonly bool _clipPhysicalEndpoints;
     public string CalibrationId { get; }
@@ -63,7 +64,7 @@ public sealed class OpticalSaturationMeasurement
         ArgumentOutOfRangeException.ThrowIfNegative(asOfSampleTimeNs);
         if (samples.Count > WindowSamples) { throw new ArgumentException("Optical.WindowTooLong", nameof(samples)); }
         long? last = null;
-        BigInteger red = 0, infrared = 0, redSquares = 0, infraredSquares = 0, products = 0;
+        long redSum = 0, infraredSum = 0, redSquaresSum = 0, infraredSquaresSum = 0, productsSum = 0;
         bool poor = false;
         int irMinimum = int.MaxValue, irMaximum = int.MinValue, redMinimum = int.MaxValue, redMaximum = int.MinValue;
         foreach (var sample in samples)
@@ -73,17 +74,25 @@ public sealed class OpticalSaturationMeasurement
             { throw new ArgumentException("Optical.NonContiguousPairs", nameof(samples)); }
             last = sample.SampleTimeNs;
             poor |= sample.QualityFlags != 0 || sample.Red is <= 0 or >= 1_000_000 || sample.Infrared is <= 0 or >= 1_000_000;
-            red += sample.Red; infrared += sample.Infrared;
-            redSquares += (BigInteger)sample.Red * sample.Red;
-            infraredSquares += (BigInteger)sample.Infrared * sample.Infrared;
-            products += (BigInteger)sample.Red * sample.Infrared;
+            // At most 500 positive values below 1,000,000 keep every sum below
+            // 500 * 1,000,000^2, within Int64. Invalid windows still validate all
+            // timestamps, but never use these statistics or accumulate invalid values.
+            if (!poor)
+            {
+                redSum += sample.Red; infraredSum += sample.Infrared;
+                redSquaresSum += (long)sample.Red * sample.Red;
+                infraredSquaresSum += (long)sample.Infrared * sample.Infrared;
+                productsSum += (long)sample.Red * sample.Infrared;
+            }
             redMinimum = Math.Min(redMinimum, sample.Red); redMaximum = Math.Max(redMaximum, sample.Red);
             irMinimum = Math.Min(irMinimum, sample.Infrared); irMaximum = Math.Max(irMaximum, sample.Infrared);
         }
-        if (last is null || asOfSampleTimeNs - last.Value > 500_000_000)
+        if (last is null || asOfSampleTimeNs - last.Value > MaximumSampleAgeNs)
         { return new(WaveformMeasurementStatus.NoData, null, null, last); }
         if (poor) { return new(WaveformMeasurementStatus.PoorSignal, null, null, last); }
         if (samples.Count < WindowSamples) { return new(WaveformMeasurementStatus.WarmingUp, null, null, last); }
+        BigInteger red = redSum, infrared = infraredSum, redSquares = redSquaresSum,
+            infraredSquares = infraredSquaresSum, products = productsSum;
         BigInteger redVariance = WindowSamples * redSquares - red * red;
         BigInteger infraredVariance = WindowSamples * infraredSquares - infrared * infrared;
         BigInteger covariance = WindowSamples * products - red * infrared;

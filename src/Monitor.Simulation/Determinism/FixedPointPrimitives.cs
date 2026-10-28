@@ -41,6 +41,19 @@ public static class FixedPointMath
         return ApplySign(quotient, negative);
     }
 
+    public static Int128 RoundShiftTiesToEven(Int128 value, int shift)
+    {
+        if (shift is < 0 or > 127) { throw new ArgumentOutOfRangeException(nameof(shift)); }
+        if (shift == 0) { return value; }
+        // Arithmetic right shift rounds toward negative infinity. The low bits
+        // are a nonnegative remainder, so both signs round upward at the same tie.
+        Int128 quotient = value >> shift;
+        UInt128 remainder = unchecked((UInt128)value) & (((UInt128)1 << shift) - 1);
+        UInt128 half = (UInt128)1 << (shift - 1);
+        if (remainder > half || remainder == half && (quotient & 1) != 0) { quotient++; }
+        return quotient;
+    }
+
     public static SaturatingInt64 Saturate(Int128 value)
     {
         if (value < long.MinValue)
@@ -63,13 +76,13 @@ public static class FixedPointMath
         Saturate((Int128)left - right);
 
     public static SaturatingInt64 MultiplyQ32(long leftQ32, long rightQ32) =>
-        Saturate(RoundDivideTiesToEven((Int128)leftQ32 * rightQ32, Q32One));
+        Saturate(RoundShiftTiesToEven((Int128)leftQ32 * rightQ32, 32));
 
     public static SaturatingInt64 DivideQ32(long numeratorQ32, long denominatorQ32) =>
         Saturate(RoundDivideTiesToEven((Int128)numeratorQ32 * Q32One, denominatorQ32));
 
     public static SaturatingInt64 MultiplyCoefficientQ62(long coefficientQ62, long valueQ32) =>
-        Saturate(RoundDivideTiesToEven((Int128)coefficientQ62 * valueQ32, Q62One));
+        Saturate(RoundShiftTiesToEven((Int128)coefficientQ62 * valueQ32, 62));
 
     private static UInt128 Magnitude(Int128 value) => value >= 0
         ? (UInt128)value

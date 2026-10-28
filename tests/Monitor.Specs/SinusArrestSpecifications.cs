@@ -74,8 +74,8 @@ internal static class SinusArrestSpecifications
         var isolated = PlethRunoffSource.Create(isolatedPlan, FixedPerfusionPresets.SinglePulse.Pleth);
         long expected = new long[] { 0, 800_000_000, 1_600_000_000 }
             .Sum(offset => isolated.EvaluateAt(3_500_000_000 - offset));
-        Check.That(Math.Abs(pleth.EvaluateAt(3_500_000_000) - expected) <= 3 && expected > 0,
-            "pause retains all earlier optical tails without new ejection");
+        Check.That(Math.Abs(pleth.EvaluateAt(3_500_000_000) - expected) <= 32 && expected > 0,
+            "pause retains all earlier optical tails within 32 Q32 units of separately rounded pulses");
         Check.That(pleth.MaximumHistoryEvents < 100, "history bound excludes elapsed runtime");
         foreach (var pressure in new[] { FixedPerfusionPresets.SinglePulse.Arterial, FixedPerfusionPresets.SinglePulse.Pulmonary })
         {

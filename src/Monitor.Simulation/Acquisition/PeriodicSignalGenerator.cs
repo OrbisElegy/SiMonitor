@@ -60,7 +60,7 @@ public sealed class PeriodicSignalGenerator
         { throw new PeriodicSignalGeneratorException("PeriodicSignal.SampleTimeOverflow", nameof(sampleIndex)); }
         ulong phase = unchecked(_plan.InitialPhaseU64 + sampleIndex * _plan.PhaseIncrementU64);
         long value = PeriodicLutLinear.Interpolate(_table, phase).Value;
-        short normalized = checked((short)FixedPointMath.RoundDivideTiesToEven(value, FixedPointMath.Q32One));
+        short normalized = checked((short)FixedPointMath.RoundShiftTiesToEven(value, 32));
         return new(new(_plan.ProfileId, _plan.StreamEpoch, sampleIndex, (long)time), phase, value, normalized);
     }
 

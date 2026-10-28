@@ -36,7 +36,7 @@ internal static class RealtimeOxygenationSpecifications
                 small.ChangeVentilation(Normal with { TidalVolumeMicrolitersBtps = 0 }, now);
                 Check.That(effective == 56_000_000 && large.Snapshot == before, "control change waits for the next grid interval without resetting stores");
             }
-            Check.That(large.Snapshot == small.Snapshot, "fixed 8ms RK4 is independent of frame subdivision");
+            Check.That(large.Snapshot == small.Snapshot, "fixed 8ms transport grid and 2ms RK4 substeps are independent of frame subdivision");
         }
         var snapshot = large.Snapshot;
         Check.That(snapshot.RetainedSamples == RealtimeOxygenationSource.HistoryCapacity &&

@@ -33,6 +33,7 @@
 
 ```csharp
 Int128 FixedPointMath.RoundDivideTiesToEven(Int128 numerator, Int128 denominator);
+Int128 FixedPointMath.RoundShiftTiesToEven(Int128 value, int shift);
 SaturatingInt64 FixedPointMath.Saturate(Int128 value);
 SaturatingInt64 PeriodicLutLinear.Interpolate(ReadOnlySpan<long> tableQ32, ulong phaseU64);
 DeterministicStreamFactory(ReadOnlySpan<byte> rootSeed);
@@ -49,6 +50,8 @@ DeterminismCheckpoint Restore(ReadOnlySpan<byte> bytes);
 ```
 
 定点除法使用 ties-to-even；除零抛 `DeterminismArithmeticException`。
+`RoundShiftTiesToEven` 对 `value / 2^shift` 作同样的舍入，支持 0–127 位（含端点）；
+0 位原样返回，越界位数抛 `ArgumentOutOfRangeException`。Q32/Q62 乘法及二次幂缩放使用此专用入口。
 二次幂分母用移位与掩码求商余，其余使用 `UInt128.DivRem`；符号、舍入和溢出约定不变。
 `Add`、`Subtract`、`MultiplyQ32`、`DivideQ32`、`MultiplyCoefficientQ62` 返回
 `SaturatingInt64(Value, Saturated)`；调用方需要保留饱和信息。
@@ -388,7 +391,7 @@ group 的 `Start` 在通用身份/预算参数后接 `RegularPhysiologyPlan phys
 
 | 入口 | 输出及集成约束 |
 | --- | --- |
-| `VascularPressureSource.Create(RegularPhysiologyPlan, VascularPressurePlan)` / `EvaluateAt(long, CancellationToken = default)` | centi-mmHg 的 Q32 值；储库衰减保留跨缺搏历史，最多 4096 次射血重建，固定 1 µs 网格 |
+| `VascularPressureSource.Create(RegularPhysiologyPlan, VascularPressurePlan)` / `EvaluateAt(long, CancellationToken = default)` | centi-mmHg 的 Q32 值；储库衰减保留跨缺搏历史，最多 4096 次射血重建，源时间 8 ms 递推并每秒重新锚定 |
 | `VascularPressureSource.SolveTarget(RegularPhysiologyPlan, VascularPressurePlan, int systolicCentiMmHg, int diastolicCentiMmHg)` | 带形态的储库按目标求 `R*Q` 和脉搏形态高度；用无脉搏与有脉搏两次探测的完整搏动起点、峰值解线性方程，无法表示时返回 null |
 | `PhysiologyIllustrationConfiguration.AbpTarget` / `PaTarget`（`VascularPressureTarget`） | 收缩压／舒张压目标，替代同一通道的脉搏分量倍率；无心室机械活动且未安排后续机械活动时保留原无射血源，不执行目标校准；超出范围、脉压小于 5 mmHg、无储库形态或无法生成时抛出 `Physiology.PressureTarget*` 原因 |
 | `PhysiologyIllustrationConfiguration.PressureVariation`（`VascularPressureVariation`） / `SeededVascularVariation` | ABP、PA 围绕当前压力水平的种子化缓慢波动，以 centi-mmHg 给出近似幅度；按实际波形在正、负射血倍率下的 4 秒均压响应校准，不使用固定参考压力或收缩／舒张压中点。目标校准不含波动，显示数值自然变化，不承诺任一读数严格落在 ± 区间；无射血时保持原压力回落。漂移定义保留种子，支持 JSON 往返及按值比较，相同设置接续不拆分历史 |
@@ -402,6 +405,14 @@ group 的 `Start` 在通用身份/预算参数后接 `RegularPhysiologyPlan phys
 [PlethRunoffSource.cs](../../src/Monitor.Simulation/Physiology/PlethRunoffSource.cs)、
 [RespirationPlan.cs](../../src/Monitor.Simulation/Physiology/RespirationPlan.cs)、
 [CapnogramPlan.cs](../../src/Monitor.Simulation/Physiology/CapnogramPlan.cs)。
+
+压力 RC 数值模型为 `VascularPressureRcIllustration@2`，内核为
+`VascularPressureRcAnchored8MsQ62@2`；Pleth 数值模型为 `PlethSmoothRunoff@2`。
+每个源以 physiology epoch 为起点，按源时间每秒重建有界事件历史，再按固定 8 ms 网格递推；
+非网格查询从同一网格状态推进余量，传播延迟作用于完整源时间。生成、随机查询、
+目标压力校准、接续历史及恢复校验共用这一路径；采集分块和调用顺序不参与数值定义。
+每个源只缓存四个不可变秒块，缓存不进入 checkpoint，淘汰或恢复后重新计算。
+上述两个数值模型的旧 `@1` 显式配置被拒绝，不按新算法解释旧数值版本；形态版本另行管理。
 
 默认 CO₂、ABP、PA 与 CVP 使用项目自制的平滑形态，源头以局部保形三次 Hermite
 曲线生成 Q32 LUT。CO₂ 按相位对应的实际纳秒时间计算切线，保留可配置的死腔、
@@ -480,9 +491,16 @@ response 必须适配 physiology。`Integrate` 最多 60 s / 4096 事件，返�
 
 `OxygenReservoirParameters` 使用肺容积 mL(BTPS)、液体血容量 mL、Hb g/dL、基础耗氧 mL(STPD)/min。
 储库气量和氧量使用 mL(STPD)，BTPS/STPD 换算仅由求解器负责；不能把血容量做气体换算。
-模型为 decimal 固定 8 ms RK4，每个 `Step` 输入必须恰好 8 ms；送气最多 100000000 nL、血流最多 16000000 nL。
+模型为 `OxygenTransportDoubleDouble@3`：double 计算流量，库存保留两个 double 的高、低位；
+同一转移量以相同舍入值记入收支两端。每个 `Step` 输入仍必须恰好 8 ms，内部固定执行
+四个 2 ms RK4 子步，各子步使用该输运区间的平均流量。送气最多 100000000 nL、血流最多 16000000 nL。
 耗氧 multiplier 为 1–4。参数范围、参考平衡和每步储库状态都必须有效，否则拒绝，不将负库存裁成零。
-`ArterialSaturationMilliPercent` 从动脉氧含量反算 0–100000 饱和度；`ConservedOxygenMl` 和 snapshot 残差提供收支数据。
+`ArterialSaturationMilliPercent` 通过 double 二分反演从动脉氧含量反算 0–100000 饱和度；
+`ConservedOxygenMl` 先合并库存高、低位，再转换成 decimal，snapshot 残差提供收支数据。
+参数、默认基线及报告属性保留 decimal；报告值不用于下一步积分。
+`OxygenReservoirState.Checkpoint` 保存模型 ID 和九组 `OxygenReservoirAmount(HighMl, LowMl)`；
+JSON 往返及该 checkpoint 构造器保留低位。旧 decimal-only JSON、未知版本、非有限数、
+未归一化或负库存被拒绝。decimal 构造器和属性赋值是显式导入／编辑，不保证保留原低位。
 
 实时源从参考储库开始，初始时间必须不早于 physiology epoch 且落在 8 ms 全局网格上。
 `AdvanceTo` 不回退且一次最多推进 1 s；只执行完整 8 ms 步，尾部不足一步保留到下一次调用。

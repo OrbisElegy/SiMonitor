@@ -30,9 +30,9 @@ internal static class VascularPressureMorphologySpecifications
         new(nameof(VascularMorphologyKeepsConductionStrideAndSubsampleTransit), VascularMorphologyKeepsConductionStrideAndSubsampleTransit),
         new(nameof(VascularMorphologyBlocksAndRestoredPendingSamplesKeepExactBytes), VascularMorphologyBlocksAndRestoredPendingSamplesKeepExactBytes),
         new(nameof(VascularMorphologyRejectsUnsafeOrUnknownPlansAtomically), VascularMorphologyRejectsUnsafeOrUnknownPlansAtomically),
-        new(nameof(VascularMorphologyDefaultsKeepOriginalSourcesUnchanged), VascularMorphologyDefaultsKeepOriginalSourcesUnchanged),
+        new(nameof(VascularMorphologyDefaultsKeepUnshapedSourcesUnchanged), VascularMorphologyDefaultsKeepUnshapedSourcesUnchanged),
         new(nameof(VascularWeakStrokeTailsDoNotDrift), VascularWeakStrokeTailsDoNotDrift),
-        new(nameof(VascularPreviousMorphologyRetainsWeakStrokeSamples), VascularPreviousMorphologyRetainsWeakStrokeSamples),
+        new(nameof(VascularPreviousMorphologyUsesCurrentReservoirSamples), VascularPreviousMorphologyUsesCurrentReservoirSamples),
         new(nameof(VascularWeakStrokeVersionsRestorePendingSamples), VascularWeakStrokeVersionsRestorePendingSamples),
         new(nameof(VascularWeakStrokeCompletesBeforePassiveRunoff), VascularWeakStrokeCompletesBeforePassiveRunoff),
     ];
@@ -252,17 +252,17 @@ internal static class VascularPressureMorphologySpecifications
             "late publication failure and cancellation leave all accepted morphology source state unchanged");
     }
 
-    private static void VascularMorphologyDefaultsKeepOriginalSourcesUnchanged()
+    private static void VascularMorphologyDefaultsKeepUnshapedSourcesUnchanged()
     {
-        const string oldJson = """
+        const string unshapedJson = """
             {"TransitDelayNs":80000000,"EjectionDurationNs":240000000,"TimeConstantNs":2900000000,
              "InitialPressureCentiMmHg":8000,"AsymptoticPressureCentiMmHg":1000,
-             "EjectionEquilibriumCentiMmHg":30000,"ModelId":"VascularPressureRcIllustration@1"}
+             "EjectionEquilibriumCentiMmHg":30000,"ModelId":"VascularPressureRcIllustration@2"}
             """;
-        var oldPlan = JsonSerializer.Deserialize<VascularPressurePlan>(oldJson)!;
-        Check.That(oldPlan.Morphology is null && oldPlan == Arterial with { Morphology = null },
-            "old pressure plans deserialize with absent morphology and retain their original model identity");
-        var raw = VascularPressureSource.Create(Physiology, oldPlan);
+        var unshapedPlan = JsonSerializer.Deserialize<VascularPressurePlan>(unshapedJson)!;
+        Check.That(unshapedPlan.Morphology is null && unshapedPlan == Arterial with { Morphology = null },
+            "pressure plans deserialize with absent morphology and retain the current model identity");
+        var raw = VascularPressureSource.Create(Physiology, unshapedPlan);
         var explicitNull = VascularPressureSource.Create(Physiology, Arterial with { Morphology = null });
         foreach (var pressure in new[] { Arterial, Pulmonary })
         {
@@ -272,7 +272,7 @@ internal static class VascularPressureMorphologySpecifications
             for (long time = 0; time < 5_000_000_000; time += 7_777_777)
             {
                 Check.That(raw.EvaluateAt(time) == explicitNull.EvaluateAt(time) && plain.EvaluateAt(time) == shaped.EvaluateAt(time),
-                    "old RC plans and no-mechanical-event trajectories remain bit-identical under optional shape support");
+                    "unshaped RC plans and no-mechanical-event trajectories remain bit-identical under optional shape support");
             }
         }
     }
@@ -331,12 +331,12 @@ internal static class VascularPressureMorphologySpecifications
         }
     }
 
-    private static void VascularPreviousMorphologyRetainsWeakStrokeSamples()
+    private static void VascularPreviousMorphologyUsesCurrentReservoirSamples()
     {
         foreach (var (configuration, expectedQ32) in new[]
         {
-            (PhysiologyIllustrationConfiguration.JunctionalEscape, new long[] { 23420640371540, 23126679421443 }),
-            (PhysiologyIllustrationConfiguration.VentricularEscape, new long[] { 14026057820999, 14155281595894 }),
+            (PhysiologyIllustrationConfiguration.JunctionalEscape, new long[] { 23420640371541, 23126679421443 }),
+            (PhysiologyIllustrationConfiguration.VentricularEscape, new long[] { 14026057820999, 14155281595895 }),
         })
         {
             var generator = PhysiologyIllustrationSource.Create(configuration).CaptureState().Channels
@@ -350,7 +350,7 @@ internal static class VascularPressureMorphologySpecifications
                 long time = physiology.VentricularMechanicalOffsetNs +
                     (30 + index) * (long)physiology.VentricularPeriodNs + pressure.TransitDelayNs + 700_000_000;
                 Check.That(legacy.EvaluateAt(time) == expectedQ32[index],
-                    "version 3 retains frozen weak-stroke samples instead of reinterpreting saved source definitions");
+                    "version 3 morphology on the current RC model retains its frozen weak-stroke samples");
             }
         }
     }

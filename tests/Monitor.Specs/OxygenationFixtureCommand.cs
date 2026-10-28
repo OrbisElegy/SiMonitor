@@ -60,7 +60,7 @@ internal static class OxygenationFixtureCommand
                     maximumBalanceResidualMl = Math.Max(maximumBalanceResidualMl, Math.Abs(solver.Snapshot.OxygenBalanceResidualMl));
                 }
                 Check.That(maximumDifferenceMilliPercent <= 2 && maximumBalanceResidualMl < .000000000000000001m,
-                    $"decimal runtime matches independent Python RK4: difference={maximumDifferenceMilliPercent}, residual={maximumBalanceResidualMl}");
+                    $"double-double runtime matches independent Python RK4: difference={maximumDifferenceMilliPercent}, residual={maximumBalanceResidualMl}");
             }
             var session = new LocalMonitorPreviewSession(configuration, MonitorDisplayConfiguration.Default(), true,
                 oxygenation: realtime ? null : oxygen,

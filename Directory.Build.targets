@@ -3,6 +3,9 @@
   <!-- A RID always wins over the build host. No-RID development builds use the
        SDK architecture; scalar is available for portable IL and diagnostics. -->
   <PropertyGroup>
+    <!-- Library kernel sources vary by architecture. Preserve the caller's RID
+         across ProjectReference boundaries and keep target outputs isolated. -->
+    <IsRidAgnostic>false</IsRidAgnostic>
     <_MonitorArchitectureRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_MonitorArchitectureRid>
     <_MonitorArchitectureRid Condition="'$(_MonitorArchitectureRid)' == '' And '$(PlatformTarget)' != '' And '$(PlatformTarget)' != 'AnyCPU'">target-$([System.String]::Copy('$(PlatformTarget)').ToLowerInvariant())</_MonitorArchitectureRid>
     <_MonitorArchitectureRid Condition="'$(_MonitorArchitectureRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_MonitorArchitectureRid>

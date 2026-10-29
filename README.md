@@ -10,6 +10,12 @@ Seele's SiMonitor 是用于教学的心电图及其他监护波形模拟器。**
 
 技术资料见 [文档导航](docs/README.md) 和 [英文摘要](docs/en/summary.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING.md)。
 
+## 项目状态说明 / Project Status
+
+**因学业等原因，在近期本项目会以修复报告的issue为主，新功能的开发暂缓**
+
+**Due to academic commitments, the primary focus for this project in the near term will be addressing reported issues; the development of new features will be put on hold.**
+
 ## 运行截图
 
 **主监护界面**

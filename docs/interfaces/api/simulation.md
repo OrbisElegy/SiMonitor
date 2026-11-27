@@ -293,6 +293,7 @@ public sealed class WaveformBlockRing
     public static WaveformBlockRing Restore(WaveformBlockRingState state);
     public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope);
     public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope, out WaveformEnvelope envelope);
+    public WaveformBlockAppendResult AppendTransport(ReadOnlySpan<byte> wire, bool allowLz4, out WaveformEnvelope envelope);
     public WaveformBlockReplayResult ReadFrom(ulong firstBlockSequence, int maximumBlocks);
     public WaveformBlockRingState CaptureState();
 }
@@ -332,7 +333,9 @@ public static class WaveformEnvelopeCodec
     public const int MaximumPlaneCount = 128;
     public const int ContentSha256Offset = PreludeSize + 80;
     public static byte[] EncodeRaw(WaveformEnvelope envelope);
+    public static byte[]? TryCompressRaw(ReadOnlySpan<byte> rawWire);
     public static WaveformEnvelope Decode(ReadOnlySpan<byte> wire);
+    public static WaveformEnvelope Decode(ReadOnlySpan<byte> wire, bool allowLz4);
 }
 ```
 
@@ -415,6 +418,7 @@ public enum WaveformRecoveryReason
     EpochChanged,
     GapOutsideRetention,
     RenderHistoryIncomplete,
+    LateJoin,
 }
 public sealed record WaveformRecoveryRequest(Guid SessionId, Guid InstanceId, ulong TimebaseEpoch, ulong StreamEpoch, ulong NextBlockSequence, ulong RequiredRenderHistoryNs, ulong AvailableRenderHistoryNs)
 {
@@ -430,6 +434,7 @@ public static class WaveformRecoveryPlanner
     public const ulong MinimumJoinLeadNs = 1_000_000_000;
     public const int MinimumJoinLeadBlockCount = (int)(MinimumJoinLeadNs / WaveformBlockAssembler.BlockDurationNs);
     public const ulong MaximumRequiredRenderHistoryNs = (ulong)WaveformBlockRing.HostRetentionBlockCount * WaveformBlockAssembler.BlockDurationNs;
+    public static WaveformJoinBoundary PlanLateJoin(WaveformBlockRing hostRing, ulong requiredRenderHistoryNs);
     public static WaveformRecoveryPlan Plan(WaveformBlockRing hostRing, WaveformRecoveryRequest request);
 }
 ```
@@ -2093,6 +2098,7 @@ public readonly record struct PhysiologyWaveformSample(Guid ChannelId, long Sour
 public sealed class PhysiologyWaveformGroup
 {
     public PhysiologyWaveformGroup Fork();
+    public PhysiologyWaveformGroup WithConfigurationRevision(ulong revision, PhysiologyWaveformGroup? definition = null);
     public static PhysiologyWaveformGroup Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch, ulong streamEpoch, ulong configurationRevision, ulong firstBlockSequence, int maximumBufferedBlocks, IReadOnlyList<PhysiologyWaveformChannelPlan> channels);
     public void ContinueWith(PhysiologyWaveformGroup definition);
     public PhysiologyWaveformGroupState CaptureState();

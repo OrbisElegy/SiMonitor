@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/configuration.schema.json",
+  "title": "Domain.Contracts configuration and clock projections",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "ActiveConfigurationSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "configuration_revision", "effective_sim_time_ns", "learner_projection_schema_ref", "learner_projection_sha256", "configuration_graph_sha256"],
+      "properties": {
+        "schema_id": {"const": "ActiveConfigurationSnapshot@1"},
+        "configuration_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "effective_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "learner_projection_schema_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "learner_projection_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "configuration_graph_sha256": {"$ref": "common.schema.json#/$defs/Sha256"}
+      }
+    },
+    "ScheduledChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "change_id", "base_configuration_revision", "commit_seq", "effective_sim_time_ns", "public_diff_sha256", "resource_refs", "preparation_policy", "conflict_policy", "state"],
+      "properties": {
+        "schema_id": {"const": "ScheduledChange@1"},
+        "change_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "base_configuration_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "effective_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "public_diff_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "resource_refs": {"type": "array", "maxItems": 64, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "preparation_policy": {"enum": ["RequirePreparedAll", "RequirePreparedQuorum", "BestEffortTeachingOnly"]},
+        "conflict_policy": {"enum": ["RejectOnRevisionMismatch", "SupersedeExplicitly"]},
+        "state": {"enum": ["Scheduled", "Prepared", "Committed", "Cancelled", "Rejected"]}
+      }
+    },
+    "ClassClockSyncState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "clock_revision", "algorithm", "sample_window", "rtt_ns", "offset_ns", "drift_ppb", "jitter_ns", "quality", "last_calibrated_authority_monotonic_ns", "current_playout_delay_ns", "target_playout_delay_ns", "slew_limit_ppm", "discipline_state"],
+      "properties": {
+        "schema_id": {"const": "ClassClockSyncState@1"},
+        "clock_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "algorithm": {"enum": ["ApplicationFourTimestamp", "OsDisciplinedClock", "ExternalPTP"]},
+        "sample_window": {
+          "type": "array", "minItems": 1, "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["client_send_ns", "host_receive_ns", "host_send_ns", "client_receive_ns"],
+            "properties": {
+              "client_send_ns": {"$ref": "common.schema.json#/$defs/I64"},
+              "host_receive_ns": {"$ref": "common.schema.json#/$defs/I64"},
+              "host_send_ns": {"$ref": "common.schema.json#/$defs/I64"},
+              "client_receive_ns": {"$ref": "common.schema.json#/$defs/I64"}
+            }
+          }
+        },
+        "rtt_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "offset_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "drift_ppb": {"$ref": "common.schema.json#/$defs/I64"},
+        "jitter_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "quality": {"enum": ["Good", "Degraded", "Unsynchronized"]},
+        "last_calibrated_authority_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "current_playout_delay_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "target_playout_delay_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "slew_limit_ppm": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "discipline_state": {"enum": ["Acquiring", "Locked", "Holdover", "Failed"]}
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@
 | 生理生成、确定性、采集、波形传输、归档、氧合 | [仿真与波形](simulation.md) | [Monitor.Simulation](api/simulation.md) |
 | 测量、质量、报警通知、扫线、记录、12 导联与手工测量 | [测量与呈现](measurements-presentation.md) | [Monitor.Application](api/application.md)、[Monitor.Domain](api/domain.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 会话权威、治疗、评分、身份、断线续算与恢复 | [权威、身份与恢复](authority-identity-recovery.md) | [Domain](api/domain.md)、[Application](api/application.md)、[Infrastructure](api/infrastructure.md) |
-| 教师 Host、学生入场、校时、实时波形与断线续传 | [课堂网络](classroom-network.md) | [Monitor.Network](api/network.md) |
+| 教师 Host、学生入场、校时、波形、课堂配置与恢复 | [课堂网络](classroom-network.md) · [控制](classroom-control.md) · [恢复](classroom-recovery.md) · [分支与资源](classroom-resources.md) | [Monitor.Network](api/network.md) |
 | 声音输出、原生 ABI、偏好文件与存储 | [音频与持久化](audio-persistence.md) | [Monitor.Infrastructure](api/infrastructure.md) |
 | ECG 模板电击转复、单／双相能量与逐模板保存 | [电击转复](electrical-conversion.md) | [Monitor.Application](api/application.md) |
 | 本地化端口、简繁中文与英文资源、系统语言选择及翻译协作 | [本地化](localization.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |

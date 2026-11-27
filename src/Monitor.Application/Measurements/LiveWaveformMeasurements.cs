@@ -190,6 +190,27 @@ public sealed class LiveWaveformMeasurements
 
     public Checkpoint Capture() => new(_calibration, _ecg.Capture(), _resp.Capture(), _pleth.Capture(), _co2.Capture(), _optical.Capture(),
         _abp.Capture(), _pa.Capture(), _cvp.Capture(), _lastSampleTime);
+    // Fork an already verified acquisition stream at its block boundary. Each estimator
+    // otherwise treats the first private block as a new stream and discards its warm history.
+    public LiveWaveformMeasurements ForkForInstance(Guid sourceInstanceId, Guid newInstanceId)
+    {
+        if (sourceInstanceId == Guid.Empty || newInstanceId == Guid.Empty || sourceInstanceId == newInstanceId)
+        { throw new ArgumentException("A private measurement stream needs a distinct instance identity."); }
+        Guid Rebind(Guid current) => current == sourceInstanceId ? newInstanceId :
+            throw new InvalidOperationException("Measurement checkpoint belongs to another instance.");
+        Checkpoint copy = Capture();
+        if (copy.Ecg.Value.Identity is { } ecg) { copy.Ecg.Value.Identity = ecg with { Instance = Rebind(ecg.Instance) }; }
+        if (copy.Resp.Value.Identity is { } resp) { copy.Resp.Value.Identity = resp with { Instance = Rebind(resp.Instance) }; }
+        if (copy.Pleth.Value.Identity is { } pleth) { copy.Pleth.Value.Identity = pleth with { Instance = Rebind(pleth.Instance) }; }
+        if (copy.Co2.Value.Identity is { } co2) { copy.Co2.Value.Identity = co2 with { Instance = Rebind(co2.Instance) }; }
+        if (copy.Optical.Value.Identity is { } optical) { copy.Optical.Value.Identity = optical with { Instance = Rebind(optical.Instance) }; }
+        foreach (MeanPressureMeasurement.Checkpoint pressure in new[] { copy.Abp, copy.Pa, copy.Cvp })
+        {
+            if (pressure.Value.Identity is { } id) { pressure.Value.Identity = id with { Instance = Rebind(id.Instance) }; }
+        }
+        return Restore(copy);
+    }
+
     public static LiveWaveformMeasurements Restore(Checkpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);

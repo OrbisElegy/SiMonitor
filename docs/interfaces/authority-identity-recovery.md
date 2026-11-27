@@ -399,7 +399,7 @@ Delta 包含 BaseSha256、PreviousDeltaSha256、更新序号/时间和 ChangedCo
 最多 128 通道、256 组件、32 资源包；组件 hash 和运行时 engine/math/resource/channel/schema 能力必须匹配。
 base 必须 Allowed；delta 必须接当前 hash 链且 checkpoint 严格增加，commit/simTime 不倒退。
 验证完整状态镜像后才 Commit admission、发布 Frontier/RecoveryStateImage；返回镜像复制组件字节。
-边界错误抛 `ContinuityCapsuleChainException`（`ContinuityChain.*`）。当前没有生产 payload decoder 或加密 envelope 实现。
+边界错误抛 `ContinuityCapsuleChainException`（`ContinuityChain.*`）。课堂网络提供学习者 Base / Delta 的分离签名 payload 解码和能力校验，当前支持明文投影经 TLS 传输。[课堂连续性与恢复](classroom-recovery.md)
 
 `ContinuityShadowCoordinator(chain, dataContinuity, generator).VerifyOverlap(proofs, authorityMonotonicNs)`
 只在断连且 shadow Pending 时调用；每块 200 ms，重叠最多 50 块。

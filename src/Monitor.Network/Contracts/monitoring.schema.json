@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/monitoring.schema.json",
+  "title": "Domain.Contracts monitoring projections",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "NumericFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "measurement_channel_ref", "publish_seq", "sim_time_ns",
+        "measured_at_sim_time_ns", "estimated_at_sim_time_ns", "published_at_sim_time_ns",
+        "source_kind", "quantity", "quality", "configuration_revision"
+      ],
+      "properties": {
+        "schema_id": {"const": "NumericFrame@1"},
+        "measurement_channel_ref": {"$ref": "common.schema.json#/$defs/MeasurementChannelRef"},
+        "publish_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "measured_at_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "estimated_at_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "published_at_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "source_kind": {"enum": ["DirectMeasurement", "DerivedEstimate", "ManualEntry", "SimulatedDevice"]},
+        "quantity": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+            {"type": "null"}
+          ]
+        },
+        "quality": {"$ref": "common.schema.json#/$defs/MeasurementQuality"},
+        "configuration_revision": {"$ref": "common.schema.json#/$defs/U64"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"quality": {"properties": {"state": {"enum": ["Valid", "Stale"]}}, "required": ["state"]}},
+            "required": ["quality"]
+          },
+          "then": {"properties": {"quantity": {"$ref": "common.schema.json#/$defs/DecimalQuantity"}}},
+          "else": {"properties": {"quantity": {"type": "null"}}}
+        }
+      ]
+    },
+    "MeasurementGroupMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["measurement_channel_ref", "quantity", "quality"],
+      "properties": {
+        "measurement_channel_ref": {"$ref": "common.schema.json#/$defs/MeasurementChannelRef"},
+        "quantity": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+            {"type": "null"}
+          ]
+        },
+        "quality": {"$ref": "common.schema.json#/$defs/MeasurementQuality"}
+      }
+    },
+    "MeasurementGroupFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "measurement_event_id", "group_id", "publish_seq", "sim_time_ns",
+        "measured_at_sim_time_ns", "configuration_revision", "members"
+      ],
+      "properties": {
+        "schema_id": {"const": "MeasurementGroupFrame@1"},
+        "measurement_event_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "group_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "publish_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "measured_at_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "configuration_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "members": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {"$ref": "#/$defs/MeasurementGroupMember"}
+        }
+      }
+    },
+    "DisplayRoleResolutionProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "display_role", "resolved_measurement_channel_ref", "display_label_key",
+        "source_label_key", "quality", "reason_code", "projection_revision", "publish_seq",
+        "effective_sim_time_ns"
+      ],
+      "properties": {
+        "schema_id": {"const": "DisplayRoleResolutionProjection@1"},
+        "display_role": {"enum": ["PrimaryRate"]},
+        "resolved_measurement_channel_ref": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/MeasurementChannelRef"},
+            {"type": "null"}
+          ]
+        },
+        "display_label_key": {"$ref": "common.schema.json#/$defs/LocalizationKey"},
+        "source_label_key": {"oneOf": [{"$ref": "common.schema.json#/$defs/LocalizationKey"}, {"type": "null"}]},
+        "quality": {"enum": ["Valid", "Degraded", "Unavailable"]},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "publish_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "effective_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"}
+      }
+    },
+    "AlarmEpisodeProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "alarm_episode_id", "alarm_rule_id", "alarm_kind",
+        "source_measurement_channel_ref", "technical_source_id", "priority",
+        "condition_state", "ack_state", "latch_state", "enablement_state",
+        "suspension_state", "limit_profile_ref", "first_onset_sim_time_ns",
+        "last_occurrence_sim_time_ns", "acknowledged_sim_time_ns",
+        "condition_cleared_sim_time_ns", "released_sim_time_ns", "projection_revision",
+        "publish_seq", "message_key"
+      ],
+      "properties": {
+        "schema_id": {"const": "AlarmEpisodeProjection@1"},
+        "alarm_episode_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "alarm_rule_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "alarm_kind": {"enum": ["Patient", "Technical"]},
+        "source_measurement_channel_ref": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/MeasurementChannelRef"},
+            {"type": "null"}
+          ]
+        },
+        "technical_source_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/StableId"}, {"type": "null"}]},
+        "priority": {"enum": ["High", "Medium", "Low", "Advisory"]},
+        "condition_state": {"enum": ["Active", "Cleared"]},
+        "ack_state": {"enum": ["Unacknowledged", "Acknowledged"]},
+        "latch_state": {"enum": ["None", "LatchedPendingAck", "Released"]},
+        "enablement_state": {"enum": ["Enabled", "DisabledByAuthorizedPolicy"]},
+        "suspension_state": {"enum": ["Evaluating", "SuspendedUnknown", "NotSuspended"]},
+        "limit_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "first_onset_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "last_occurrence_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "acknowledged_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "condition_cleared_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "released_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "publish_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "message_key": {"$ref": "common.schema.json#/$defs/LocalizationKey"}
+      }
+    },
+    "AlarmAudioPolicyProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "projection_revision", "publish_seq", "audio_state",
+        "highest_audible_episode_id", "highest_audible_priority",
+        "paused_until_authority_monotonic_ns", "breakthrough_allowed",
+        "realert_at_authority_monotonic_ns", "audio_event_ref", "reason_code"
+      ],
+      "properties": {
+        "schema_id": {"const": "AlarmAudioPolicyProjection@1"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "publish_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "audio_state": {"enum": ["Audible", "PausedUntil", "OffByAuthorizedPolicy"]},
+        "highest_audible_episode_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "highest_audible_priority": {
+          "oneOf": [
+            {"enum": ["High", "Medium", "Low", "Advisory"]},
+            {"type": "null"}
+          ]
+        },
+        "paused_until_authority_monotonic_ns": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/I64"},
+            {"type": "null"}
+          ]
+        },
+        "breakthrough_allowed": {"type": "boolean"},
+        "realert_at_authority_monotonic_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "audio_event_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/StableId"}, {"type": "null"}]},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"}
+      }
+    }
+  }
+}

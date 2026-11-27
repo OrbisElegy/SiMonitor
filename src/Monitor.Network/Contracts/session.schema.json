@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/session.schema.json",
+  "title": "Domain.Contracts session, identity and timebase",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "ViewportDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["physical_width_px", "physical_height_px", "logical_width_dip", "logical_height_dip", "device_pixel_ratio", "available_client_rect_dip", "orientation", "safe_insets_px", "window_mode", "display_count", "input_modalities"],
+      "properties": {
+        "physical_width_px": {"type": "integer", "minimum": 240, "maximum": 32768},
+        "physical_height_px": {"type": "integer", "minimum": 240, "maximum": 32768},
+        "logical_width_dip": {"type": "integer", "minimum": 240, "maximum": 16384},
+        "logical_height_dip": {"type": "integer", "minimum": 240, "maximum": 16384},
+        "device_pixel_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 8},
+        "available_client_rect_dip": {
+          "type": "object", "additionalProperties": false,
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": {"type": "integer", "minimum": -32768, "maximum": 32768},
+            "y": {"type": "integer", "minimum": -32768, "maximum": 32768},
+            "width": {"type": "integer", "minimum": 1, "maximum": 16384},
+            "height": {"type": "integer", "minimum": 1, "maximum": 16384}
+          }
+        },
+        "orientation": {"enum": ["Landscape", "Portrait"]},
+        "safe_insets_px": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["top", "right", "bottom", "left"],
+          "properties": {
+            "top": {"type": "integer", "minimum": 0, "maximum": 4096},
+            "right": {"type": "integer", "minimum": 0, "maximum": 4096},
+            "bottom": {"type": "integer", "minimum": 0, "maximum": 4096},
+            "left": {"type": "integer", "minimum": 0, "maximum": 4096}
+          }
+        },
+        "window_mode": {"enum": ["Windowed", "Borderless", "Fullscreen"]},
+        "display_count": {"type": "integer", "minimum": 1, "maximum": 32},
+        "input_modalities": {"type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": {"enum": ["Mouse", "Keyboard", "Touch", "Pen", "Gamepad", "HardwareController"]}}
+      }
+    },
+    "ClientHello": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "client_id", "requested_role", "platform_id", "app_ref",
+        "protocol_ref", "domain_contract_ref", "render_backend_ref", "audio_backend_ref",
+        "capability_ids", "resource_pack_refs", "viewport"
+      ],
+      "properties": {
+        "schema_id": {"const": "ClientHello@1"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "requested_role": {"enum": ["Teacher", "Student", "Observer", "Administrator", "Standalone"]},
+        "platform_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "app_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "protocol_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "domain_contract_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "render_backend_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "audio_backend_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "capability_ids": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "resource_pack_refs": {"type": "array", "maxItems": 64, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "viewport": {"$ref": "#/$defs/ViewportDescriptor"}
+      }
+    },
+    "SessionManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "manifest_revision", "session_id", "cohort_id", "instance_id",
+        "authority_epoch", "timebase_epoch", "stream_epoch", "case_ref", "patient_profile_ref",
+        "device_capability_profile_ref", "device_behavior_profile_ref", "presentation_profile_ref",
+        "surface_kind", "skin_ref", "institution_brand_pack_ref", "action_catalog_ref",
+        "system_readability_floor_ref", "engine_ref", "math_profile_ref", "domain_contract_ref",
+        "assessment_mode", "local_continuation_policy", "manifest_sha256"
+      ],
+      "properties": {
+        "schema_id": {"const": "SessionManifest@1"},
+        "manifest_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "cohort_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "timebase_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "stream_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "case_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "patient_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "device_capability_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "device_behavior_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "presentation_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "surface_kind": {"enum": ["MonitorSurface", "ECG12StudyView"]},
+        "skin_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "institution_brand_pack_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "action_catalog_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "system_readability_floor_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "engine_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "math_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "domain_contract_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "assessment_mode": {"enum": ["Teaching", "IndependentAssessment", "None"]},
+        "local_continuation_policy": {"enum": ["Disabled", "TeachingReadOnly", "TeachingCourseApproved"]},
+        "manifest_sha256": {"$ref": "common.schema.json#/$defs/Sha256"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"surface_kind": {"const": "ECG12StudyView"}}},
+          "then": {"properties": {"skin_ref": {"type": "null"}}},
+          "else": {"properties": {"skin_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"}}}
+        },
+        {
+          "if": {"properties": {"assessment_mode": {"const": "IndependentAssessment"}}},
+          "then": {"properties": {"local_continuation_policy": {"const": "Disabled"}}}
+        }
+      ]
+    },
+    "TimebaseState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "timebase_epoch", "revision", "sim_time_ns", "host_monotonic_anchor_ns", "rate_numerator", "rate_denominator", "run_state", "changed_at_authority_monotonic_ns"],
+      "properties": {
+        "schema_id": {"const": "TimebaseState@1"},
+        "timebase_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "host_monotonic_anchor_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "rate_numerator": {"$ref": "common.schema.json#/$defs/I64"},
+        "rate_denominator": {"$ref": "common.schema.json#/$defs/U64"},
+        "run_state": {"enum": ["Running", "Paused", "Ended"]},
+        "changed_at_authority_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"}
+      }
+    },
+    "ClientProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "client_id", "session_id", "instance_id", "authority_epoch", "last_applied_plan_revision", "last_applied_sweep_revision", "last_applied_commit_seq", "last_applied_event_seq", "last_applied_waveform_block_seq", "last_rendered_sample_index", "buffered_from_sim_time_ns", "buffered_until_sim_time_ns", "available_render_history_ns", "presentation_clock_revision", "playhead_sim_time_ns", "write_head_phase_ppm", "estimated_clock_offset_ns", "connection_state", "local_continuation_from_sim_time_ns", "local_continuation_until_sim_time_ns", "last_common_capsule_sha256", "state_sha256", "sync_health", "reported_at_authority_monotonic_ns"],
+      "properties": {
+        "schema_id": {"const": "ClientProgress@1"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_plan_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_sweep_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_waveform_block_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_rendered_sample_index": {"$ref": "common.schema.json#/$defs/U64"},
+        "buffered_from_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "buffered_until_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "available_render_history_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "presentation_clock_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "playhead_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "write_head_phase_ppm": {"type": "integer", "minimum": 0, "maximum": 999999},
+        "estimated_clock_offset_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "connection_state": {"enum": ["Connected", "Suspect", "Disconnected", "Relocking"]},
+        "local_continuation_from_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "local_continuation_until_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "last_common_capsule_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+        "state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "sync_health": {"enum": ["Healthy", "Degraded", "Unsynchronized", "NoData"]},
+        "reported_at_authority_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"}
+      }
+    },
+    "LocalPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "principal_id", "subject_ref", "auth_method", "role_ids", "scope_ids", "session_scope_id", "authenticated_at_utc", "expires_at_utc"],
+      "properties": {
+        "schema_id": {"const": "LocalPrincipal@1"},
+        "principal_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "subject_ref": {"$ref": "common.schema.json#/$defs/StableId"},
+        "auth_method": {"enum": ["AnonymousLocal", "WindowsIntegrated", "InstitutionOfflineCredential", "InstitutionFederated", "MutualTLSService"]},
+        "role_ids": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "scope_ids": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "session_scope_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "authenticated_at_utc": {"$ref": "common.schema.json#/$defs/UtcInstant"},
+        "expires_at_utc": {"$ref": "common.schema.json#/$defs/UtcInstant"}
+      }
+    },
+    "DataProtectionProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "profile_ref", "data_classification", "database_protection", "backup_protection", "key_owner_ref", "key_recovery_procedure_ref", "retention_days", "deletion_policy", "export_policy", "diagnostic_redaction_required", "audit_required"],
+      "properties": {
+        "schema_id": {"const": "DataProtectionProfile@1"},
+        "profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "data_classification": {"enum": ["PublicTrainingAsset", "Operational", "PseudonymousAssessment", "IdentifiableEducationRecord"]},
+        "database_protection": {"enum": ["PlatformProtected", "ApplicationEncrypted", "InstitutionManagedEncryption"]},
+        "backup_protection": {"enum": ["EncryptedWithSeparateKey", "InstitutionManagedEncryption"]},
+        "key_owner_ref": {"$ref": "common.schema.json#/$defs/StableId"},
+        "key_recovery_procedure_ref": {"$ref": "common.schema.json#/$defs/StableId"},
+        "retention_days": {"type": "integer", "minimum": 0, "maximum": 36500},
+        "deletion_policy": {"enum": ["AutomaticAfterRetention", "AuthorizedManual", "InstitutionRecordPolicy"]},
+        "export_policy": {"enum": ["Allowed", "RoleRestricted", "Prohibited"]},
+        "diagnostic_redaction_required": {"const": true},
+        "audit_required": {"type": "boolean"}
+      }
+    },
+    "HostClusterManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "cluster_id", "exam_id", "leader_epoch", "fencing_token", "leader_endpoint_id", "standby_endpoint_ids", "endpoint_certificate_refs", "witness_policy_ref", "failover_capability_ids", "rpo_target_commits", "rto_target_ns", "manifest_sha256", "signature"],
+      "properties": {
+        "schema_id": {"const": "HostClusterManifest@1"},
+        "cluster_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "exam_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "leader_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "fencing_token": {"$ref": "common.schema.json#/$defs/U64"},
+        "leader_endpoint_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "standby_endpoint_ids": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "endpoint_certificate_refs": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "witness_policy_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "failover_capability_ids": {"type": "array", "maxItems": 32, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "rpo_target_commits": {"const": 0},
+        "rto_target_ns": {"type": "string", "pattern": "^[1-9][0-9]{0,19}$", "maxLength": 20},
+        "manifest_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "signature": {"$ref": "common.schema.json#/$defs/SignatureBlock"}
+      }
+    },
+    "ReplicationAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "cluster_id", "leader_epoch", "fencing_token", "replica_id", "last_durable_commit_seq", "wal_frame_seq", "last_durable_checkpoint_seq", "state_sha256", "fsync_completed_at_authority_monotonic_ns", "signature"],
+      "properties": {
+        "schema_id": {"const": "ReplicationAck@1"},
+        "cluster_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "leader_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "fencing_token": {"$ref": "common.schema.json#/$defs/U64"},
+        "replica_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "last_durable_commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "wal_frame_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_durable_checkpoint_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "fsync_completed_at_authority_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "signature": {"$ref": "common.schema.json#/$defs/SignatureBlock"}
+      }
+    }
+  }
+}

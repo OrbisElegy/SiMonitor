@@ -21,7 +21,7 @@ internal static class ClassroomNetworkSpecifications
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         CancellationToken ct = timeout.Token;
-        Guid sessionId = Guid.NewGuid(), instanceId = Guid.NewGuid(), channelId = Guid.NewGuid();
+        Guid sessionId = ClassroomContinuitySpecifications.SessionId, instanceId = ClassroomContinuitySpecifications.InstanceId, channelId = Guid.NewGuid();
         await using var certificates = await ClassroomCertificateFixture.CreateAsync(ct).ConfigureAwait(false);
         var trustedRoot = certificates.Root;
         using var certificate = ClassroomCertificate.Load(certificates.LeafPfxPath, keyPath: null, password: null);
@@ -37,7 +37,7 @@ internal static class ClassroomNetworkSpecifications
         catch (CryptographicException) { }
         await using var host = await ClassroomHost.StartAsync(IPAddress.Loopback, 0, IPAddress.Loopback.ToString(), certificate,
             ring, admission, identity, trustedRoot, ct).ConfigureAwait(false);
-        Guid firstId = Guid.NewGuid(), secondId = Guid.NewGuid();
+        Guid firstId = ClassroomContinuitySpecifications.StudentId, secondId = Guid.NewGuid();
         string firstInvitation = admission.IssueInvitation(firstId);
         bool untrusted = false;
         try
@@ -76,6 +76,10 @@ internal static class ClassroomNetworkSpecifications
             firstManifest is { OldestBlockSequence: 0, NextBlockSequence: 64, StreamEpoch: 2 } &&
             secondManifest.SessionId == sessionId && secondManifest.InstanceId == instanceId,
             "the manifest binds credentials to their assigned observer and stream");
+        await ClassroomSessionSpecifications.VerifySessionAsync(host, first, second, firstManifest, ct).ConfigureAwait(false);
+        await ClassroomArtifactSpecifications.ExerciseTransportAsync(host, first, second, firstManifest, ct).ConfigureAwait(false);
+        await ClassroomDiscoverySpecifications.ExercisePairingAsync(host.BaseAddress, trustedRoot, certificate, admission, ct).ConfigureAwait(false);
+        await ClassroomControlSpecifications.VerifyLoopbackAsync(host, first, second, firstManifest, ct).ConfigureAwait(false);
         await using var slow = await second.SubscribeAsync(secondManifest, cancellationToken: ct).ConfigureAwait(false);
         ulong resumeAt;
         await using (var history = await first.SubscribeAsync(firstManifest, 0, ct).ConfigureAwait(false))
@@ -123,6 +127,8 @@ internal static class ClassroomNetworkSpecifications
         catch (HttpRequestException error) when (error.StatusCode == HttpStatusCode.Conflict) { expired = true; }
         Check.That(expired, "the server rejects a cursor evicted since the manifest was fetched");
 
+        await ClassroomContinuitySpecifications.VerifyLoopbackAsync(host, first, second, ct).ConfigureAwait(false);
+        await ClassroomRecoverySpecifications.VerifyLoopbackAsync(host, first, firstManifest, Publish, ct).ConfigureAwait(false);
         var fresh = await first.GetSessionAsync(ct).ConfigureAwait(false);
         await using var idle = await first.SubscribeAsync(fresh, cancellationToken: ct).ConfigureAwait(false);
         Task<WaveformEnvelope?> pending = idle.ReceiveAsync(ct).AsTask();
@@ -133,7 +139,7 @@ internal static class ClassroomNetworkSpecifications
         Check.That(pending.IsCompleted, "an idle WebSocket must not hold the classroom host open");
     }
 
-    private static ClassroomBootstrap AuthenticateTeacher(string directory)
+    internal static ClassroomBootstrap AuthenticateTeacher(string directory)
     {
         const string username = "network-admin";
         const string password = "test-only classroom passphrase";

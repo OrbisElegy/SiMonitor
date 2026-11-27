@@ -178,6 +178,19 @@ public sealed class PhysiologyWaveformGroup
         _channels = channels;
     }
 
+    // Prepare a replacement off to the side so the owner can commit the configuration and swap
+    // the source atomically. Already delivered samples and the absolute sequence remain unchanged.
+    public PhysiologyWaveformGroup WithConfigurationRevision(ulong revision, PhysiologyWaveformGroup? definition = null)
+    {
+        WaveformBlockAssemblerState state = _assembler.CaptureState();
+        if (revision <= state.ConfigurationRevision || state.Planes.Any(p => p.PendingSamples.Count != 0))
+        { throw new InvalidOperationException("A configuration change requires a complete waveform block boundary."); }
+        PhysiologyWaveformGroup next = Fork();
+        if (definition is not null) { next.ContinueWith(definition); }
+        next._assembler = WaveformBlockAssembler.Restore(state with { ConfigurationRevision = revision });
+        return next;
+    }
+
     public PhysiologyWaveformGroupState CaptureState() => new(Array.AsReadOnly(_channels.Select(channel =>
         new PhysiologyWaveformChannelState(channel.Id, channel.Generator.CaptureState(), channel.QualityFlags, channel.PressureZeroOffsetCentiMmHg)
         { SensorIllustrations = channel.SensorIllustrations, AmplitudeCurves = channel.AmplitudeCurves }).ToArray()),

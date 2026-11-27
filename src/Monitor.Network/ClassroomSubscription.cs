@@ -8,7 +8,7 @@ namespace Monitor.Network;
 // The ring, outbox and replay cursor share the host publication lock. No socket
 // operation runs under that lock. Historical replay and new live blocks meet
 // at the sequence captured while the subscriber is registered.
-internal sealed class ClassroomSubscription(Guid studentId, WaveformBlockRing ring, ulong from)
+internal sealed class ClassroomSubscription(Guid studentId, WaveformBlockRing ring, ulong from, Action<ulong>? acknowledgeRejoin = null)
 {
     private readonly ulong _liveStart = ring.NextBlockSequence;
     private ulong _cursor = from;
@@ -16,7 +16,7 @@ internal sealed class ClassroomSubscription(Guid studentId, WaveformBlockRing ri
     internal WaveformSubscriberOutbox Outbox { get; } = WaveformSubscriberOutbox.Start(
         studentId, ring, WaveformSubscriberOutbox.MaximumCapacity, ring.NextBlockSequence);
 
-    internal async Task SendAsync(WebSocket socket, object gate, Func<Task> publicationSignal, CancellationToken cancellationToken)
+    internal async Task SendAsync(WebSocket socket, object gate, Func<Task> publicationSignal, Func<WaveformRetainedBlock, byte[]> transport, CancellationToken cancellationToken)
     {
         using var reading = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         byte[] ack = new byte[ClassroomWire.AcknowledgementBytes + 1];
@@ -51,7 +51,7 @@ internal sealed class ClassroomSubscription(Guid studentId, WaveformBlockRing ri
                 deadline.CancelAfter(TimeSpan.FromSeconds(5));
                 try
                 {
-                    await socket.SendAsync(block.RawEnvelope.AsMemory(), WebSocketMessageType.Binary, true,
+                    await socket.SendAsync(transport(block).AsMemory(), WebSocketMessageType.Binary, true,
                         deadline.Token).ConfigureAwait(false);
                     if (!await input.WaitAsync(deadline.Token).ConfigureAwait(false))
                     {
@@ -119,6 +119,7 @@ internal sealed class ClassroomSubscription(Guid studentId, WaveformBlockRing ri
             throw new InvalidDataException("Live subscriber requires resync.");
         }
         _cursor++;
+        acknowledgeRejoin?.Invoke(_cursor);
     }
 
     private static async Task<bool> ReadAcknowledgementAsync(WebSocket socket, byte[] bytes, CancellationToken cancellationToken)

@@ -7,7 +7,7 @@ using Monitor.Infrastructure.Identity;
 
 namespace Monitor.Network;
 
-public sealed class ClassroomBootstrap : IDisposable
+public sealed partial class ClassroomBootstrap : IDisposable
 {
     private static readonly LocalAuthority Authority = new();
     private static readonly Pbkdf2PasswordHasher PasswordHasher = new();
@@ -15,14 +15,18 @@ public sealed class ClassroomBootstrap : IDisposable
     private readonly AesGcmIdentityPayloadProtector _protector;
 
     private ClassroomBootstrap(
-        AesGcmIdentityPayloadProtector protector,
+        string databasePath, AesGcmIdentityPayloadProtector protector,
         IBootstrapIdentityRepository repository,
         LocalPrincipal principal)
     {
+        DatabasePath = databasePath;
         _protector = protector;
         Repository = repository;
         Principal = principal;
     }
+
+    internal string DatabasePath { get; }
+    internal IIdentityPayloadProtector PayloadProtector => _protector;
 
     public IBootstrapIdentityRepository Repository { get; }
     public LocalPrincipal Principal { get; }
@@ -89,7 +93,7 @@ public sealed class ClassroomBootstrap : IDisposable
                 throw new InvalidOperationException("identity.classroom.host_forbidden");
             }
 
-            return new ClassroomBootstrap(protector, repository, principal);
+            return new ClassroomBootstrap(databasePath, protector, repository, principal);
         }
         catch
         {

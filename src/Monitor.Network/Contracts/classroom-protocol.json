@@ -1,0 +1,12 @@
+{
+  "id": "Classroom.Protocol",
+  "version": "1.0.0",
+  "domain_contracts_sha256": "5ca5ef507870ea63d8c16532d955ad7b894a19ffac07be4b66a1fc2545192964",
+  "waveform_layout_sha256": "481c4a68ce5f10364c4cd024966153e762589c96b95015f8d49335d7b0a9c911",
+  "required_sample_format": "raw-int16",
+  "waveform_subprotocol": "simonitor.waveforms.v1",
+  "control_media_type": "application/json",
+  "optional_transport_codecs": [
+    "lz4-block-per-plane"
+  ]
+}

@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Net.Security;
 using System.Net.WebSockets;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -14,7 +15,7 @@ using Monitor.Simulation.Acquisition;
 
 namespace Monitor.Network;
 
-public sealed class ClassroomStudentClient : IDisposable
+public sealed partial class ClassroomStudentClient : IDisposable
 {
     private static readonly JsonSerializerOptions ControlJson = new()
     {
@@ -22,32 +23,38 @@ public sealed class ClassroomStudentClient : IDisposable
         RespectRequiredConstructorParameters = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         AllowDuplicateProperties = false,
+        Converters = { new ClassroomControlWire.I64(), new ClassroomControlWire.U64() },
         MaxDepth = 4
     };
 
     private readonly Uri _endpoint;
+    private readonly X509Certificate2? _trustedRoot;
+    private readonly string? _pinnedLeaf;
+    private readonly Guid? _privateInstance;
     private readonly HttpClient _http;
     private readonly HttpMessageInvoker _webSocketTransport;
     private string? _token;
 
-    private ClassroomStudentClient(Uri endpoint, X509Certificate2? trustedRoot)
+    private ClassroomStudentClient(Uri endpoint, X509Certificate2? trustedRoot, string? certificateSha256, Guid? privateInstance)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        if (!endpoint.IsAbsoluteUri || endpoint.Scheme != Uri.UriSchemeHttps ||
-            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0 ||
-            endpoint.AbsolutePath != "/")
+        if (!ClassroomPairingTicket.IsOrigin(endpoint))
         {
             throw new ArgumentException("A classroom endpoint must be an HTTPS origin.", nameof(endpoint));
         }
 
         _endpoint = endpoint;
+        _trustedRoot = trustedRoot;
+        _pinnedLeaf = certificateSha256;
+        _privateInstance = privateInstance;
         var tls = new SslClientAuthenticationOptions
         {
             EnabledSslProtocols = SslProtocols.Tls13,
             CertificateChainPolicy = ClassroomCertificate.ServerTrust(trustedRoot),
             RemoteCertificateValidationCallback = (_, certificate, _, errors) =>
                 errors == SslPolicyErrors.None && certificate is X509Certificate2 leaf &&
-                ClassroomCertificate.MatchesServer(leaf, endpoint.IdnHost)
+                ClassroomCertificate.MatchesServer(leaf, endpoint.IdnHost) &&
+                (certificateSha256 is null || leaf.GetCertHashString(HashAlgorithmName.SHA256).Equals(certificateSha256, StringComparison.OrdinalIgnoreCase))
         };
 
         var handler = new SocketsHttpHandler
@@ -59,35 +66,48 @@ public sealed class ClassroomStudentClient : IDisposable
             MaxResponseHeadersLength = 16
         };
         _webSocketTransport = new HttpMessageInvoker(handler);
-        _http = new HttpClient(handler, disposeHandler: false)
+        _http = new HttpClient(new BearerHandler(this, handler))
         {
             BaseAddress = endpoint,
             Timeout = TimeSpan.FromSeconds(10),
-            MaxResponseContentBufferSize = 4096
+            MaxResponseContentBufferSize = 128 * 1024
         };
+        if (privateInstance is Guid instance) { _http.DefaultRequestHeaders.Add(ClassroomHost.InstanceHeader, instance.ToString("D")); }
     }
 
-    public static async Task<ClassroomStudentClient> JoinAsync(Uri endpoint, string joinCode,
-        X509Certificate2? trustedRoot = null, CancellationToken cancellationToken = default)
+    public static Task<ClassroomStudentClient> JoinAsync(Uri endpoint, string joinCode,
+        X509Certificate2? trustedRoot = null, CancellationToken cancellationToken = default) =>
+        JoinCoreAsync(endpoint, joinCode, trustedRoot, null, null, null, null, cancellationToken);
+
+    private static async Task<ClassroomStudentClient> JoinCoreAsync(Uri endpoint, string joinCode, X509Certificate2? trustedRoot,
+        string? certificateSha256, Guid? expectedSessionId, Guid? privateInstance, JsonElement? presentation, CancellationToken cancellationToken)
     {
+        if (presentation is { } hello) { ClassroomContracts.Validate("ClientHello@1", hello); }
         ArgumentException.ThrowIfNullOrWhiteSpace(joinCode);
         if (joinCode.Length > 128 || !joinCode.All(char.IsAsciiLetterOrDigit))
         {
             throw new ArgumentException("Invalid join code.", nameof(joinCode));
         }
 
-        var client = new ClassroomStudentClient(endpoint, trustedRoot);
+        var client = new ClassroomStudentClient(endpoint, trustedRoot, certificateSha256, privateInstance);
         try
         {
-            using HttpResponseMessage response = await client._http.PostAsJsonAsync("v1/join",
-                new { protocolVersion = 1, joinCode }, cancellationToken).ConfigureAwait(false);
+            object request = expectedSessionId is Guid sessionId
+                ? new { protocolVersion = 1, joinCode, sessionId }
+                : new { protocolVersion = 1, joinCode };
+            using HttpResponseMessage response = await client._http.PostAsJsonAsync("v1/join", request, cancellationToken)
+                .ConfigureAwait(false);
             JoinResponse joined = await ReadControlAsync<JoinResponse>(response, cancellationToken).ConfigureAwait(false);
             if (joined.Token is not { Length: 64 } || !joined.Token.All(char.IsAsciiHexDigit))
             {
                 throw new InvalidDataException("The host returned an invalid access token.");
             }
             client._token = joined.Token;
-            client._http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", client._token);
+            ClassroomManifest manifest = await client.GetSessionAsync(cancellationToken).ConfigureAwait(false);
+            if ((expectedSessionId.HasValue && expectedSessionId != manifest.SessionId) ||
+                (privateInstance.HasValue && privateInstance != manifest.InstanceId))
+            { throw new InvalidDataException("The joined classroom does not match the assigned instance."); }
+            await client.NegotiateAsync(manifest, presentation, cancellationToken).ConfigureAwait(false);
             return client;
         }
         catch
@@ -145,10 +165,12 @@ public sealed class ClassroomStudentClient : IDisposable
             throw new HttpRequestException("The requested waveform cursor is outside the host retention window.", null, HttpStatusCode.Conflict);
         }
         long startSimTimeNs = manifest.NextBlockStartSimTimeNs - (long)(manifest.NextBlockSequence - from) * WaveformBlockAssembler.BlockDurationNs;
+        bool allowLz4 = Negotiation?.AllowLz4 == true;
         var socket = new ClientWebSocket();
         try
         {
             socket.Options.SetRequestHeader("Authorization", "Bearer " + _token);
+            if (_privateInstance is Guid instance) { socket.Options.SetRequestHeader(ClassroomHost.InstanceHeader, instance.ToString("D")); }
             socket.Options.AddSubProtocol(ClassroomWire.WaveformSubprotocol);
             socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(1);
             socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(4);
@@ -158,7 +180,7 @@ public sealed class ClassroomStudentClient : IDisposable
                 Scheme = "wss",
                 Port = _endpoint.Port,
                 Path = "/v1/waveforms",
-                Query = "from=" + from.ToString(CultureInfo.InvariantCulture)
+                Query = "from=" + from.ToString(CultureInfo.InvariantCulture) + (allowLz4 ? "&codec=lz4" : "")
             };
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(10));
@@ -169,7 +191,7 @@ public sealed class ClassroomStudentClient : IDisposable
             }
             var history = WaveformBlockRing.Start(manifest.SessionId, manifest.InstanceId, manifest.TimebaseEpoch,
                 manifest.StreamEpoch, from, startSimTimeNs, WaveformBlockRing.ClientHistoryBlockCount);
-            return new ClassroomWaveformSubscription(socket, history);
+            return new ClassroomWaveformSubscription(socket, history, allowLz4);
         }
         catch (WebSocketException error) when ((int)socket.HttpStatusCode is > 0 and not 101)
         {
@@ -213,6 +235,23 @@ public sealed class ClassroomStudentClient : IDisposable
         }
         return await response.Content.ReadFromJsonAsync<T>(ControlJson, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidDataException("The host returned an empty response.");
+    }
+
+    // HTTP and WebSocket share the TLS pool. The bearer is read for each request so rotation can
+    // coexist with telemetry polling and block reception.
+    private sealed class BearerHandler(ClassroomStudentClient client, SocketsHttpHandler transport) : HttpMessageHandler
+    {
+        private readonly HttpMessageInvoker _invoker = new(transport, disposeHandler: false);
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (Volatile.Read(ref client._token) is { } token) { request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token); }
+            return _invoker.SendAsync(request, cancellationToken);
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { _invoker.Dispose(); }
+            base.Dispose(disposing);
+        }
     }
 
     private sealed record JoinResponse(string Token);

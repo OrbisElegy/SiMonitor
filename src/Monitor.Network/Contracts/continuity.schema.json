@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/continuity.schema.json",
+  "title": "Domain.Contracts continuity and recovery",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "DeterministicStateComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_id", "state_schema_ref", "state_sha256", "state_base64"],
+      "properties": {
+        "component_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "state_schema_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "state_base64": {"$ref": "common.schema.json#/$defs/Base64"}
+      }
+    },
+    "ChannelCursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel_id", "next_sample_index", "next_block_seq", "next_numeric_seq"],
+      "properties": {
+        "channel_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "next_sample_index": {"$ref": "common.schema.json#/$defs/U64"},
+        "next_block_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "next_numeric_seq": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "ContinuityCapsuleBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "capsule_id", "session_id", "instance_id", "branch_id",
+        "authority_epoch", "timebase_epoch", "stream_epoch", "checkpoint_seq", "commit_seq",
+        "sim_time_ns", "next_event_seq", "channel_cursors", "state_components",
+        "projection_revisions", "engine_ref", "math_profile_ref", "resource_pack_refs",
+        "continuation_permission", "secret_boundary_sim_time", "continuation_valid_until",
+        "capsule_sha256", "signature", "encryption_envelope_ref"
+      ],
+      "properties": {
+        "schema_id": {"const": "ContinuityCapsuleBase@1"},
+        "capsule_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "branch_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "timebase_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "stream_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "checkpoint_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "next_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "channel_cursors": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/ChannelCursor"}},
+        "state_components": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/DeterministicStateComponent"}},
+        "projection_revisions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["display_role", "alarm_episode", "alarm_audio_policy", "therapy"],
+          "properties": {
+            "display_role": {"$ref": "common.schema.json#/$defs/U64"},
+            "alarm_episode": {"$ref": "common.schema.json#/$defs/U64"},
+            "alarm_audio_policy": {"$ref": "common.schema.json#/$defs/U64"},
+            "therapy": {"$ref": "common.schema.json#/$defs/U64"}
+          }
+        },
+        "engine_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "math_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "resource_pack_refs": {"type": "array", "maxItems": 32, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "continuation_permission": {"enum": ["Allowed", "DisallowedByCourse", "DisallowedByMode", "Ineligible"]},
+        "secret_boundary_sim_time": {"$ref": "common.schema.json#/$defs/I64"},
+        "continuation_valid_until": {"$ref": "common.schema.json#/$defs/I64"},
+        "capsule_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "signature": {"$ref": "common.schema.json#/$defs/SignatureBlock"},
+        "encryption_envelope_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/StableId"}, {"type": "null"}]}
+      }
+    },
+    "ContinuityCapsuleDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "delta_id", "base_sha256", "previous_delta_sha256", "checkpoint_seq",
+        "commit_seq", "sim_time_ns", "changed_components", "secret_boundary_sim_time",
+        "continuation_valid_until", "delta_sha256", "signature"
+      ],
+      "properties": {
+        "schema_id": {"const": "ContinuityCapsuleDelta@1"},
+        "delta_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "base_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "previous_delta_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+        "checkpoint_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "changed_components": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/DeterministicStateComponent"}},
+        "secret_boundary_sim_time": {"$ref": "common.schema.json#/$defs/I64"},
+        "continuation_valid_until": {"$ref": "common.schema.json#/$defs/I64"},
+        "delta_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "signature": {"$ref": "common.schema.json#/$defs/SignatureBlock"}
+      }
+    },
+    "OfflineCapabilityLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "lease_id", "session_id", "client_id", "instance_id", "branch_id",
+        "authority_epoch", "base_capsule_sha256", "allowed_action_ids", "takeover_from_sim_time_ns",
+        "maximum_offline_window_ns", "maximum_offline_operation_seq", "secret_boundary_sim_time",
+        "continuation_valid_until", "issued_at_safety_ns", "expires_at_safety_ns", "signature"
+      ],
+      "properties": {
+        "schema_id": {"const": "OfflineCapabilityLease@1"},
+        "lease_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "branch_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "base_capsule_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "allowed_action_ids": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "actions.schema.json#/$defs/ActionId"}},
+        "takeover_from_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "maximum_offline_window_ns": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$", "maxLength": 20},
+        "maximum_offline_operation_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "secret_boundary_sim_time": {"$ref": "common.schema.json#/$defs/I64"},
+        "continuation_valid_until": {"$ref": "common.schema.json#/$defs/I64"},
+        "issued_at_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "expires_at_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "signature": {"$ref": "common.schema.json#/$defs/SignatureBlock"}
+      }
+    },
+    "LocalContinuationReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "report_id", "session_id", "client_id", "instance_id", "branch_id",
+        "base_sha256", "last_delta_sha256", "fallback_epoch", "start_sim_time_ns",
+        "end_sim_time_ns", "last_sample_index_by_channel", "last_block_seq", "last_event_seq",
+        "rolling_state_sha256", "offline_action_chain_sha256", "offline_action_event_ids",
+        "integrity_state"
+      ],
+      "properties": {
+        "schema_id": {"const": "LocalContinuationReport@1"},
+        "report_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "branch_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "base_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "last_delta_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+        "fallback_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "start_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "end_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "last_sample_index_by_channel": {
+          "type": "array", "maxItems": 128,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["channel_id", "last_sample_index"],
+            "properties": {"channel_id": {"$ref": "common.schema.json#/$defs/StableId"}, "last_sample_index": {"$ref": "common.schema.json#/$defs/U64"}}
+          }
+        },
+        "last_block_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "rolling_state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "offline_action_chain_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "offline_action_event_ids": {"type": "array", "maxItems": 10000, "items": {"$ref": "common.schema.json#/$defs/Uuid"}},
+        "integrity_state": {"enum": ["PendingVerification", "Verified", "Rejected"]}
+      }
+    },
+    "RecoveryHello": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "client_id", "session_id", "instance_id", "observed_authority_epoch",
+        "last_applied_commit_seq", "last_applied_event_seq", "base_sha256", "last_delta_sha256",
+        "local_continuation_report_id", "momentary_inputs_cleared"
+      ],
+      "properties": {
+        "schema_id": {"const": "RecoveryHello@1"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "observed_authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_applied_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "base_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+        "last_delta_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+        "local_continuation_report_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "momentary_inputs_cleared": {"const": true}
+      }
+    },
+    "ResyncPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "plan_id", "new_authority_epoch", "host_checkpoint_seq",
+        "host_state_sha256", "relock_sim_time_ns", "new_stream_epoch", "preroll_from_sim_time_ns",
+        "preroll_until_sim_time_ns", "local_prediction_decision", "reason_code",
+        "accepted_through_commit_seq", "resume_snapshot_sha256"
+      ],
+      "properties": {
+        "schema_id": {"const": "ResyncPlan@1"},
+        "plan_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "new_authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "host_checkpoint_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "host_state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "relock_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "new_stream_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "preroll_from_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "preroll_until_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "local_prediction_decision": {"enum": ["CommitVerified", "Discard", "FullSnapshotRequired", "RejectClient"]},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"},
+        "accepted_through_commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "resume_snapshot_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/Sha256"}, {"type": "null"}]}
+      }
+    },
+    "ClientResumeSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "snapshot_id", "session_id", "instance_id", "authority_epoch",
+        "commit_seq", "sim_time_ns", "resolved_plan_sha256", "projection_bundle_sha256",
+        "numeric_snapshot_sha256", "waveform_preroll_sha256", "required_render_history_ns",
+        "available_render_history_ns", "prepared"
+      ],
+      "properties": {
+        "schema_id": {"const": "ClientResumeSnapshot@1"},
+        "snapshot_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "resolved_plan_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "projection_bundle_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "numeric_snapshot_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "waveform_preroll_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "required_render_history_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "available_render_history_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "prepared": {"type": "boolean"}
+      }
+    },
+    "SimulationCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "checkpoint_id", "session_id", "instance_id", "authority_epoch", "timebase_epoch", "checkpoint_seq", "commit_seq", "sim_time_ns", "state_registry_ref", "state_components", "private_scenario_state_sha256", "private_scenario_state_base64", "checkpoint_sha256", "confidentiality"],
+      "properties": {
+        "schema_id": {"const": "SimulationCheckpoint@1"},
+        "checkpoint_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "timebase_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "checkpoint_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "state_registry_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "state_components": {"type": "array", "minItems": 1, "maxItems": 512, "items": {"$ref": "#/$defs/DeterministicStateComponent"}},
+        "private_scenario_state_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "private_scenario_state_base64": {"$ref": "common.schema.json#/$defs/Base64"},
+        "checkpoint_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "confidentiality": {"const": "HostPrivateNeverProjectToLearner"}
+      }
+    }
+  }
+}

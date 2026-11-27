@@ -632,6 +632,7 @@ public sealed class LiveWaveformMeasurements
     public LiveMeasurementSnapshot ConsumeSamples(IReadOnlyList<WaveformEnvelope> channelBlocks, long asOfSampleTimeNs, out IReadOnlyList<DetectedEcgBeat> detectedBeats, out IReadOnlyList<DetectedPlethPulse> detectedPulses, out IReadOnlyList<DetectedEcgRhythmEvent> rhythmEvents, out IReadOnlyList<DetectedEcgMonitoringEvent> monitoringEvents, EcgPacingEvidence? pacingEvidence = null);
     public LiveMeasurementSnapshot Read(long asOfSampleTimeNs);
     public Checkpoint Capture();
+    public LiveWaveformMeasurements ForkForInstance(Guid sourceInstanceId, Guid newInstanceId);
     public static LiveWaveformMeasurements Restore(Checkpoint checkpoint);
     public sealed class Checkpoint
     {
@@ -1908,6 +1909,7 @@ public sealed record MonitorSoundPreferences(int Volume, int HeartbeatVolume, bo
 ```csharp
 public enum NibpPhase { Disabled, Idle, Inflating, Deflating }
 public enum NibpEventKind { Started, Completed, Cancelled }
+public sealed record NibpMeasurementState(long SimTimeNs, ManualNibp? Target, ManualNibp? MeasuringTarget, ManualNibp? LastReading, long? StartedAtNs, long? NextMeasurementAtNs, long? MeasuredAtNs, bool AutoEnabled, int AutoIntervalMinutes);
 public sealed record NibpMeasurementEvent(long TimeNs, NibpEventKind Kind, ManualNibp? Reading);
 public sealed class NibpMeasurement
 {
@@ -1925,6 +1927,8 @@ public sealed class NibpMeasurement
     public NibpPhase Phase { get; }
     public int PhaseRemainingMilliseconds { get; }
     public event Action<NibpMeasurementEvent>? Changed;
+    public NibpMeasurementState CaptureState();
+    public static NibpMeasurement Restore(NibpMeasurementState state);
     public void Advance(long simTimeNs, ManualNibp? target);
     public bool Start();
     public void Stop();

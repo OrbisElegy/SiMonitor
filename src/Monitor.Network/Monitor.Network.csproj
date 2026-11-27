@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Contracts/*.json" LogicalName="Classroom.Contracts.%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="Monitor.Specs" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Monitor.Infrastructure/Monitor.Infrastructure.csproj" />

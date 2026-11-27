@@ -3,6 +3,8 @@ namespace Monitor.Application.Presentation;
 
 public enum NibpPhase { Disabled, Idle, Inflating, Deflating }
 public enum NibpEventKind { Started, Completed, Cancelled }
+public sealed record NibpMeasurementState(long SimTimeNs, ManualNibp? Target, ManualNibp? MeasuringTarget, ManualNibp? LastReading,
+    long? StartedAtNs, long? NextMeasurementAtNs, long? MeasuredAtNs, bool AutoEnabled, int AutoIntervalMinutes);
 public sealed record NibpMeasurementEvent(long TimeNs, NibpEventKind Kind, ManualNibp? Reading);
 
 // Local teaching cuff cycle, driven only by the session clock. The configured
@@ -30,6 +32,38 @@ public sealed class NibpMeasurement
         ? (int)Math.Max(0, (start + (Phase == NibpPhase.Inflating ? InflationDurationNs : MeasurementDurationNs) - _timeNs + 999_999) / 1_000_000)
         : 0;
     public event Action<NibpMeasurementEvent>? Changed;
+
+    public NibpMeasurementState CaptureState() => new(_timeNs, _target, _measuringTarget, _reading, _startedAtNs,
+        NextMeasurementAtNs, MeasuredAtNs, AutoEnabled, AutoIntervalMinutes);
+
+    public static NibpMeasurement Restore(NibpMeasurementState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.SimTimeNs < 0 || !AutoIntervalsMinutes.Contains(state.AutoIntervalMinutes) ||
+            state.StartedAtNs.HasValue != (state.MeasuringTarget is not null) ||
+            state.MeasuredAtNs.HasValue != (state.LastReading is not null) ||
+            state.AutoEnabled != state.NextMeasurementAtNs.HasValue ||
+            state.Target is null && (state.StartedAtNs.HasValue || state.AutoEnabled || state.LastReading is not null) ||
+            state.StartedAtNs is { } start && (start < 0 || start > state.SimTimeNs ||
+                state.SimTimeNs - start >= MeasurementDurationNs || start > long.MaxValue - MeasurementDurationNs) ||
+            state.MeasuredAtNs is { } measured && (measured < 0 || measured > state.SimTimeNs) ||
+            state.NextMeasurementAtNs < 0)
+        {
+            throw new ArgumentException("Invalid cuff measurement state.", nameof(state));
+        }
+        return new NibpMeasurement
+        {
+            _timeNs = state.SimTimeNs,
+            _target = state.Target,
+            _measuringTarget = state.MeasuringTarget,
+            _reading = state.LastReading,
+            _startedAtNs = state.StartedAtNs,
+            NextMeasurementAtNs = state.NextMeasurementAtNs,
+            MeasuredAtNs = state.MeasuredAtNs,
+            AutoEnabled = state.AutoEnabled,
+            AutoIntervalMinutes = state.AutoIntervalMinutes
+        };
+    }
 
     public void Advance(long simTimeNs, ManualNibp? target)
     {

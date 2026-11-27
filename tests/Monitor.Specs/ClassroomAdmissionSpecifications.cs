@@ -12,6 +12,7 @@ internal static class ClassroomAdmissionSpecifications
 {
     public static Specification[] All =>
     [
+        new(nameof(AdmissionWindowsAndCredentialRotationAreBounded), AdmissionWindowsAndCredentialRotationAreBounded),
         new(nameof(ClassroomInvitationHasOneWinnerAndOneHost), ClassroomInvitationHasOneWinnerAndOneHost),
         new(nameof(ClassroomGrantsExpireAndReleaseCapacity), ClassroomGrantsExpireAndReleaseCapacity),
         new(nameof(ClassroomJoinFailuresHaveSourceAndGlobalLimits), ClassroomJoinFailuresHaveSourceAndGlobalLimits),
@@ -123,6 +124,28 @@ internal static class ClassroomAdmissionSpecifications
         try { operation(); }
         catch (InvalidOperationException rejected) when (rejected.Message == reason) { return; }
         throw new InvalidOperationException($"Expected rejection: {reason}.");
+    }
+
+    private static void AdmissionWindowsAndCredentialRotationAreBounded()
+    {
+        var clock = new ClassroomClock();
+        var policy = new ClassroomAdmissionPolicy(12, 90, 120, 30);
+        using var admission = new ClassroomAdmission(Guid.NewGuid(), Guid.NewGuid(), clock, policy);
+        admission.ReopenInvitations(clock.GetUtcNow().AddSeconds(60));
+        var seat = Guid.NewGuid();
+        string code = admission.IssueInvitation(seat);
+        Check.That(code.Length == 12 && admission.TryRedeem(code, "local", out _), "institution invitation parameters apply");
+        string second = admission.IssueInvitation(seat);
+        Check.That(admission.TryRedeem(second, "local", out string? token), "grant issued");
+        var rotation = Guid.NewGuid();
+        Check.That(!admission.TryRefresh(token!, rotation, out _), "renewal must wait for its configured window");
+        clock.Advance(TimeSpan.FromSeconds(100));
+        Check.That(!admission.IsOpen && admission.TryRefresh(token!, rotation, out string? renewed) && renewed != token &&
+            admission.TryRefresh(token!, rotation, out string? retry) && retry == renewed && !admission.TryRefresh(token!, Guid.NewGuid(), out _) &&
+            admission.TryAuthorize(renewed!, out var actualSeat, out _) && actualSeat == seat,
+            "lost renewal replies are idempotent and admission expiry does not revoke an already paired student");
+        clock.ShiftWall(TimeSpan.FromMinutes(-3));
+        Check.That(!admission.IsOpen, "a wall-clock rollback cannot reopen old invitations");
     }
 
     private sealed class ClassroomClock : TimeProvider

@@ -10,13 +10,14 @@ using Monitor.Simulation.Authoring;
 
 namespace Monitor.Network;
 
-internal static class Program
+internal static partial class Program
 {
     private const string Usage = """
         SiMonitor classroom transport
           init    DATABASE ADMIN_NAME BLOCKED_PASSWORD_HASH_FILE
-          teacher DATABASE USERNAME LISTEN_IP PORT CERTIFICATE_DNS_NAME CERTIFICATE INVITATIONS_FILE [SEATS]
-          student HTTPS_ORIGIN [BLOCK_COUNT]
+          teacher DATABASE USERNAME LISTEN_IP PORT CERTIFICATE_DNS_NAME CERTIFICATE INVITATIONS_FILE [SEATS] [--start]
+          student HTTPS_ORIGIN|ticket [BLOCK_COUNT]
+          discover INTERFACE_IP
         Secrets and trust configuration are described in docs/interfaces/classroom-network.md.
         """;
 
@@ -38,11 +39,15 @@ internal static class Program
                     finally { CryptographicOperations.ZeroMemory(key); }
                     Console.WriteLine("Classroom identity initialized.");
                     break;
-                case ["teacher", ..] when args.Length is 8 or 9:
+                case ["teacher", ..] when args.Length is >= 8 and <= 10:
                     await RunTeacherAsync(args, stop.Token).ConfigureAwait(false);
                     break;
                 case ["student", ..] when args.Length is 2 or 3:
                     await RunStudentAsync(args, stop.Token).ConfigureAwait(false);
+                    break;
+                case ["discover", var networkInterface]:
+                    foreach (var teacher in await ClassroomDiscovery.BrowseAsync(IPAddress.Parse(networkInterface), TimeSpan.FromSeconds(3), stop.Token).ConfigureAwait(false))
+                    { Console.WriteLine($"{teacher.DisplayName} {teacher.Origin} {teacher.CertificateSha256}"); }
                     break;
                 case ["--help"]:
                     Console.WriteLine(Usage);
@@ -60,13 +65,28 @@ internal static class Program
             System.Net.WebSockets.WebSocketException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or
             System.Net.Sockets.SocketException or OperationCanceledException or System.Security.Authentication.AuthenticationException)
         {
-            Console.Error.WriteLine(error.Message);
+            string? hint = error switch
+            {
+                CryptographicException or System.Security.Authentication.AuthenticationException => "请检查机构根证书、主机名 SAN、服务器私钥、有效期和吊销服务。",
+                HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } => "TLS 校验失败，请核对 DNS 名、机构 CA 和 TLS 1.3 支持。",
+                HttpRequestException { HttpRequestError: HttpRequestError.ConnectionError or HttpRequestError.NameResolutionError } =>
+                    "请核对教师机上的监听网卡、地址、端口、防火墙和系统代理。",
+                System.Net.Sockets.SocketException or Microsoft.AspNetCore.Connections.AddressInUseException =>
+                    "无法使用指定网卡或端口，请核对地址及端口占用。",
+                HttpRequestException { StatusCode: HttpStatusCode.Unauthorized } => "邀请码或会话令牌无效，请向教师重新领取。",
+                HttpRequestException { StatusCode: HttpStatusCode.UnprocessableEntity } => "课堂协议、资源、座位或呈现能力不匹配。",
+                _ => null
+            };
+            Console.Error.WriteLine(hint is null ? error.Message : $"{hint} {error.Message}");
             return 1;
         }
     }
 
     private static async Task RunTeacherAsync(string[] args, CancellationToken cancellationToken)
     {
+        bool start = args[^1] == "--start";
+        if (start) { args = args[..^1]; }
+        if (args.Length is not (8 or 9)) { throw new ArgumentException(Usage); }
         int seats = args.Length == 9 ? Integer(args[8], 1, 36) : 1;
         var address = IPAddress.Parse(args[3]);
         int port = Integer(args[4], 0, 65535);
@@ -77,7 +97,6 @@ internal static class Program
         using var identity = Authenticate(args[1], args[2]);
         var sessionId = Guid.NewGuid();
         var instanceId = Guid.NewGuid();
-        var source = PhysiologyIllustrationSource.CreateForSession(sessionId, instanceId);
         var ring = WaveformBlockRing.Start(sessionId, instanceId, 1, 1, 0, 0, WaveformBlockRing.HostRetentionBlockCount);
         using var admission = new ClassroomAdmission(sessionId, instanceId);
         await using var host = await ClassroomHost.StartAsync(address, port, hostName, certificate, ring, admission, identity, trustedRoot,
@@ -85,16 +104,9 @@ internal static class Program
         var origin = new UriBuilder(Uri.UriSchemeHttps, hostName, host.BaseAddress.Port).Uri;
         WriteInvitations(args[7], origin, admission, seats);
         Console.WriteLine($"Classroom {sessionId:D} listening at {origin}. Invitations are in the specified file.");
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(200));
-        long simTimeNs = 0;
-        while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-        {
-            simTimeNs = checked(simTimeNs + WaveformBlockAssembler.BlockDurationNs);
-            foreach (byte[] wire in source.AdvanceTo(simTimeNs, 250, 1, 256, cancellationToken))
-            {
-                host.Publish(wire);
-            }
-        }
+        if (start) { host.StartClass(); }
+        await ServeLessonAsync(host, admission, identity.Principal.PrincipalId, address, origin,
+            certificate.GetCertHashString(HashAlgorithmName.SHA256).ToLowerInvariant(), cancellationToken).ConfigureAwait(false);
     }
 
     private static void WriteInvitations(string path, Uri origin, ClassroomAdmission admission, int seats)
@@ -131,62 +143,29 @@ internal static class Program
     {
         int count = args.Length == 3 ? Integer(args[2], 1, int.MaxValue) : int.MaxValue;
         using X509Certificate2? root = LoadTrustedRoot();
-        using var client = await ClassroomStudentClient.JoinAsync(new Uri(args[1]), Secret("SIMONITOR_JOIN_CODE"), root,
-            cancellationToken).ConfigureAwait(false);
-        ClassroomManifest manifest = await client.GetSessionAsync(cancellationToken).ConfigureAwait(false);
-        ClassroomClockSample clock = await client.SynchronizeClockAsync(cancellationToken).ConfigureAwait(false);
-        Console.WriteLine($"Session {manifest.SessionId:D}, student {manifest.StudentId:D}, clock RTT {clock.RoundTripNs} ns.");
-        int received = 0;
-        int retries = 0;
-        const int maximumRetries = 3;
-        ulong cursor = manifest.NextBlockSequence;
-        while (received < count)
-        {
-            try
-            {
-                await using ClassroomWaveformSubscription subscription = retries == 0
-                    ? await client.SubscribeAsync(manifest, cursor, cancellationToken).ConfigureAwait(false)
-                    : await client.ResumeAsync(manifest, cursor, cancellationToken).ConfigureAwait(false);
-                while (received < count)
-                {
-                    WaveformEnvelope block = await subscription.ReceiveAsync(cancellationToken).ConfigureAwait(false)
-                        ?? throw new EndOfStreamException("The host closed the waveform stream before the requested block count.");
-                    cursor = subscription.NextBlockSequence;
-                    received++;
-                    Console.WriteLine(FormattableString.Invariant($"Block {block.BlockSequence} at {block.StartSimTimeNs} ns, {block.Planes.Count} planes."));
-                }
-            }
-            catch (Exception error) when (!cancellationToken.IsCancellationRequested && IsTransientStreamError(error))
-            {
-                if (retries == maximumRetries)
-                {
-                    throw new IOException($"Waveform delivery stopped at block {cursor} after {retries} reconnect attempts.", error);
-                }
-                int delaySeconds = 1 << retries;
-                retries++;
-                Console.Error.WriteLine($"Reconnecting for block {cursor} in {delaySeconds} s (attempt {retries}/{maximumRetries}).");
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken).ConfigureAwait(false);
-            }
-        }
+        using var client = args[1] == "ticket"
+            ? await ClassroomStudentClient.JoinAsync(ClassroomPairingTicket.Parse(Secret("SIMONITOR_PAIRING_TICKET")), root, cancellationToken).ConfigureAwait(false)
+            : await ClassroomStudentClient.JoinAsync(new Uri(args[1]), Secret("SIMONITOR_JOIN_CODE"), root, cancellationToken).ConfigureAwait(false);
+        await ObserveLessonAsync(client, count, cancellationToken).ConfigureAwait(false);
+    }
 
-        static bool IsTransientStreamError(Exception error)
+    private static bool IsTransientStreamError(Exception error)
+    {
+        HttpRequestException? request = null;
+        for (Exception? cause = error; cause is not null; cause = cause.InnerException)
         {
-            HttpRequestException? request = null;
-            for (Exception? cause = error; cause is not null; cause = cause.InnerException)
-            {
-                if (cause is System.Security.Authentication.AuthenticationException or InvalidDataException) { return false; }
-                request ??= cause as HttpRequestException;
-            }
-            if (request is not null)
-            {
-                return request.StatusCode is null
-                    ? request.HttpRequestError is HttpRequestError.NameResolutionError or HttpRequestError.ConnectionError or HttpRequestError.ResponseEnded
-                    : request.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests or HttpStatusCode.BadGateway or
-                        HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
-            }
-            return error is IOException or OperationCanceledException ||
-                error is System.Net.WebSockets.WebSocketException { WebSocketErrorCode: System.Net.WebSockets.WebSocketError.ConnectionClosedPrematurely };
+            if (cause is System.Security.Authentication.AuthenticationException or InvalidDataException) { return false; }
+            request ??= cause as HttpRequestException;
         }
+        if (request is not null)
+        {
+            return request.StatusCode is null
+                ? request.HttpRequestError is HttpRequestError.NameResolutionError or HttpRequestError.ConnectionError or HttpRequestError.ResponseEnded
+                : request.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests or HttpStatusCode.BadGateway or
+                    HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
+        }
+        return error is IOException or OperationCanceledException ||
+            error is System.Net.WebSockets.WebSocketException { WebSocketErrorCode: System.Net.WebSockets.WebSocketError.ConnectionClosedPrematurely };
     }
 
     private static ClassroomBootstrap Authenticate(string db, string user)

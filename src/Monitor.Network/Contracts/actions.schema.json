@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/actions.schema.json",
+  "title": "Domain.Contracts learner actions",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "ActionId": {
+      "enum": [
+        "alarm.settings.open",
+        "alarm.acknowledge",
+        "alarm.audio_pause.start",
+        "alarm.audio_pause.resume",
+        "alarm.test.start",
+        "nibp.measurement.start",
+        "nibp.measurement.cancel",
+        "nibp.auto.configure",
+        "presentation.layout.select",
+        "presentation.ecg12_theme.select",
+        "measurement.ecg12.activate",
+        "measurement.ecg12.deactivate",
+        "measurement.ecg12.cursor.set",
+        "measurement.ecg12.clear",
+        "therapy.operating_mode.set",
+        "therapy.defib.timing_mode.set",
+        "therapy.defib.energy.set",
+        "therapy.defib.charge.press",
+        "therapy.defib.charge.renew",
+        "therapy.defib.charge.release",
+        "therapy.defib.disarm",
+        "therapy.defib.shock.press",
+        "therapy.defib.shock.renew",
+        "therapy.defib.shock.release",
+        "therapy.pacer.mode.set",
+        "therapy.pacer.rate.set",
+        "therapy.pacer.output.set",
+        "therapy.pacer.start",
+        "therapy.pacer.pause",
+        "therapy.pacer.stop"
+      ]
+    },
+    "ActionProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "action_id", "projection_revision", "availability",
+        "interaction_kind", "parameter_schema_id", "disabled_reason_code",
+        "localization_key"
+      ],
+      "properties": {
+        "schema_id": {"const": "ActionProjection@1"},
+        "action_id": {"$ref": "#/$defs/ActionId"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "availability": {"enum": ["Hidden", "Disabled", "Enabled", "Pending"]},
+        "interaction_kind": {"enum": ["Immediate", "SetValue", "PressHoldRelease", "Navigation"]},
+        "parameter_schema_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "disabled_reason_code": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/ReasonCode"},
+            {"type": "null"}
+          ]
+        },
+        "localization_key": {"$ref": "common.schema.json#/$defs/LocalizationKey"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"availability": {"const": "Disabled"}}, "required": ["availability"]},
+          "then": {"properties": {"disabled_reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"}}},
+          "else": {"properties": {"disabled_reason_code": {"type": "null"}}}
+        }
+      ]
+    },
+    "LearnerActionIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "intent_id", "idempotency_key", "session_id", "client_id",
+        "instance_id", "action_id", "projection_revision", "client_monotonic_ns",
+        "control_id", "skin_id", "parameters"
+      ],
+      "properties": {
+        "schema_id": {"const": "LearnerActionIntent@1"},
+        "intent_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "idempotency_key": {"$ref": "common.schema.json#/$defs/StableId"},
+        "session_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "action_id": {"$ref": "#/$defs/ActionId"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "client_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "control_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "skin_id": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/StableId"},
+            {"type": "null"}
+          ]
+        },
+        "parameters": {"type": "object"}
+      }
+    },
+    "LearnerActionCommitted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "intent_id", "idempotency_key", "accepted", "action_id",
+        "projection_revision", "commit_seq", "sim_time_ns", "rejection"
+      ],
+      "properties": {
+        "schema_id": {"const": "LearnerActionCommitted@1"},
+        "intent_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "idempotency_key": {"$ref": "common.schema.json#/$defs/StableId"},
+        "accepted": {"type": "boolean"},
+        "action_id": {"$ref": "#/$defs/ActionId"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "commit_seq": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/U64"},
+            {"type": "null"}
+          ]
+        },
+        "sim_time_ns": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/I64"},
+            {"type": "null"}
+          ]
+        },
+        "rejection": {
+          "oneOf": [
+            {"$ref": "common.schema.json#/$defs/DomainRejection"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"accepted": {"const": true}}, "required": ["accepted"]},
+          "then": {
+            "properties": {
+              "commit_seq": {"$ref": "common.schema.json#/$defs/U64"},
+              "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+              "rejection": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "commit_seq": {"type": "null"},
+              "sim_time_ns": {"type": "null"},
+              "rejection": {"$ref": "common.schema.json#/$defs/DomainRejection"}
+            }
+          }
+        }
+      ]
+    },
+    "EmptyParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "AlarmAcknowledgeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alarm_episode_ids"],
+      "properties": {
+        "alarm_episode_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"$ref": "common.schema.json#/$defs/Uuid"}
+        }
+      }
+    },
+    "AlarmPauseParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_s"],
+      "properties": {
+        "duration_s": {"type": "integer", "minimum": 1, "maximum": 3600}
+      }
+    },
+    "AlarmTestParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id"],
+      "properties": {"profile_id": {"$ref": "common.schema.json#/$defs/StableId"}}
+    },
+    "NibpAutoParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "interval_s"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "interval_s": {"oneOf": [{"type": "integer", "minimum": 30, "maximum": 86400}, {"type": "null"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]},
+          "then": {"properties": {"interval_s": {"type": "integer", "minimum": 30, "maximum": 86400}}},
+          "else": {"properties": {"interval_s": {"type": "null"}}}
+        }
+      ]
+    },
+    "SelectIdParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selected_id"],
+      "properties": {"selected_id": {"$ref": "common.schema.json#/$defs/StableId"}}
+    },
+    "Ecg12CursorParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lead_id", "sample_index"],
+      "properties": {
+        "lead_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "sample_index": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "OperatingModeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operating_mode"],
+      "properties": {"operating_mode": {"enum": ["Monitor", "ManualDefib", "AED", "Pacer"]}}
+    },
+    "DefibTimingModeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timing_mode"],
+      "properties": {"timing_mode": {"enum": ["Async", "Sync"]}}
+    },
+    "EnergyParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["energy"],
+      "properties": {"energy": {"$ref": "common.schema.json#/$defs/DecimalQuantity"}}
+    },
+    "MomentaryParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interaction_id"],
+      "properties": {"interaction_id": {"$ref": "common.schema.json#/$defs/Uuid"}}
+    },
+    "PacerModeParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pacer_mode"],
+      "properties": {"pacer_mode": {"enum": ["Demand", "Fixed"]}}
+    },
+    "PacerRateParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rate"],
+      "properties": {"rate": {"$ref": "common.schema.json#/$defs/DecimalQuantity"}}
+    },
+    "PacerOutputParameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output"],
+      "properties": {"output": {"$ref": "common.schema.json#/$defs/DecimalQuantity"}}
+    }
+  }
+}

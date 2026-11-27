@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/events.schema.json",
+  "title": "Domain.Contracts physiology, therapy history and audio events",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "PhysiologyEvent": {
+      "oneOf": [
+        {"$ref": "#/$defs/QrsEvent"},
+        {"$ref": "#/$defs/MechanicalBeatEvent"},
+        {"$ref": "#/$defs/RespirationEvent"},
+        {"$ref": "#/$defs/LifecycleEvent"}
+      ]
+    },
+    "QrsEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "event_type", "sim_time_ns", "source_id", "quality", "qrs_class"],
+      "properties": {
+        "event_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "event_type": {"const": "QRS"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "source_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "quality": {"enum": ["Valid", "Degraded", "Invalid"]},
+        "qrs_class": {"enum": ["Intrinsic", "Paced", "Fusion", "Unknown"]}
+      }
+    },
+    "MechanicalBeatEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "event_type", "sim_time_ns", "source_id", "quality", "pulse_origin"],
+      "properties": {
+        "event_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "event_type": {"const": "MechanicalBeat"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "source_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "quality": {"enum": ["Valid", "Degraded", "Invalid"]},
+        "pulse_origin": {"enum": ["Intrinsic", "PacedCapture", "ExternalCompression", "Artifact"]}
+      }
+    },
+    "RespirationEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "event_type", "sim_time_ns", "source_id", "quality", "phase"],
+      "properties": {
+        "event_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "event_type": {"const": "Respiration"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "source_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "quality": {"enum": ["Valid", "Degraded", "Invalid"]},
+        "phase": {"enum": ["InspirationStart", "ExpirationStart"]}
+      }
+    },
+    "LifecycleEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event_id", "event_type", "sim_time_ns", "source_id", "quality", "lifecycle_state", "reason_code"],
+      "properties": {
+        "event_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "event_type": {"enum": ["SensorLifecycle", "DeviceLifecycle"]},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "source_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "quality": {"enum": ["Valid", "Degraded", "Invalid"]},
+        "lifecycle_state": {"enum": ["Connected", "Disconnected", "Fault", "Recovering", "Ready"]},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"}
+      }
+    },
+    "PhysiologyEventBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "batch_id", "instance_id", "stream_epoch", "first_event_seq", "last_event_seq", "events", "content_sha256"],
+      "properties": {
+        "schema_id": {"const": "PhysiologyEventBatch@1"},
+        "batch_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "stream_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "first_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "last_event_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "events": {"type": "array", "minItems": 1, "maxItems": 4096, "items": {"$ref": "#/$defs/PhysiologyEvent"}},
+        "content_sha256": {"$ref": "common.schema.json#/$defs/Sha256"}
+      }
+    },
+    "DefibrillationAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "attempt_id", "instance_id", "attempt_revision", "state", "timing_mode", "selected_energy", "started_sim_time_ns", "last_transition_sim_time_ns", "shock_delivery_id", "terminal_reason_code"],
+      "properties": {
+        "schema_id": {"const": "DefibrillationAttempt@1"},
+        "attempt_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "attempt_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "state": {"enum": ["Charging", "Charged", "DischargeRequested", "AwaitingSync", "Delivered", "Disarmed", "Expired", "Failed"]},
+        "timing_mode": {"enum": ["Asynchronous", "Synchronized", "AED"]},
+        "selected_energy": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "started_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "last_transition_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "shock_delivery_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "terminal_reason_code": {"oneOf": [{"$ref": "common.schema.json#/$defs/ReasonCode"}, {"type": "null"}]}
+      }
+    },
+    "PromptLogicalState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "prompt_instance_id", "prompt_id", "resource_ref", "scope_id", "logical_state", "logical_started_sim_time_ns", "logical_terminal_sim_time_ns", "terminal_reason_code", "state_revision"],
+      "properties": {
+        "schema_id": {"const": "PromptLogicalState@1"},
+        "prompt_instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "prompt_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "resource_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "scope_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "logical_state": {"enum": ["Scheduled", "Active", "Completed", "Cancelled", "Expired"]},
+        "logical_started_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "logical_terminal_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "terminal_reason_code": {"oneOf": [{"$ref": "common.schema.json#/$defs/ReasonCode"}, {"type": "null"}]},
+        "state_revision": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "AudioPlaybackReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "report_id", "prompt_instance_id", "client_id", "resource_sha256", "planned_start_client_monotonic_ns", "actual_start_client_monotonic_ns", "actual_end_client_monotonic_ns", "result", "stop_reason_code", "audio_backend_ref"],
+      "properties": {
+        "schema_id": {"const": "AudioPlaybackReport@1"},
+        "report_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "prompt_instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "resource_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "planned_start_client_monotonic_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "actual_start_client_monotonic_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "actual_end_client_monotonic_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "result": {"enum": ["Completed", "Failed", "Preempted", "Expired"]},
+        "stop_reason_code": {"oneOf": [{"$ref": "common.schema.json#/$defs/ReasonCode"}, {"type": "null"}]},
+        "audio_backend_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"}
+      }
+    }
+  }
+}

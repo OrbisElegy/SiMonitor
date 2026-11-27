@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/therapy.schema.json",
+  "title": "Domain.Contracts therapy state and evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "TherapyStateProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "state_revision", "operating_mode", "shock_timing_mode",
+        "energy_state", "selected_energy", "charged_energy", "sync_state",
+        "shock_request_state", "therapy_path_valid", "pacer_state"
+      ],
+      "properties": {
+        "schema_id": {"const": "TherapyStateProjection@1"},
+        "state_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "operating_mode": {"enum": ["Monitor", "ManualDefib", "AED", "Pacer"]},
+        "shock_timing_mode": {"enum": ["Asynchronous", "Synchronized", "NotApplicable"]},
+        "energy_state": {"enum": ["Idle", "Charging", "Ready", "Disarmed", "Failed"]},
+        "selected_energy": {"oneOf": [{"$ref": "common.schema.json#/$defs/DecimalQuantity"}, {"type": "null"}]},
+        "charged_energy": {"oneOf": [{"$ref": "common.schema.json#/$defs/DecimalQuantity"}, {"type": "null"}]},
+        "sync_state": {"enum": ["Off", "Acquiring", "Tracking", "Lost", "NotApplicable"]},
+        "shock_request_state": {"enum": ["None", "Pressed", "Held", "WaitingNextQRS", "Cancelled"]},
+        "therapy_path_valid": {"type": "boolean"},
+        "pacer_state": {"enum": ["Stopped", "Running", "Paused", "Fault", "NotApplicable"]}
+      }
+    },
+    "MomentaryTherapyLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "lease_id", "interaction_id", "action_id", "client_id", "instance_id",
+        "authority_epoch", "granted_state_revision", "issued_at_safety_ns",
+        "pressed_at_safety_ns", "last_refresh_safety_ns", "hold_threshold_ns",
+        "expires_at_safety_ns", "renew_seq", "state", "cancel_reason_code", "commit_event_id"
+      ],
+      "properties": {
+        "schema_id": {"const": "MomentaryTherapyLease@1"},
+        "lease_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "interaction_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "action_id": {"enum": ["therapy.defib.shock", "therapy.defib.charge", "therapy.pacer.start"]},
+        "client_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "authority_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "granted_state_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "issued_at_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "pressed_at_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "last_refresh_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "hold_threshold_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "expires_at_safety_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "renew_seq": {"$ref": "common.schema.json#/$defs/U64"},
+        "state": {"enum": ["Pressed", "Held", "Released", "Cancelled", "Expired"]},
+        "cancel_reason_code": {"oneOf": [{"$ref": "common.schema.json#/$defs/ReasonCode"}, {"type": "null"}]},
+        "commit_event_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"enum": ["Pressed", "Held", "Released"]}}},
+          "then": {"properties": {"cancel_reason_code": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"state": {"const": "Pressed"}}},
+          "then": {"properties": {"commit_event_id": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"state": {"enum": ["Cancelled", "Expired"]}}},
+          "then": {"properties": {"cancel_reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"}, "commit_event_id": {"type": "null"}}}
+        }
+      ]
+    },
+    "AEDInputWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_id", "channel_ids", "sample_rate_hz", "sample_start_index",
+        "sample_end_exclusive_index", "block_hashes"
+      ],
+      "properties": {
+        "stream_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "channel_ids": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "sample_rate_hz": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "sample_start_index": {"$ref": "common.schema.json#/$defs/U64"},
+        "sample_end_exclusive_index": {"$ref": "common.schema.json#/$defs/U64"},
+        "block_hashes": {"type": "array", "minItems": 1, "maxItems": 4096, "items": {"$ref": "common.schema.json#/$defs/Sha256"}}
+      }
+    },
+    "AEDAnalysisEpisode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "analysis_id", "instance_id", "pads_state", "input_window",
+        "filter_profile_ref", "required_continuous_window_ns", "clock_domain",
+        "quality_state", "quality_reason_codes", "motion_policy", "cpr_policy",
+        "algorithm_profile_ref", "result_source", "result", "result_revision", "reason_code",
+        "started_sim_time_ns", "ended_sim_time_ns", "evidence_sha256", "provenance_ref",
+        "recovery_checkpoint_ref", "audit_event_ref"
+      ],
+      "properties": {
+        "schema_id": {"const": "AEDAnalysisEpisode@1"},
+        "analysis_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "pads_state": {"enum": ["Connected", "Disconnected", "PoorContact", "Unknown"]},
+        "input_window": {"$ref": "#/$defs/AEDInputWindow"},
+        "filter_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "required_continuous_window_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "clock_domain": {"const": "SimulationTime"},
+        "quality_state": {"enum": ["Good", "Marginal", "Unusable", "NoData"]},
+        "quality_reason_codes": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"enum": ["PADS_DISCONNECTED", "MOTION", "CPR_ARTIFACT", "SATURATION", "NO_DATA", "LOW_SIGNAL"]}},
+        "motion_policy": {"enum": ["PauseWindow", "ResetWindow", "Restart", "FailIndeterminate"]},
+        "cpr_policy": {"enum": ["PauseWindow", "ResetWindow", "Restart", "FailIndeterminate"]},
+        "algorithm_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "result_source": {"enum": ["SignalAlgorithmDerived", "ExplicitTeachingOverride"]},
+        "result": {"enum": ["ShockAdvised", "NoShockAdvised", "Indeterminate", "AnalysisFailed", "Interrupted"]},
+        "result_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"},
+        "started_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "ended_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "evidence_sha256": {"$ref": "common.schema.json#/$defs/Sha256"},
+        "provenance_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "recovery_checkpoint_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/StableId"}, {"type": "null"}]},
+        "audit_event_ref": {"$ref": "common.schema.json#/$defs/Uuid"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"result_source": {"const": "ExplicitTeachingOverride"}}},
+          "then": {"properties": {"provenance_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"}}},
+          "else": {"properties": {"provenance_ref": {"type": "null"}}}
+        }
+      ]
+    },
+    "ShockDelivered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "delivery_id", "interaction_id", "lease_id", "instance_id",
+        "timing_mode", "selected_energy", "delivered_energy", "delivered_sim_time_ns",
+        "trigger_qrs_event_id", "therapy_state_revision"
+      ],
+      "properties": {
+        "schema_id": {"const": "ShockDelivered@1"},
+        "delivery_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "interaction_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "lease_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "timing_mode": {"enum": ["Asynchronous", "Synchronized", "AED"]},
+        "selected_energy": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "delivered_energy": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "delivered_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "trigger_qrs_event_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/Uuid"}, {"type": "null"}]},
+        "therapy_state_revision": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "ChestCompressionApplied": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "compression_id", "instance_id", "source", "sim_time_ns", "depth_class", "depth_mm", "release_complete", "quality", "sequence"],
+      "properties": {
+        "schema_id": {"const": "ChestCompressionApplied@1"},
+        "compression_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "source": {"enum": ["Learner", "Instructor", "AutoCompressor"]},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "depth_class": {"enum": ["TooShallow", "Target", "TooDeep", "Unknown"]},
+        "depth_mm": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "release_complete": {"type": "boolean"},
+        "quality": {"enum": ["Valid", "Degraded", "Invalid"]},
+        "sequence": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "PacingStimulusIssued": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "stimulus_id", "instance_id", "sim_time_ns", "rate", "output", "mode", "sensing_state"],
+      "properties": {
+        "schema_id": {"const": "PacingStimulusIssued@1"},
+        "stimulus_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "rate": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "output": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "mode": {"enum": ["Demand", "Fixed"]},
+        "sensing_state": {"enum": ["Sensed", "NotSensed", "Refractory", "NotApplicable"]}
+      }
+    },
+    "CaptureEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "capture_id", "stimulus_id", "instance_id", "sim_time_ns", "capture_kind", "captured"],
+      "properties": {
+        "schema_id": {"enum": ["ElectricalCaptureOccurred@1", "MechanicalCaptureOccurred@1"]},
+        "capture_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "stimulus_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "instance_id": {"$ref": "common.schema.json#/$defs/Uuid"},
+        "sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "capture_kind": {"enum": ["Electrical", "Mechanical"]},
+        "captured": {"type": "boolean"}
+      }
+    }
+  }
+}

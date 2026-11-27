@@ -5,6 +5,10 @@ namespace Monitor.Network;
 
 public static class ClassroomWire
 {
+    public const string ProtocolId = "Classroom.Protocol";
+    public const string ProtocolVersion = "1.0.0";
+    public const string DomainContractsSha256 = ClassroomContracts.PackageHash;
+    public static string ProtocolSha256 => ClassroomContracts.ProtocolHash;
     public const string WaveformSubprotocol = "simonitor.waveforms.v1";
     public const int AcknowledgementBytes = 48;
     internal const JsonNumberHandling DecimalString = JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString;

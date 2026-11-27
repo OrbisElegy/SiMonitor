@@ -59,7 +59,7 @@ python3 tools/build.py --jobs 32
 dotnet run --project src/Monitor.Desktop --no-build --configuration Release
 ```
 
-教师和学生可以分别启动 `Monitor.Network` 命令行程序，在局域网上实时收发教学波形。证书、课堂凭据和启动示例见[课堂网络接口](docs/interfaces/classroom-network.md)。
+教师和学生可以分别启动 `Monitor.Network` 命令行程序，在局域网上加入课堂、同步波形和读数、指定设备操作端，或分出私有练习实例。证书、课堂凭据和启动示例见[课堂网络接口](docs/interfaces/classroom-network.md)。
 
 清理后，Windows 下应先重新运行构建脚本以恢复原生音频 DLL。若使用默认 Debug 配置的 `dotnet run --project src/Monitor.Desktop/Monitor.Desktop.csproj`，将会报错找不到 WASAPI 音频库，请先执行 `python3 tools/build.py --configuration Debug`。重编译 WASAPI 音频库后，再运行不带 `--no-build` 参数的 `dotnet run`，才会将新 DLL 复制到对应输出目录；缺失 DLL 时启动检查会提示上述恢复命令。
 

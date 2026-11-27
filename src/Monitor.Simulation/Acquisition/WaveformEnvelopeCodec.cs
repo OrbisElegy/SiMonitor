@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -167,8 +168,58 @@ public static class WaveformEnvelopeCodec
         return wire;
     }
 
-    public static WaveformEnvelope Decode(ReadOnlySpan<byte> wire)
+    public static byte[]? TryCompressRaw(ReadOnlySpan<byte> rawWire)
     {
+        _ = Decode(rawWire);
+        int headerBytes = BinaryPrimitives.ReadUInt16LittleEndian(rawWire[10..]);
+        int payloadStart = PreludeSize + headerBytes;
+        int rawBytes = rawWire.Length - payloadStart;
+        if (rawBytes < 1024) { return null; }
+        int budget = rawBytes - MinimumSavings(rawBytes);
+        byte[] result = new byte[payloadStart + budget];
+        rawWire[..payloadStart].CopyTo(result);
+        Span<byte> packed = result.AsSpan(payloadStart);
+        int written = 0;
+        int[] table = ArrayPool<int>.Shared.Rent(WaveformLz4Block.MatchTableSize);
+        try
+        {
+            for (int index = PreludeSize + FixedHeaderSize; index < payloadStart; index += PlaneDescriptorSize)
+            {
+                Span<byte> descriptor = result.AsSpan(index, PlaneDescriptorSize);
+                int offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(descriptor[36..]);
+                int bytes = (int)BinaryPrimitives.ReadUInt32LittleEndian(descriptor[44..]);
+                if (!WaveformLz4Block.TryEncode(rawWire.Slice(payloadStart + offset, bytes), packed[written..],
+                    table.AsSpan(0, WaveformLz4Block.MatchTableSize), out int count))
+                { return null; }
+                BinaryPrimitives.WriteUInt32LittleEndian(descriptor[36..], (uint)written);
+                BinaryPrimitives.WriteUInt32LittleEndian(descriptor[40..], (uint)count);
+                written += count;
+            }
+        }
+        finally { ArrayPool<int>.Shared.Return(table); }
+        Array.Resize(ref result, payloadStart + written);
+        FinishTransport(result, headerBytes, 1);
+        return result;
+    }
+
+    private static int MinimumSavings(int rawBytes) => Math.Max(128, (rawBytes + 7) / 8);
+
+    private static void FinishTransport(Span<byte> wire, int headerBytes, byte codec)
+    {
+        ReadOnlySpan<byte> payload = wire[(PreludeSize + headerBytes)..];
+        wire[7] = codec;
+        BinaryPrimitives.WriteUInt32LittleEndian(wire[12..], (uint)payload.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(wire[24..], ComputeCrc32C(payload));
+        BinaryPrimitives.WriteUInt32LittleEndian(wire[20..], ComputeHeaderCrc32C(wire[..PreludeSize], wire.Slice(PreludeSize, headerBytes)));
+    }
+
+    public static WaveformEnvelope Decode(ReadOnlySpan<byte> wire) => DecodeTransport(wire, false, out _);
+
+    public static WaveformEnvelope Decode(ReadOnlySpan<byte> wire, bool allowLz4) => DecodeTransport(wire, allowLz4, out _);
+
+    internal static WaveformEnvelope DecodeTransport(ReadOnlySpan<byte> wire, bool allowLz4, out byte[]? canonicalRaw)
+    {
+        canonicalRaw = null;
         if (wire.Length < PreludeSize + FixedHeaderSize)
         {
             throw Error("BINARY_LENGTH_INVALID", nameof(wire));
@@ -237,12 +288,13 @@ public static class WaveformEnvelopeCodec
             throw Error("BINARY_DESCRIPTOR_INVALID", nameof(wire));
         }
 
-        if (codec != 0)
+        if (codec != 0 && !allowLz4)
         {
             throw Error("BINARY_CODEC_VECTOR_UNSUPPORTED", nameof(wire));
         }
 
-        if (payloadSize != rawPayloadSize)
+        if (codec == 0 ? payloadSize != rawPayloadSize :
+            rawPayloadSize < 1024 || (long)rawPayloadSize - payloadSize < MinimumSavings((int)rawPayloadSize))
         {
             throw Error("BINARY_LENGTH_INVALID", nameof(wire));
         }
@@ -250,6 +302,7 @@ public static class WaveformEnvelopeCodec
         var descriptors = new DecodedDescriptor[planeCount];
         byte[]? previousChannel = null;
         uint expectedPayloadOffset = 0;
+        uint rawOffset = 0;
         for (int index = 0; index < planeCount; index++)
         {
             ReadOnlySpan<byte> descriptor = header.Slice(
@@ -283,7 +336,8 @@ public static class WaveformEnvelopeCodec
             if (rateNumerator == 0 || rateDenominator == 0 ||
                 scaleDenominator == 0 || offsetDenominator == 0 ||
                 sampleFormat != 1 || qualityEncoding > 1 || descriptorReserved != 0 ||
-                expectedRawBytes != rawPlaneBytes || planeBytes != rawPlaneBytes ||
+                expectedRawBytes != rawPlaneBytes || (codec == 0 ? planeBytes != rawPlaneBytes : planeBytes == 0) ||
+                (ulong)rawOffset + rawPlaneBytes > rawPayloadSize ||
                 payloadOffset != expectedPayloadOffset || planeEnd > payloadSize)
             {
                 throw Error("BINARY_DESCRIPTOR_INVALID", nameof(wire));
@@ -295,7 +349,7 @@ public static class WaveformEnvelopeCodec
                 rateDenominator,
                 firstSampleIndex,
                 sampleCount,
-                payloadOffset,
+                rawOffset,
                 scaleNumerator,
                 scaleDenominator,
                 offsetNumerator,
@@ -303,11 +357,35 @@ public static class WaveformEnvelopeCodec
                 (WaveformQualityEncoding)qualityEncoding,
                 qualityRangeCount);
             expectedPayloadOffset = checked(expectedPayloadOffset + planeBytes);
+            rawOffset += rawPlaneBytes;
         }
 
-        if (expectedPayloadOffset != payloadSize)
+        if (expectedPayloadOffset != payloadSize || rawOffset != rawPayloadSize)
         {
             throw Error("BINARY_DESCRIPTOR_INVALID", nameof(wire));
+        }
+
+        if (codec == 1)
+        {
+            // Counts, logical sample sizes, offsets and transport CRCs have all been checked before allocating.
+            canonicalRaw = new byte[PreludeSize + headerSize + (int)rawPayloadSize];
+            wire[..(PreludeSize + headerSize)].CopyTo(canonicalRaw);
+            Span<byte> logical = canonicalRaw.AsSpan(PreludeSize + headerSize);
+            for (int index = 0; index < descriptors.Length; index++)
+            {
+                Span<byte> d = canonicalRaw.AsSpan(PreludeSize + FixedHeaderSize + index * PlaneDescriptorSize, PlaneDescriptorSize);
+                int sourceOffset = (int)BinaryPrimitives.ReadUInt32LittleEndian(d[36..]);
+                int sourceBytes = (int)BinaryPrimitives.ReadUInt32LittleEndian(d[40..]);
+                int length = (int)BinaryPrimitives.ReadUInt32LittleEndian(d[44..]);
+                uint destOffset = descriptors[index].PayloadOffset;
+                if (!WaveformLz4Block.TryDecode(payload.Slice(sourceOffset, sourceBytes), logical.Slice((int)destOffset, length)))
+                { throw Error("BINARY_LZ4_INVALID", nameof(wire)); }
+                BinaryPrimitives.WriteUInt32LittleEndian(d[36..], destOffset);
+                BinaryPrimitives.WriteUInt32LittleEndian(d[40..], (uint)length);
+            }
+            FinishTransport(canonicalRaw, headerSize, 0);
+            header = canonicalRaw.AsSpan(PreludeSize, headerSize);
+            payload = logical;
         }
 
         byte[] canonicalHeader = header.ToArray();

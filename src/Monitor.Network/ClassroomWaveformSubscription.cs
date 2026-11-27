@@ -9,6 +9,7 @@ public sealed class ClassroomWaveformSubscription : IDisposable, IAsyncDisposabl
 {
     private const int MaximumFrameBytes = WaveformEnvelopeCodec.PreludeSize + WaveformEnvelopeCodec.MaximumHeaderSize + WaveformEnvelopeCodec.MaximumPayloadSize;
     private readonly WebSocket _socket;
+    private readonly bool _allowLz4;
     private readonly WaveformBlockRing _history;
     private readonly byte[] _buffer = new byte[MaximumFrameBytes + 1];
     private readonly byte[] _ack = new byte[ClassroomWire.AcknowledgementBytes];
@@ -16,14 +17,17 @@ public sealed class ClassroomWaveformSubscription : IDisposable, IAsyncDisposabl
     private int _reading;
     private int _disposed;
 
-    internal ClassroomWaveformSubscription(WebSocket socket, WaveformBlockRing history)
+    internal ClassroomWaveformSubscription(WebSocket socket, WaveformBlockRing history, bool allowLz4 = false)
     {
+        _allowLz4 = allowLz4;
         _socket = socket;
         _history = history;
         _nextBlockSequence = history.NextBlockSequence;
     }
 
     // This is the first block not yet returned to the caller, even if sending an ACK failed.
+    internal bool LastBlockWasCompressed { get; private set; }
+
     public ulong NextBlockSequence => Volatile.Read(ref _nextBlockSequence);
 
     // Local history includes verified blocks. The delivery cursor advances only after the ACK succeeds.
@@ -79,7 +83,7 @@ public sealed class ClassroomWaveformSubscription : IDisposable, IAsyncDisposabl
             WaveformEnvelope envelope;
             lock (_history)
             {
-                WaveformBlockAppendResult append = _history.Append(_buffer.AsSpan(0, used), out envelope);
+                WaveformBlockAppendResult append = _history.AppendTransport(_buffer.AsSpan(0, used), _allowLz4, out envelope);
                 if (append.Status != WaveformBlockAppendStatus.Appended)
                 {
                     throw new InvalidDataException("Unexpected duplicate waveform block.");
@@ -90,6 +94,7 @@ public sealed class ClassroomWaveformSubscription : IDisposable, IAsyncDisposabl
             _buffer.AsSpan(WaveformEnvelopeCodec.ContentSha256Offset, 32).CopyTo(_ack.AsSpan(16));
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
             await _socket.SendAsync(_ack.AsMemory(), WebSocketMessageType.Binary, true, deadline.Token).ConfigureAwait(false);
+            LastBlockWasCompressed = _buffer[7] == 1;
             Volatile.Write(ref _nextBlockSequence, _history.NextBlockSequence);
             return envelope;
         }

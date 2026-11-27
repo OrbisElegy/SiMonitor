@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/common.schema.json",
+  "title": "Domain.Contracts common types",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "U64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "maxLength": 20
+    },
+    "I64": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]{0,18})$",
+      "maxLength": 20
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "maxLength": 64
+    },
+    "Base64": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "maxLength": 1398104
+    },
+    "StableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._:@/-]{0,127}$",
+      "maxLength": 128
+    },
+    "ReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+      "maxLength": 64
+    },
+    "LocalizationKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "maxLength": 128
+    },
+    "UtcInstant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "maxLength": 35
+    },
+    "SchemaVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "minor": {"type": "integer", "minimum": 0, "maximum": 65535}
+      }
+    },
+    "VersionedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "content_sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/StableId"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$", "maxLength": 64},
+        "content_sha256": {"$ref": "#/$defs/Sha256"}
+      }
+    },
+    "DecimalQuantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mantissa_i64", "exponent10", "unit_code"],
+      "properties": {
+        "mantissa_i64": {"$ref": "#/$defs/I64"},
+        "exponent10": {"type": "integer", "minimum": -12, "maximum": 12},
+        "unit_code": {
+          "enum": [
+            "BEATS_PER_MINUTE",
+            "BREATHS_PER_MINUTE",
+            "PERCENT",
+            "MMHG",
+            "CELSIUS",
+            "MILLIVOLT",
+            "MICROVOLT",
+            "MILLIAMPERE",
+            "MILLIMETER",
+            "MILLIMETER_PER_SECOND",
+            "MILLISECOND",
+            "SECOND",
+            "JOULE",
+            "OHM",
+            "DEVICE_RELATIVE",
+            "UNITLESS"
+          ]
+        },
+        "device_scale_profile_ref": {"$ref": "#/$defs/VersionedRef"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"unit_code": {"const": "DEVICE_RELATIVE"}}, "required": ["unit_code"]},
+          "then": {"required": ["device_scale_profile_ref"]},
+          "else": {"not": {"required": ["device_scale_profile_ref"]}}
+        }
+      ]
+    },
+    "MeasurementChannelRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter_id", "source_instance_id"],
+      "properties": {
+        "parameter_id": {"$ref": "#/$defs/StableId"},
+        "source_instance_id": {"$ref": "#/$defs/Uuid"}
+      }
+    },
+    "MeasurementQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason_codes", "since_sim_time_ns"],
+      "properties": {
+        "state": {
+          "enum": ["Valid", "Acquiring", "Invalid", "Stale", "NotMeasured", "Unsupported", "NotConfigured", "Disconnected"]
+        },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/ReasonCode"}
+        },
+        "since_sim_time_ns": {"$ref": "#/$defs/I64"},
+        "detail_ref": {"$ref": "#/$defs/StableId"}
+      }
+    },
+    "DomainEventEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "schema_major", "schema_minor", "event_id", "event_type",
+        "session_id", "cohort_id", "instance_id", "authority_epoch", "timebase_epoch",
+        "stream_epoch", "event_seq", "commit_seq", "sim_time_ns", "authority_monotonic_ns",
+        "correlation_id", "causation_id", "idempotency_key", "source_component",
+        "payload_schema_id", "payload"
+      ],
+      "properties": {
+        "schema_id": {"const": "DomainEventEnvelope"},
+        "schema_major": {"const": 1},
+        "schema_minor": {"const": 0},
+        "event_id": {"$ref": "#/$defs/Uuid"},
+        "event_type": {"$ref": "#/$defs/StableId"},
+        "session_id": {"$ref": "#/$defs/Uuid"},
+        "cohort_id": {"oneOf": [{"$ref": "#/$defs/Uuid"}, {"type": "null"}]},
+        "instance_id": {"oneOf": [{"$ref": "#/$defs/Uuid"}, {"type": "null"}]},
+        "authority_epoch": {"$ref": "#/$defs/U64"},
+        "timebase_epoch": {"$ref": "#/$defs/U64"},
+        "stream_epoch": {"oneOf": [{"$ref": "#/$defs/U64"}, {"type": "null"}]},
+        "event_seq": {"$ref": "#/$defs/U64"},
+        "commit_seq": {"$ref": "#/$defs/U64"},
+        "sim_time_ns": {"oneOf": [{"$ref": "#/$defs/I64"}, {"type": "null"}]},
+        "authority_monotonic_ns": {"$ref": "#/$defs/I64"},
+        "correlation_id": {"$ref": "#/$defs/Uuid"},
+        "causation_id": {"oneOf": [{"$ref": "#/$defs/Uuid"}, {"type": "null"}]},
+        "idempotency_key": {"oneOf": [{"$ref": "#/$defs/StableId"}, {"type": "null"}]},
+        "source_component": {"$ref": "#/$defs/StableId"},
+        "payload_schema_id": {"$ref": "#/$defs/StableId"},
+        "payload": {"type": "object"}
+      }
+    },
+    "DomainRejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "reason_code", "object_ref", "field_path", "current_revision", "retryable", "localization_key", "correlation_id"],
+      "properties": {
+        "schema_id": {"const": "DomainRejection@1"},
+        "reason_code": {"$ref": "#/$defs/ReasonCode"},
+        "object_ref": {"$ref": "#/$defs/StableId"},
+        "field_path": {"type": "string", "pattern": "^(/(?:[^~/]|~0|~1)*)*$", "maxLength": 512},
+        "current_revision": {"oneOf": [{"$ref": "#/$defs/U64"}, {"type": "null"}]},
+        "retryable": {"type": "boolean"},
+        "localization_key": {"$ref": "#/$defs/LocalizationKey"},
+        "correlation_id": {"$ref": "#/$defs/Uuid"}
+      }
+    },
+    "SignatureBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signature_alg_id", "key_id", "signed_schema_version", "signature_base64"],
+      "properties": {
+        "signature_alg_id": {"$ref": "#/$defs/StableId"},
+        "key_id": {"$ref": "#/$defs/StableId"},
+        "signed_schema_version": {"$ref": "#/$defs/SchemaVersion"},
+        "signature_base64": {"type": "string", "contentEncoding": "base64", "maxLength": 16384}
+      }
+    },
+    "HashRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/StableId"},
+        "sha256": {"$ref": "#/$defs/Sha256"}
+      }
+    }
+  }
+}

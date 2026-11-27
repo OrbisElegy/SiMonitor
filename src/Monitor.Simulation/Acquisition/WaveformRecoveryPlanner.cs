@@ -24,6 +24,7 @@ public enum WaveformRecoveryReason
     EpochChanged,
     GapOutsideRetention,
     RenderHistoryIncomplete,
+    LateJoin,
 }
 
 public sealed record WaveformRecoveryRequest(
@@ -56,6 +57,15 @@ public static class WaveformRecoveryPlanner
     public const ulong MaximumRequiredRenderHistoryNs =
         (ulong)WaveformBlockRing.HostRetentionBlockCount *
         WaveformBlockAssembler.BlockDurationNs;
+
+    public static WaveformJoinBoundary PlanLateJoin(WaveformBlockRing hostRing, ulong requiredRenderHistoryNs)
+    {
+        ArgumentNullException.ThrowIfNull(hostRing);
+        var request = new WaveformRecoveryRequest(hostRing.SessionId, hostRing.InstanceId, hostRing.TimebaseEpoch,
+            hostRing.StreamEpoch, hostRing.NextBlockSequence, requiredRenderHistoryNs, 0);
+        ValidateRequest(hostRing, request);
+        return SnapshotPlan(hostRing, requiredRenderHistoryNs, WaveformRecoveryReason.LateJoin).JoinBoundary!;
+    }
 
     public static WaveformRecoveryPlan Plan(
         WaveformBlockRing hostRing,

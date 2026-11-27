@@ -10,7 +10,7 @@ The repository contains a .NET desktop application, a deterministic simulation l
 
 See the [documentation index](../README.md) and [English summary](summary.md) for technical references. Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
 
-The teacher host and student receiver can run as separate command-line processes. See the [classroom transport guide](../interfaces/classroom-network.md) for setup, credentials, and the wire protocol.
+The teacher and students can run separate command-line processes for a shared lesson, designate a device operator, schedule configuration changes, and fork or rejoin a private practice instance. See the [classroom transport guide](../interfaces/classroom-network.md) for setup, credentials, and the wire protocol.
 
 ## Screenshots
 

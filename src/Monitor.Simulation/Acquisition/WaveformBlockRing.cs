@@ -202,10 +202,13 @@ public sealed class WaveformBlockRing
 
     public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope) => Append(rawEnvelope, out _);
 
-    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope, out WaveformEnvelope envelope)
+    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope, out WaveformEnvelope envelope) =>
+        AppendTransport(rawEnvelope, false, out envelope);
+
+    public WaveformBlockAppendResult AppendTransport(ReadOnlySpan<byte> wire, bool allowLz4, out WaveformEnvelope envelope)
     {
-        WaveformEnvelope decoded = WaveformEnvelopeCodec.Decode(rawEnvelope);
-        WaveformBlockAppendResult result = AppendDecoded(rawEnvelope, decoded);
+        WaveformEnvelope decoded = WaveformEnvelopeCodec.DecodeTransport(wire, allowLz4, out byte[]? canonicalRaw);
+        WaveformBlockAppendResult result = AppendDecoded(canonicalRaw is null ? wire : canonicalRaw, decoded);
         envelope = decoded;
         return result;
     }

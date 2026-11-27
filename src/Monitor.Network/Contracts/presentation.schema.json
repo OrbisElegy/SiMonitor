@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.monitor-sim.local/domain/v1/presentation.schema.json",
+  "title": "Domain.Contracts presentation plans",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "ActionProjectionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_id", "projection_revision"],
+      "properties": {
+        "action_id": {"$ref": "actions.schema.json#/$defs/ActionId"},
+        "projection_revision": {"$ref": "common.schema.json#/$defs/U64"}
+      }
+    },
+    "ResolvedPresentationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id", "plan_revision", "surface_kind", "skin_ref", "layout_ref", "theme_ref",
+        "interaction_profile_ref", "institution_brand_pack_ref", "viewport_breakpoint_id",
+        "sweep_group_plan_refs", "calibration_glyph_plan_refs", "action_projection_refs",
+        "home_softkey_plan_ref", "system_view_command_bar_plan_ref", "therapy_composition",
+        "therapy_presentation_ref", "parameter_color_binding_plan_ref", "content_sha256"
+      ],
+      "properties": {
+        "schema_id": {"const": "ResolvedPresentationPlan@1"},
+        "plan_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "surface_kind": {"enum": ["MonitorSurface", "ECG12StudyView"]},
+        "skin_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "layout_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "theme_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "interaction_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "institution_brand_pack_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "viewport_breakpoint_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "sweep_group_plan_refs": {"type": "array", "maxItems": 16, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "calibration_glyph_plan_refs": {"type": "array", "maxItems": 32, "items": {"$ref": "common.schema.json#/$defs/VersionedRef"}},
+        "action_projection_refs": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/ActionProjectionRef"}},
+        "home_softkey_plan_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "system_view_command_bar_plan_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "therapy_composition": {"oneOf": [{"enum": ["OptionalRail", "EmbeddedRequired"]}, {"type": "null"}]},
+        "therapy_presentation_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "parameter_color_binding_plan_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "content_sha256": {"$ref": "common.schema.json#/$defs/Sha256"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"surface_kind": {"const": "ECG12StudyView"}}},
+          "then": {
+            "properties": {
+              "skin_ref": {"type": "null"},
+              "home_softkey_plan_ref": {"type": "null"},
+              "system_view_command_bar_plan_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+              "therapy_composition": {"type": "null"},
+              "therapy_presentation_ref": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "skin_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+              "home_softkey_plan_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+              "system_view_command_bar_plan_ref": {"type": "null"}
+            }
+          }
+        }
+      ]
+    },
+    "ParameterColorBindingPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "plan_ref", "palette_ref", "course_override_ref", "bindings", "alarm_override_token", "grayscale_fallback_token", "locked_for_assessment"],
+      "properties": {
+        "schema_id": {"const": "ParameterColorBindingPlan@1"},
+        "plan_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "palette_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "course_override_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/VersionedRef"}, {"type": "null"}]},
+        "bindings": {
+          "type": "array", "minItems": 1, "maxItems": 128,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["measurement_family_id", "source_role", "semantic_color_token"],
+            "properties": {
+              "measurement_family_id": {"$ref": "common.schema.json#/$defs/StableId"},
+              "source_role": {"$ref": "common.schema.json#/$defs/StableId"},
+              "semantic_color_token": {"$ref": "common.schema.json#/$defs/StableId"}
+            }
+          }
+        },
+        "alarm_override_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "grayscale_fallback_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "locked_for_assessment": {"type": "boolean"}
+      }
+    },
+    "HomeSoftkeyPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "page_id", "slots"],
+      "properties": {
+        "schema_id": {"const": "HomeSoftkeyPlan@1"},
+        "page_id": {"const": "GenericBedsideClinical.Home"},
+        "slots": {
+          "type": "array", "minItems": 5, "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["slot_index", "slot_id", "label_key", "kind", "action_projection_ref", "visible", "enabled", "pending", "disabled_reason_code", "course_locked"],
+            "properties": {
+              "slot_index": {"type": "integer", "minimum": 0, "maximum": 4},
+              "slot_id": {"enum": ["Layout", "AlarmSetup", "AlarmAudioPause", "NIBPStartStop", "NIBPAutoInterval"]},
+              "label_key": {"$ref": "common.schema.json#/$defs/LocalizationKey"},
+              "kind": {"enum": ["Navigation", "Action"]},
+              "action_projection_ref": {"oneOf": [{"$ref": "#/$defs/ActionProjectionRef"}, {"type": "null"}]},
+              "visible": {"type": "boolean"},
+              "enabled": {"type": "boolean"},
+              "pending": {"type": "boolean"},
+              "disabled_reason_code": {"oneOf": [{"$ref": "common.schema.json#/$defs/ReasonCode"}, {"type": "null"}]},
+              "course_locked": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "SystemViewCommandBarPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "command_ids", "assessment_policy", "excluded_from_print"],
+      "properties": {
+        "schema_id": {"const": "SystemViewCommandBarPlan@1"},
+        "command_ids": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"enum": ["Back", "Theme", "Zoom", "Pagination", "QuickMeasurement"]}},
+        "assessment_policy": {"enum": ["Enabled", "Disabled", "CourseLocked"]},
+        "excluded_from_print": {"const": true}
+      }
+    },
+    "TherapyPanelPresentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "modules", "requested_visibility", "resolved_visibility", "therapy_permission", "therapy_rail_space_policy", "therapy_panel_transition", "active_therapy_hide_policy", "effective_sim_time_ns", "layout_variant_id", "state_strip_required", "reason_code"],
+      "properties": {
+        "schema_id": {"const": "TherapyPanelPresentation@1"},
+        "modules": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"enum": ["ManualDefib", "AED", "Pacer", "CPR"]}},
+        "requested_visibility": {"enum": ["Hidden", "Collapsed", "Expanded"]},
+        "resolved_visibility": {"enum": ["Hidden", "Collapsed", "Expanded", "ForcedCollapsedStrip"]},
+        "therapy_permission": {"enum": ["ObserveOnly", "Operate"]},
+        "therapy_rail_space_policy": {"enum": ["Collapse", "Reserve"]},
+        "therapy_panel_transition": {"const": "Scheduled"},
+        "active_therapy_hide_policy": {"enum": ["Reject", "ForceCollapsedStrip"]},
+        "effective_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "layout_variant_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "state_strip_required": {"const": true},
+        "reason_code": {"$ref": "common.schema.json#/$defs/ReasonCode"}
+      }
+    },
+    "EmbeddedTherapyRegionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "logical_region_id", "fixed_regions", "composition_kind", "required_capability_ids", "mode_component_sets", "control_bindings", "therapy_permission", "presence"],
+      "properties": {
+        "schema_id": {"const": "EmbeddedTherapyRegionPlan@1"},
+        "logical_region_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "fixed_regions": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["region_id", "capacity_units"],
+            "properties": {"region_id": {"$ref": "common.schema.json#/$defs/StableId"}, "capacity_units": {"type": "integer", "minimum": 1, "maximum": 1024}}
+          }
+        },
+        "composition_kind": {"enum": ["DefibOnly", "PacerOnly", "Combined"]},
+        "required_capability_ids": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "mode_component_sets": {"type": "object", "minProperties": 1, "maxProperties": 16, "additionalProperties": {"type": "array", "maxItems": 128, "items": {"$ref": "common.schema.json#/$defs/StableId"}}},
+        "control_bindings": {
+          "type": "array", "maxItems": 128,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["control_id", "action_projection_ref"],
+            "properties": {"control_id": {"$ref": "common.schema.json#/$defs/StableId"}, "action_projection_ref": {"$ref": "#/$defs/ActionProjectionRef"}}
+          }
+        },
+        "therapy_permission": {"enum": ["ObserveOnly", "Operate"]},
+        "presence": {"const": "Required"}
+      }
+    },
+    "WaveformTimebaseProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "profile_ref", "visible_duration_ns", "paper_speed_mm_per_s", "logical_paper_width_mm", "resize_policy"],
+      "properties": {
+        "schema_id": {"const": "WaveformTimebaseProfile@1"},
+        "profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "visible_duration_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "paper_speed_mm_per_s": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "logical_paper_width_mm": {"$ref": "common.schema.json#/$defs/DecimalQuantity"},
+        "resize_policy": {"const": "PreserveVisibleDuration"}
+      }
+    },
+    "SweepGroupPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "group_id", "slot_ids", "timebase_profile_ref", "render_mode", "direction", "overwrite_policy", "sweep_epoch", "presentation_clock_revision", "cycle_origin_presentation_ns", "erase_gap_ns", "initial_fill_policy", "required_render_history_ns", "scale_change_boundary"],
+      "properties": {
+        "schema_id": {"const": "SweepGroupPlan@1"},
+        "group_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "slot_ids": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/StableId"}},
+        "timebase_profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "render_mode": {"enum": ["SweepRaster", "FillOnceThenHold"]},
+        "direction": {"const": "LeftToRight"},
+        "overwrite_policy": {"const": "OverwriteOnPass"},
+        "sweep_epoch": {"$ref": "common.schema.json#/$defs/U64"},
+        "presentation_clock_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "cycle_origin_presentation_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "erase_gap_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "initial_fill_policy": {"enum": ["BlankThenFill", "PrerollThenSweep"]},
+        "required_render_history_ns": {"$ref": "common.schema.json#/$defs/U64"},
+        "scale_change_boundary": {"enum": ["NextSweepCycle", "ImmediateClearAndRestart"]}
+      }
+    },
+    "SweepStateProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "plan_revision", "sweep_revision", "presentation_clock_revision", "session_run_state", "temporal_view_mode", "data_availability", "authority_state", "playhead_data_sim_time_ns", "cycle_index", "write_head_phase_ppm", "freeze_anchor_sim_time_ns", "review_segment_ref", "no_data_since_authority_monotonic_ns"],
+      "properties": {
+        "schema_id": {"const": "SweepStateProjection@1"},
+        "plan_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "sweep_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "presentation_clock_revision": {"$ref": "common.schema.json#/$defs/U64"},
+        "session_run_state": {"enum": ["Running", "Paused", "Stopped"]},
+        "temporal_view_mode": {"enum": ["LiveSweep", "AcquisitionFill", "CapturedRecord", "FrozenSnapshot", "HistoricalReview"]},
+        "data_availability": {"enum": ["Authoritative", "Buffered", "LocalContinuation", "NoData"]},
+        "authority_state": {"enum": ["Authoritative", "Provisional"]},
+        "playhead_data_sim_time_ns": {"$ref": "common.schema.json#/$defs/I64"},
+        "cycle_index": {"$ref": "common.schema.json#/$defs/U64"},
+        "write_head_phase_ppm": {"type": "integer", "minimum": 0, "maximum": 999999},
+        "freeze_anchor_sim_time_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]},
+        "review_segment_ref": {"oneOf": [{"$ref": "common.schema.json#/$defs/StableId"}, {"type": "null"}]},
+        "no_data_since_authority_monotonic_ns": {"oneOf": [{"$ref": "common.schema.json#/$defs/I64"}, {"type": "null"}]}
+      }
+    },
+    "CalibrationGlyphPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "ecg_strip_id", "gutter_id", "shape", "amplitude_uv", "duration_ns", "gain_ref", "speed_ref", "paper_scale_ref", "erase_policy"],
+      "properties": {
+        "schema_id": {"const": "CalibrationGlyphPlan@1"},
+        "ecg_strip_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "gutter_id": {"$ref": "common.schema.json#/$defs/StableId"},
+        "shape": {"const": "Square"},
+        "amplitude_uv": {"const": 1000},
+        "duration_ns": {"const": "200000000"},
+        "gain_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "speed_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "paper_scale_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "erase_policy": {"const": "NeverErase"}
+      }
+    },
+    "ECGThemePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "theme_id", "background_token", "trace_token", "text_token", "minor_grid_token", "major_grid_token", "grid_ratio", "theme_ref"],
+      "properties": {
+        "schema_id": {"const": "ECGThemePlan@1"},
+        "theme_id": {"enum": ["MonitorDarkGreen", "PaperGridBlack"]},
+        "background_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "trace_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "text_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "minor_grid_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "major_grid_token": {"$ref": "common.schema.json#/$defs/StableId"},
+        "grid_ratio": {"const": "1:5"},
+        "theme_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"}
+      }
+    },
+    "SystemReadabilityFloor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_id", "profile_ref", "minimum_text_px", "minimum_touch_target_px", "minimum_contrast_ratio_milli", "critical_state_overlay_required"],
+      "properties": {
+        "schema_id": {"const": "SystemReadabilityFloor@1"},
+        "profile_ref": {"$ref": "common.schema.json#/$defs/VersionedRef"},
+        "minimum_text_px": {"type": "integer", "minimum": 8, "maximum": 256},
+        "minimum_touch_target_px": {"type": "integer", "minimum": 16, "maximum": 512},
+        "minimum_contrast_ratio_milli": {"type": "integer", "minimum": 1000, "maximum": 21000},
+        "critical_state_overlay_required": {"const": true}
+      }
+    }
+  }
+}

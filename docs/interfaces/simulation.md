@@ -147,7 +147,7 @@ UUID 使用 `Guid.TryWriteBytes(..., bigEndian: true, ...)` 的规范 16 字节�
 | Prelude 偏移 | 字段 / 大小 |
 | --- | --- |
 | 0 | ASCII `MWS1`，4 字节 |
-| 4 / 5 / 6 / 7 | major=1、minor=0、messageType=1、codec=0，各 1 字节 |
+| 4 / 5 / 6 / 7 | major=1、minor=0、messageType=1、codec（0 为 raw，1 为逐 plane LZ4 Block），各 1 字节 |
 | 8 / 10 | flags=0 / headerSize，各 UInt16 |
 | 12 / 16 | payloadSize / rawPayloadSize，各 UInt32，raw codec 下相等 |
 | 20 / 24 | header CRC32C / payload CRC32C，各 UInt32 |
@@ -184,7 +184,9 @@ CRC32C 使用 Castagnoli 反射多项式 `0x82f63b78`，初值全 1，结果按�
 实现按小端 64 位块调用 `BitOperations.Crc32C` 并处理剩余字节，由 .NET 选择硬件指令或软件退化；线上字节和校验约定不变。
 header CRC 覆盖 prelude（两个 CRC 字段偏移 20–27 均清零）和整个 header；payload CRC 覆盖传输 payload。
 content SHA-256 覆盖 header（hash 位置清零）与 raw payload，不包含 prelude。
-当前只实现 raw codec 0；codec 1 通过基础 header 格式检查后仍以 `BINARY_CODEC_VECTOR_UNSUPPORTED` 拒绝。
+`EncodeRaw` 和单参数 `Decode` 使用 raw 基线。双方协商 LZ4 后，`TryCompressRaw` 在逻辑 payload 至少 1024 B 且节省达到 `max(128 B, ceil(rawBytes / 8))` 时返回替代帧，其余情况返回 null，可直接传送原始字节。每个 plane 使用独立 LZ4 Block，最后一个序列只含字面量，匹配只能引用本 plane 已输出的字节。[LZ4 Block 格式](https://github.com/lz4/lz4/blob/v1.10.0/doc/lz4_Block_format.md)
+
+`Decode(wire, allowLz4: true)` 先核对传输 header 与 payload 的 CRC32C、各 plane 的顺序、范围、样本／质量条目数和声明展开长度，再按各 plane 边界展开。content SHA-256 始终覆盖以 raw 偏移和 raw 长度规范化的 header 及未压缩 payload。已协商的学生接收环用 `AppendTransport` 校验并存储规范 raw 帧，以便混合编码重连、ACK 和预卷仍有相同的内容身份。
 长度、版本、排序、descriptor、CRC 或 SHA 失败分别返回 `WaveformEnvelopeException.ReasonCode`，
 如 `BINARY_LENGTH_INVALID`、`SCHEMA_MAJOR_UNSUPPORTED`、`BINARY_HEADER_CRC_MISMATCH`、
 `BINARY_PAYLOAD_CRC_MISMATCH`、`BINARY_CONTENT_HASH_MISMATCH`；不能把校验失败的数据继续发布。

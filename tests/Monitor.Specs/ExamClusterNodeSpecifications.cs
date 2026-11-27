@@ -11,11 +11,74 @@ internal static class ExamClusterNodeSpecifications
 {
     internal static Specification[] All =>
     [
+        new(nameof(ColdExamConnectionsCanPrepareWithoutExtendingFailover), () => ColdExamConnectionsCanPrepareWithoutExtendingFailover().GetAwaiter().GetResult()),
+        new(nameof(ExamPreparationReportsTransportFailures), () => ExamPreparationReportsTransportFailures().GetAwaiter().GetResult()),
         new(nameof(LostExamReceiptsReconcileAgainstTheNewFence), () => LostExamReceiptsReconcileAgainstTheNewFence().GetAwaiter().GetResult()),
         new(nameof(StandbyCanFenceAReachablePrimaryThatLostItsLease), () => StandbyCanFenceAReachablePrimaryThatLostItsLease().GetAwaiter().GetResult()),
         new(nameof(ColdRecoveryReconcilesASingleLostDurableReceipt), () => ColdRecoveryReconcilesASingleLostDurableReceipt().GetAwaiter().GetResult()),
         new(nameof(RestoredExamQualificationAndManualFencesNeedIndependentProof), () => RestoredExamQualificationAndManualFencesNeedIndependentProof().GetAwaiter().GetResult())
     ];
+
+    private static async Task ColdExamConnectionsCanPrepareWithoutExtendingFailover()
+    {
+        using var f = new Fixture();
+        Check.That(f.Witness.TryAcquire(f.Other, new(f.Cluster, 0, 0, 0), out _), "first witness term");
+        f.PeerRole = "Primary";
+        f.BeforeWitnessRead = async token =>
+        {
+            await Task.Delay(1100, token);
+            f.BeforeWitnessRead = null;
+        };
+        f.BeforePeerRead = async token =>
+        {
+            await Task.Delay(850, token);
+            f.BeforePeerRead = null;
+        };
+        using var node = f.StartNode(false);
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        Task running = node.RunAsync(stop.Token);
+        try
+        {
+            var preparing = node.GetStatus();
+            Check.That(!preparing.LeaseValid && !preparing.Qualified, "a pending cold probe confers no authority");
+            await UntilAsync(() => node.GetStatus().Qualified, stop.Token);
+            f.BeforePeerRead = token => Task.Delay(Timeout.InfiniteTimeSpan, token);
+            f.Clock.Advance(3001);
+            using var promotion = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+            promotion.CancelAfter(TimeSpan.FromSeconds(5));
+            await UntilAsync(() => node.GetStatus() is { AuthorityEpoch: 2, LeaseValid: true }, promotion.Token);
+        }
+        finally { await stop.CancelAsync(); await running; }
+    }
+
+    private static async Task ExamPreparationReportsTransportFailures()
+    {
+        using var f = new Fixture();
+        using var node = f.StartNode(false);
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var failures = new (Exception Error, string Reason)[]
+        {
+            (new HttpRequestException(HttpRequestError.NameResolutionError), "WitnessDnsFailure"),
+            (new HttpRequestException(HttpRequestError.ConnectionError), "WitnessTcpFailure"),
+            (new HttpRequestException(HttpRequestError.SecureConnectionError), "WitnessTlsFailure"),
+            (new HttpRequestException("forbidden", null, HttpStatusCode.Forbidden), "WitnessHttp403"),
+            (new TaskCanceledException(), "WitnessRequestTimeout")
+        };
+        f.BeforeWitnessRead = _ => Task.FromException(failures[0].Error);
+        Task running = node.RunAsync(stop.Token);
+        try
+        {
+            foreach (var failure in failures)
+            {
+                f.BeforeWitnessRead = _ => Task.FromException(failure.Error);
+                await UntilAsync(() => node.GetStatus().Reason == failure.Reason, stop.Token);
+                Check.That(!node.GetStatus().LeaseValid, "a transport error never authorizes writing");
+            }
+            f.BeforeWitnessRead = null;
+            await UntilAsync(() => node.GetStatus().Reason == "WaitingForPrimary", stop.Token);
+        }
+        finally { await stop.CancelAsync(); await running; }
+    }
 
     private static async Task LostExamReceiptsReconcileAgainstTheNewFence()
     {
@@ -149,6 +212,8 @@ internal static class ExamClusterNodeSpecifications
         internal readonly ExamReplicaStore Local;
         internal readonly ExamReplicaStore OtherStore;
         internal readonly ExamWitnessStore Witness;
+        internal volatile Func<CancellationToken, Task>? BeforeWitnessRead;
+        internal volatile Func<CancellationToken, Task>? BeforePeerRead;
         internal volatile bool WitnessOffline;
         internal volatile bool PeerOffline;
         internal volatile string PeerRole = "Recovering";
@@ -174,7 +239,11 @@ internal static class ExamClusterNodeSpecifications
         private async Task<HttpResponseMessage> WitnessAsync(HttpRequestMessage message, CancellationToken token)
         {
             if (WitnessOffline) { throw new HttpRequestException("Witness unavailable."); }
-            if (message.Method == HttpMethod.Get) { return Reply(Witness.Read()); }
+            if (message.Method == HttpMethod.Get)
+            {
+                if (BeforeWitnessRead is { } before) { await before(token); }
+                return Reply(Witness.Read());
+            }
             var request = await message.Content!.ReadFromJsonAsync<ExamWitnessRequest>(ExamClusterConfiguration.Json, token);
             bool granted = message.RequestUri!.AbsolutePath.EndsWith("/acquire", StringComparison.Ordinal)
                 ? Witness.TryAcquire(Self, request!, out var lease) : Witness.TryRenew(Self, request!, out lease);
@@ -186,6 +255,7 @@ internal static class ExamClusterNodeSpecifications
             if (PeerOffline) { throw new HttpRequestException("Peer unavailable."); }
             if (message.Method == HttpMethod.Get)
             {
+                if (BeforePeerRead is { } before) { await before(token); }
                 var lease = Witness.Read();
                 return Reply(new ExamClusterNodeStatus(Cluster, Other, PeerRole, lease.AuthorityEpoch, lease.FencingToken,
                     PeerRole == "Primary" && lease.OwnerId == Other && lease.RemainingMs > 0, PeerRole == "Standby", OtherStore.Head, "test")

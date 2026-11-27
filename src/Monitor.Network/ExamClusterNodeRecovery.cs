@@ -6,7 +6,7 @@ internal sealed partial class ExamClusterNode
     internal async Task<ExamClusterNodeStatus> RequalifyAsync(string operatorName, CancellationToken cancellationToken)
     {
         ValidateOperator(operatorName);
-        await ReadWitnessAsync(cancellationToken).ConfigureAwait(false);
+        await ReadWitnessAsync(false, cancellationToken).ConfigureAwait(false);
         await CatchUpAsync(operatorName, cancellationToken).ConfigureAwait(false);
         var result = GetStatus();
         if (!result.Qualified) { throw new InvalidOperationException("The replica must finish verified catch-up before requalification."); }
@@ -26,7 +26,7 @@ internal sealed partial class ExamClusterNode
         {
             try
             {
-                await ReadWitnessAsync(cancellationToken).ConfigureAwait(false);
+                await ReadWitnessAsync(false, cancellationToken).ConfigureAwait(false);
                 throw new InvalidOperationException("Manual fencing requires an unavailable witness.");
             }
             catch (HttpRequestException error) when (error.StatusCode is null && error.HttpRequestError != HttpRequestError.SecureConnectionError) { }
@@ -61,9 +61,9 @@ internal sealed partial class ExamClusterNode
         await _elections.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var lease = await ReadWitnessAsync(cancellationToken).ConfigureAwait(false);
+            var lease = await ReadWitnessAsync(false, cancellationToken).ConfigureAwait(false);
             if (lease.RemainingMs > 0 || lease.Revision == 0) { throw new InvalidOperationException("Cold recovery requires an expired, previously issued lease."); }
-            var peer = await PeerStatusAsync(cancellationToken).ConfigureAwait(false);
+            var peer = await PeerStatusAsync(false, cancellationToken).ConfigureAwait(false);
             long epochFloor, tokenFloor;
             lock (_gate)
             {

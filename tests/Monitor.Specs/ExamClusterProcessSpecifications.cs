@@ -179,6 +179,11 @@ internal static class ExamClusterProcessSpecifications
     private static async Task CheckRoleSeparationAsync(string directory, CancellationToken ct)
     {
         var config = ExamClusterConfiguration.Load(Path.Combine(directory, "witness.json"));
+        var standby = ExamClusterConfiguration.Load(Path.Combine(directory, "standby.json"));
+        using var peerTransport = new ExamClusterTransport(standby);
+        using var peer = peerTransport.Connect(config.Primary);
+        using var authorized = await peer.GetAsync("/v1/exam/peer/status", ct).ConfigureAwait(false);
+        authorized.EnsureSuccessStatusCode();
         using var transport = new ExamClusterTransport(config);
         using var witnessAsClient = transport.Connect(config.Primary);
         try

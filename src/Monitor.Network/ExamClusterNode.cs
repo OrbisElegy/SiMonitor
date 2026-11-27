@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -15,6 +17,9 @@ public sealed record ExamClusterNodeStatus(Guid ClusterId, Guid NodeId, string R
 
 internal sealed partial class ExamClusterNode : IDisposable
 {
+    private const int ColdProbeTimeoutMs = 10000;
+    private const int WitnessProbeTimeoutMs = 800;
+    private const int PeerProbeTimeoutMs = 550;
     private readonly TimeProvider _clock;
     private readonly Guid _cluster;
     private readonly Guid _self;
@@ -33,6 +38,10 @@ internal sealed partial class ExamClusterNode : IDisposable
     private bool _inOffice;
     private bool _manual;
     private bool _stopped;
+    private bool _witnessReady;
+    private bool _peerReady;
+    private string? _witnessProblem;
+    private string? _peerProblem;
     private long _witnessRevision = -1;
     private long _writeUntilMs;
     private long _peerUntilMs;
@@ -79,8 +88,8 @@ internal sealed partial class ExamClusterNode : IDisposable
         {
             bool leaseValid = OwnsLiveLease();
             string role = _manual ? "ManualPrimary" : _inOffice ? "Primary" : _armed ? "Standby" : "Recovering";
-            return new(_cluster, _self, role, _term.AuthorityEpoch, _term.FencingToken, leaseValid, _armed, _store.Head,
-                _inOffice && !leaseValid ? "AwaitingWitnessLease" : _reason)
+            string reason = _witnessProblem ?? _peerProblem ?? (_inOffice && !leaseValid ? "AwaitingWitnessLease" : _reason);
+            return new(_cluster, _self, role, _term.AuthorityEpoch, _term.FencingToken, leaseValid, _armed, _store.Head, reason)
             { Pending = _store.Pending?.Cursor };
         }
     }
@@ -122,7 +131,15 @@ internal sealed partial class ExamClusterNode : IDisposable
                 try
                 {
                     if (election) { await PollElectionAsync(cancellationToken).ConfigureAwait(false); }
-                    else if (GetStatus().LeaseValid) { await ReconcileIdlePrimaryAsync(cancellationToken).ConfigureAwait(false); }
+                    else if (GetStatus().LeaseValid)
+                    {
+                        // This read-only connection probe runs independently of lease renewal
+                        // and never holds the write gate or participates in promotion.
+                        bool warmPeer;
+                        lock (_gate) { warmPeer = !_peerReady || _peerProblem is not null; }
+                        if (warmPeer) { await PeerStatusAsync(true, cancellationToken).ConfigureAwait(false); }
+                        await ReconcileIdlePrimaryAsync(cancellationToken).ConfigureAwait(false);
+                    }
                     else { await CatchUpAsync(null, cancellationToken).ConfigureAwait(false); }
                 }
                 catch (Exception error) when (!cancellationToken.IsCancellationRequested && error is HttpRequestException or
@@ -150,7 +167,7 @@ internal sealed partial class ExamClusterNode : IDisposable
         await _elections.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            ExamWitnessLease view = await ReadWitnessAsync(cancellationToken).ConfigureAwait(false);
+            ExamWitnessLease view = await ReadWitnessAsync(true, cancellationToken).ConfigureAwait(false);
             bool renew, claim, checkFormerLeader;
             lock (_gate)
             {
@@ -177,12 +194,19 @@ internal sealed partial class ExamClusterNode : IDisposable
         finally { _elections.Release(); }
     }
 
-    private async Task<ExamWitnessLease> ReadWitnessAsync(CancellationToken cancellationToken)
+    private async Task<ExamWitnessLease> ReadWitnessAsync(bool allowColdProbe, CancellationToken cancellationToken)
     {
         long started = NowMs;
-        using var limit = Deadline(800, cancellationToken);
+        int timeout;
+        lock (_gate) { timeout = allowColdProbe && !_witnessReady && !_armed && !_inOffice ? ColdProbeTimeoutMs : WitnessProbeTimeoutMs; }
+        using var limit = Deadline(timeout, cancellationToken);
         var view = await GetJsonAsync<ExamWitnessLease>(_witness, ExamWitnessEndpoints.LeasePath, limit.Token).ConfigureAwait(false);
-        lock (_gate) { ObserveWitness(view, started); }
+        lock (_gate)
+        {
+            ObserveWitness(view, started);
+            _witnessReady = true;
+            if (!_initialPrimary && view.OwnerId is null && _term.OwnerId is null) { _reason = "WaitingForPrimary"; }
+        }
         return view;
     }
 
@@ -246,14 +270,26 @@ internal sealed partial class ExamClusterNode : IDisposable
         }
         using var limit = Deadline(900, cancellationToken);
         long started = NowMs;
-        using var response = await _witness.PostAsJsonAsync(ExamWitnessEndpoints.LeasePath + (acquire ? "/acquire" : "/renew"),
-            request, ExamClusterConfiguration.Json, limit.Token).ConfigureAwait(false);
-        if (response.StatusCode != HttpStatusCode.Conflict) { response.EnsureSuccessStatusCode(); }
-        var lease = await ReadJsonAsync<ExamWitnessLease>(response, limit.Token).ConfigureAwait(false);
+        ExamWitnessLease lease;
+        bool rejected;
+        try
+        {
+            using var response = await _witness.PostAsJsonAsync(ExamWitnessEndpoints.LeasePath + (acquire ? "/acquire" : "/renew"),
+                request, ExamClusterConfiguration.Json, limit.Token).ConfigureAwait(false);
+            rejected = response.StatusCode == HttpStatusCode.Conflict;
+            if (!rejected) { response.EnsureSuccessStatusCode(); }
+            lock (_gate) { _witnessProblem = null; }
+            lease = await ReadJsonAsync<ExamWitnessLease>(response, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
+        {
+            lock (_gate) { _witnessProblem = TransportProblem("Witness", error); }
+            throw;
+        }
         lock (_gate)
         {
             ObserveWitness(lease, started);
-            if (response.StatusCode == HttpStatusCode.Conflict) { throw new InvalidOperationException("The witness rejected the lease comparison."); }
+            if (rejected) { throw new InvalidOperationException("The witness rejected the lease comparison."); }
             if (lease.OwnerId != _self || lease.AuthorityEpoch != expectedEpoch || lease.FencingToken != expectedToken ||
                 lease.Revision <= view.Revision || NowMs >= started + lease.RemainingMs)
             { throw new InvalidDataException("The witness did not return a usable grant."); }
@@ -289,30 +325,63 @@ internal sealed partial class ExamClusterNode : IDisposable
         return limit;
     }
 
-    private static async Task<T> GetJsonAsync<T>(HttpClient client, string path, CancellationToken token)
+    private async Task<T> GetJsonAsync<T>(HttpClient client, string path, CancellationToken token)
     {
-        using var response = await client.GetAsync(path, token).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return await ReadJsonAsync<T>(response, token).ConfigureAwait(false);
+        bool witness = ReferenceEquals(client, _witness);
+        try
+        {
+            using var response = await client.GetAsync(path, token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            lock (_gate)
+            {
+                if (witness) { _witnessProblem = null; }
+                else { _peerProblem = null; }
+            }
+            return await ReadJsonAsync<T>(response, token).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
+        {
+            lock (_gate)
+            {
+                if (witness) { _witnessProblem = TransportProblem("Witness", error); }
+                else { _peerProblem = TransportProblem("Peer", error); }
+            }
+            throw;
+        }
     }
+
+    private static string TransportProblem(string link, Exception error) => error switch
+    {
+        HttpRequestException { StatusCode: { } status } => FormattableString.Invariant($"{link}Http{(int)status}"),
+        HttpRequestException { HttpRequestError: HttpRequestError.NameResolutionError } => link + "DnsFailure",
+        HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } or
+            HttpRequestException { InnerException: AuthenticationException } => link + "TlsFailure",
+        HttpRequestException { InnerException: SocketException { SocketErrorCode: SocketError.TimedOut } } => link + "TcpTimeout",
+        HttpRequestException { HttpRequestError: HttpRequestError.ConnectionError } => link + "TcpFailure",
+        OperationCanceledException => link + "RequestTimeout",
+        _ => link + "TransportFailure"
+    };
 
     private static async Task<T> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken token) =>
         await response.Content.ReadFromJsonAsync<T>(ExamClusterConfiguration.Json, token).ConfigureAwait(false)
         ?? throw new InvalidDataException("The exam cluster response was empty.");
 
-    private async Task<ExamClusterNodeStatus> PeerStatusAsync(CancellationToken token)
+    private async Task<ExamClusterNodeStatus> PeerStatusAsync(bool allowColdProbe, CancellationToken token)
     {
-        using var limit = Deadline(550, token);
+        int timeout;
+        lock (_gate) { timeout = allowColdProbe && !_peerReady ? ColdProbeTimeoutMs : PeerProbeTimeoutMs; }
+        using var limit = Deadline(timeout, token);
         var peer = await GetJsonAsync<ExamClusterNodeStatus>(_peer, PeerPath + "/status", limit.Token).ConfigureAwait(false);
         if (peer.ClusterId != _cluster || peer.NodeId != _other || peer.Head is null || peer.Head.Sequence < 0 ||
             !ClassroomArtifactDescriptor.IsContentHash(peer.Head.Hash))
         { throw new InvalidDataException("The peer returned a status for a different host or cluster."); }
+        lock (_gate) { _peerReady = true; }
         return peer;
     }
 
     private async Task<ExamClusterNodeStatus?> ProbePeerAsync(CancellationToken token)
     {
-        try { return await PeerStatusAsync(token).ConfigureAwait(false); }
+        try { return await PeerStatusAsync(false, token).ConfigureAwait(false); }
         catch (HttpRequestException error) when (error.StatusCode is null && error.HttpRequestError != HttpRequestError.SecureConnectionError) { return null; }
         catch (OperationCanceledException) when (!token.IsCancellationRequested) { return null; }
     }

@@ -55,7 +55,9 @@ internal static class ExamReplicaSpecifications
         ShouldThrow<InvalidOperationException>(() => a.Prepare(7, 22, request));
         b.Confirm(a.Apply(replacement));
         Check.That(a.Head == b.Head && a.Head.Sequence == 2, "a new term can extend its verified committed prefix");
-        byte[] data = File.ReadAllBytes(pair.A + "-wal");
+        using var wal = new FileStream(pair.A + "-wal", FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        byte[] data = new byte[checked((int)wal.Length)];
+        wal.ReadExactly(data);
         Check.That(data.AsSpan().IndexOf(request.Payload) < 0 && Encoding.ASCII.GetString(data).IndexOf(Convert.ToBase64String(request.Payload), StringComparison.Ordinal) < 0,
             "the local WAL must not carry answer bytes or their JSON representation");
     }

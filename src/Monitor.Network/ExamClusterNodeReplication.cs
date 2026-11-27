@@ -48,7 +48,7 @@ internal sealed partial class ExamClusterNode
             request.Entry.Validate(_cluster);
             bool refresh;
             lock (_gate) { refresh = NowMs >= _peerUntilMs || request.AuthorityEpoch != _term.AuthorityEpoch; }
-            if (refresh) { await ReadWitnessAsync(deadline.Token).ConfigureAwait(false); }
+            if (refresh) { await ReadWitnessAsync(false, deadline.Token).ConfigureAwait(false); }
             lock (_gate)
             {
                 RequireFollower(request.AuthorityEpoch, request.FencingToken);
@@ -115,6 +115,7 @@ internal sealed partial class ExamClusterNode
         lock (_gate)
         {
             RequireWriter(epoch, token);
+            _peerProblem = null;
             var confirmed = _store.Confirm(durable);
             RequireWriter(epoch, token);
             return confirmed;
@@ -144,7 +145,7 @@ internal sealed partial class ExamClusterNode
     {
         // A standby can durably apply before either side receives the reply. Its exact
         // committed hash proves the lost receipt even if it subsequently restarted.
-        var peer = await PeerStatusAsync(cancellationToken).ConfigureAwait(false);
+        var peer = await PeerStatusAsync(false, cancellationToken).ConfigureAwait(false);
         if (peer.Role is not ("Recovering" or "Standby") || peer.AuthorityEpoch != epoch || peer.FencingToken != token) { return; }
         lock (_gate)
         {
@@ -179,7 +180,7 @@ internal sealed partial class ExamClusterNode
                 epoch = _term.AuthorityEpoch;
                 token = _term.FencingToken;
             }
-            var source = await PeerStatusAsync(cancellationToken).ConfigureAwait(false);
+            var source = await PeerStatusAsync(operatorName is null, cancellationToken).ConfigureAwait(false);
             if (source.Role != "Primary" || !source.LeaseValid || source.AuthorityEpoch != epoch || source.FencingToken != token)
             {
                 if (operatorName is not null) { throw new InvalidOperationException("The peer primary is not ready."); }

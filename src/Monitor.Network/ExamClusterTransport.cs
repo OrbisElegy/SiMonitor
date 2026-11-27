@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Net;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -42,12 +43,18 @@ internal sealed class ExamClusterTransport : IDisposable
 
     internal DateTime CertificateExpiresUtc => _certificate.NotAfter.ToUniversalTime();
 
+    private X509ChainPolicy TrustPolicy()
+    {
+        X509ChainPolicy policy = ClassroomCertificate.ServerTrust(_root);
+        policy.ApplicationPolicy.Add(new Oid(ClientAuthentication));
+        policy.RevocationMode = _config.Revocation == "Offline" ? X509RevocationMode.Offline : X509RevocationMode.Online;
+        policy.UrlRetrievalTimeout = TimeSpan.FromSeconds(2);
+        return policy;
+    }
+
     private bool Trusted(X509Certificate2 certificate, X509Chain? presented, out string errors)
     {
-        using var chain = new X509Chain { ChainPolicy = ClassroomCertificate.ServerTrust(_root) };
-        chain.ChainPolicy.ApplicationPolicy.Add(new Oid(ClientAuthentication));
-        chain.ChainPolicy.RevocationMode = _config.Revocation == "Offline" ? X509RevocationMode.Offline : X509RevocationMode.Online;
-        chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(2);
+        using var chain = new X509Chain { ChainPolicy = TrustPolicy() };
         if (presented is not null)
         {
             chain.ChainPolicy.ExtraStore.AddRange(presented.ChainPolicy.ExtraStore);
@@ -83,12 +90,14 @@ internal sealed class ExamClusterTransport : IDisposable
             AllowAutoRedirect = false,
             UseCookies = false,
             UseProxy = false,
-            ConnectTimeout = TimeSpan.FromSeconds(1),
+            ConnectTimeout = TimeSpan.FromSeconds(8),
+            ConnectCallback = ConnectDnsAsync,
             PooledConnectionLifetime = TimeSpan.FromSeconds(20),
             SslOptions = new SslClientAuthenticationOptions
             {
                 EnabledSslProtocols = SslProtocols.Tls13,
                 AllowTlsResume = false,
+                CertificateChainPolicy = TrustPolicy(),
                 ClientCertificates = new X509CertificateCollection { _certificate },
                 LocalCertificateSelectionCallback = (_, _, _, _, _) => _certificate,
                 RemoteCertificateValidationCallback = (sender, cert, chain, errors) => cert is X509Certificate2 leaf &&
@@ -99,9 +108,52 @@ internal sealed class ExamClusterTransport : IDisposable
         return new HttpClient(handler)
         {
             BaseAddress = remote.Origin,
-            Timeout = TimeSpan.FromSeconds(4),
+            Timeout = TimeSpan.FromSeconds(10),
             MaxResponseContentBufferSize = remote.Id == _config.Witness.Id ? 16384 : 2 * ExamReplicaEntry.MaxPayloadBytes
         };
+    }
+
+    // A non-listening AAAA address can consume a whole lease before the OS tries an A record.
+    // Race the two address families for TCP only. TLS still authenticates the configured DNS origin.
+    private static async ValueTask<Stream> ConnectDnsAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    {
+        DnsEndPoint endpoint = context.DnsEndPoint;
+        IPAddress[] resolved = await Dns.GetHostAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+        using var race = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var attempts = resolved.Where(address => address.AddressFamily == AddressFamily.InterNetwork && Socket.OSSupportsIPv4 ||
+            address.AddressFamily == AddressFamily.InterNetworkV6 && Socket.OSSupportsIPv6).GroupBy(address => address.AddressFamily)
+            .Select(family => ConnectAsync(family.Key, family.ToArray())).ToList();
+        try
+        {
+            while (attempts.Count > 0)
+            {
+                Task<Socket> next = await Task.WhenAny(attempts).ConfigureAwait(false);
+                attempts.Remove(next);
+                try { return new NetworkStream(await next.ConfigureAwait(false), ownsSocket: true); }
+                catch (SocketException) when (attempts.Count > 0) { }
+            }
+            throw new SocketException((int)SocketError.HostNotFound);
+        }
+        finally
+        {
+            await race.CancelAsync().ConfigureAwait(false);
+            foreach (Task<Socket> attempt in attempts)
+            {
+                try { (await attempt.ConfigureAwait(false)).Dispose(); }
+                catch (Exception error) when (error is SocketException or OperationCanceledException) { }
+            }
+        }
+
+        async Task<Socket> ConnectAsync(AddressFamily family, IPAddress[] addresses)
+        {
+            var socket = new Socket(family, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(addresses, endpoint.Port, race.Token).ConfigureAwait(false);
+                return socket;
+            }
+            catch { socket.Dispose(); throw; }
+        }
     }
 
     internal WebApplication BuildListener()
@@ -122,7 +174,11 @@ internal sealed class ExamClusterTransport : IDisposable
                     https.SslProtocols = SslProtocols.Tls13;
                     https.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
                     https.ClientCertificateValidation = (leaf, chain, errors) => Identify(leaf).HasValue && Trusted(leaf, chain, out _);
-                    https.OnAuthenticate = (_, ssl) => ssl.AllowTlsResume = false;
+                    https.OnAuthenticate = (_, ssl) =>
+                    {
+                        ssl.AllowTlsResume = false;
+                        ssl.CertificateChainPolicy = TrustPolicy();
+                    };
                 });
             });
         });

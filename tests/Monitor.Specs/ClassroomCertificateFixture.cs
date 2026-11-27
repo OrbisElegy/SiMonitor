@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Monitor.Network;
 
 namespace Monitor.Specs;
 
@@ -23,6 +24,33 @@ internal sealed class ClassroomCertificateFixture : IAsyncDisposable
 
     internal X509Certificate2 Root { get; }
     internal string LeafPfxPath => Path.Combine(_directory.FullName, "loopback.pfx");
+
+    internal async Task PrepareWindowsRevocationCacheAsync(IEnumerable<string> leafPaths, CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows()) { return; }
+
+        // Crypt32 shares the signed CRL in the current user's URL cache. Fetch it
+        // through the real distribution point before starting child test processes.
+        const X509ChainStatusFlags unavailable = X509ChainStatusFlags.OfflineRevocation | X509ChainStatusFlags.RevocationStatusUnknown;
+        foreach (string path in leafPaths)
+        {
+            using var certificate = X509CertificateLoader.LoadPkcs12FromFile(path, null, X509KeyStorageFlags.EphemeralKeySet);
+            for (int attempt = 1; ; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using var chain = new X509Chain { ChainPolicy = ClassroomCertificate.ServerTrust(Root) };
+                chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(5);
+                if (await Task.Run(() => chain.Build(certificate), cancellationToken).ConfigureAwait(false)) { break; }
+                X509ChainStatus[] status = chain.ChainStatus;
+                if (attempt == 3 || status.Length == 0 || status.Any(item => (item.Status & ~unavailable) != 0))
+                {
+                    throw new InvalidOperationException($"Test certificate revocation check failed for {Path.GetFileName(path)}: " +
+                        string.Join(", ", status.Select(item => item.Status)));
+                }
+                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
 
     internal static async Task<ClassroomCertificateFixture> CreateAsync(CancellationToken cancellationToken,
         Action<string, X509Certificate2, Uri>? issueAdditionalLeaves = null)

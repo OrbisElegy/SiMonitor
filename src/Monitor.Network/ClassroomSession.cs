@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -164,11 +163,11 @@ public sealed partial class ClassroomHost
 
     private void MapClassroomRoutes(IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/v1/hello", NegotiateAsync);
+        routes.MapPost("/v1/hello", NegotiateAsync).WithMetadata(ClassroomEndpointAccess.Enrollment);
         routes.MapPost("/v1/ready", AcceptReadyAsync);
         routes.MapPost("/v1/progress", AcceptProgressAsync);
         routes.MapPost("/v1/progress/receiver", ReceiveHeadlessProgressAsync);
-        routes.MapPost("/v1/refresh", RefreshAsync);
+        routes.MapPost("/v1/refresh", RefreshAsync).WithMetadata(ClassroomEndpointAccess.BranchAccess);
         routes.MapGet("/v1/events", ReadEventsAsync);
         routes.MapGet("/v1/telemetry", async context =>
         {
@@ -221,11 +220,12 @@ public sealed partial class ClassroomHost
         ClassroomNegotiation negotiation;
         lock (_gate)
         {
+            if (!Authorize(context, out _, out _)) { return; }
             if (_presentationManifest is not null && (hello.Presentation is not { } gui || !MatchesPresentation(gui)))
             { context.Response.StatusCode = 422; return; }
             bool newMember = !_members.ContainsKey(student);
             if (newMember && _members.Count >= MaximumStudents) { context.Response.StatusCode = 429; return; }
-            string token = AuthenticationHeaderValue.Parse(context.Request.Headers.Authorization.ToString()).Parameter!;
+            string token = ReadBearer(context);
             if (!_admission.CompleteNegotiation(token, hello.AllowLz4)) { context.Response.StatusCode = 401; return; }
             if (newMember) { _members.Add(student, new ClassroomMember(student, false, 500_000_000, HostMonotonicNs, null)); }
             negotiation = new(_ring.SessionId, _ring.InstanceId, _admission.CohortId, student, _admission.SessionEpoch, AuthorityEpoch, hello.SampleFormat, hello.AllowLz4, ClassroomContracts.PackageHash, expires, (int)Math.Clamp((expires - _admission.Clock.GetUtcNow()).TotalSeconds, 0, _admission.Policy.TokenLifetimeSeconds), _admission.Policy.RefreshWindowSeconds, _presentationManifest);
@@ -285,7 +285,7 @@ public sealed partial class ClassroomHost
     private async Task RefreshAsync(HttpContext context)
     {
         if (!Authorize(context, out _, out _)) { return; }
-        string old = AuthenticationHeaderValue.Parse(context.Request.Headers.Authorization.ToString()).Parameter!;
+        string old = ReadBearer(context);
         var request = await ClassroomMessageJson.ReadAsync<ClassroomRefreshRequest>(context.Request.Body, 4096, context.RequestAborted).ConfigureAwait(false);
         if (!_admission.TryRefresh(old, request.RequestId, out string? replacement)) { context.Response.StatusCode = 409; return; }
         if (!_admission.TryAuthorize(replacement!, out _, out var expires)) { context.Response.StatusCode = 401; return; }

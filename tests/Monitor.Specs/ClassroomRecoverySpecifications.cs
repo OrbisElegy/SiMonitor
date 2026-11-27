@@ -10,8 +10,8 @@ namespace Monitor.Specs;
 
 internal static class ClassroomRecoverySpecifications
 {
-    internal static async Task VerifyLoopbackAsync(ClassroomHost host, ClassroomStudentClient client,
-        ClassroomManifest manifest, Action<ulong> publish, CancellationToken ct)
+    internal static async Task VerifyLoopbackAsync(ClassroomHost host, ClassroomAdmission admission, ClassroomStudentClient client,
+        ClassroomStudentClient other, ClassroomManifest manifest, Action<ulong> publish, CancellationToken ct)
     {
         ClassroomManifest before = await client.GetSessionAsync(ct).ConfigureAwait(false);
         ConfigurePresentation(host, manifest.StudentId);
@@ -52,6 +52,8 @@ internal static class ClassroomRecoverySpecifications
                 1, 7, 2, stateHash, null, Guid.NewGuid(), true);
             await ExpectStatusAsync(() => client.BeginAuthorityRecoveryAsync(hello with { ClientId = Guid.NewGuid() },
                 1, 0, ct), HttpStatusCode.Forbidden).ConfigureAwait(false);
+            await ExpectStatusAsync(() => client.BeginAuthorityRecoveryAsync(hello, manifest.StreamEpoch, 0, ct),
+                HttpStatusCode.Conflict).ConfigureAwait(false);
             Check.That(await client.BeginAuthorityRecoveryAsync(hello, 1, 0, ct).ConfigureAwait(false) is null,
                 "the host awaits the referenced local continuation report");
             var report = new LocalContinuationReportMessage(hello.LocalContinuationReportId!.Value, manifest.SessionId,
@@ -91,6 +93,15 @@ internal static class ClassroomRecoverySpecifications
             Check.That(commit?.FirstAuthoritativeBlockSha256 == firstAuthoritative.ContentSha256 &&
                 await client.SendRecoveryPreparedAsync(ack, ct).ConfigureAwait(false) == commit,
                 "the idempotent commit binds the exact authoritative block and checked preroll");
+
+            ClassroomManifest otherManifest = await other.GetSessionAsync(ct).ConfigureAwait(false);
+            authority.OnReadCheckpoint = admission.RevokeStudent;
+            var otherHello = hello with { ClientId = otherManifest.StudentId, LocalContinuationReportId = null };
+            await ExpectStatusAsync(() => other.BeginAuthorityRecoveryAsync(otherHello, 1, 0, ct),
+                HttpStatusCode.Unauthorized).ConfigureAwait(false);
+            authority.OnReadCheckpoint = null;
+            Check.That(await client.SendRecoveryPreparedAsync(ack, ct).ConfigureAwait(false) == commit,
+                "revocation during checkpoint loading prevents a new recovery plan without changing another seat's plan");
         }
         finally { host.ConfigureRecoveryAuthority(null); }
     }
@@ -141,7 +152,12 @@ internal static class ClassroomRecoverySpecifications
     {
         public ulong AuthorityEpoch => 2;
         internal int Replays { get; private set; }
-        public ClassroomAuthorityCheckpoint ReadCheckpoint(Guid studentId) => new(4, 9, 2, state);
+        internal Action<Guid>? OnReadCheckpoint { get; set; }
+        public ClassroomAuthorityCheckpoint ReadCheckpoint(Guid studentId)
+        {
+            OnReadCheckpoint?.Invoke(studentId);
+            return new(4, 9, 2, state);
+        }
         public ContinuityReportVerification Replay(RecoveryHelloMessage hello, LocalContinuationReportMessage report, CancellationToken cancellationToken)
         {
             Replays++;

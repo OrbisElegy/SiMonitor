@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -34,6 +33,16 @@ public sealed partial class ClassroomHost
     private readonly Dictionary<Guid, string> _branchFailures = [];
     private readonly Dictionary<Guid, HashSet<HttpContext>> _sharedRequests = [];
     private sealed record PrivateBranch(ClassroomHost Host, RequestDelegate Router, long ForkSimTimeNs);
+    private sealed record ClassroomEndpointAccess(bool AllowDetached = false, bool NeedsNegotiation = true,
+        bool NeedsSharedRejoin = false, bool RedeemsInvitation = false)
+    {
+        internal static readonly ClassroomEndpointAccess Member = new();
+        internal static readonly ClassroomEndpointAccess Invitation = new(NeedsNegotiation: false, RedeemsInvitation: true);
+        internal static readonly ClassroomEndpointAccess Enrollment = new(NeedsNegotiation: false);
+        internal static readonly ClassroomEndpointAccess Assignment = new(AllowDetached: true, NeedsNegotiation: false);
+        internal static readonly ClassroomEndpointAccess BranchAccess = new(AllowDetached: true);
+        internal static readonly ClassroomEndpointAccess ControlWrite = new(NeedsSharedRejoin: true);
+    }
 
     public ClassroomBranchAssignment GetBranchAssignment(Guid studentId)
     {
@@ -201,6 +210,7 @@ public sealed partial class ClassroomHost
             }
             var router = new ApplicationBuilder(_app.Services);
             router.UseRouting();
+            router.Use(child.EnforceEndpointAccessAsync);
             router.UseEndpoints(child.MapNetworkEndpoints);
             RequestDelegate pipeline = router.Build();
 
@@ -318,29 +328,29 @@ public sealed partial class ClassroomHost
     {
         routes.MapGet("/v1/branch/assignment", async context =>
         {
-            if (!Authorize(context, out Guid student, out _)) { return; }
             ClassroomBranchAssignment assignment;
             lock (_gate)
             {
+                if (!Authorize(context, out Guid student, out _)) { return; }
                 if (!_members.ContainsKey(student)) { context.Response.StatusCode = 412; return; }
                 assignment = GetBranchAssignment(student);
             }
             await context.Response.WriteAsJsonAsync(assignment, context.RequestAborted).ConfigureAwait(false);
-        });
+        }).WithMetadata(ClassroomEndpointAccess.Assignment);
         routes.MapPost("/v1/branch/enter/{id:guid}", async context =>
         {
-            if (!Authorize(context, out Guid student, out _)) { return; }
             ClassroomBranchCredential grant;
             lock (_gate)
             {
-                if (!_branches.TryGetValue(student, out var branch) ||
+                if (!Authorize(context, out Guid student, out _)) { return; }
+                if (!_branches.TryGetValue(student, out var branch) || branch.Host._admission.Ended ||
                     !Guid.TryParse(context.Request.RouteValues["id"] as string, out var requested) || requested != branch.Host._ring.InstanceId)
                 { context.Response.StatusCode = 409; return; }
                 string code = branch.Host._admission.ReplaceInvitation(student);
-                grant = new ClassroomBranchCredential(_ring.SessionId, requested, code);
+                grant = new ClassroomBranchCredential(_ring.SessionId, branch.Host._ring.InstanceId, code);
             }
             await context.Response.WriteAsJsonAsync(grant, context.RequestAborted).ConfigureAwait(false);
-        });
+        }).WithMetadata(ClassroomEndpointAccess.BranchAccess);
     }
 
     private async Task DispatchInstanceAsync(HttpContext context, RequestDelegate next)
@@ -358,24 +368,31 @@ public sealed partial class ClassroomHost
                 lifetime = branch.Host._stopping.Token;
             }
             using var stopRequest = lifetime.Register(context.Abort);
-            context.SetEndpoint(null);
-            context.Request.RouteValues = new RouteValueDictionary();
             await branch.Router(context).ConfigureAwait(false);
             return;
         }
+        await next(context).ConfigureAwait(false);
+    }
 
+    private static ClassroomEndpointAccess EndpointAccess(HttpContext context) =>
+        context.GetEndpoint()?.Metadata.GetMetadata<ClassroomEndpointAccess>() ?? ClassroomEndpointAccess.Member;
+
+    private async Task EnforceEndpointAccessAsync(HttpContext context, RequestDelegate next)
+    {
         Guid studentId = default;
         bool tracked = false;
-        lock (_gate)
+        var access = EndpointAccess(context);
+        if (context.GetEndpoint() is RouteEndpoint && !access.RedeemsInvitation)
         {
-            if (!context.Request.Path.StartsWithSegments("/v1/branch") && context.Request.Path != "/v1/refresh" &&
-                AuthenticationHeaderValue.TryParse(context.Request.Headers.Authorization, out var header) &&
-                header.Parameter is { } token && _admission.TryAuthorize(token, out studentId, out _))
+            lock (_gate)
             {
-                if (_branches.ContainsKey(studentId)) { context.Response.StatusCode = 409; return; }
-                if (!_sharedRequests.TryGetValue(studentId, out var requests)) { _sharedRequests.Add(studentId, requests = []); }
-                requests.Add(context);
-                tracked = true;
+                if (!Authorize(context, out studentId, out _)) { return; }
+                if (_parent is null && !access.AllowDetached)
+                {
+                    if (!_sharedRequests.TryGetValue(studentId, out var requests)) { _sharedRequests.Add(studentId, requests = []); }
+                    requests.Add(context);
+                    tracked = true;
+                }
             }
         }
         try { await next(context).ConfigureAwait(false); }

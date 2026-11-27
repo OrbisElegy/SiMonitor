@@ -70,7 +70,8 @@ public sealed partial class ClassroomHost
             if (!Authorize(ctx, out Guid actor, out _)) { return Results.StatusCode(ctx.Response.StatusCode); }
             lock (_gate) { return Results.Json(_control.Configuration(actor), ClassroomControlWire.Json); }
         });
-        routes.MapPost("/v1/configuration/ack", (Func<HttpContext, Task<IResult>>)AcceptConfigurationAckAsync);
+        routes.MapPost("/v1/configuration/ack", (Func<HttpContext, Task<IResult>>)AcceptConfigurationAckAsync)
+            .WithMetadata(ClassroomEndpointAccess.ControlWrite);
     }
 
     private async Task<IResult> AcceptConfigurationAckAsync(HttpContext context)

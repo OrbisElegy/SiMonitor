@@ -126,6 +126,8 @@ public sealed partial class ClassroomHost : IAsyncDisposable
                 }
             });
             app.Use(host.DispatchInstanceAsync);
+            app.UseRouting();
+            app.Use(host.EnforceEndpointAccessAsync);
             host.MapNetworkEndpoints(app);
             await app.StartAsync(cancellationToken).ConfigureAwait(false);
             return host;
@@ -140,8 +142,8 @@ public sealed partial class ClassroomHost : IAsyncDisposable
 
     private void MapNetworkEndpoints(IEndpointRouteBuilder routes)
     {
-        routes.MapPost("/v1/join", JoinAsync);
-        routes.MapGet("/v1/session", ManifestAsync);
+        routes.MapPost("/v1/join", JoinAsync).WithMetadata(ClassroomEndpointAccess.Invitation);
+        routes.MapGet("/v1/session", ManifestAsync).WithMetadata(ClassroomEndpointAccess.Enrollment);
         routes.MapGet("/v1/clock", ClockAsync);
         routes.MapGet("/v1/waveforms", StreamAsync);
         MapClassroomRoutes(routes);
@@ -280,32 +282,35 @@ public sealed partial class ClassroomHost : IAsyncDisposable
 
     private bool Authorize(HttpContext context, out Guid studentId, out DateTimeOffset expiresAt)
     {
-        studentId = default;
-        expiresAt = default;
-        var values = context.Request.Headers.Authorization;
-        if (values.Count == 1 && AuthenticationHeaderValue.TryParse(values[0], out var header) &&
-            header.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase) && header.Parameter is { } token &&
-            _admission.TryAuthorize(token, out studentId, out expiresAt))
+        string token = ReadBearer(context);
+        var access = EndpointAccess(context);
+        lock (_gate)
         {
-            if (context.Request.Path != "/v1/hello" && context.Request.Path != "/v1/session" &&
-                context.Request.Path != "/v1/branch/assignment" && !_admission.IsNegotiated(token))
+            if (!_admission.TryAuthorize(token, out studentId, out expiresAt))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return false;
+            }
+            if (!access.AllowDetached && _branches.ContainsKey(studentId))
+            {
+                context.Response.StatusCode = StatusCodes.Status409Conflict;
+                return false;
+            }
+            if ((access.NeedsNegotiation && !_admission.IsNegotiated(token)) ||
+                (access.NeedsSharedRejoin && _requiredRejoins.ContainsKey(studentId)))
             {
                 context.Response.StatusCode = StatusCodes.Status412PreconditionFailed;
                 return false;
             }
-            if (HttpMethods.IsPost(context.Request.Method) &&
-                (context.Request.Path.StartsWithSegments("/v1/actions") || context.Request.Path.StartsWithSegments("/v1/configuration")))
-            {
-                lock (_gate)
-                {
-                    if (_requiredRejoins.ContainsKey(studentId)) { context.Response.StatusCode = StatusCodes.Status412PreconditionFailed; return false; }
-                }
-            }
-            return true;
         }
+        return true;
+    }
 
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return false;
+    private static string ReadBearer(HttpContext context)
+    {
+        var values = context.Request.Headers.Authorization;
+        return values.Count == 1 && AuthenticationHeaderValue.TryParse(values[0], out var header) &&
+            header.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase) ? header.Parameter ?? string.Empty : string.Empty;
     }
 
     private async Task ManifestAsync(HttpContext context)
@@ -362,7 +367,7 @@ public sealed partial class ClassroomHost : IAsyncDisposable
         bool allowLz4 = false;
         if (context.Request.Query.TryGetValue("codec", out var codec))
         {
-            string credential = AuthenticationHeaderValue.Parse(context.Request.Headers.Authorization.ToString()).Parameter!;
+            string credential = ReadBearer(context);
             if (codec.Count != 1 || codec[0] != "lz4" || !_admission.AllowsLz4(credential))
             { context.Response.StatusCode = 422; return; }
             allowLz4 = true;
@@ -370,6 +375,7 @@ public sealed partial class ClassroomHost : IAsyncDisposable
         ClassroomSubscription subscriber;
         lock (_gate)
         {
+            if (!Authorize(context, out _, out _)) { return; }
             if (_students.Count >= MaximumStudents || _students.ContainsKey(studentId))
             {
                 context.Response.StatusCode = StatusCodes.Status429TooManyRequests;

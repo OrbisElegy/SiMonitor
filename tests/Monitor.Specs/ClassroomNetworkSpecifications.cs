@@ -128,7 +128,7 @@ internal static class ClassroomNetworkSpecifications
         Check.That(expired, "the server rejects a cursor evicted since the manifest was fetched");
 
         await ClassroomContinuitySpecifications.VerifyLoopbackAsync(host, first, second, ct).ConfigureAwait(false);
-        await ClassroomRecoverySpecifications.VerifyLoopbackAsync(host, first, firstManifest, Publish, ct).ConfigureAwait(false);
+        await ClassroomRecoverySpecifications.VerifyLoopbackAsync(host, admission, first, second, firstManifest, Publish, ct).ConfigureAwait(false);
         var fresh = await first.GetSessionAsync(ct).ConfigureAwait(false);
         await using var idle = await first.SubscribeAsync(fresh, cancellationToken: ct).ConfigureAwait(false);
         Task<WaveformEnvelope?> pending = idle.ReceiveAsync(ct).AsTask();

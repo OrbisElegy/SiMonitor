@@ -207,13 +207,14 @@ public sealed partial class ClassroomHost
             lock (_gate) { return Results.Json(_control.Snapshot(), ClassroomControlWire.Json); }
         });
         MapConfigurationRoutes(routes);
-        routes.MapPost("/v1/actions", (Func<HttpContext, Task<IResult>>)ProcessActionAsync);
+        routes.MapPost("/v1/actions", (Func<HttpContext, Task<IResult>>)ProcessActionAsync).WithMetadata(ClassroomEndpointAccess.ControlWrite);
         routes.MapGet("/v1/configuration/actions", (HttpContext ctx) =>
         {
             if (!Authorize(ctx, out _, out _)) { return Results.StatusCode(ctx.Response.StatusCode); }
             lock (_gate) { return Results.Json(new ClassroomControlScheduleReply(_control.Pending()), ClassroomControlWire.Json); }
         });
-        routes.MapPost("/v1/configuration/actions/prepared", (Func<HttpContext, Task<IResult>>)PrepareActionPolicyAsync);
+        routes.MapPost("/v1/configuration/actions/prepared", (Func<HttpContext, Task<IResult>>)PrepareActionPolicyAsync)
+            .WithMetadata(ClassroomEndpointAccess.ControlWrite);
     }
 
     private async Task<IResult> ProcessActionAsync(HttpContext context)

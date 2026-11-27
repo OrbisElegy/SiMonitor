@@ -42,6 +42,8 @@ internal sealed class ExamClusterProcessFixture(ClassroomCertificateFixture cert
 
     internal async Task PrepareAsync(CancellationToken ct)
     {
+        await certificates.PrepareWindowsRevocationCacheAsync(
+            Names.Append("primary-next").Select(name => Path.Combine(DirectoryPath, name + ".pfx")), ct).ConfigureAwait(false);
         File.WriteAllBytes(Path.Combine(DirectoryPath, "root.cer"), certificates.Root.RawData);
         string blocked = Path.Combine(DirectoryPath, "blocked.txt");
         File.WriteAllText(blocked, Convert.ToHexString(SHA256.HashData("blocked test password"u8)));

@@ -152,41 +152,48 @@ public sealed partial class ClassroomHost
 
     private byte[]? OpenRecovery(HttpContext context, Guid student, IClassroomRecoveryAuthority authority, RecoveryHelloMessage hello)
     {
-        if (hello.ClientId != student || hello.SessionId != _ring.SessionId || hello.InstanceId != _ring.InstanceId)
-        {
-            throw new BadHttpRequestException("Forbidden recovery identity.", 403);
-        }
-        if (!TryReadRecoveryNumber(context, "stream", out ulong oldStream) || oldStream >= _ring.StreamEpoch ||
-            !TryReadRecoveryNumber(context, "from", out ulong cursor))
-        {
-            throw new BadHttpRequestException("Invalid previous waveform cursor.", 409);
-        }
-        var request = new WaveformRecoveryRequest(hello.SessionId, hello.InstanceId, _ring.TimebaseEpoch, oldStream, cursor,
-            WaveformRecoveryPlanner.MinimumJoinLeadNs, 0);
-        var handshake = RecoveryHandshakeCoordinator.Start(student, hello.SessionId, hello.InstanceId, AuthorityEpoch);
-        handshake.AcceptHello(hello);
+        // Read via the authenticated seat and keep the application callback outside host locks.
         ClassroomAuthorityCheckpoint checkpoint = authority.ReadCheckpoint(student);
-        if (hello.LastAppliedEventSequence > checkpoint.LastDurableEventSequence || hello.LastAppliedCommitSequence > checkpoint.DurableCommitSequence)
-        {
-            throw new BadHttpRequestException("Unrecognized durable frontier.", 409);
-        }
-
         lock (_recoveryGate)
-        {
-            EnsureCurrentAuthority(authority);
-            if (FindPending(student) is { } previous && previous.Hello == hello && previous.Request == request)
+            lock (_gate)
             {
-                return previous.Plan is null ? null : RecoveryWireCodec.EncodePlan(previous.Plan);
+                // The authority or seat may have been revoked while the request body or checkpoint was read.
+                EnsureCurrentAuthority(authority);
+                if (!Authorize(context, out Guid currentStudent, out _))
+                {
+                    throw new BadHttpRequestException("Recovery session is no longer authorized.", context.Response.StatusCode);
+                }
+                if (currentStudent != student || hello.ClientId != currentStudent || hello.SessionId != _ring.SessionId || hello.InstanceId != _ring.InstanceId)
+                {
+                    throw new BadHttpRequestException("Forbidden recovery identity.", 403);
+                }
+                if (!TryReadRecoveryNumber(context, "stream", out ulong oldStream) || oldStream >= _ring.StreamEpoch ||
+                    !TryReadRecoveryNumber(context, "from", out ulong cursor))
+                {
+                    throw new BadHttpRequestException("Invalid previous waveform cursor.", 409);
+                }
+
+                var request = new WaveformRecoveryRequest(_ring.SessionId, _ring.InstanceId, _ring.TimebaseEpoch, oldStream, cursor,
+                    WaveformRecoveryPlanner.MinimumJoinLeadNs, 0);
+                var handshake = RecoveryHandshakeCoordinator.Start(currentStudent, _ring.SessionId, _ring.InstanceId, AuthorityEpoch);
+                handshake.AcceptHello(hello);
+                if (hello.LastAppliedEventSequence > checkpoint.LastDurableEventSequence || hello.LastAppliedCommitSequence > checkpoint.DurableCommitSequence)
+                {
+                    throw new BadHttpRequestException("Unrecognized durable frontier.", 409);
+                }
+                if (FindPending(student) is { } previous && previous.Hello == hello && previous.Request == request)
+                {
+                    return previous.Plan is null ? null : RecoveryWireCodec.EncodePlan(previous.Plan);
+                }
+                if (!_pendingRecovery.ContainsKey(student) && _pendingRecovery.Count >= MaximumStudents)
+                {
+                    throw new BadHttpRequestException("Too many active recovery handshakes.", 429);
+                }
+                var pending = new PendingRecovery(hello, handshake, request);
+                byte[]? wire = hello.LocalContinuationReportId is null ? CreatePlan(pending, checkpoint) : null;
+                _pendingRecovery[student] = pending;
+                return wire;
             }
-            if (!_pendingRecovery.ContainsKey(student) && _pendingRecovery.Count >= MaximumStudents)
-            {
-                throw new BadHttpRequestException("Too many active recovery handshakes.", 429);
-            }
-            var pending = new PendingRecovery(hello, handshake, request);
-            byte[]? wire = hello.LocalContinuationReportId is null ? CreatePlan(pending, checkpoint) : null;
-            _pendingRecovery[student] = pending;
-            return wire;
-        }
     }
 
     private byte[] ProcessRecoveryReport(Guid student, IClassroomRecoveryAuthority authority,

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Net.Security;
 using System.Net.WebSockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Monitor.Application.Measurements;
@@ -50,7 +55,8 @@ internal static class ClassroomBranchSpecifications
         using var identity = ClassroomNetworkSpecifications.AuthenticateTeacher(Path.GetDirectoryName(certificates.LeafPfxPath)!);
         var session = Guid.NewGuid();
         var shared = Guid.NewGuid();
-        using var admission = new ClassroomAdmission(session, shared);
+        var clock = new AdmissionClock();
+        using var admission = new ClassroomAdmission(session, shared, clock);
         var ring = WaveformBlockRing.Start(session, shared, 1, 1, 0, 0, WaveformBlockRing.HostRetentionBlockCount);
         await using var host = await ClassroomHost.StartAsync(IPAddress.Loopback, 0, "127.0.0.1", leaf,
             ring, admission, identity, certificates.Root, ct).ConfigureAwait(false);
@@ -72,6 +78,11 @@ internal static class ClassroomBranchSpecifications
                 ClassroomBranchAssignment scheduled = host.SchedulePrivateBranch(studentId);
                 await WaitForAsync(host, student, "Detached", ct).ConfigureAwait(false);
                 await ExpectStatusAsync(() => student.GetControlSnapshotAsync(ct), HttpStatusCode.Conflict).ConfigureAwait(false);
+                if (disposition == ClassroomBranchDisposition.Archive)
+                {
+                    await VerifyEndpointAccessAsync(host.BaseAddress, certificates.Root, admission, clock,
+                        studentId, scheduled.InstanceId, ct).ConfigureAwait(false);
+                }
                 using var fork = await student.ConnectAssignedBranchAsync(ct).ConfigureAwait(false);
                 ClassroomManifest a = await fork.GetSessionAsync(ct).ConfigureAwait(false);
                 ClassroomManifest b = await observer.GetSessionAsync(ct).ConfigureAwait(false);
@@ -163,6 +174,59 @@ internal static class ClassroomBranchSpecifications
             try { await producer.ConfigureAwait(false); }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
         }
+    }
+
+    private static async Task VerifyEndpointAccessAsync(Uri endpoint, X509Certificate2 root, ClassroomAdmission admission,
+        AdmissionClock clock, Guid studentId, Guid instanceId, CancellationToken ct)
+    {
+        Check.That(admission.TryRedeem(admission.IssueInvitation(studentId), "specification", out string? bearer) &&
+            admission.CompleteNegotiation(bearer, allowLz4: false), "the fixture can issue a negotiated shared credential for the seat");
+        using var client = new HttpClient(new SocketsHttpHandler
+        {
+            UseProxy = false,
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                EnabledSslProtocols = SslProtocols.Tls13,
+                CertificateChainPolicy = ClassroomCertificate.ServerTrust(root)
+            }
+        })
+        { BaseAddress = endpoint };
+        async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, Guid? selected = null, object? body = null,
+            bool includeBearer = true)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            if (includeBearer) { request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer); }
+            if (selected is Guid instance) { request.Headers.Add(ClassroomHost.InstanceHeader, instance.ToString("D")); }
+            if (body is not null) { request.Content = JsonContent.Create(body); }
+            return await client.SendAsync(request, ct).ConfigureAwait(false);
+        }
+
+        using var wrongScope = await SendAsync(HttpMethod.Get, "v1/session", instanceId).ConfigureAwait(false);
+        using var privateHandoff = await SendAsync(HttpMethod.Post, $"v1/branch/enter/{instanceId:D}", instanceId).ConfigureAwait(false);
+        using var unknown = await SendAsync(HttpMethod.Get, "v1/branch/unknown").ConfigureAwait(false);
+        using var wrongMethod = await SendAsync(HttpMethod.Get, "v1/refresh").ConfigureAwait(false);
+        using var shared = await SendAsync(HttpMethod.Get, "v1/session").ConfigureAwait(false);
+        Check.That(wrongScope.StatusCode == HttpStatusCode.Unauthorized && privateHandoff.StatusCode == HttpStatusCode.NotFound &&
+            unknown.StatusCode == HttpStatusCode.NotFound && wrongMethod.StatusCode == HttpStatusCode.MethodNotAllowed &&
+            shared.StatusCode == HttpStatusCode.Conflict, "an instance selector cannot widen bearer authority or inherit the shared handoff");
+
+        clock.Advance(TimeSpan.FromSeconds(admission.Policy.TokenLifetimeSeconds - admission.Policy.RefreshWindowSeconds + 5));
+        var rotation = new { requestId = Guid.NewGuid() };
+        using var missingBearer = await SendAsync(HttpMethod.Post, "v1/refresh", body: rotation, includeBearer: false).ConfigureAwait(false);
+        using var renewed = await SendAsync(HttpMethod.Post, "v1/refresh", body: rotation).ConfigureAwait(false);
+        using var retry = await SendAsync(HttpMethod.Post, "v1/refresh", body: rotation).ConfigureAwait(false);
+        var first = await renewed.Content.ReadFromJsonAsync<ClassroomRefreshedToken>(ct).ConfigureAwait(false);
+        var again = await retry.Content.ReadFromJsonAsync<ClassroomRefreshedToken>(ct).ConfigureAwait(false);
+        Check.That(missingBearer.StatusCode == HttpStatusCode.Unauthorized && renewed.IsSuccessStatusCode && retry.IsSuccessStatusCode &&
+            first is not null && again?.Token == first.Token && admission.TryAuthorize(first.Token, out Guid renewedStudent, out _) &&
+            renewedStudent == studentId, "only the checked shared bearer can renew while detached, and a retry preserves its issued token");
+    }
+
+    private sealed class AdmissionClock : TimeProvider
+    {
+        private long _offsetTicks;
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow.AddTicks(Interlocked.Read(ref _offsetTicks));
+        internal void Advance(TimeSpan elapsed) => Interlocked.Add(ref _offsetTicks, elapsed.Ticks);
     }
 
     private static async Task RemoveDetachedSeatAsync(ClassroomHost host, ClassroomStudentClient student,

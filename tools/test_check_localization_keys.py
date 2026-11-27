@@ -8,6 +8,19 @@ import check_localization_keys as checker
 
 
 class ReferencedKeyTests(unittest.TestCase):
+    def test_wire_ids_are_recognized_only_in_network_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            network = Path(directory) / 'Monitor.Network'
+            network.mkdir()
+            transport = network / 'Transport.cs'
+            desktop = Path(directory) / 'View.cs'
+            transport.write_text('Send("nibp.measurement.start"); Send("alarm.episode.changed");\n'
+                                 'Get("display.settings"); Get("display.missing");\n', encoding='utf-8')
+            desktop.write_text('Get("nibp.measurement.start");\n', encoding='utf-8')
+            catalog = {'display.title', 'nibp.title', 'alarm.title'}
+            missing = list(checker.missing_keys([transport, desktop], catalog, network, checker.classroom_wire_ids()))
+        self.assertEqual(missing, [(transport, 2, 'display.missing'), (desktop, 1, 'nibp.measurement.start')])
+
     def test_namespaced_dotted_literals_are_reported_with_lines(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'Sample.cs'

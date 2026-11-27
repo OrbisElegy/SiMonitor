@@ -14,7 +14,9 @@
     <ProjectReference Include="../Monitor.Domain/Monitor.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <!-- Select the bundle with the SQLite 3.54.0 security fixes. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
     <EmbeddedResource Include="Audio/SelectedTones/*.pcm" />
     <EmbeddedResource Include="Audio/SelectedTherapySounds/*.wav" LogicalName="Monitor.Therapy.%(Filename).wav" />
     <EmbeddedResource Include="../../eng/audio/voices/zh-CN/F1/*.wav" LogicalName="Monitor.Therapy.zh-CN.%(Filename).wav" />

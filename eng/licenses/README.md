@@ -7,12 +7,12 @@ change the project's own AGPL-3.0-or-later license.
 
 | Locked packages | License and notice source |
 | --- | --- |
-| Microsoft.Data.Sqlite, Microsoft.Data.Sqlite.Core 10.0.11 | [dotnet/efcore v10.0.11](https://github.com/dotnet/efcore/blob/v10.0.11/LICENSE.txt) |
-| Avalonia 12.1.2 family | [Avalonia package source commit](https://github.com/AvaloniaUI/Avalonia/tree/d3c867a9e2de379249b03dbeb3495bd7f076a81a): `licence.md`, `NOTICE.md` |
+| Microsoft.Data.Sqlite, Microsoft.Data.Sqlite.Core 10.0.15 | [dotnet/efcore v10.0.15](https://github.com/dotnet/efcore/blob/v10.0.15/LICENSE.txt) |
+| Avalonia 12.1.6 family | [Avalonia package source commit](https://github.com/AvaloniaUI/Avalonia/tree/cf8e564674700348947e93ab19105f27afe859a9): `licence.md`, `NOTICE.md` |
 | Avalonia.BuildServices 11.3.2 (excluded build assets) | [BuildServices package source commit](https://github.com/AvaloniaUI/Avalonia.BuildServices/tree/777f975b0a0cecf0311273711d56697212c558c0): `LICENSE` |
 | Avalonia.Angle.Windows.Natives 2.1.27548.20260419 | `LICENSE` in the locked NuGet package |
-| SQLitePCLRaw 2.1.12 family, including e_sqlite3 | [SQLitePCLRaw v2.1.12](https://github.com/ericsink/SQLitePCL.raw/tree/v2.1.12): `LICENSE.TXT`, `NOTICE.TXT` |
-| SkiaSharp 3.119.4 and HarfBuzzSharp 8.3.1.3 families | `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt` in their locked NuGet packages; both families carry identical copies |
+| SQLitePCLRaw 2.1.14 family, including e_sqlite3 | [SQLitePCLRaw 2.1.14](https://github.com/ericsink/SQLitePCL.raw/tree/a89750630f7f00038489eb41952c6edd9d189f60): `LICENSE.TXT`, `NOTICE.TXT` |
+| SkiaSharp 4.158.0 and HarfBuzzSharp 15.0.0 families | `LICENSE.txt` in both package families and a shared `THIRD-PARTY-NOTICES.txt` in their native asset packages |
 | MicroCom.Runtime 0.11.6 | [MicroCom package source commit](https://github.com/kekekeks/MicroCom/tree/76785efcafd91b5902fd19dd11145f6dd655b7b4): `LICENSE` |
 | Tmds.DBus.Protocol 0.94.1 | [Tmds.DBus package source commit](https://github.com/tmds/Tmds.DBus/tree/b4a7fed0b878f74cb54f7cca84d2889af4e596ba): `COPYING` |
 

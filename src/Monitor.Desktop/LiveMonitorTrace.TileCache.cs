@@ -118,14 +118,14 @@ internal sealed partial class LiveMonitorTrace
 
     private static SKPath CreateStrokePath(Rect plot, Point[] points, ContourBatch batch)
     {
-        var path = new SKPath();
+        using var builder = new SKPathBuilder();
         for (int index = batch.StartIndex + 1; index < batch.StartIndex + batch.Count; index++)
         {
             Point a = points[index - 1], b = points[index];
-            path.MoveTo((float)(plot.X + a.X * plot.Width), (float)(plot.Y + a.Y * plot.Height));
-            path.LineTo((float)(plot.X + b.X * plot.Width), (float)(plot.Y + b.Y * plot.Height));
+            builder.MoveTo((float)(plot.X + a.X * plot.Width), (float)(plot.Y + a.Y * plot.Height));
+            builder.LineTo((float)(plot.X + b.X * plot.Width), (float)(plot.Y + b.Y * plot.Height));
         }
-        return path;
+        return builder.Detach();
     }
 
     private sealed class ContourTileCache(TileMetrics metrics, long maximumBytes) : IDisposable
@@ -142,7 +142,7 @@ internal sealed partial class LiveMonitorTrace
         private SKPaint? _paint;
         private int _leftPixels, _topPixels, _widthPixels, _heightPixels, _paddingPixels;
 
-        private sealed record RasterTile(SKImage Image, StreamGeometry[] Paths, long Bytes);
+        private sealed record RasterTile(SKImage Image, StreamGeometry[] Paths, SKRectI Clip, long Bytes);
 
         internal bool Draw(SKCanvas canvas, Rect plot, Point[] points, ContourBatch[] batches,
             SKColor ink, double begin, double end)
@@ -151,7 +151,8 @@ internal sealed partial class LiveMonitorTrace
             {
                 if (_disposed) { return false; }
                 SKMatrix matrix = canvas.TotalMatrix;
-                if (!Prepare(matrix, plot, ink)) { return false; }
+                if (!canvas.IsClipRect || !Prepare(matrix, plot, ink)) { return false; }
+                SKRectI deviceClip = canvas.DeviceClipBounds;
                 double fromPixels = matrix.ScaleX * (plot.X + begin * plot.Width) + matrix.TransX;
                 double toPixels = matrix.ScaleX * (plot.X + end * plot.Width) + matrix.TransX;
                 int first = Math.Clamp((int)Math.Floor((fromPixels - _leftPixels) / TileWidthPixels), 0, _tiles.Length - 1);
@@ -171,12 +172,17 @@ internal sealed partial class LiveMonitorTrace
                         int start = FirstBatch(batches, from);
                         int count = 0;
                         while (start + count < batches.Length && batches[start + count].Begin <= to) { count++; }
+                        // A moving sweep clip changes edge coverage during Skia rasterization.
+                        // Intersect it with the padded tile so interior tiles remain reusable.
+                        var paddedBounds = new SKRectI(left - _paddingPixels, _topPixels - _paddingPixels,
+                            left + width + _paddingPixels, _topPixels + _heightPixels + _paddingPixels);
+                        var clip = SKRectI.Intersect(deviceClip, paddedBounds);
                         RasterTile? tile = _tiles[index];
-                        if (!Matches(tile, batches, start, count))
+                        if (!Matches(tile, batches, start, count, clip))
                         {
                             Retire(index);
-                            if (count == 0) { continue; }
-                            tile = CreateTile(left, width, points, batches, start, count);
+                            if (count == 0 || clip.IsEmpty) { continue; }
+                            tile = CreateTile(paddedBounds, clip, points, batches, start, count);
                             _tiles[index] = tile;
                         }
                         if (tile is null) { continue; }
@@ -226,16 +232,18 @@ internal sealed partial class LiveMonitorTrace
             return true;
         }
 
-        private RasterTile CreateTile(int left, int width, Point[] points, ContourBatch[] batches, int start, int count)
+        private RasterTile CreateTile(SKRectI bounds, SKRectI clip, Point[] points, ContourBatch[] batches, int start, int count)
         {
-            int pixelWidth = width + _paddingPixels * 2, pixelHeight = _heightPixels + _paddingPixels * 2;
+            int pixelWidth = bounds.Width, pixelHeight = bounds.Height;
             using var surface = SKSurface.Create(new SKImageInfo(pixelWidth, pixelHeight, SKColorType.Bgra8888, SKAlphaType.Premul));
             SKCanvas canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
+            canvas.ClipRect(new SKRect(clip.Left - bounds.Left, clip.Top - bounds.Top,
+                clip.Right - bounds.Left, clip.Bottom - bounds.Top));
             SKMatrix transform = _matrix;
-            transform.TransX -= left - _paddingPixels;
-            transform.TransY -= _topPixels - _paddingPixels;
-            canvas.SetMatrix(transform);
+            transform.TransX -= bounds.Left;
+            transform.TransY -= bounds.Top;
+            canvas.SetMatrix(in transform);
             var paths = new StreamGeometry[count];
             for (int index = 0; index < count; index++)
             {
@@ -248,7 +256,7 @@ internal sealed partial class LiveMonitorTrace
             SKImage image = surface.Snapshot();
             Interlocked.Add(ref metrics.Bytes, bytes);
             Interlocked.Increment(ref metrics.Builds);
-            return new(image, paths, bytes);
+            return new(image, paths, clip, bytes);
         }
 
         private static int FirstBatch(ContourBatch[] batches, double from)
@@ -263,9 +271,9 @@ internal sealed partial class LiveMonitorTrace
             return low;
         }
 
-        private static bool Matches(RasterTile? tile, ContourBatch[] batches, int start, int count)
+        private static bool Matches(RasterTile? tile, ContourBatch[] batches, int start, int count, SKRectI clip)
         {
-            if (tile is null || tile.Paths.Length != count) { return false; }
+            if (tile is null || tile.Paths.Length != count || tile.Clip != clip) { return false; }
             for (int index = 0; index < count; index++)
                 if (!ReferenceEquals(tile.Paths[index], batches[start + index].Path)) { return false; }
             return true;

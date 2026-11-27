@@ -5,8 +5,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <!-- Single source for UI, assembly and distribution versions. -->
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <ApplicationIcon>Assets/app-icon.ico</ApplicationIcon>
+    <SkiaSharpVersion>4.158.0</SkiaSharpVersion>
+    <HarfBuzzSharpVersion>15.0.0</HarfBuzzSharpVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(ProductRelease)' == 'true'">
     <DefineConstants>$(DefineConstants);SIMONITOR_RELEASE</DefineConstants>
@@ -37,8 +39,15 @@
            Text="Windows audio requires sim_audio_native.dll beside the application. From the repository root, run: py -3 tools/build.py --configuration $(Configuration). Then retry dotnet run." />
   </Target>
   <ItemGroup>
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <!-- Use security-patched Skia and HarfBuzz across the managed and native packages. -->
+    <PackageReference Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="$(SkiaSharpVersion)" />
+    <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" Version="$(SkiaSharpVersion)" />
+    <PackageReference Include="HarfBuzzSharp" Version="$(HarfBuzzSharpVersion)" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="$(HarfBuzzSharpVersion)" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly" Version="$(HarfBuzzSharpVersion)" />
     <!-- Exclude optional build telemetry targets from this development shell. -->
     <PackageReference Include="Avalonia.BuildServices" Version="11.3.2" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>

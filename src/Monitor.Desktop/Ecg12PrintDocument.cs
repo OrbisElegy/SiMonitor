@@ -78,7 +78,7 @@ internal sealed class Ecg12PrintDocument : IDisposable
         {
             font.Size = size;
             string fitted = Fit(text.Replace('\r', ' ').Replace('\n', ' '), font, width);
-            canvas.DrawText(fitted, center ? x - font.MeasureText(fitted) / 2 : x, y, font, ink);
+            canvas.DrawText(fitted, center ? x - font.MeasureText(fitted) / 2 : x, y, SKTextAlign.Left, font, ink);
         }
         void Paragraph(string text, float x, float y, int lines, float size = 3)
         {
@@ -117,15 +117,16 @@ internal sealed class Ecg12PrintDocument : IDisposable
             float baseline = BaselineMm(lead);
             float calibrationWidth = .2f * Options.SpeedMmPerSecond;
             // The calibration occupies reserved space and does not shift any lead's sample time.
-            using var pulse = new SKPath();
-            pulse.MoveTo(samplesLeft - calibrationWidth - 1, baseline);
-            pulse.LineTo(samplesLeft - calibrationWidth - 1, baseline - Options.GainMmPerMillivolt);
-            pulse.LineTo(samplesLeft - 1, baseline - Options.GainMmPerMillivolt);
-            pulse.LineTo(samplesLeft - 1, baseline);
+            using var pulseBuilder = new SKPathBuilder();
+            pulseBuilder.MoveTo(samplesLeft - calibrationWidth - 1, baseline);
+            pulseBuilder.LineTo(samplesLeft - calibrationWidth - 1, baseline - Options.GainMmPerMillivolt);
+            pulseBuilder.LineTo(samplesLeft - 1, baseline - Options.GainMmPerMillivolt);
+            pulseBuilder.LineTo(samplesLeft - 1, baseline);
+            using var pulse = pulseBuilder.Detach();
             canvas.DrawPath(pulse, line);
             canvas.Save();
             canvas.ClipRect(new SKRect(samplesLeft, GridTopMm, GridRightMm, GridBottomMm));
-            using var trace = new SKPath();
+            using var traceBuilder = new SKPathBuilder();
             long? previousTime = null;
             foreach (var block in blocks)
             {
@@ -142,11 +143,12 @@ internal sealed class Ecg12PrintDocument : IDisposable
                         (double)plane.OffsetNumerator / plane.OffsetDenominator;
                     float x = SampleX(timeNs, Options);
                     float y = baseline - (float)(microvolts / 1000 * Options.GainMmPerMillivolt);
-                    if (previousTime is { } previous && timeNs - previous == stepNs) { trace.LineTo(x, y); }
-                    else { trace.MoveTo(x, y); }
+                    if (previousTime is { } previous && timeNs - previous == stepNs) { traceBuilder.LineTo(x, y); }
+                    else { traceBuilder.MoveTo(x, y); }
                     previousTime = timeNs;
                 }
             }
+            using var trace = traceBuilder.Detach();
             canvas.DrawPath(trace, line);
             canvas.Restore();
         }

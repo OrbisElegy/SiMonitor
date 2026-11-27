@@ -48,11 +48,11 @@ internal sealed partial class LiveMonitorTrace
     // One continuous figure preserves joins at the original sample vertices.
     private static SKPath CreateEcgPath(Point[] points, Rect plot)
     {
-        var path = new SKPath();
-        if (points.Length == 0) { return path; }
-        path.MoveTo((float)points[0].X, (float)points[0].Y);
+        if (points.Length == 0) { return new SKPath(); }
+        using var builder = new SKPathBuilder();
+        builder.MoveTo((float)points[0].X, (float)points[0].Y);
         for (int index = 1; index < points.Length; index++)
-        { path.LineTo((float)points[index].X, (float)points[index].Y); }
+        { builder.LineTo((float)points[index].X, (float)points[index].Y); }
         var transform = new SKMatrix
         {
             ScaleX = (float)plot.Width,
@@ -61,6 +61,7 @@ internal sealed partial class LiveMonitorTrace
             TransY = (float)plot.Y,
             Persp2 = 1
         };
+        SKPath path = builder.Detach();
         path.Transform(in transform);
         return path;
     }
@@ -109,6 +110,7 @@ internal sealed partial class LiveMonitorTrace
         private SKPaint? _paint;
         private SKColor _ink;
         private SKMatrix _matrix;
+        private SKRectI _clip;
         private SKImage? _image;
         private SKRect _imageRegion;
         private long _bytes;
@@ -134,7 +136,7 @@ internal sealed partial class LiveMonitorTrace
                     _ink = ink;
                 }
                 SKMatrix matrix = canvas.TotalMatrix;
-                if (!PrepareImage(matrix, plot))
+                if (!canvas.IsClipRect || !PrepareImage(matrix, plot, canvas.DeviceClipBounds))
                 {
                     canvas.DrawPath(_path!, _paint);
                     return true;
@@ -152,7 +154,7 @@ internal sealed partial class LiveMonitorTrace
             }
         }
 
-        private bool PrepareImage(SKMatrix matrix, Rect plot)
+        private bool PrepareImage(SKMatrix matrix, Rect plot, SKRectI deviceClip)
         {
             // Fractional transforms can change Skia's edge coverage when a
             // moving sweep clip is applied after rasterization. Preserve the
@@ -171,18 +173,25 @@ internal sealed partial class LiveMonitorTrace
             int width = (int)right + 2, height = (int)bottom + 2;
             long bytes = (long)width * height * 4;
             if (bytes > maximumBytes) { RetireImage(); return false; }
-            if (_image is not null && _matrix == matrix) { return true; }
+            var clip = SKRectI.Intersect(deviceClip, SKRectI.Create(width, height));
+            if (_matrix == matrix && _clip == clip && _image is not null) { return true; }
             RetireImage();
+            // Rasterize with the target clip so Skia computes the same edge coverage.
+            // Reuse the vector path while the sweep advances instead of rebuilding
+            // a whole-row image on every new pixel of the clip.
+            bool clipMoved = _matrix == matrix && _clip != clip;
+            _matrix = matrix;
+            _clip = clip;
+            if (clipMoved) { return false; }
             // Retain the target's device origin. Translating a cropped surface
             // introduces another float rounding step at steep ECG slopes.
             using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
             SKCanvas canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
+            canvas.ClipRect(new SKRect(clip.Left, clip.Top, clip.Right, clip.Bottom));
             canvas.SetMatrix(in matrix);
-            canvas.ClipRect(new SKRect((float)plot.Left, (float)plot.Top, (float)plot.Right, (float)plot.Bottom));
             canvas.DrawPath(_path!, _paint!);
             _image = surface.Snapshot();
-            _matrix = matrix;
             _imageRegion = new((float)left, (float)top, (float)right, (float)bottom);
             _bytes = bytes;
             Interlocked.Add(ref metrics.Bytes, bytes);

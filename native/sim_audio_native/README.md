@@ -1,7 +1,7 @@
 # Native audio ABI1
 
-Project wrapper: AGPL-3.0-or-later. Downloaded miniaudio 0.11.23 is unchanged,
-commit f40cf03f80cdb7e741d43e53b7e706e8c1394bcf, selected license MIT-0.
+Project wrapper: AGPL-3.0-or-later. Downloaded miniaudio 0.11.26 is unchanged,
+commit 877ea4a7c2601c7b0f2a44e83dfac42e6470fea6, selected license MIT-0.
 Original dual-license notice is preserved in vendor/LICENSE.miniaudio;
 source hashes and origin are in eng/dependencies.json.
 
@@ -108,7 +108,7 @@ polls an atomic flag in 1 ms steps and says nothing about wake-up latency.
 
 Official references:
 
-- https://github.com/mackron/miniaudio/tree/0.11.23
+- https://github.com/mackron/miniaudio/tree/0.11.26
 - https://miniaud.io/docs/manual/index.html#15.-backends
 
 ## Managed binding checks

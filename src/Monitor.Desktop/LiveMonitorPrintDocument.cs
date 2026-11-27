@@ -116,16 +116,17 @@ internal sealed class LiveMonitorPrintDocument : IDisposable
             }
         }
         using var ink = new SKPaint { Color = SKColors.Black, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = .2f };
-        using var pulse = new SKPath();
+        using var pulseBuilder = new SKPathBuilder();
         float calibrationWidth = .2f * Options.SpeedMmPerSecond;
-        pulse.MoveTo(TraceLeftMm - calibrationWidth - 2, baseline);
-        pulse.LineTo(TraceLeftMm - calibrationWidth - 2, baseline - Options.GainMmPerMillivolt);
-        pulse.LineTo(TraceLeftMm - 2, baseline - Options.GainMmPerMillivolt);
-        pulse.LineTo(TraceLeftMm - 2, baseline);
+        pulseBuilder.MoveTo(TraceLeftMm - calibrationWidth - 2, baseline);
+        pulseBuilder.LineTo(TraceLeftMm - calibrationWidth - 2, baseline - Options.GainMmPerMillivolt);
+        pulseBuilder.LineTo(TraceLeftMm - 2, baseline - Options.GainMmPerMillivolt);
+        pulseBuilder.LineTo(TraceLeftMm - 2, baseline);
+        using var pulse = pulseBuilder.Detach();
         canvas.DrawPath(pulse, ink);
         canvas.Save();
         canvas.ClipRect(new SKRect(TraceLeftMm, top, right, top + height));
-        using var path = new SKPath();
+        using var pathBuilder = new SKPathBuilder();
         long? previous = null;
         foreach (var sample in samples)
         {
@@ -133,10 +134,11 @@ internal sealed class LiveMonitorPrintDocument : IDisposable
             if (!double.IsFinite(sample.Microvolts)) { previous = null; continue; }
             float x = SampleX(sample.TimeNs, start, Options.SpeedMmPerSecond);
             float y = baseline - (float)(sample.Microvolts / 1000 * Options.GainMmPerMillivolt);
-            if (previous is { } time && sample.TimeNs - time == 4_000_000) { path.LineTo(x, y); }
-            else { path.MoveTo(x, y); }
+            if (previous is { } time && sample.TimeNs - time == 4_000_000) { pathBuilder.LineTo(x, y); }
+            else { pathBuilder.MoveTo(x, y); }
             previous = sample.TimeNs;
         }
+        using var path = pathBuilder.Detach();
         canvas.DrawPath(path, ink);
         canvas.Restore();
         DrawText(canvas, ProjectedEcgDemoSource.LeadNames[lead], 13, top + 4, 2.8f);
@@ -156,7 +158,7 @@ internal sealed class LiveMonitorPrintDocument : IDisposable
         using var typeface = SKFontManager.Default.MatchCharacter('中') ?? SKTypeface.FromFamilyName("sans-serif");
         using var font = new SKFont(typeface, size);
         using var paint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
-        canvas.DrawText(text, x, y, font, paint);
+        canvas.DrawText(text, x, y, SKTextAlign.Left, font, paint);
     }
 
     internal byte[] PreviewPng(int page)

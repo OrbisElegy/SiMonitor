@@ -59,7 +59,7 @@ def main():
     manifest = {'host_os': platform.system(), 'host_arch': platform.machine(),
                 'windows_syntax_only_command': syntax_command,
                 'compiler_configuration': 'See adjacent CMakeCache.txt and CMakeFiles compiler metadata',
-                'miniaudio_commit': 'f40cf03f80cdb7e741d43e53b7e706e8c1394bcf',
+                'miniaudio_commit': '877ea4a7c2601c7b0f2a44e83dfac42e6470fea6',
                 'hardware_qualified': False, 'binaries': rows}
     p = root / 'artifacts/native-audio/build-evidence.json'
     p.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')

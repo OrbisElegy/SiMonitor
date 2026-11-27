@@ -3,11 +3,11 @@
   "toolchain": {
     "dotnet_sdk": {
       "development_policy": "apt-managed stable .NET 10 SDK",
-      "global_json_floor": "10.0.100",
+      "global_json_floor": "10.0.115",
       "roll_forward": "latestFeature",
       "allow_prerelease": false,
-      "last_verified_sdk": "10.0.111",
-      "last_verified_runtime": "10.0.11",
+      "last_verified_sdk": "10.0.115",
+      "last_verified_runtime": "10.0.15",
       "source": "Ubuntu 24.04 dotnet-sdk-10.0 package",
       "release_rule": "ReleaseBaseline records the resolved SDK and binary hashes"
     }
@@ -15,27 +15,27 @@
   "direct_packages": [
     {
       "id": "Microsoft.Data.Sqlite",
-      "version": "10.0.11",
+      "version": "10.0.15",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "7je7UELzm131GiLYc4PpZvfKXIgIyzPM+v+tjcd/nbnuWRfgcONYKzDTqJlURxwVCFsVnlpmq6y6yn4qvR8QXQ==",
+      "content_hash_sha512_base64": "PtnNCUloQOLAXhB09id+0CL2c9yd+9/wi0QHCHPa+zrTKEJTdu07jlUgblFjorYhKnwcHN1VS0z75jN8vFruuQ==",
       "license_file": "eng/licenses/microsoft-data-sqlite-LICENSE.txt"
     },
     {
       "id": "Avalonia.Desktop",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "ghG7UVnLVhCyWm/74xh24gAkXgEZ41oJTUr7c0VI9BiVSqhpukvU5vm8l8ZY35BZX8VPx1YtXUI1+VbhDTOLMw==",
+      "content_hash_sha512_base64": "X3RzMxlfl6IB/CA+X2JO+CrJHUdFIjzZiIbLyy0Xy52NYvvrb1nCVlv9TOTo5JpBL832CvPBp7BAgR9UrLlPpA==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.Themes.Fluent",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "EKw1PzlIfqB8n0+yGuHThR9cUEiqZYj0EHYp89jrTwSuudu8pji6I4SGe1UmdwJWdgWf+kuss8T7KT+0wsUyow==",
+      "content_hash_sha512_base64": "CafSFU8q6I2ij7VRWy3D5qw3ObrDEOXRqIvFqVuEh7vqk1EC9ob94KYRmbHLZRsyj3Ob2xsF/tgcF5YF2uiKzQ==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
@@ -47,54 +47,109 @@
       "content_hash_sha512_base64": "qHDToxto1e3hci5YqbG9n0Ty8mlp3zBUN5wT66wKqaDVzXyQ0do3EnRILd4Ke9jpvsktaPpgE0YjEk7hornryQ==",
       "purpose": "ExcludeAssets=all, PrivateAssets=all: optional build telemetry targets are not imported",
       "license_file": "eng/licenses/avalonia-buildservices-LICENSE.txt"
+    },
+    {
+      "id": "SQLitePCLRaw.bundle_e_sqlite3",
+      "version": "2.1.14",
+      "license": "Apache-2.0",
+      "content_hash_sha512_base64": "Y6K7m+7ODFmGwAC/ApJY3c68Rq4WPgoIj4GOceagaTow5tLzaJwD9invSWzU8bSMTcKOR101a1ZaU0LQ5SoX/Q==",
+      "license_file": "eng/licenses/sqlitepclraw-LICENSE.txt",
+      "notice_file": "eng/licenses/sqlitepclraw-NOTICE.txt",
+      "source": "https://api.nuget.org/v3/index.json"
+    },
+    {
+      "id": "HarfBuzzSharp",
+      "version": "15.0.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "3QL37PyvchjQjDoS9i9iF7BLpA2HbfnBKzieebTstXTm6IlAcv9QzL9Kw3DS3Fx364hr+3pa78a5HXs+92PixA==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "id": "HarfBuzzSharp.NativeAssets.Linux",
+      "version": "15.0.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "qz96kz02Hva0A3b0KJc1iWsZ7V6aauo/seqYA2fS6Tgxlk7k7jNzxVNas1cqM3YdQZZfLAwXrRyHij12SPM0Yw==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "id": "HarfBuzzSharp.NativeAssets.WebAssembly",
+      "version": "15.0.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "iW6xTgvxjNJjDuirJPFWD/f9JkR+ZXHLaEFWU6Vkf9UQN1PIshP9scxDcgjSaAzNiy/Fs/t/IqzyeZ+TheActA==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "id": "SkiaSharp",
+      "version": "4.158.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "EcQW2hYO9N23HaU3JbuqLJOsowxt9uJBBTUvQK9hNvs+sJOz17IBE6gpd5L8R6RcbvalbuRtI4WslZSfS/edVQ==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "id": "SkiaSharp.NativeAssets.Linux",
+      "version": "4.158.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "kGYM3KRoaHV4YkK3WUBbfLce5bes0ySmwgRCDFYkb2l9tGC7qQUzaBhs/xjOsv9ndKSvhwFKw19t2k1SDFMNHg==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
+    },
+    {
+      "id": "SkiaSharp.NativeAssets.WebAssembly",
+      "version": "4.158.0",
+      "license": "MIT",
+      "source": "https://api.nuget.org/v3/index.json",
+      "content_hash_sha512_base64": "x70h+39LEJPm8OrJz4NCEx3IwwYQMQKGTiEE27I8Zh5zIFxG+tgUOdcG/CGY6y4uZzLuTOv5vvkvYloqy5c7JA==",
+      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
+      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
     }
   ],
   "transitive_packages": [
     {
       "id": "Microsoft.Data.Sqlite.Core",
-      "version": "10.0.11",
+      "version": "10.0.15",
       "license": "MIT",
-      "content_hash_sha512_base64": "hubA20AGenQ4Sx0ElWaPpB8DISjXpdx463+1zOGRslsT0e/t/06ITv+pHsop8CcJ0d8PZLfgnT7juCDVD79Dkw==",
+      "content_hash_sha512_base64": "mjDz/zleAF78J1KRN9FludN2bzbsMWoXYSLVcawADle7RBhZYpFZYivGRvbvlH/RtXT/gjO0yhG99tzdFiET+A==",
       "license_file": "eng/licenses/microsoft-data-sqlite-LICENSE.txt"
     },
     {
-      "id": "SQLitePCLRaw.bundle_e_sqlite3",
-      "version": "2.1.12",
-      "license": "Apache-2.0",
-      "content_hash_sha512_base64": "mAgscpQMLw5/nfA1Q5oJVAT29yROUo1ifZGbbTpx/lwZpSxMUGoYbKfmvdm8oXER+RzxqBmmQzeBEVKfeHv2nw==",
-      "license_file": "eng/licenses/sqlitepclraw-LICENSE.txt",
-      "notice_file": "eng/licenses/sqlitepclraw-NOTICE.txt"
-    },
-    {
       "id": "SQLitePCLRaw.core",
-      "version": "2.1.12",
+      "version": "2.1.14",
       "license": "Apache-2.0",
-      "content_hash_sha512_base64": "ETpNw9DY3ckWLgRRAeCHj+GKOuPi61aeczkXhgHexUvqoZBAYg8RYESE2J7O1M7+o6QbdSEZwrw9bfqztUVWXg==",
+      "content_hash_sha512_base64": "LqyPmc38sTnZGivatrJ918DhnohR4SUg+I+9ps+nYrh3VC1sRakjpbJfiRLHRstRT7O9l+BOP/zser8vw+qPPw==",
       "license_file": "eng/licenses/sqlitepclraw-LICENSE.txt",
       "notice_file": "eng/licenses/sqlitepclraw-NOTICE.txt"
     },
     {
       "id": "SQLitePCLRaw.lib.e_sqlite3",
-      "version": "2.1.12",
+      "version": "2.1.14",
       "license": "Apache-2.0",
-      "content_hash_sha512_base64": "fWi8Dbknuhgg72fWinIdjXVaqO1hHL4YBBwVLnr7e1c9TAZwJ0QE38j9syW1hwx6HaqEVTwI+O07WPdZn8Rp0w==",
+      "content_hash_sha512_base64": "h32f78UhMGzr3l2kO8t1+qp7ItqfbmyAFTLjBHqL13/kNeKOR6K6FhOQe/gOzlHnUSFAYNUt3JoVPAEjFRIB9g==",
       "license_file": "eng/licenses/sqlitepclraw-LICENSE.txt",
       "notice_file": "eng/licenses/sqlitepclraw-NOTICE.txt"
     },
     {
       "id": "SQLitePCLRaw.provider.e_sqlite3",
-      "version": "2.1.12",
+      "version": "2.1.14",
       "license": "Apache-2.0",
-      "content_hash_sha512_base64": "W3oH4XIfCzFrgUSDKHhN6N+dgzA5YHOR2VxX8GB6Qy7CyrJJgxPEG8NirgYWlPQC5P2jz2knSsexWu4tDUL33g==",
+      "content_hash_sha512_base64": "53lrHTKoz5jCmwUjiiYD/mZUr34XCAk+Cd2T5fBrCGs7zI956cBSouWoX5owO67QA45YlzsWKSUJE/Ajc5h1bQ==",
       "license_file": "eng/licenses/sqlitepclraw-LICENSE.txt",
       "notice_file": "eng/licenses/sqlitepclraw-NOTICE.txt"
     },
     {
       "id": "Avalonia",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "GHSe4qxjbqqxB570xuB4KtoD+Qhk3uKXJUXbelGYhGz/ti8xEoL7e5DGun8hcsXHondszPPBEdcC68szw7vUKg==",
+      "content_hash_sha512_base64": "juogZu7ASS2KMtSqOMa8nGJ5I1Ile/3PG3JR+tD73liDr30qgilEsqNVQw3KIXJvuFc9m3Mf9NzGWc3sQvnlXA==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
@@ -108,118 +163,91 @@
     },
     {
       "id": "Avalonia.FreeDesktop",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "RJqKF7djK/lyDBdj24+HKELGe+7I/86NIA57aeiod5k340svbcb9hs1RYkIF8Nga4Xa2Jd/Pzxpkmvdjb1ASiw==",
+      "content_hash_sha512_base64": "sE7bo4++6/ReFFYhRVXPhaHIPSN/yXPOBBzGBddorWD9RzIXP0iA4mkzcrrSkpwQfcsJUgseCxAydWt0hhMyig==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.FreeDesktop.AtSpi",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "632PfHnqe7OkzStmDOW2ghXfCcTapGhT46HZGMMOIZFr+I0biyxUk7felBQwNzEk5LJ54y4VfIoiWKTgZK8FnA==",
+      "content_hash_sha512_base64": "K37YcbSy+dDmLIjuWU7X5Y3oGPxIsG2H7aWNQnwzlF1mWfbNm5B0inAXpShwCc3m8eVxqyA0gCSoXnhbWEucMw==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.HarfBuzz",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "CqYTMnOLuAXjGldTEMdEf5/ozMY1z5ZshpE4YF0i2s2o4ycsYq855BD/eQS0iBt5PbjtlJgk8njILrBwW0HteQ==",
+      "content_hash_sha512_base64": "Y+0vG5+ObryzJl/fs1Vc25E7raOvW+inDkLU7QDxmdXgsxUq3wVx5S/k35vYn2fB9gWtFdGwSrEfLdOQev39Ag==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.Native",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "Co60A3FhDiCR022en90e/nUJqn2GtYal353cSUB0lWAd0qb/AuVRdScz9i0QCyglYw+PBfUXSP+9OfI2XvnfCg==",
+      "content_hash_sha512_base64": "c9+4tsRB8K2bKd9wvhb9jY1vD1ItV1SVYpN6valUtOg/Pu6/AlqRKzLo8zyv8mwcqFZzgtp+WunareH//6+VUQ==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.Remote.Protocol",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "DdLTe9xKXxxfRcXmUw1trXZpBpz1YiZYWXx0DfMVPFAnkCszKsHLi67kaZfGJqtfQq2EySKd2qgRYX2QYkSxcg==",
+      "content_hash_sha512_base64": "55fcjPpzkzPaSSMczUjpKHKWcuJo6dJHHkLXgT8nMP80ijYASzdPdf86173R7CqPitw8E8nJ229Jqpu/EyUVow==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.Skia",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "x0TDDdZgNepbxRd6gSQyv3A/hHoVJk3kYqjRa1baI43XPGPuO87lArf4DRKAERgWUxUp1ad28aTvVsE3x0JM0g==",
+      "content_hash_sha512_base64": "6Ampu5kpbuhx/tk2aw9DF664q+fOjMjpsF6N76/lulCt/g+Tkoz4rr8dk9lsmHvOI9KQ/dmERO9MrJ5/mVDwlQ==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.Win32",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "MjHc5aKNs7Hp/fiX13wTQ3pg+kG9lh+NfqSQGx6/SkfvdO1Hbmribk7Bt0pwFTxcJ6HGlzwGKp1Ur3Ib/tv0ew==",
+      "content_hash_sha512_base64": "AZjU48WnzqNoi79bf8wHA7mxfgEi3MEv1vyn7N7HQpaegCnwh7TJ5jwrEbcwNqjP2JviXl/1H7CQ6tPbrgNw3A==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
       "id": "Avalonia.X11",
-      "version": "12.1.2",
+      "version": "12.1.6",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "wtCAY9k90yrvhzKmesDGGFxYHsgejmLaR7HY36A4VYJ+E1R8AguNZc3hFaVKywnQLpf/eLhAwQWUxoNVFu9h/w==",
+      "content_hash_sha512_base64": "sZbD5MAVBbeXqNZ8uBLg6p38uen+nNTWUZPJLPA5NSKbNrBT9Yg9lbqk24btEGsuLs4Uqqj3+C5Pa5oD0d2iVg==",
       "license_file": "eng/licenses/avalonia-LICENSE.md",
       "notice_file": "eng/licenses/avalonia-NOTICE.md"
     },
     {
-      "id": "HarfBuzzSharp",
-      "version": "8.3.1.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "NGZ2+ZVNPM+NdHB/asW0/ykWngyHWwcqjrbN2nDeH1B/aptPGlCUl8wkQ2cSJxw5fdWgdmIPmNuTPWpLwNVXWg==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
-      "id": "HarfBuzzSharp.NativeAssets.Linux",
-      "version": "8.3.1.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "RI6A1LgmooU30+4QIyFt5rmBCzP0VzTR+587IJSGvYIsHHWlahFufihYxtraLfsIhW7I8dn6+xX+DZGygOPKWQ==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
       "id": "HarfBuzzSharp.NativeAssets.macOS",
-      "version": "8.3.1.3",
+      "version": "15.0.0",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "KPTq0xnslkI6nAo0jh3ptcQPJvZZr7MWYXa2jUe4SnHc9q+JlHElmNXp0sfFoiTgoCX7WOYpYsurypuH9Gehxw==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
-      "id": "HarfBuzzSharp.NativeAssets.WebAssembly",
-      "version": "8.3.1.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "w2QfdNm9Uz/sUa0B5D+OnVQhyq3G/fBq6ibQMdWBlQqqwh0g0/5j3RFvYqZAmRZ5+RzvjVe8o8SFFnWYUSkuxA==",
+      "content_hash_sha512_base64": "iOwBya9cmPK/pykugivsLEB1guR/TL7+WMgykImCwDDphvOEKYgteB59AoibLgBAwAXPc/t4NTAsbj1fUP4U6A==",
       "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
       "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
     },
     {
       "id": "HarfBuzzSharp.NativeAssets.Win32",
-      "version": "8.3.1.3",
+      "version": "15.0.0",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "bx8CE8Js+XGX8PUxAHCBDEORt5aaBYtMN4Hr9QFs57Xithh6yjUyYqksizH6eRDhJkwsGI+SXWmPmMm8lZC9Pw==",
+      "content_hash_sha512_base64": "GRxZCj1hSFSRuyxW4d26k8saiqL5QKa9Ulg7hvYh323DMslhFYV5YoZMwSkroW4yy0uVv43lqcxwfIj43hIJXA==",
       "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
       "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
     },
@@ -232,47 +260,20 @@
       "license_file": "eng/licenses/microcom-LICENSE.txt"
     },
     {
-      "id": "SkiaSharp",
-      "version": "3.119.4",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "53NOSUZ1Us+91Sm0uCkIivh/k7jOowRErZT2sIWwPFN9mLUvdxnE6rS4sWo4255+Rd2MWUSF+j0NMZHD6Cke+Q==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
-      "id": "SkiaSharp.NativeAssets.Linux",
-      "version": "3.119.4",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "UAyVzbqNfZsZbKbzj68zXLyUyF/SbTKmzTfOO6qDu++dtIUMMTzPBe8oOuzU/DiewpfKoUUlOSsJmqWc6blxBw==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
       "id": "SkiaSharp.NativeAssets.macOS",
-      "version": "3.119.4",
+      "version": "4.158.0",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "fgBOWEqbY012x7gMfJU4ezgz6dfhJb30Z6YdW35h85Zoe39+a8YNbAAwL29ihPfWoppg5AjvyKNzD1oCvlqWwA==",
-      "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
-      "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
-    },
-    {
-      "id": "SkiaSharp.NativeAssets.WebAssembly",
-      "version": "3.119.4",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "S1HOxtBbD4bYDtA2e9WH5TX+lxqRrTPvKjrjttRhxnHNNu7YY8VFo/LeCP7tNqoTA6PV+8vsvNbmRUEC2ip8RQ==",
+      "content_hash_sha512_base64": "KldVRYCbwIQtAfUyGGKnkPeGYZohvRikZI0sHe9f4QxN0LtKqn70j4GB4diEVcfpO5/Tt3+H/aIqUCZ1wRgTdg==",
       "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
       "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
     },
     {
       "id": "SkiaSharp.NativeAssets.Win32",
-      "version": "3.119.4",
+      "version": "4.158.0",
       "license": "MIT",
       "source": "https://api.nuget.org/v3/index.json",
-      "content_hash_sha512_base64": "XOpbx/4CReO2wYsq2s6rbvdauc6dntG4Zv499sHGTJ87bwZaFXszFkwql3+FIZMc8kUPeaj3Mx2ezIJmo8a1Kg==",
+      "content_hash_sha512_base64": "7+7mqPOFD8oINjuVHS358PpOX2yERNnBZbQDFhPeHxEYLpOmMEaO+k7XzKdhPEUiPRZtLvf3RmG1xJRaAaEUZw==",
       "license_file": "eng/licenses/skiasharp-harfbuzzsharp-LICENSE.txt",
       "notice_file": "eng/licenses/skiasharp-harfbuzzsharp-THIRD-PARTY-NOTICES.txt"
     },
@@ -288,17 +289,17 @@
   "native_dependencies": [
     {
       "id": "e_sqlite3",
-      "provided_by": "SQLitePCLRaw.lib.e_sqlite3 2.1.12",
+      "provided_by": "SQLitePCLRaw.lib.e_sqlite3 2.1.14 (SQLite 3.54.0)",
       "purpose": "SQLite native engine"
     },
     {
       "id": "Skia",
-      "provided_by": "SkiaSharp.NativeAssets.* 3.119.4",
+      "provided_by": "SkiaSharp.NativeAssets.* 4.158.0",
       "purpose": "Avalonia rendering; platform binary qualification remains pending"
     },
     {
       "id": "HarfBuzz",
-      "provided_by": "HarfBuzzSharp.NativeAssets.* 8.3.1.3",
+      "provided_by": "HarfBuzzSharp.NativeAssets.* 15.0.0",
       "purpose": "Text shaping; platform binary qualification remains pending"
     },
     {
@@ -308,21 +309,21 @@
     },
     {
       "id": "Avalonia.Native",
-      "provided_by": "Avalonia.Native 12.1.2",
+      "provided_by": "Avalonia.Native 12.1.6",
       "purpose": "Desktop native platform components; target qualification remains pending"
     },
     {
       "id": "miniaudio",
-      "version": "0.11.23",
-      "commit": "f40cf03f80cdb7e741d43e53b7e706e8c1394bcf",
-      "source": "https://github.com/mackron/miniaudio/tree/f40cf03f80cdb7e741d43e53b7e706e8c1394bcf",
+      "version": "0.11.26",
+      "commit": "877ea4a7c2601c7b0f2a44e83dfac42e6470fea6",
+      "source": "https://github.com/mackron/miniaudio/tree/877ea4a7c2601c7b0f2a44e83dfac42e6470fea6",
       "license": "MIT-0",
       "purpose": "Hash-pinned downloaded source for project narrow C ABI; no third-party implementation in core source checkout",
       "source_files": [
         {
           "path": "native/sim_audio_native/vendor/miniaudio.h",
-          "sha256": "7e4f3f13c8fe66df2080ac3dd12a89193e3c2463cb7f067c798abd7331cd8ee6",
-          "url": "https://raw.githubusercontent.com/mackron/miniaudio/f40cf03f80cdb7e741d43e53b7e706e8c1394bcf/miniaudio.h",
+          "sha256": "6b376c7fbb1352ba1e0e432ab66069b335ea9405e45cb6c30b97ef0f3c9c3e0e",
+          "url": "https://raw.githubusercontent.com/mackron/miniaudio/877ea4a7c2601c7b0f2a44e83dfac42e6470fea6/miniaudio.h",
           "maximum_bytes": 5000000
         },
         {
@@ -333,7 +334,7 @@
       "license_file": "native/sim_audio_native/vendor/LICENSE.miniaudio"
     }
   ],
-  "notes": "Locked NuGet package licenses and supplied upstream notices are mapped in each package entry. The self-contained .NET runtime license and notices are copied from the exact runtime pack during distribution assembly. miniaudio 0.11.23 is admitted as pinned MIT-0 source only; per-RID binaries, platform qualification and release acceptance remain pending.",
+  "notes": "Locked NuGet package licenses and supplied upstream notices are mapped in each package entry. The self-contained .NET runtime license and notices are copied from the exact runtime pack during distribution assembly. miniaudio 0.11.26 is admitted as pinned MIT-0 source only; per-RID binaries, platform qualification and release acceptance remain pending.",
   "source_adaptations": [
     {
       "id": "Infirmary Integrated",

@@ -200,9 +200,18 @@ public sealed class WaveformBlockRing
         }
     }
 
-    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope)
+    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope) => Append(rawEnvelope, out _);
+
+    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope, out WaveformEnvelope envelope)
     {
-        WaveformEnvelope envelope = WaveformEnvelopeCodec.Decode(rawEnvelope);
+        WaveformEnvelope decoded = WaveformEnvelopeCodec.Decode(rawEnvelope);
+        WaveformBlockAppendResult result = AppendDecoded(rawEnvelope, decoded);
+        envelope = decoded;
+        return result;
+    }
+
+    private WaveformBlockAppendResult AppendDecoded(ReadOnlySpan<byte> rawEnvelope, WaveformEnvelope envelope)
+    {
         ValidateEnvelopeIdentity(
             envelope,
             SessionId,

@@ -66,6 +66,12 @@
           "SQLitePCLRaw.bundle_e_sqlite3": "[2.1.14, )"
         }
       },
+      "monitor.network": {
+        "type": "Project",
+        "dependencies": {
+          "Monitor.Infrastructure": "[1.0.0, )"
+        }
+      },
       "monitor.simulation": {
         "type": "Project"
       }

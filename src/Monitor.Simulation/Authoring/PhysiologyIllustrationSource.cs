@@ -36,7 +36,12 @@ public static class PhysiologyIllustrationSource
     }
 
     public static PhysiologyWaveformGroup Create(PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0,
-        VentilationTransportPlan? ventilation = null)
+        VentilationTransportPlan? ventilation = null) =>
+        CreateForSession(ChannelId(0), ChannelId(2), configuration, abpZeroOffsetCentiMmHg, paZeroOffsetCentiMmHg, cvpZeroOffsetCentiMmHg, ventilation);
+
+    public static PhysiologyWaveformGroup CreateForSession(Guid sessionId, Guid instanceId,
+        PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0,
+        int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0, VentilationTransportPlan? ventilation = null)
     {
         configuration ??= PhysiologyIllustrationConfiguration.Default;
         // Preserve the existing authored control range, not a clinical range.
@@ -174,7 +179,7 @@ public static class PhysiologyIllustrationSource
                         : band).ToArray())
             };
         }
-        return PhysiologyWaveformGroup.Start(ChannelId(0), ChannelId(2), 1, 1, 1, 0, 16, channels);
+        return PhysiologyWaveformGroup.Start(sessionId, instanceId, 1, 1, 1, 0, 16, channels);
     }
     private static PhysiologyWaveformChannelPlan ApplyVariation(PhysiologyWaveformChannelPlan channel, int amplitudeCentiMmHg,
         string seedHex, string streamName, RegularPhysiologyPlan plan, Guid channelId)

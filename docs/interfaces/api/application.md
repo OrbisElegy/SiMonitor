@@ -264,6 +264,7 @@ public sealed class BootstrapIdentityService
 {
     public BootstrapIdentityService(IBootstrapIdentityRepository repository, IPasswordHasher passwordHasher, ICompromisedPasswordChecker compromisedPasswords, IAuthorityWallClock clock, IIdentityIdSource ids);
     public bool MayStartNetworkListener();
+    public static bool MayStartNetworkListener(IBootstrapIdentityRepository repository);
     public BootstrapOutcome Complete(CompleteBootstrapRequest request, ReadOnlySpan<char> bootstrapPassword, ReadOnlySpan<char> newPassword);
 }
 ```

@@ -37,6 +37,9 @@ internal static class Program
         }
         Specification[] specifications =
         [
+            .. ClassroomAdmissionSpecifications.All,
+            .. ClassroomWaveformClientSpecifications.All,
+            .. ClassroomNetworkSpecifications.All,
             .. AudioKernelPolicySpecifications.All,
             .. FixedPointOptimizationSpecifications.All,
             .. OpticalOptimizationSpecifications.All,

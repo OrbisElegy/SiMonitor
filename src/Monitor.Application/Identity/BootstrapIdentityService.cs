@@ -32,13 +32,18 @@ public sealed class BootstrapIdentityService
         _ids = ids ?? throw new ArgumentNullException(nameof(ids));
     }
 
-    public bool MayStartNetworkListener() =>
-        _repository.LoadBootstrap() is
+    public bool MayStartNetworkListener() => MayStartNetworkListener(_repository);
+
+    public static bool MayStartNetworkListener(IBootstrapIdentityRepository repository)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        return repository.LoadBootstrap() is
         {
             State: BootstrapLifecycleState.Completed,
             RootPermanentlyRetired: true,
             BootstrapVerifier: null,
         };
+    }
 
     public BootstrapOutcome Complete(
         CompleteBootstrapRequest request,

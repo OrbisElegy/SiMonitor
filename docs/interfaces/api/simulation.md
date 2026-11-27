@@ -292,6 +292,7 @@ public sealed class WaveformBlockRing
     public static WaveformBlockRing Start(Guid sessionId, Guid instanceId, ulong timebaseEpoch, ulong streamEpoch, ulong firstBlockSequence, long firstBlockStartSimTimeNs, int capacity);
     public static WaveformBlockRing Restore(WaveformBlockRingState state);
     public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope);
+    public WaveformBlockAppendResult Append(ReadOnlySpan<byte> rawEnvelope, out WaveformEnvelope envelope);
     public WaveformBlockReplayResult ReadFrom(ulong firstBlockSequence, int maximumBlocks);
     public WaveformBlockRingState CaptureState();
 }
@@ -655,6 +656,7 @@ public static class PhysiologyIllustrationSource
     public static Guid ChannelId(int row);
     public static PhysiologyTransportSource CreateTransport(PhysiologyIllustrationConfiguration configuration, VentilationTransportPlan ventilation, int referenceStrokeVolumeMicroliters, long ejectionDurationNs = 240_000_000);
     public static PhysiologyWaveformGroup Create(PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0, VentilationTransportPlan? ventilation = null);
+    public static PhysiologyWaveformGroup CreateForSession(Guid sessionId, Guid instanceId, PhysiologyIllustrationConfiguration? configuration = null, int abpZeroOffsetCentiMmHg = 0, int paZeroOffsetCentiMmHg = 0, int cvpZeroOffsetCentiMmHg = 0, VentilationTransportPlan? ventilation = null);
 }
 ```
 

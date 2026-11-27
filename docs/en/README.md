@@ -10,6 +10,8 @@ The repository contains a .NET desktop application, a deterministic simulation l
 
 See the [documentation index](../README.md) and [English summary](summary.md) for technical references. Read the [contribution guide](../../CONTRIBUTING.md) before contributing.
 
+The teacher host and student receiver can run as separate command-line processes. See the [classroom transport guide](../interfaces/classroom-network.md) for setup, credentials, and the wire protocol.
+
 ## Screenshots
 
 **Main monitor view**
@@ -125,7 +127,7 @@ Project-authored code is licensed under AGPL-3.0-or-later; see [`LICENSE`](../..
 - Final icon design (a temporary icon is in use)
 - More complete UI design
 - Further skin interface improvements
-- Separate teacher and student interfaces
+- Dedicated teacher and student graphical interfaces
 - Teaching and exam features
 - macOS and mobile device support
 - A companion simulator device?

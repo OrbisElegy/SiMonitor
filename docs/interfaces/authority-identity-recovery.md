@@ -4,7 +4,7 @@
 
 本文描述当前源码中的进程内 C# 契约、恢复消息编解码和身份存储格式。
 `Monitor.Domain` 提供确定性规则与状态机，`Monitor.Application` 组织调用，
-`Monitor.Infrastructure` 实现密码学和 SQLite 适配；这些类型没有对应的 HTTP 路由。
+`Monitor.Infrastructure` 实现密码学和 SQLite 适配。教师进程在监听前调用身份服务，学生接入见[课堂网络接口](classroom-network.md)。
 时间、标识和依赖由调用者输入；身份服务使用注入的 UTC 墙钟，连续性状态机使用单调纳秒或仿真纳秒。
 显示与音频偏好另见 [音频与偏好接口](audio-persistence.md)。
 
@@ -174,6 +174,7 @@ BootstrapOutcome BootstrapIdentityService.Complete(
     CompleteBootstrapRequest request, ReadOnlySpan<char> bootstrapPassword,
     ReadOnlySpan<char> newPassword);
 bool BootstrapIdentityService.MayStartNetworkListener();
+bool BootstrapIdentityService.MayStartNetworkListener(IBootstrapIdentityRepository repository);
 InstitutionAuthenticationResult InstitutionAuthenticationService.Authenticate(
     InstitutionAuthenticationRequest request, ReadOnlySpan<char> password);
 ```

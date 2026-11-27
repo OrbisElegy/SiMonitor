@@ -5,6 +5,7 @@
     <Project Path="src/Monitor.Desktop/Monitor.Desktop.csproj" />
     <Project Path="src/Monitor.Application/Monitor.Application.csproj" />
     <Project Path="src/Monitor.Infrastructure/Monitor.Infrastructure.csproj" />
+    <Project Path="src/Monitor.Network/Monitor.Network.csproj" />
     <Project Path="src/Monitor.Simulation/Monitor.Simulation.csproj" />
   </Folder>
   <Folder Name="/tests/">

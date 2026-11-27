@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -191,8 +192,11 @@ internal static class ExamClusterProcessSpecifications
             using var response = await witnessAsClient.GetAsync("/v1/exam/peer/status", ct).ConfigureAwait(false);
             Check.That(response.StatusCode == HttpStatusCode.Forbidden, "the witness cannot read application replication data");
         }
+        // Schannel can abort the established TLS connection on a rejected client
+        // certificate before an HTTP response exists (WSAECONNABORTED).
         catch (HttpRequestException error) when (error.HttpRequestError is HttpRequestError.SecureConnectionError or
-            HttpRequestError.ConnectionError or HttpRequestError.ResponseEnded || error.InnerException is AuthenticationException)
+            HttpRequestError.ConnectionError or HttpRequestError.ResponseEnded || error.InnerException is AuthenticationException or
+            IOException { InnerException: SocketException { SocketErrorCode: SocketError.ConnectionAborted or SocketError.ConnectionReset } })
         { }
         var badPin = config.Witness with { CertificateSha256 = [new string('f', 64)] };
         try

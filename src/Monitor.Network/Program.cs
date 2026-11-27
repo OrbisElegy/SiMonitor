@@ -18,7 +18,10 @@ internal static partial class Program
           teacher DATABASE USERNAME LISTEN_IP PORT CERTIFICATE_DNS_NAME CERTIFICATE INVITATIONS_FILE [SEATS] [--start]
           student HTTPS_ORIGIN|ticket [BLOCK_COUNT]
           discover INTERFACE_IP
+          exam provision CONFIG
+          exam serve CONFIG [IDENTITY_DATABASE ADMIN_NAME]
         Secrets and trust configuration are described in docs/interfaces/classroom-network.md.
+        Exam node configuration is described in docs/interfaces/exam-cluster.md.
         """;
 
     internal static async Task<int> Main(string[] args)
@@ -29,6 +32,9 @@ internal static partial class Program
         {
             switch (args)
             {
+                case ["exam", ..]:
+                    await RunExamAsync(args, stop.Token).ConfigureAwait(false);
+                    break;
                 case ["init", var db, var admin, var blocklist]:
                     byte[] key = IdentityKey();
                     try

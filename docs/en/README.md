@@ -12,6 +12,8 @@ See the [documentation index](../README.md) and [English summary](summary.md) fo
 
 The teacher and students can run separate command-line processes for a shared lesson, designate a device operator, schedule configuration changes, and fork or rejoin a private practice instance. See the [classroom transport guide](../interfaces/classroom-network.md) for setup, credentials, and the wire protocol.
 
+The formal exam cluster runs a primary, a standby, and an independent lease witness. The two hosts acknowledge exam writes after both have committed them to local storage. Deployment, failover, and recovery commands are in the [exam cluster guide](../interfaces/exam-cluster.md).
+
 ## Screenshots
 
 **Main monitor view**

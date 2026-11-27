@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Monitor.Application.Measurements;
 using Monitor.Simulation.Acquisition;
@@ -28,20 +27,6 @@ public sealed partial class ClassroomBootstrap
     private static string ArchivePurpose(Guid session, Guid instance) =>
         "classroom.branch." + session.ToString("N") + "." + instance.ToString("N");
 
-    private static readonly JsonSerializerOptions ArchiveJson = new() { Converters = { new RateAdjustmentConverter() } };
-    private sealed record ArchivedRate(int HeartRateBpm, int? AtrialRateBpm, string SeedHex, int VariationPermille);
-    private sealed class RateAdjustmentConverter : JsonConverter<CardiacRateAdjustment>
-    {
-        public override CardiacRateAdjustment Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
-        {
-            var rate = JsonSerializer.Deserialize<ArchivedRate>(ref reader, options) ?? throw new JsonException("Missing cardiac rate.");
-            return new CardiacRateAdjustment(rate.HeartRateBpm, rate.AtrialRateBpm, rate.SeedHex, rate.VariationPermille);
-        }
-        public override void Write(Utf8JsonWriter writer, CardiacRateAdjustment value, JsonSerializerOptions options) =>
-            JsonSerializer.Serialize(writer, new ArchivedRate(value.Rate.HeartRateBpm, value.AtrialRate?.HeartRateBpm,
-                value.Rate.SeedHex, value.Rate.VariationPermille), options);
-    }
-
     private const string CreateArchive = "CREATE TABLE IF NOT EXISTS classroom_branch_archives(session TEXT NOT NULL, instance TEXT NOT NULL, owner TEXT NOT NULL, sealed BLOB NOT NULL, PRIMARY KEY(session,instance)) STRICT";
 
     private SqliteConnection OpenArchiveDatabase()
@@ -63,7 +48,7 @@ public sealed partial class ClassroomBootstrap
     {
         Guid instance = archive.Telemetry.InstanceId;
         Guid session = archive.Telemetry.SessionId;
-        byte[] plain = JsonSerializer.SerializeToUtf8Bytes(archive, ArchiveJson);
+        byte[] plain = JsonSerializer.SerializeToUtf8Bytes(archive, WaveformCheckpointJson.Options);
         try
         {
             _ = DecodeBranchArchive(plain);
@@ -83,22 +68,9 @@ public sealed partial class ClassroomBootstrap
 
     private static ClassroomBranchArchive DecodeBranchArchive(byte[] plain)
     {
-        var archive = JsonSerializer.Deserialize<ClassroomBranchArchive>(plain, ArchiveJson) ??
+        var archive = JsonSerializer.Deserialize<ClassroomBranchArchive>(plain, WaveformCheckpointJson.Options) ??
             throw new InvalidDataException("Invalid classroom branch archive.");
-        var channels = archive.Patient.Channels.ToArray();
-        if (channels.Length == 0) { throw new InvalidDataException("Empty classroom branch checkpoint."); }
-        // The group has one clinical plan. Record equality in the live engine also
-        // uses identity of prepared rate schedules; JSON does not retain those aliases.
-        var common = channels[0].Generator.Timeline.Plan;
-        JsonElement canonical = JsonSerializer.SerializeToElement(common, ArchiveJson);
-        for (int i = 1; i < channels.Length; i++)
-        {
-            var g = channels[i].Generator;
-            if (!JsonElement.DeepEquals(canonical, JsonSerializer.SerializeToElement(g.Timeline.Plan, ArchiveJson)))
-            { throw new InvalidDataException("Archived channels have different clinical plans."); }
-            channels[i] = channels[i] with { Generator = g with { Timeline = g.Timeline with { Plan = common } } };
-        }
-        var patient = archive.Patient with { Channels = channels };
+        var patient = WaveformCheckpointJson.Normalize(archive.Patient);
         _ = PhysiologyWaveformGroup.Restore(patient);
         return archive with { Patient = patient };
     }

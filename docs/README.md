@@ -23,6 +23,7 @@
 - [课堂控制与排程](interfaces/classroom-control.md)
 - [课堂校时、断线与恢复](interfaces/classroom-recovery.md)
 - [课堂配对、资源与私有分支](interfaces/classroom-resources.md)
+- [正式考试集群、主备复制与第三节点见证](interfaces/exam-cluster.md)
 - [权威、身份、连续性与持久化接口](interfaces/authority-identity-recovery.md)
 - [患者时间线文件、体征渐变与模板事件](interfaces/desktop-tools.md#患者时间线)
 - [桌面皮肤装配与命令行入口](interfaces/desktop-tools.md)

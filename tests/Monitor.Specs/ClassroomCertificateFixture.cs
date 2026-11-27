@@ -24,7 +24,8 @@ internal sealed class ClassroomCertificateFixture : IAsyncDisposable
     internal X509Certificate2 Root { get; }
     internal string LeafPfxPath => Path.Combine(_directory.FullName, "loopback.pfx");
 
-    internal static async Task<ClassroomCertificateFixture> CreateAsync(CancellationToken cancellationToken)
+    internal static async Task<ClassroomCertificateFixture> CreateAsync(CancellationToken cancellationToken,
+        Action<string, X509Certificate2, Uri>? issueAdditionalLeaves = null)
     {
         using var caKey = RSA.Create(2048);
         var caRequest = new CertificateRequest($"CN=Classroom test CA {Guid.NewGuid():N}",
@@ -50,6 +51,7 @@ internal sealed class ClassroomCertificateFixture : IAsyncDisposable
             await app.StartAsync(cancellationToken).ConfigureAwait(false);
             var crlUri = new Uri(new Uri(app.Urls.Single()), crlPath);
             fixture.WriteLeaf(issuer, now, crlUri);
+            issueAdditionalLeaves?.Invoke(directory.FullName, issuer, crlUri);
             return fixture;
         }
         catch

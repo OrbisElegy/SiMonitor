@@ -1,6 +1,6 @@
 # Monitor.Network 公开声明索引
 
-[课堂网络接口](../classroom-network.md) · [控制与配置](classroom-control.md) · [校时与恢复](classroom-recovery.md) · [资源与私有分支](classroom-resources.md)
+[课堂网络接口](../classroom-network.md) · [控制与配置](classroom-control.md) · [校时与恢复](classroom-recovery.md) · [资源与私有分支](classroom-resources.md) · [正式考试集群](../exam-cluster.md)
 
 以下声明按源文件排列，命名空间均为 `Monitor.Network`。位置 record 的参数定义同名属性。Host 接管课堂入场服务和保留环，调用者在 Host 运行期间保持 TLS 证书和已认证的本地身份可用。学生连接使用的机构根证书需在连接期间保持可用。
 
@@ -623,4 +623,54 @@ public sealed record ClassroomClockSample(long ClientSendNs, long HostReceiveNs,
     public long RoundTripNs { get; }
     public long HostOffsetNs { get; }
 }
+```
+
+## ExamClusterNode.cs
+
+`Head` 为本机已提交的事务前沿，`Pending` 携带待确认的本地准备记录游标。`Qualified` 指示本备机在当前运行期已核验接管资格。[源码](../../../src/Monitor.Network/ExamClusterNode.cs)
+
+```csharp
+public sealed record ExamClusterNodeStatus(Guid ClusterId, Guid NodeId, string Role, long AuthorityEpoch,
+    long FencingToken, bool LeaseValid, bool Qualified, ExamReplicaCursor Head, string Reason)
+{
+    public ExamReplicaCursor? Pending { get; init; }
+}
+```
+
+## ExamClusterService.cs
+
+宿主考试应用以本地 Host 配置启动服务，在已认证、授权的操作中提交和读取事务。见证、具名人工隔离和接管审批的部署入口见[正式考试集群](../exam-cluster.md)。[源码](../../../src/Monitor.Network/ExamClusterService.cs)
+
+```csharp
+public sealed class ExamClusterService : IAsyncDisposable
+{
+    public static Task<ExamClusterService> StartAsync(string configurationPath, CancellationToken cancellationToken = default);
+    public Task Completion { get; }
+    public ExamClusterNodeStatus GetStatus();
+    public Task<ExamReplicaCursor> SubmitAsync(long authorityEpoch, long fencingToken, ExamReplicaCommand command,
+        CancellationToken cancellationToken = default);
+    public ExamReplicaCommand? ReadCommitted(long sequence);
+    public ValueTask DisposeAsync();
+}
+```
+
+## ExamReplicaCheckpoint.cs
+
+考试宿主在完整的 200 ms 边界调用 `Capture` 生成 `Checkpoint` 事务的二进制载荷。`Restore` 恢复该边界的生成器，并独立重演下一块、核对内容摘要。核验过程使用生成器副本，返回的实例仍指向原边界。[源码](../../../src/Monitor.Network/ExamReplicaCheckpoint.cs)
+
+```csharp
+public static class ExamReplicaCheckpoint
+{
+    public static byte[] Capture(PhysiologyWaveformGroup source);
+    public static PhysiologyWaveformGroup Restore(byte[] payload);
+}
+```
+
+## ExamReplicaTransaction.cs
+
+`RequestId` 标识一次逻辑提交。`Kind` 可取 `Answer`、`Control`、`Checkpoint` 或 `Audit`。`Payload` 保存该类型的原始字节。`ExamReplicaCursor.Hash` 为序号对应的完整事务链摘要。[源码](../../../src/Monitor.Network/ExamReplicaTransaction.cs)
+
+```csharp
+public sealed record ExamReplicaCursor(long Sequence, string Hash);
+public sealed record ExamReplicaCommand(Guid RequestId, string Kind, byte[] Payload);
 ```

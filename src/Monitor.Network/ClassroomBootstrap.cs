@@ -64,7 +64,11 @@ public sealed partial class ClassroomBootstrap : IDisposable
         string databasePath,
         ReadOnlySpan<byte> masterKey,
         string username,
-        ReadOnlySpan<char> password)
+        ReadOnlySpan<char> password) =>
+        AuthenticateHost(databasePath, masterKey, username, password, InstitutionAuthenticationContext.Teaching);
+
+    internal static ClassroomBootstrap AuthenticateHost(string databasePath, ReadOnlySpan<byte> masterKey,
+        string username, ReadOnlySpan<char> password, InstitutionAuthenticationContext context)
     {
         if (!File.Exists(databasePath)) { throw new InvalidOperationException("identity.bootstrap.required"); }
         AesGcmIdentityPayloadProtector protector = new(masterKey);
@@ -80,13 +84,15 @@ public sealed partial class ClassroomBootstrap : IDisposable
                 repository, new SqliteAuthenticationFailureTracker(databasePath, protector),
                 PasswordHasher, DummyVerifier.Value, Authority, Authority);
             InstitutionAuthenticationResult result = authentication.Authenticate(
-                new InstitutionAuthenticationRequest(username, "local", InstitutionAuthenticationContext.Teaching, Guid.NewGuid()),
+                new InstitutionAuthenticationRequest(username, "local", context, Guid.NewGuid()),
                 password);
             if (result.Kind != AuthenticationOutcomeKind.Accepted || result.Principal is not { } principal)
             {
                 throw new InvalidOperationException(result.ReasonCode);
             }
 
+            if (context == InstitutionAuthenticationContext.FormalExam && !IdentityPolicy.IsAuthorized(principal.Role, "deployment.manage"))
+            { throw new UnauthorizedAccessException("Exam cluster administration requires deployment.manage."); }
             if (!IdentityPolicy.IsAuthorized(principal.Role, "deployment.manage") &&
                 !IdentityPolicy.IsAuthorized(principal.Role, "session.manage"))
             {

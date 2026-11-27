@@ -37,6 +37,10 @@ internal static class Program
         }
         Specification[] specifications =
         [
+            .. ExamWitnessSpecifications.All,
+            .. ExamReplicaSpecifications.All,
+            .. ExamClusterProcessSpecifications.All,
+            .. ExamClusterNodeSpecifications.All,
             .. ClassroomAdmissionSpecifications.All,
             .. ClassroomWaveformClientSpecifications.All,
             .. ClassroomNetworkSpecifications.All,

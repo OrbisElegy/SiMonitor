@@ -10,6 +10,7 @@
 | 测量、质量、报警通知、扫线、记录、12 导联与手工测量 | [测量与呈现](measurements-presentation.md) | [Monitor.Application](api/application.md)、[Monitor.Domain](api/domain.md)、[Monitor.Infrastructure](api/infrastructure.md) |
 | 会话权威、治疗、评分、身份、断线续算与恢复 | [权威、身份与恢复](authority-identity-recovery.md) | [Domain](api/domain.md)、[Application](api/application.md)、[Infrastructure](api/infrastructure.md) |
 | 教师 Host、学生入场、校时、波形、课堂配置与恢复 | [课堂网络](classroom-network.md) · [控制](classroom-control.md) · [恢复](classroom-recovery.md) · [分支与资源](classroom-resources.md) | [Monitor.Network](api/network.md) |
+| 正式考试主备 Host、双端持久化、第三节点见证、接管与返场 | [考试集群](exam-cluster.md) | `Monitor.Network exam` 命令与 mTLS 接口 |
 | 声音输出、原生 ABI、偏好文件与存储 | [音频与持久化](audio-persistence.md) | [Monitor.Infrastructure](api/infrastructure.md) |
 | ECG 模板电击转复、单／双相能量与逐模板保存 | [电击转复](electrical-conversion.md) | [Monitor.Application](api/application.md) |
 | 本地化端口、简繁中文与英文资源、系统语言选择及翻译协作 | [本地化](localization.md) | [Monitor.Application](api/application.md)、[Monitor.Infrastructure](api/infrastructure.md) |
@@ -46,7 +47,7 @@ flowchart LR
 | `Monitor.Domain` | 治疗、身份政策、ECG 评分、连续性与安全状态、呈现几何及准入 | 由调用方提供时间／状态；不创建平台窗口或数据库 |
 | `Monitor.Application` | 会话串行权威、身份服务、恢复编排、测量聚合、呈现发布、本地预览会话 | 通过显式参数和端口联系平台；`LocalMonitorPreviewSession` 是本地预览运行时 |
 | `Monitor.Infrastructure` | SQLite、负载保护、签名验签、wire codec、偏好、SVG／worker、PCM 和原生音频 | 持有文件、数据库、线程与设备资源；调用方负责生命周期 |
-| `Monitor.Network` | 本地登录、课堂邀请、HTTPS 会话与时钟、WSS 波形订阅 | 教师和学生各自启动进程，仿真由教师推进 |
+| `Monitor.Network` | 本地登录、课堂邀请、HTTPS 会话与时钟、WSS 波形订阅、考试事务复制与见证 | 课堂由教师推进仿真，考试集群由主备及见证三个进程运行 |
 | `Monitor.Desktop` | Avalonia 控件、输入转换、设置、定时推进、资源装配 | UI 线程串行操作；默认打开本地监护界面 |
 
 课堂的 HTTPS 路由与 WebSocket 帧格式见[课堂网络接口](classroom-network.md)。学生收到的原始 MWS1 块可直接交给测量或呈现模块。权威恢复消息的独立编解码契约见[权威、身份与恢复](authority-identity-recovery.md)。

@@ -35,6 +35,7 @@ establish Windows device behavior or release acceptance.
 ## Technical documentation
 
 - [Classroom transport](../interfaces/classroom-network.md) covers the independent teacher and student processes, authenticated controls and scheduled configurations, shared clock and waveform playback, private practice instances, and recovery.
+- The exam cluster replicates versioned transactions and checkpoints between two hosts. A third node fences each change of primary with a durable lease. See the [exam cluster guide](../interfaces/exam-cluster.md).
 
 - [CPU dispatch and computation scope](../research/performance/cpu-kernels.md) explains feature-based SIMD selection, compile-time x64/ARM64 separation, exact batched waveform evaluation, and the production performance harness. Processor models do not select special tuning paths.
 - [Patient timeline](../interfaces/desktop-tools.md#患者时间线) describes initial patient states, session-relative events, continuous vital targets, waveform template changes, switching between direct SpO₂ targets and modeled ventilation, treatment permissions, treatment-relative branches that preserve patient history, complete timeline file import/export, and disabling execution until a fresh restart.
